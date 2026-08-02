@@ -1,0 +1,30 @@
+# Enforce LF line endings for all source files so Windows dev and Linux (NAS/CI) never diverge.
+* text=auto eol=lf
+
+*.py text eol=lf
+*.pyi text eol=lf
+*.toml text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+.env.example text eol=lf
+
+# Binary assets — never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pmtiles binary
+*.parquet binary
+*.db binary
+*.fit binary

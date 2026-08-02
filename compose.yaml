@@ -1,0 +1,52 @@
+name: sporthealth
+
+# Base service definitions. No ports published and no bind mounts here — see
+# compose.override.yml (dev/Windows, auto-merged) and compose.nas.yml (NAS, applied via -f).
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    image: ${GHCR_IMAGE_PREFIX:-sporthealth-api}:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      SPORTHEALTH_ENVIRONMENT: ${SPORTHEALTH_ENVIRONMENT:-development}
+      SPORTHEALTH_LOG_LEVEL: ${SPORTHEALTH_LOG_LEVEL:-INFO}
+      SPORTHEALTH_API_PORT: ${SPORTHEALTH_API_PORT:-8000}
+      SPORTHEALTH_DATA_DIR: ${SPORTHEALTH_DATA_DIR:-/data}
+    volumes:
+      - sporthealth-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/healthz', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    image: ${GHCR_IMAGE_PREFIX:-sporthealth-worker}:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      SPORTHEALTH_ENVIRONMENT: ${SPORTHEALTH_ENVIRONMENT:-development}
+      SPORTHEALTH_LOG_LEVEL: ${SPORTHEALTH_LOG_LEVEL:-INFO}
+      SPORTHEALTH_DATA_DIR: ${SPORTHEALTH_DATA_DIR:-/data}
+    volumes:
+      - sporthealth-data:/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    image: ${GHCR_IMAGE_PREFIX:-sporthealth-frontend}:${IMAGE_TAG:-local}
+    restart: unless-stopped
+
+volumes:
+  sporthealth-data:

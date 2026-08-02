@@ -1,0 +1,38 @@
+# Secrets / local env
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# Data (never commit real health/activity data or the archive)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.parquet
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Plans / scratch
+*.local.md

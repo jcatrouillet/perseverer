@@ -1,0 +1,13 @@
+# Auto-merged by plain `docker compose up` — this is the Windows/Docker Desktop dev shape.
+# Only publishes ports to localhost. Rebuild after code changes with `docker compose up --build`;
+# live-reload via bind-mounted source + editable install is deferred until daily iteration
+# speed actually matters (Phase 1+), not added speculatively in Phase 0.
+
+services:
+  api:
+    ports:
+      - "${DEV_API_PUBLISHED_PORT:-8000}:8000"
+
+  frontend:
+    ports:
+      - "${DEV_FRONTEND_PUBLISHED_PORT:-5173}:80"

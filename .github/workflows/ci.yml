@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --all-groups
+      - run: uv run ruff check .
+      - run: uv run mypy
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --all-groups
+      - run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  avx-smoke:
+    # The DS1019+ (Celeron J3455 / Goldmont) has no AVX/AVX2. GitHub-hosted runners are
+    # AVX2-capable, so we can't rely on the runner's real hardware to catch a dependency
+    # compiled for x86-64-v3. Instead we run the same import/basic-op smoke test under
+    # `qemu-x86_64 -cpu qemu64`, whose CPU model has no AVX/AVX2 — an AVX-only code path
+    # SIGILLs here instead of silently working on this runner and crashing on the NAS.
+    # See docs/adr/0001-phase-0-foundations.md for the "not yet fully validated" caveat.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --all-groups
+      - name: Install qemu-user (same-arch CPU-feature emulation, not cross-arch)
+        run: sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-static
+      - name: Run AVX-sensitive-import smoke test under an AVX-less CPU model
+        run: |
+          set -euo pipefail
+          PYBIN="$(uv run python -c 'import sys; print(sys.executable)')"
+          qemu-x86_64 -cpu qemu64 "$PYBIN" -m pytest tests/test_avx_smoke.py -q
