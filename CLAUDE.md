@@ -67,7 +67,7 @@ npm run build                # tsc --noEmit && vite build
 
 # Full stack (Windows/Podman Desktop — compose.override.yml auto-merges)
 podman compose up --build
-curl http://localhost:8000/api/v1/healthz
+curl http://localhost:8008/api/v1/healthz
 
 # NAS deploy — the NAS runs Docker (DSM Container Manager), not Podman; never build on the
 # NAS, see docs/DEPLOY.md

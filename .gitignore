@@ -33,6 +33,10 @@ data/
 .idea/
 .DS_Store
 Thumbs.db
+NUL
+
+# Claude Code session-local harness state (not project content)
+.claude/
 
 # Plans / scratch
 *.local.md

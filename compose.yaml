@@ -2,13 +2,21 @@ name: sporthealth
 
 # Base service definitions. No ports published and no bind mounts here — see
 # compose.override.yml (dev/Windows, auto-merged) and compose.nas.yml (NAS, applied via -f).
+#
+# `image:` here is a purely local build tag — GHCR_IMAGE_PREFIX/IMAGE_TAG are deliberately
+# NOT referenced in this file. They only apply in compose.nas.yml, which overrides `image:`
+# entirely for the pull-only NAS deploy. (An earlier version used
+# `${GHCR_IMAGE_PREFIX:-sporthealth-api}:${IMAGE_TAG:-local}` here — the `:-default` fallback
+# only kicks in when the variable is fully unset, so once .env sets GHCR_IMAGE_PREFIX for the
+# NAS, all three services silently collapsed onto the same image name. Decoupling local
+# build tags from the registry prefix avoids that whole bug class.)
 
 services:
   api:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
-    image: ${GHCR_IMAGE_PREFIX:-sporthealth-api}:${IMAGE_TAG:-local}
+    image: sporthealth-api:local
     restart: unless-stopped
     environment:
       SPORTHEALTH_ENVIRONMENT: ${SPORTHEALTH_ENVIRONMENT:-development}
@@ -32,7 +40,7 @@ services:
     build:
       context: .
       dockerfile: docker/worker.Dockerfile
-    image: ${GHCR_IMAGE_PREFIX:-sporthealth-worker}:${IMAGE_TAG:-local}
+    image: sporthealth-worker:local
     restart: unless-stopped
     environment:
       SPORTHEALTH_ENVIRONMENT: ${SPORTHEALTH_ENVIRONMENT:-development}
@@ -45,7 +53,7 @@ services:
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
-    image: ${GHCR_IMAGE_PREFIX:-sporthealth-frontend}:${IMAGE_TAG:-local}
+    image: sporthealth-frontend:local
     restart: unless-stopped
 
 volumes:

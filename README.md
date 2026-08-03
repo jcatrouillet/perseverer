@@ -12,5 +12,5 @@ See [`CLAUDE.md`](CLAUDE.md) for the architecture summary and non-negotiable inv
 ```bash
 cp .env.example .env
 podman compose up --build
-curl http://localhost:8000/api/v1/healthz
+curl http://localhost:8008/api/v1/healthz
 ```

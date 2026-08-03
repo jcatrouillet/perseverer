@@ -24,16 +24,36 @@ interoperate directly, only agree on the OCI image format, which they do.
 
 ## Dev loop (Windows, Podman Desktop)
 
+**One-time machine setup — this is required, not optional:** the Podman machine must be
+created with **User-Mode Networking**, or published container ports never reach Windows
+`localhost` at all (containers run fine and are reachable via the VM's own IP, but
+`localhost:<port>` from Windows just hangs/refuses — this cost significant debugging time to
+track down, see the "what actually broke" section of
+`docs/adr/0001-phase-0-foundations.md` decision 8). If Podman Desktop's machine wasn't created
+with this from the start:
+
+```bash
+podman machine stop
+podman machine rm podman-machine-default
+podman machine init podman-machine-default --user-mode-networking
+podman machine start
+```
+
+If the machine's first start after `init` fails to connect (`ssh: rejected: connect failed`),
+it's a known WSL2 cgroup race on first boot — `podman machine stop`, then `wsl --shutdown`,
+then `podman machine start` again clears it.
+
 ```bash
 cp .env.example .env       # adjust DEV_* ports if they collide with something else
 podman compose up --build
-curl http://localhost:8000/api/v1/healthz
+curl http://localhost:8008/api/v1/healthz
 ```
 
 `compose.yaml`/`compose.override.yml`/`compose.nas.yml` are plain Compose Specification files
 with no Docker-only extensions, so `podman compose` works the same way `docker compose` would
 — it auto-merges `compose.yaml` + `compose.override.yml`, no `-f` flags needed. The override
-publishes the API on `DEV_API_PUBLISHED_PORT` (default 8000) and the frontend on
+publishes the API on `DEV_API_PUBLISHED_PORT` (default 8008 — deliberately not 8000, which
+collided with an unrelated local process) and the frontend on
 `DEV_FRONTEND_PUBLISHED_PORT` (default 5173). There is no live-reload wired up yet (Phase 0
 scope is a health check, not a dev loop optimized for iteration) — rebuild with
 `podman compose up --build` after code changes. Frontend work in Phase 5+ will likely run
