@@ -1,26 +1,84 @@
-"""Worker container entrypoint.
+"""Worker container entrypoint: runs the daily garmin_connect sync + staleness check on a
+cron schedule (default 04:15 local, jittered — see §6 of the project spec).
 
-Phase 0 placeholder: keeps the container alive and logs that it's up. APScheduler and the
-daily sync job (rolling re-fetch window, ingest_run bookkeeping, staleness webhook) land in
-Phase 2 alongside the garmin_connect adapter — see §6 of the project spec.
+`garmin_export` is deliberately never scheduled here — it's a one-off/occasional CLI action
+(`sync import garmin-export <path>`), not a recurring job.
 """
 
 import logging
-import time
 
+from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+from sporthealth.adapters.garmin_connect import RateLimitSettings, sync_garmin_connect
 from sporthealth.config import get_settings
+from sporthealth.db.engine import make_engine
+from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from sporthealth.staleness import check_staleness, notify_webhook
 
 logger = logging.getLogger("sporthealth.worker")
+
+
+def run_daily_sync() -> None:
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        logger.info("starting scheduled garmin_connect sync")
+        summary = sync_garmin_connect(
+            conn,
+            settings.raw_archive_dir,
+            settings.parquet_dir,
+            settings.garmin_tokenstore_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            rolling_window_days=settings.garmin_rolling_window_days,
+            rate_limits=RateLimitSettings(
+                request_interval_s=settings.garmin_request_interval_s,
+                max_requests_per_hour=settings.garmin_max_requests_per_hour,
+            ),
+        )
+        logger.info(
+            "garmin_connect sync finished: seen=%d new=%d errors=%d",
+            summary.items_seen,
+            summary.items_new,
+            len(summary.errors),
+        )
+
+        alerts = check_staleness(
+            conn,
+            DEFAULT_ATHLETE_ID,
+            escalate_after_days=settings.garmin_stale_escalate_days,
+            freshness_days=settings.export_freshness_days,
+        )
+        for alert in alerts:
+            logger.warning(
+                "staleness alert [%s/%s]: %s", alert.source, alert.severity, alert.message
+            )
+            if settings.staleness_webhook_url:
+                notify_webhook(settings.staleness_webhook_url, alert)
 
 
 def main() -> None:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
-    logger.info(
-        "worker skeleton started (environment=%s); no scheduled jobs yet", settings.environment
+    logger.info("worker started (environment=%s)", settings.environment)
+
+    scheduler = BlockingScheduler()
+    scheduler.add_job(
+        run_daily_sync,
+        trigger=CronTrigger(
+            hour=settings.schedule_hour,
+            minute=settings.schedule_minute,
+            jitter=settings.schedule_jitter_s,
+        ),
+        id="daily_garmin_sync",
     )
-    while True:
-        time.sleep(3600)
+    logger.info(
+        "scheduled daily sync at %02d:%02d local (+/- %ds jitter)",
+        settings.schedule_hour,
+        settings.schedule_minute,
+        settings.schedule_jitter_s,
+    )
+    scheduler.start()
 
 
 if __name__ == "__main__":

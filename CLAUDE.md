@@ -6,7 +6,8 @@ Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing revers
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
 the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
-**Current phase: 1 (raw archive, FIT parser, fit_folder adapter, schema, merge engine core).**
+**Current phase: 2 (garmin_export importer, garmin_connect adapter, scheduler, staleness,
+health/wellness FIT + JSON ingestion).**
 See the phase table in the project brief (kept outside this repo) for the full 10-phase plan.
 Do not skip ahead — each phase has its own ADR in `docs/adr/` and its own acceptance criterion.
 
@@ -55,17 +56,48 @@ because you don't recognize it — stop, that's the bug.
 - **DuckDB**, attached read-only, for analytical queries spanning SQLite + Parquet in one
   statement. (Not yet wired up — arrives with the read API in Phase 3.)
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
-  `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). `fit_folder` (`adapters/
-  fit_folder.py`) is the first implementation: a polling directory importer, content-hash
-  idempotent, feeding the shared FIT parser (`fit/parser.py`) and merge engine
-  (`merge/engine.py`). When a vendor breaks — and Garmin already has, twice, as of this
-  writing — the fix is confined to one adapter file. If fixing a vendor break means touching
-  the schema, the design is wrong; stop and say so.
-- **Never drop a field, concretely**: the FIT parser registers every field it sees into
-  `metric_definition`, even ones it doesn't materialize a value for (a field on a known
-  message it doesn't map to a column, or a field of an entirely unrecognized message type).
-  See the module docstring in `fit/parser.py` for exactly which fields get values stored
-  where versus cataloged-only.
+  `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Three exist now:
+  - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash
+    idempotent. The universal offline importer/test harness for every other adapter. Also
+    recognizes two narrow Garmin Connect-shaped health JSON filename patterns
+    (`daily_summary_*.json`, `hydration_*.json`) — not a general JSON importer.
+  - `garmin_export` (`adapters/garmin_export.py`) — historical backfill from a Garmin "Export
+    Your Data" archive (directory or `.zip`), zero network calls. Recursively finds FIT files
+    at any depth; everything else in the archive is archived raw but not parsed yet (Garmin's
+    export JSON schema is undocumented — see `docs/adr/0003-phase-2-garmin-adapters.md`).
+  - `garmin_connect` (`adapters/garmin_connect.py`) — the primary, incremental, unattended
+    sync path, and the adapter most likely to break. See the safety rules below before
+    touching this file.
+  Every `.fit` file, from any adapter (except `garmin_connect`, which only ever downloads
+  activity FIT files), goes through `ingest_dispatch.ingest_fit_bytes` — archives once, tries
+  the shared activity parser (`fit/parser.py`), falls back to the shared health parser
+  (`health/fit_parser.py`) if it isn't an activity. No adapter has its own parser. See
+  `docs/adr/0004-phase-2-health-ingestion.md`.
+  When a vendor breaks — and Garmin already has, twice, as of this writing — the fix is
+  confined to one adapter file. If fixing a vendor break means touching the schema, the design
+  is wrong; stop and say so.
+- **`garmin_connect` safety rules, non-negotiable**: it never constructs a credentialed client
+  automatically — `authenticate()` only loads the token store (`data/garmin_tokens/`), and if
+  that fails, raises `GarminAuthRequired` rather than falling back to credentials. The *only*
+  place credentials are ever used is `sync auth login`, run interactively by a human. A 429
+  (`GarminConnectTooManyRequestsError`) aborts the current run immediately — no retry, ever,
+  anywhere. Garmin's SSO 429-locks per account with no recovery path; see
+  `docs/adr/0003-phase-2-garmin-adapters.md` for how this is enforced structurally, not just
+  by convention.
+- **Staleness is a first-class signal, not an afterthought.** `sporthealth/staleness.py` checks
+  (a) whether `garmin_connect` has succeeded recently — escalating from "warning" to "critical"
+  past `SPORTHEALTH_GARMIN_STALE_ESCALATE_DAYS` (default 7) — and (b) whether
+  `athlete.last_full_export_at` is fresh enough (`SPORTHEALTH_EXPORT_FRESHNESS_DAYS`, default
+  90). Both fire a generic JSON webhook (`SPORTHEALTH_STALENESS_WEBHOOK_URL`) if configured.
+  The worker container (`worker/main.py`, APScheduler) runs `garmin_connect` sync + this check
+  daily (default 04:15 local, jittered); `garmin_export` is never scheduled, it's a manual
+  CLI action.
+- **Never drop a field, concretely**: the activity FIT parser (`fit/parser.py`), health FIT
+  parser (`health/fit_parser.py`), and health JSON parser (`health/json_parser.py`) all
+  register every field they see into `metric_definition`, even ones they don't materialize a
+  value for (a field on a known message/object they don't map to a column, or a field of an
+  entirely unrecognized message type/nested JSON structure). See each module's docstring for
+  exactly which fields get values stored where versus cataloged-only.
 - Multi-tenant from day one: every data table carries `athlete_id` except `athlete` and
   `metric_definition` (shared catalogs, not personal data) — enforced by a schema test
   (`tests/db/test_schema.py`), not just convention. Only one athlete row exists today.
@@ -84,8 +116,13 @@ uv run alembic upgrade head              # create/migrate schema, seeds the one 
 uv run alembic revision --autogenerate -m "..."   # after changing db/schema.py
 
 # Ingestion (the `sync` console script — see cli.py)
-uv run sync import fit-folder <path>     # one-shot import of every .fit file in <path>
+uv run sync import fit-folder <path>     # one-shot import of every .fit (+ daily_summary/hydration .json) in <path>
+uv run sync import garmin-export <path>  # backfill from a Garmin export archive (dir or .zip)
+uv run sync import garmin-connect        # on-demand incremental sync (--days to override window)
 uv run sync watch fit-folder <path>      # continuously poll <path> (--interval seconds, default 30)
+uv run sync auth login                   # interactive Garmin login (MFA prompt) — run this yourself
+uv run sync auth status                  # token store presence + age
+uv run sync report counts                # per-source activity counts + unmatched (single-source)
 uv run sync rebuild                      # wipe derived tables, replay the entire raw archive
 
 # Frontend
@@ -127,6 +164,12 @@ It will. `python-garminconnect` has already been rebuilt once (garth → curl_cf
 writing. The contract: **the fix stays inside one adapter file.** If you find yourself
 changing the schema, the API contract, or the frontend because a vendor changed a JSON key,
 stop — that's a sign the abstraction leaked, not a sign the schema was wrong.
+
+**Verify a vendor library's API by introspecting the installed package, not from memory.**
+`docs/adr/0003-phase-2-garmin-adapters.md` decision 1-2 is the example: introspecting
+`garminconnect`'s actual `login()` source (not recalling its shape) surfaced a real
+credential-fallback behavior that directly shaped the auth-safety design. Training data on
+fast-moving vendor libraries is exactly what this project's brief warns is stale.
 
 ## Docs
 

@@ -11,6 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from sporthealth.fit.types import StreamPoint
+from sporthealth.health.types import HealthStreamPoint
 
 
 def write_activity_stream(
@@ -43,3 +44,44 @@ def write_activity_stream(
     pq.write_table(table, full_path)
 
     return relative_path, len(points), channel_names
+
+
+def write_health_stream(
+    parquet_dir: Path,
+    athlete_id: str,
+    metric_key: str,
+    year_month: str,
+    points: list[HealthStreamPoint],
+) -> tuple[str, int]:
+    """Writes/merges intraday health stream points into the (metric_key, year_month) Parquet
+    file. Unlike `write_activity_stream` (one file, always fully rewritten from one activity's
+    parse), a health-stream file is built up incrementally: separate daily source files
+    (`WELLNESS`/`HRV_STATUS` FIT files, one per day) all contribute to the same month's file
+    across many ingest calls. Existing points are read back, new points are merged in keyed by
+    timestamp (last write wins — re-ingesting the same day is idempotent), and the file is
+    rewritten sorted. Returns (relative_path, total_n_samples_after_merge).
+    """
+    relative_path = f"{athlete_id}/health/{metric_key}/{year_month}.parquet"
+    full_path = parquet_dir / relative_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+
+    merged: dict[object, float] = {}
+    if full_path.exists():
+        existing = pq.read_table(full_path)
+        existing_ts = existing.column("timestamp_utc").to_pylist()
+        existing_val = existing.column("value").to_pylist()
+        for ts, value in zip(existing_ts, existing_val, strict=True):
+            merged[ts] = value
+
+    for point in points:
+        merged[point.timestamp_utc] = point.value
+
+    ordered = sorted(merged.items())
+    table = pa.table(
+        {
+            "timestamp_utc": pa.array([ts for ts, _ in ordered], type=pa.timestamp("us", tz="UTC")),
+            "value": [v for _, v in ordered],
+        }
+    )
+    pq.write_table(table, full_path)
+    return relative_path, len(ordered)

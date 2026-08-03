@@ -7,17 +7,20 @@ from pathlib import Path
 
 from sqlalchemy import Connection, delete, select
 
-from sporthealth.adapters.fit_folder import ingest_canonical_batch
 from sporthealth.archive import read_raw_bytes, restore_raw_object_table
 from sporthealth.db.schema import (
     activity,
     activity_metric,
     activity_source_link,
     activity_stream,
+    health_observation,
+    health_stream,
     lap,
     merge_decision,
     raw_object,
     route_geom,
+    sleep_session,
+    sleep_stage,
 )
 from sporthealth.db.schema import (
     device as device_table,
@@ -25,7 +28,9 @@ from sporthealth.db.schema import (
 from sporthealth.db.schema import (
     split as split_table,
 )
-from sporthealth.fit.parser import parse_fit
+from sporthealth.health.ingest import ingest_health_batch
+from sporthealth.health.json_parser import parse_daily_summary_json, parse_hydration_json
+from sporthealth.ingest_dispatch import ingest_fit_bytes
 
 # Wiped and rebuilt from raw_object. Never includes raw_object itself, and never includes
 # metric_definition (a catalog, not per-athlete data — see EXEMPT_FROM_ATHLETE_SCOPING).
@@ -40,6 +45,10 @@ _REBUILDABLE_TABLES = (
     activity_source_link,
     activity,
     device_table,
+    sleep_stage,
+    health_observation,
+    health_stream,
+    sleep_session,
 )
 
 
@@ -66,7 +75,7 @@ def rebuild_database(
             raw_object.c.kind,
             raw_object.c.source,
             raw_object.c.storage_path,
-            raw_object.c.sha256,
+            raw_object.c.external_id,
         )
         .where(raw_object.c.athlete_id == athlete_id)
         .order_by(raw_object.c.fetched_at)
@@ -74,21 +83,43 @@ def rebuild_database(
 
     replayed = 0
     for row in rows:
-        if not row.kind.startswith("fit_"):
-            # Forward-compatible: only FIT kinds are parsed/handled as of Phase 1. Other
-            # kinds are simply skipped on rebuild, not dropped — their bytes remain archived.
-            continue
         content = read_raw_bytes(archive_root, row.storage_path)
-        batch = parse_fit(content)
-        ingest_canonical_batch(
-            conn,
-            parquet_dir,
-            athlete_id=athlete_id,
-            source=row.source,
-            raw_object_id=row.id,
-            sha256=row.sha256,
-            batch=batch,
-        )
+
+        # "fit" covers Phase 2's unified dispatch (activity-or-health); "fit_activity" is the
+        # Phase 1 kind, kept for backward compatibility with rows archived before this change.
+        # archive_raw_bytes is content-addressed and idempotent, so replaying through the same
+        # dispatch used at ingest time re-finds this exact raw_object.id rather than duplicating
+        # it.
+        if row.kind.startswith("fit"):
+            ingest_fit_bytes(
+                conn,
+                archive_root,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                content=content,
+                external_id_hint=row.external_id,
+            )
+        elif row.kind == "daily_summary_json":
+            ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_daily_summary_json(content),
+            )
+        elif row.kind == "hydration_json":
+            ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_hydration_json(content),
+            )
+        else:
+            # Forward-compatible: other kinds (garmin_export_json/csv/other, etc.) are
+            # simply skipped on rebuild, not dropped — their bytes remain archived.
+            continue
         conn.commit()
         replayed += 1
 

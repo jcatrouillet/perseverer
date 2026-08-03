@@ -8,8 +8,8 @@ SMB/rsync/Drive don't reliably fire inotify events inside a container (see CLAUD
 
 from __future__ import annotations
 
-import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -38,12 +38,20 @@ from sporthealth.db.schema import (
 )
 from sporthealth.fit.parser import parse_fit
 from sporthealth.fit.types import CanonicalBatch, ParsedDevice
+from sporthealth.health.ingest import ingest_health_batch
+from sporthealth.health.json_parser import parse_daily_summary_json, parse_hydration_json
 from sporthealth.merge.engine import ActivityCandidate, is_same_activity
 from sporthealth.metrics.registry import get_or_register_metric
 from sporthealth.streams import write_activity_stream
 
 _EPOCH = datetime.fromtimestamp(0, tz=UTC)
 _MERGE_WINDOW = timedelta(days=1)
+
+# fit_folder's charter is FIT files, plus these two specific Garmin Connect-shaped JSON
+# filename patterns confirmed against real data (see docs/adr/0004-phase-2-health-ingestion.md)
+# — not a general JSON importer.
+_DAILY_SUMMARY_JSON_RE = re.compile(r"^daily_summary_\d{4}-\d{2}-\d{2}\.json$", re.IGNORECASE)
+_HYDRATION_JSON_RE = re.compile(r"^hydration_\d{4}-\d{2}-\d{2}\.json$", re.IGNORECASE)
 
 
 class FitFolderAdapter:
@@ -61,13 +69,21 @@ class FitFolderAdapter:
         pass  # no credentials needed — it's a directory
 
     def list_changed(self, since: datetime) -> list[ObjectRef]:
-        # Explicit suffix check (not path.glob("*.fit")): glob is case-insensitive on Windows
-        # but case-sensitive on Linux, so "*.fit" alone would silently miss ACTIVITY.FIT on
-        # the NAS. Content hashing (in fetch_raw/archive) is the real idempotency mechanism —
-        # mtime here is only a cheap pre-filter, not a correctness requirement.
+        # Explicit suffix/filename checks (not path.glob("*.fit")): glob is case-insensitive
+        # on Windows but case-sensitive on Linux, so "*.fit" alone would silently miss
+        # ACTIVITY.FIT on the NAS. Content hashing (in fetch_raw/archive) is the real
+        # idempotency mechanism — mtime here is only a cheap pre-filter, not a correctness
+        # requirement.
         refs = []
         for path in sorted(self.folder.iterdir()):
-            if not path.is_file() or path.suffix.lower() != ".fit":
+            if not path.is_file():
+                continue
+            suffix = path.suffix.lower()
+            is_fit = suffix == ".fit"
+            is_health_json = suffix == ".json" and (
+                _DAILY_SUMMARY_JSON_RE.match(path.name) or _HYDRATION_JSON_RE.match(path.name)
+            )
+            if not (is_fit or is_health_json):
                 continue
             mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
             if mtime >= since:
@@ -188,16 +204,22 @@ def ingest_canonical_batch(
     raw_object_id: int,
     sha256: str,
     batch: CanonicalBatch,
+    external_id_hint: str | None = None,
 ) -> IngestResult:
     """Upserts a parsed batch into the schema. Idempotent: a raw object that's already linked
     (same athlete_id, source, external_id) is a no-op — see activity_source_link's unique
     constraint, which is the actual idempotency mechanism this relies on.
+
+    `external_id_hint`: when the caller already has a real, stable, vendor-assigned ID (e.g.
+    `garmin_export`'s filename-embedded activity ID, or `garmin_connect`'s own `activityId`),
+    pass it here to use directly instead of the device-serial+start-time/sha256 fallback below
+    — that fallback exists for `fit_folder`, which has no such ID available.
     """
     if batch.kind != "activity" or batch.activity is None:
         return IngestResult(activity_id=None, created=False)
 
     a = batch.activity
-    external_id = _derive_external_id(a.start_time_utc, a.device, sha256)
+    external_id = external_id_hint or _derive_external_id(a.start_time_utc, a.device, sha256)
 
     existing_activity_id = conn.execute(
         select(activity_source_link.c.activity_id).where(
@@ -356,6 +378,10 @@ def import_from_folder(
     folder: Path,
     since: datetime | None = None,
 ) -> IngestRunSummary:
+    # Local import: ingest_dispatch imports IngestResult/ingest_canonical_batch from this
+    # module, so importing it at module level here would be circular.
+    from sporthealth.ingest_dispatch import ingest_fit_bytes
+
     adapter = FitFolderAdapter(folder)
     health = adapter.health_check()
     if not health.ok:
@@ -380,30 +406,46 @@ def import_from_folder(
     summary = IngestRunSummary(run_id=run_id)
     for ref in adapter.list_changed(since or _EPOCH):
         summary.items_seen += 1
+        path = Path(ref.locator)
         try:
-            payload = adapter.fetch_raw(ref)
-            sha256 = hashlib.sha256(payload.content).hexdigest()
-            raw_id = archive_raw_bytes(
+            if path.suffix.lower() == ".fit":
+                content = path.read_bytes()
+                dispatch_result = ingest_fit_bytes(
+                    conn,
+                    archive_root,
+                    parquet_dir,
+                    athlete_id=athlete_id,
+                    source=adapter.name,
+                    content=content,
+                    locator=ref.locator,
+                )
+                conn.commit()
+                if dispatch_result.created:
+                    summary.items_new += 1
+                continue
+
+            content = path.read_bytes()
+            if _DAILY_SUMMARY_JSON_RE.match(path.name):
+                json_kind = "daily_summary_json"
+                health_batch = parse_daily_summary_json(content)
+            else:
+                json_kind = "hydration_json"
+                health_batch = parse_hydration_json(content)
+
+            archive_raw_bytes(
                 conn,
                 archive_root,
                 athlete_id=athlete_id,
                 source=adapter.name,
-                kind=payload.kind,
-                content=payload.content,
+                kind=json_kind,
+                content=content,
                 locator=ref.locator,
             )
-            batch = adapter.parse(payload.content)
-            ingest_result = ingest_canonical_batch(
-                conn,
-                parquet_dir,
-                athlete_id=athlete_id,
-                source=adapter.name,
-                raw_object_id=raw_id,
-                sha256=sha256,
-                batch=batch,
+            health_result = ingest_health_batch(
+                conn, parquet_dir, athlete_id=athlete_id, source=adapter.name, batch=health_batch
             )
             conn.commit()
-            if ingest_result.created:
+            if health_result.observations_new > 0 or health_result.sleep_sessions_new > 0:
                 summary.items_new += 1
         except Exception as e:  # one bad file must not abort the whole run
             conn.rollback()

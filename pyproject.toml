@@ -20,6 +20,10 @@ dependencies = [
   "polyline>=2.0",
   "alembic>=1.13",
   "sqlalchemy>=2.0",
+  # Phase 2: garmin_connect adapter, scheduler, staleness webhook.
+  "garminconnect>=0.3.5",
+  "apscheduler>=3.10",
+  "httpx>=0.27",
 ]
 
 [project.scripts]
@@ -31,7 +35,6 @@ dev = [
   "mypy>=1.13",
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
-  "httpx>=0.27",
   "fitdecode>=0.10",
   "hypothesis>=6.115",
 ]
@@ -62,7 +65,14 @@ files = ["src", "tests"]
 [[tool.mypy.overrides]]
 # pyarrow, garmin_fit_sdk, polyline, fitdecode ship no py.typed marker / stubs as of this
 # writing.
-module = ["pyarrow.*", "garmin_fit_sdk.*", "polyline.*", "fitdecode.*"]
+module = [
+  "pyarrow.*",
+  "garmin_fit_sdk.*",
+  "polyline.*",
+  "fitdecode.*",
+  "garminconnect.*",
+  "apscheduler.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

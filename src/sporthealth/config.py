@@ -31,6 +31,17 @@ class Settings(BaseSettings):
     api_port: int = 8000
     data_dir: Path = Path("/data")
 
+    # --- Phase 2: garmin_connect rate limiting, rolling window, staleness, scheduler ---
+    garmin_rolling_window_days: int = 10
+    garmin_request_interval_s: float = 3.0
+    garmin_max_requests_per_hour: int = 300
+    garmin_stale_escalate_days: int = 7
+    export_freshness_days: int = 90
+    staleness_webhook_url: str | None = None
+    schedule_hour: int = 4
+    schedule_minute: int = 15
+    schedule_jitter_s: int = 600
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "sporthealth.db"
@@ -42,6 +53,10 @@ class Settings(BaseSettings):
     @property
     def parquet_dir(self) -> Path:
         return self.data_dir / "parquet"
+
+    @property
+    def garmin_tokenstore_dir(self) -> Path:
+        return self.data_dir / "garmin_tokens"
 
     @classmethod
     def settings_customise_sources(

@@ -49,6 +49,9 @@ athlete = Table(
     Column("timezone", String, nullable=False, default="UTC"),
     Column("unit_preference", String, nullable=False, default="metric"),
     Column("created_at", DateTime(), nullable=False),
+    # Set by the garmin_export adapter on successful completion — the "days since last full
+    # Garmin export" health signal (spec: nag past 90 days; see sporthealth/staleness.py).
+    Column("last_full_export_at", DateTime(), nullable=True),
 )
 
 # --- Bronze: immutable raw archive --------------------------------------------
