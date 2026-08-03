@@ -22,7 +22,12 @@ services:
       SPORTHEALTH_ENVIRONMENT: ${SPORTHEALTH_ENVIRONMENT:-development}
       SPORTHEALTH_LOG_LEVEL: ${SPORTHEALTH_LOG_LEVEL:-INFO}
       SPORTHEALTH_API_PORT: ${SPORTHEALTH_API_PORT:-8000}
-      SPORTHEALTH_DATA_DIR: ${SPORTHEALTH_DATA_DIR:-/data}
+      # Hardcoded, not templated from .env: this is the container-internal mount point
+      # (matches the volumes: entry below), an implementation detail of this compose file,
+      # not something a host .env should override. .env's SPORTHEALTH_DATA_DIR is for
+      # host-side tooling (alembic, the CLI run directly via `uv run`) and means something
+      # different there (a local relative path) — see .env.example.
+      SPORTHEALTH_DATA_DIR: /data
     volumes:
       - sporthealth-data:/data
     healthcheck:
@@ -45,7 +50,12 @@ services:
     environment:
       SPORTHEALTH_ENVIRONMENT: ${SPORTHEALTH_ENVIRONMENT:-development}
       SPORTHEALTH_LOG_LEVEL: ${SPORTHEALTH_LOG_LEVEL:-INFO}
-      SPORTHEALTH_DATA_DIR: ${SPORTHEALTH_DATA_DIR:-/data}
+      # Hardcoded, not templated from .env: this is the container-internal mount point
+      # (matches the volumes: entry below), an implementation detail of this compose file,
+      # not something a host .env should override. .env's SPORTHEALTH_DATA_DIR is for
+      # host-side tooling (alembic, the CLI run directly via `uv run`) and means something
+      # different there (a local relative path) — see .env.example.
+      SPORTHEALTH_DATA_DIR: /data
     volumes:
       - sporthealth-data:/data
 

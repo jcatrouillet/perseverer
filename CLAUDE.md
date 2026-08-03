@@ -6,9 +6,9 @@ Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing revers
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
 the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
-**Current phase: 0 (repo skeleton).** See the phase table in the project brief (kept outside
-this repo) for the full 10-phase plan. Do not skip ahead — each phase has its own ADR in
-`docs/adr/` and its own acceptance criterion.
+**Current phase: 1 (raw archive, FIT parser, fit_folder adapter, schema, merge engine core).**
+See the phase table in the project brief (kept outside this repo) for the full 10-phase plan.
+Do not skip ahead — each phase has its own ADR in `docs/adr/` and its own acceptance criterion.
 
 ## The one rule that overrides everything else
 
@@ -31,25 +31,44 @@ because you don't recognize it — stop, that's the bug.
 5. **Never destructive.** No migration or sync deletes raw data. Soft-delete only.
 6. **SI units in storage** (metres, seconds, m/s, kg, °C, W, bpm), converted at the
    presentation layer. Timestamps: UTC + local UTC offset + IANA timezone name.
+   **Implementation note**: every `DateTime` column is a *naive* Python datetime that's
+   implicitly UTC — SQLite/SQLAlchemy don't actually round-trip `tzinfo`, so declaring
+   `timezone=True` would be a lie (see `docs/adr/0002-phase-1-schema-and-ingestion.md`
+   decision 10, and `docs/DATA_DICTIONARY.md`). Never assume a value read from the DB is
+   timezone-aware.
 7. **Additive schema evolution.** A new activity type or health metric needs zero migrations
    and zero code changes — only a registry row.
 
-## Architecture (target shape — most of this doesn't exist yet in Phase 0)
+## Architecture
 
-- **Bronze/raw archive**: every vendor HTTP response and every FIT/TCX/GPX file, gzipped,
-  content-addressed, immutable.
+- **Bronze/raw archive** (`data/raw/`, table `raw_object`): every vendor HTTP response and
+  every FIT/TCX/GPX file, gzipped, content-addressed at `<sha256[:2]>/<sha256>.gz`, immutable.
+  Each blob has a JSON sidecar (`<sha256>.json`) mirroring its `raw_object` row — the sidecar,
+  not the SQLite row, is the durable catalog; `sync rebuild` restores `raw_object` from
+  sidecars first, which is what makes rebuilding after deleting the database entirely work.
 - **SQLite (WAL mode)**: metadata, daily/summary health observations, activity summaries,
-  laps/splits, rollups, notes. What you filter and join on.
-- **Parquet, one file per activity or per metric-month**: per-second activity streams and
-  intraday health streams. What you plot. Never rows-in-SQLite for this.
+  laps/splits, rollups, notes. What you filter and join on. See `docs/DATA_DICTIONARY.md` for
+  the full table list.
+- **Parquet, one file per activity** (`data/parquet/<athlete_id>/<activity_id>.parquet`):
+  full-resolution per-second activity streams. What you plot. Never rows-in-SQLite for this.
+  Downsampling into low/medium/high tiers is a Phase 3 (API-serving) concern, not ingestion.
 - **DuckDB**, attached read-only, for analytical queries spanning SQLite + Parquet in one
-  statement.
+  statement. (Not yet wired up — arrives with the read API in Phase 3.)
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
-  `list_changed`, `fetch_raw`, `parse`). When a vendor breaks — and Garmin already has, twice,
-  as of this writing — the fix is confined to one adapter file. If fixing a vendor break means
-  touching the schema, the design is wrong; stop and say so.
-- Multi-tenant from day one: every data table carries `athlete_id`, scoping is enforced in the
-  repository layer, not per-endpoint. Only one athlete row exists today.
+  `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). `fit_folder` (`adapters/
+  fit_folder.py`) is the first implementation: a polling directory importer, content-hash
+  idempotent, feeding the shared FIT parser (`fit/parser.py`) and merge engine
+  (`merge/engine.py`). When a vendor breaks — and Garmin already has, twice, as of this
+  writing — the fix is confined to one adapter file. If fixing a vendor break means touching
+  the schema, the design is wrong; stop and say so.
+- **Never drop a field, concretely**: the FIT parser registers every field it sees into
+  `metric_definition`, even ones it doesn't materialize a value for (a field on a known
+  message it doesn't map to a column, or a field of an entirely unrecognized message type).
+  See the module docstring in `fit/parser.py` for exactly which fields get values stored
+  where versus cataloged-only.
+- Multi-tenant from day one: every data table carries `athlete_id` except `athlete` and
+  `metric_definition` (shared catalogs, not personal data) — enforced by a schema test
+  (`tests/db/test_schema.py`), not just convention. Only one athlete row exists today.
 
 ## Commands
 
@@ -59,6 +78,15 @@ uv sync                      # install deps (installed via `pip install uv` if u
 uv run pytest                # test suite
 uv run ruff check .          # lint
 uv run mypy                  # strict type check
+
+# Database (SPORTHEALTH_DATA_DIR in .env controls where — defaults to ./data for host tooling)
+uv run alembic upgrade head              # create/migrate schema, seeds the one athlete row
+uv run alembic revision --autogenerate -m "..."   # after changing db/schema.py
+
+# Ingestion (the `sync` console script — see cli.py)
+uv run sync import fit-folder <path>     # one-shot import of every .fit file in <path>
+uv run sync watch fit-folder <path>      # continuously poll <path> (--interval seconds, default 30)
+uv run sync rebuild                      # wipe derived tables, replay the entire raw archive
 
 # Frontend
 cd frontend && npm install

@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     api_port: int = 8000
     data_dir: Path = Path("/data")
 
+    @property
+    def db_path(self) -> Path:
+        return self.data_dir / "sporthealth.db"
+
+    @property
+    def raw_archive_dir(self) -> Path:
+        return self.data_dir / "raw"
+
+    @property
+    def parquet_dir(self) -> Path:
+        return self.data_dir / "parquet"
+
     @classmethod
     def settings_customise_sources(
         cls,
