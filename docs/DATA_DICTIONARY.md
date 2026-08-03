@@ -37,9 +37,12 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
   archived before that change), `daily_summary_json`/`hydration_json` (`fit_folder`'s two
   recognized Garmin Connect-shaped health JSON filename patterns), `garmin_connect_json` (the
   Connect API's activity summary — archived for every activity but not cross-referenced from
-  `activity_source_link`, see below), `garmin_export_json`/`garmin_export_csv`/
-  `garmin_export_other` (everything in an export archive that isn't a `.fit` file — archived
-  raw, not yet parsed; see `docs/adr/0003-phase-2-garmin-adapters.md` decision 4).
+  `activity_source_link`, see below), `garmin_export_health_json` (a real GDPR export's
+  `DI-Connect-Wellness`/`Metrics`/`Aggregator` files — archived raw *and* parsed, see below and
+  `docs/adr/0005-phase-2-garmin-export-real-data.md`), `garmin_export_json`/`garmin_export_csv`/
+  `garmin_export_other` (everything else in an export archive that isn't a `.fit` file or
+  recognized health JSON — archived raw, not parsed; see
+  `docs/adr/0003-phase-2-garmin-adapters.md` decision 4).
 
 ### Core
 
@@ -58,8 +61,12 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
   to it. `external_id` is the adapter's idempotency key: for `fit_folder`, derived from the FIT
   file's device serial + start time (falling back to the file's sha256), deliberately never the
   filename, since real device folders don't use descriptive names; for `garmin_export`, the
-  filename-embedded Garmin activity ID when present (real exports name files
-  `<activityId>_ACTIVITY.fit`); for `garmin_connect`, the Connect API's own `activityId`
+  filename-embedded Garmin activity ID when present — either `<activityId>_ACTIVITY.fit`
+  (Phase 1's manually-organized test data) or `<email>_<activityId>.fit` (a real GDPR export's
+  own naming, confirmed only nested inside `DI-Connect-Uploaded-Files/UploadedFiles_*.zip` and
+  a couple of single-file backup zips — see ADR 0005), tried in that order, falling back to
+  `fit_folder`'s device+timestamp/sha256 heuristic when neither matches (e.g. the fixed-name
+  device/training backup FIT files); for `garmin_connect`, the Connect API's own `activityId`
   directly. `raw_object_id` always points at the FIT that was actually parsed — for
   `garmin_connect`, which archives a JSON summary too, that JSON gets its own `raw_object` row
   but isn't linked from here (see decision 3 in ADR 0003).
@@ -84,14 +91,19 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
 
 - **`health_observation`** — one row per daily/instant/interval health fact, keyed
   `metric_key` + `observed_at_utc` + `source`. `aggregation` is `instant | interval | daily`.
-  Two `metric_key` naming families: `fit.<message>.<field>`-style keys for FIT-sourced facts
+  Three `metric_key` naming families: `fit.<message>.<field>`-style keys for FIT-sourced facts
   that have no dedicated column (e.g. `hrv.status`, `sleep.deep_sleep_score` — every
-  `sleep_assessment_mesgs` score maps generically to `sleep.<field>`, ADR 0004 decision 3), and
+  `sleep_assessment_mesgs` score maps generically to `sleep.<field>`, ADR 0004 decision 3);
   `garmin.daily_summary.<key>` / `garmin.hydration.<key>` for scalar fields flattened from the
   Garmin Connect-shaped `daily_summary_*.json` / `hydration_*.json` files (nested dict/list
-  values in those files are archived but not flattened — decision 5). `nap` is a single
-  `aggregation="interval"` row per nap (`interval_start`/`interval_end`, `value_text` =
-  feedback) rather than a dedicated table (decision 4).
+  values in those files are archived but not flattened — decision 5); and
+  `garmin.export.<report_kind>.<field>` for scalar fields flattened from a real GDPR export's
+  `DI-Connect-Wellness`/`Metrics`/`Aggregator` JSON (`report_kind` mechanically derived from the
+  filename — `sleepData`, `UDSFile`, `HydrationLogFile`, `TrainingReadinessDTO`,
+  `EnduranceScore`, and ~20 more, all through one generic parser rather than bespoke code per
+  kind — see ADR 0005 decisions 3-4). `nap` is a single `aggregation="interval"` row per nap
+  (`interval_start`/`interval_end`, `value_text` = feedback) rather than a dedicated table
+  (ADR 0004 decision 4).
 - **`health_stream`** — Parquet-backed intraday time series, one row per `(metric_key,
   year_month)`: `heart_rate` (from `monitoring_mesgs`, `timestamp_16`-corrected — decision 1),
   `stress_level`, `respiration_rate`, `spo2`, `hrv`. Unlike `activity_stream`, a month's file is
@@ -135,12 +147,15 @@ totals for exactly those fields (decision 2).
 ## Metric registry
 
 Populated automatically by `sporthealth.metrics.registry.get_or_register_metric`, called from
-both the activity FIT parser's and the health FIT/JSON parsers' ingest paths for every field
-they encounter. As of the Phase 1 acceptance run (776 real activity FIT files), 824 distinct
-metric keys were cataloged; after also running the Phase 2 health extension against 1808 real
-monitoring FIT/JSON files (735 WELLNESS, 636 METRICS, 103 HRV_STATUS, 103 SLEEP_DATA, 17 NAP,
-107 daily_summary, 107 hydration — zero errors, fully idempotent on re-run), 1156 distinct
-metric keys are cataloged in total. Browse the live catalog via `select * from
-metric_definition` — there is no separate promoted-metrics document yet (Phase 3's `/metrics`
-endpoint and the frontend's metric registry browser, Phase 5+, are the intended long-term ways
-to browse this).
+the activity FIT parser's, health FIT/JSON parsers', and GDPR-export JSON parser's ingest
+paths for every field they encounter. As of the Phase 1 acceptance run (776 real activity FIT
+files), 824 distinct metric keys were cataloged; after the Phase 2 health extension against
+1808 real monitoring FIT/JSON files, 1156; after also running a real full GDPR export archive
+(172MB, ~23,000 files across 6 nested zips plus ~24 report-kind JSON files under
+`DI-Connect-Wellness`/`Metrics`/`Aggregator` — 0 errors, fully idempotent on re-run, 1250 total
+activities with 776 correctly matched across `fit_folder`+`garmin_export` and 474 newly
+discovered, 288,939 `health_observation` rows, 1480 `sleep_session` rows going back years
+further than the local monitoring folder), 1415 distinct metric keys are cataloged in total.
+Browse the live catalog via `select * from metric_definition` — there is no separate
+promoted-metrics document yet (Phase 3's `/metrics` endpoint and the frontend's metric
+registry browser, Phase 5+, are the intended long-term ways to browse this).

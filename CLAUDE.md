@@ -63,8 +63,14 @@ because you don't recognize it — stop, that's the bug.
     (`daily_summary_*.json`, `hydration_*.json`) — not a general JSON importer.
   - `garmin_export` (`adapters/garmin_export.py`) — historical backfill from a Garmin "Export
     Your Data" archive (directory or `.zip`), zero network calls. Recursively finds FIT files
-    at any depth; everything else in the archive is archived raw but not parsed yet (Garmin's
-    export JSON schema is undocumented — see `docs/adr/0003-phase-2-garmin-adapters.md`).
+    at any depth, including nested inside further `.zip` files — confirmed necessary against a
+    real export, whose FIT files (activity and health mixed together) all live one zip-level
+    deeper than the top-level archive; see `docs/adr/0005-phase-2-garmin-export-real-data.md`.
+    Health JSON under `DI-Connect-Wellness`/`Metrics`/`Aggregator` is parsed generically
+    (`garmin.export.<report_kind>.<field>`, one parser for all ~24 report kinds, not bespoke
+    code per kind — ADR 0005). Everything else (account data, bulk activity summaries, and
+    unrelated non-fitness product domains a Garmin account's export can bundle) is archived
+    raw but not parsed.
   - `garmin_connect` (`adapters/garmin_connect.py`) — the primary, incremental, unattended
     sync path, and the adapter most likely to break. See the safety rules below before
     touching this file.
