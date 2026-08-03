@@ -3,7 +3,8 @@
 Self-hosted fitness & health data platform. Garmin + Strava in, one owned SQLite+Parquet
 archive, a REST/JSON API an AI agent can write notes through, a fast web frontend. Runs on a
 Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing reverse proxy;
-developed on Windows + Docker Desktop.
+developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
+the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
 **Current phase: 0 (repo skeleton).** See the phase table in the project brief (kept outside
 this repo) for the full 10-phase plan. Do not skip ahead — each phase has its own ADR in
@@ -64,11 +65,12 @@ cd frontend && npm install
 npm run typecheck            # tsc --noEmit
 npm run build                # tsc --noEmit && vite build
 
-# Full stack (Windows/Docker Desktop — compose.override.yml auto-merges)
-docker compose up --build
+# Full stack (Windows/Podman Desktop — compose.override.yml auto-merges)
+podman compose up --build
 curl http://localhost:8000/api/v1/healthz
 
-# NAS deploy (never build on the NAS — see docs/DEPLOY.md)
+# NAS deploy — the NAS runs Docker (DSM Container Manager), not Podman; never build on the
+# NAS, see docs/DEPLOY.md
 docker compose -f compose.yaml -f compose.nas.yml pull
 docker compose -f compose.yaml -f compose.nas.yml up -d
 ```

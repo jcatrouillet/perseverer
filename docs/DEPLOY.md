@@ -8,7 +8,7 @@ and observability pieces as they're built.
 
 | | Dev | Production |
 |---|---|---|
-| Host | Windows 10, Docker Desktop (WSL2 backend) | Synology DS1019+, DSM 7.x Container Manager |
+| Host | Windows 10, Podman Desktop | Synology DS1019+, DSM 7.x Container Manager (Docker) |
 | CPU | whatever your dev machine has | Intel Celeron J3455 (Goldmont, **no AVX/AVX2**, 4 cores, 1.5GHz) |
 | RAM budget | not constrained | ~1.5GB for the whole stack (8GB total, shared with DSM) |
 | Build location | here | **never** — see below |
@@ -17,26 +17,36 @@ and observability pieces as they're built.
 ## Golden rule: never build on the NAS
 
 A Vite build or a Python wheel compile on a J3455 is measured in double-digit minutes. All
-images are built on Windows (manually) or in GitHub Actions (CI), tagged, and pushed to
-**GHCR** (`ghcr.io/<owner>/my-sport-health-data-{api,worker,frontend}`). The NAS only ever
-pulls.
+images are built on Windows (manually, via Podman) or in GitHub Actions (CI), tagged, and
+pushed to **GHCR** (`ghcr.io/<owner>/my-sport-health-data-{api,worker,frontend}`). The NAS
+only ever pulls, using Docker (DSM Container Manager) — the two engines never need to
+interoperate directly, only agree on the OCI image format, which they do.
 
-## Dev loop (Windows)
+## Dev loop (Windows, Podman Desktop)
 
 ```bash
 cp .env.example .env       # adjust DEV_* ports if they collide with something else
-docker compose up --build
+podman compose up --build
 curl http://localhost:8000/api/v1/healthz
 ```
 
-`docker compose` auto-merges `compose.yaml` + `compose.override.yml` — no `-f` flags needed.
-The override publishes the API on `DEV_API_PUBLISHED_PORT` (default 8000) and the frontend on
+`compose.yaml`/`compose.override.yml`/`compose.nas.yml` are plain Compose Specification files
+with no Docker-only extensions, so `podman compose` works the same way `docker compose` would
+— it auto-merges `compose.yaml` + `compose.override.yml`, no `-f` flags needed. The override
+publishes the API on `DEV_API_PUBLISHED_PORT` (default 8000) and the frontend on
 `DEV_FRONTEND_PUBLISHED_PORT` (default 5173). There is no live-reload wired up yet (Phase 0
 scope is a health check, not a dev loop optimized for iteration) — rebuild with
-`docker compose up --build` after code changes. Frontend work in Phase 5+ will likely run
+`podman compose up --build` after code changes. Frontend work in Phase 5+ will likely run
 `npm run dev` directly on the host instead of through the container, for HMR.
 
+If you ever need the Docker CLI locally (e.g. to sanity-check an image before it reaches the
+NAS), Podman Desktop can also emulate the `docker` command; not required for the dev loop
+above.
+
 ## NAS deploy
+
+The NAS runs Docker (DSM Container Manager), not Podman — this step is unaffected by the dev
+engine choice.
 
 ```bash
 # one-time: authenticate the NAS's docker CLI/Container Manager to pull from GHCR

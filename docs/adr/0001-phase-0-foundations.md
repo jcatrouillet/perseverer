@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Accepted. Amended 2026-08-02: dev container engine changed from Docker Desktop to Podman
+Desktop — see decision 8.
 
 ## Context
 
@@ -48,12 +49,13 @@ adapter/scheduler config lands.
 ### 4. Three compose files: base + dev override (auto-merged) + NAS override (explicit `-f`)
 
 `compose.yaml` has no bind mounts and publishes nothing. `compose.override.yml` is picked up
-automatically by plain `docker compose up` on Windows — this is what makes the Phase 0
-acceptance criterion ("`docker compose up` gives a healthy `/healthz` on Windows") trivially
-true with no extra flags. `compose.nas.yml` is applied explicitly
-(`-f compose.yaml -f compose.nas.yml`) and adds the `user:` UID/GID mapping, the NAS host bind
-mount, and per-service memory/CPU caps — never ports, since the DSM reverse proxy is the sole
-ingress from Phase 3 onward.
+automatically by a plain `compose up` invocation on Windows (`docker compose up` originally;
+`podman compose up` since decision 8 — both auto-merge override files identically, since this
+is a Compose Specification behavior, not a Docker-specific one) — this is what makes the
+Phase 0 acceptance criterion (a healthy `/healthz` with no extra flags) trivially true.
+`compose.nas.yml` is applied explicitly (`-f compose.yaml -f compose.nas.yml`) and adds the
+`user:` UID/GID mapping, the NAS host bind mount, and per-service memory/CPU caps — never
+ports, since the DSM reverse proxy is the sole ingress from Phase 3 onward.
 
 Rejected: a single compose file with profiles. Three files map directly to "how do I run this
 right now" (plain `up` = dev, explicit NAS flags = prod) without needing to remember a profile
@@ -89,6 +91,27 @@ setup time (not the versions originally sketched) after `npm install` flagged th
 `vite` line on a moderate-severity dev-server advisory (GHSA-67mh-4wv8-2f99, dev-server-only,
 not a production build issue). Since this repo is brand new, there's no reason to start on a
 version with a known advisory when the current major resolves cleanly.
+
+### 8. Dev container engine: Podman Desktop instead of Docker Desktop
+
+Local dev on Windows uses Podman Desktop rather than Docker Desktop. No file in this repo
+needed to change for this: `compose.yaml`/`compose.override.yml`/`compose.nas.yml` are plain
+Compose Specification with no Docker-only extensions (no BuildKit-only Dockerfile features
+either — both Dockerfiles are standard multi-stage `FROM`/`COPY --from=`/`RUN`/`USER`/`CMD`,
+which `podman build` handles natively via buildah). The dev commands change from
+`docker compose ...` to `podman compose ...`; everything else in this ADR stands unchanged.
+
+This is dev-only. **The NAS is unaffected** — DSM Container Manager runs Docker, not Podman,
+so `compose.nas.yml` and the GHCR pull-based deploy flow in `docs/DEPLOY.md` stay exactly as
+designed. Podman's rootless-by-default model also happens to line up with the non-root `USER
+sporthealth` already set in both `api.Dockerfile` and `worker.Dockerfile` — no change needed
+there either.
+
+**Not yet verified**: no container engine (Docker Desktop or Podman Desktop) is installed on
+the machine this repo was scaffolded on, so the Phase 0 acceptance criterion (`compose up`
+serving a healthy `/healthz`) is still unverified end-to-end as of this amendment. Everything
+short of that — `uv run pytest`/`ruff`/`mypy`, the frontend `typecheck`/`build`, and YAML
+validation of all three compose files — passes locally.
 
 ## Consequences
 

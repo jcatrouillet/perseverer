@@ -1,5 +1,7 @@
-# Auto-merged by plain `docker compose up` — this is the Windows/Docker Desktop dev shape.
-# Only publishes ports to localhost. Rebuild after code changes with `docker compose up --build`;
+# Auto-merged by a plain `compose up` invocation — this is the Windows/Podman Desktop dev
+# shape (works identically with `docker compose` if you ever switch back — this file has no
+# engine-specific extensions). Only publishes ports to localhost. Rebuild after code changes
+# with `podman compose up --build`;
 # live-reload via bind-mounted source + editable install is deferred until daily iteration
 # speed actually matters (Phase 1+), not added speculatively in Phase 0.
 

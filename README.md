@@ -7,10 +7,10 @@ See [`CLAUDE.md`](CLAUDE.md) for the architecture summary and non-negotiable inv
 [`docs/DEPLOY.md`](docs/DEPLOY.md) for the Windows → NAS deploy runbook, and
 [`docs/adr/`](docs/adr/) for the decision record, one ADR per phase.
 
-## Quickstart (dev, Windows + Docker Desktop)
+## Quickstart (dev, Windows + Podman Desktop)
 
 ```bash
 cp .env.example .env
-docker compose up --build
+podman compose up --build
 curl http://localhost:8000/api/v1/healthz
 ```
