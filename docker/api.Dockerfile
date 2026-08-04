@@ -21,15 +21,26 @@ COPY src ./src
 COPY config ./config
 RUN uv sync --frozen --no-dev --no-editable
 
+# Bakes DuckDB's "sqlite" extension in at build time, using the same duckdb version `uv sync`
+# just installed. `INSTALL` fetches over the network on first use, and the NAS container has
+# no reason to have outbound internet and images are never built there (see CLAUDE.md) — this
+# must happen here, not on first request in production. See
+# docs/adr/0006-phase-3-read-api-and-rollups.md decision 4.
+RUN /app/.venv/bin/python -c "\
+import duckdb; \
+duckdb.connect(':memory:', config={'extension_directory': '/app/.duckdb_extensions'}).execute('INSTALL sqlite')"
+
 FROM python:3.12-slim AS runtime
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin sporthealth
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
 COPY --from=builder /app/config /app/config
+COPY --from=builder /app/.duckdb_extensions /app/.duckdb_extensions
 
 ENV PATH="/app/.venv/bin:${PATH}" \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    SPORTHEALTH_DUCKDB_EXTENSION_DIR=/app/.duckdb_extensions
 
 USER sporthealth
 EXPOSE 8000

@@ -42,6 +42,21 @@ class Settings(BaseSettings):
     schedule_minute: int = 15
     schedule_jitter_s: int = 600
 
+    # --- Phase 3: read API auth/CORS/DuckDB ---
+    # Shared secret for the X-API-Key header (api/dependencies.py::require_api_key). Unset ->
+    # every protected route fails closed (503), never fails open. See ADR 0006 decision 6.
+    api_key: str | None = None
+    # Comma-separated origins for CORSMiddleware; unset -> no CORS middleware at all (no
+    # cross-origin browser access by default). See ADR 0006 decision 8.
+    cors_allowed_origins: str | None = None
+    # Reserved, not yet wired to uvicorn's --forwarded-allow-ips (needs an api.Dockerfile CMD
+    # change unrelated to Phase 3's core scope). See ADR 0006 decision 8 / decision 3 in the
+    # deferred-scope section.
+    trusted_proxy_ip: str | None = None
+    # Where the DuckDB sqlite extension is baked in at Docker build time (api.Dockerfile) --
+    # None locally, where DuckDB's own default cache/INSTALL is fine. See ADR 0006 decision 4.
+    duckdb_extension_dir: Path | None = None
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "sporthealth.db"
@@ -57,6 +72,12 @@ class Settings(BaseSettings):
     @property
     def garmin_tokenstore_dir(self) -> Path:
         return self.data_dir / "garmin_tokens"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        if not self.cors_allowed_origins:
+            return []
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
     @classmethod
     def settings_customise_sources(

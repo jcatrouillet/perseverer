@@ -46,6 +46,7 @@ from sporthealth.adapters.fit_folder import IngestResult, IngestRunSummary, inge
 from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.schema import ingest_run
 from sporthealth.fit.parser import parse_fit
+from sporthealth.rollups import refresh_daily_rollup
 
 SOURCE_NAME = "garmin_connect"
 
@@ -249,6 +250,7 @@ def sync_garmin_connect(
     conn.commit()
 
     summary = IngestRunSummary(run_id=run_id)
+    touched_dates: set[str] = set()
     try:
         adapter.authenticate()
         since = started_at - timedelta(days=rolling_window_days)
@@ -265,6 +267,8 @@ def sync_garmin_connect(
                     activity_summary=activity_summary,
                 )
                 conn.commit()
+                if ingest_result.local_date is not None:
+                    touched_dates.add(ingest_result.local_date)
                 if ingest_result.created:
                     summary.items_new += 1
             except GarminRateLimitAborted as e:
@@ -273,6 +277,10 @@ def sync_garmin_connect(
                 break  # no retry loop — stop this run entirely, let the next scheduled run continue
     except (GarminAuthRequired, GarminRateLimitAborted) as e:
         summary.errors.append({"error": str(e)})
+
+    for local_date in touched_dates:
+        refresh_daily_rollup(conn, athlete_id=athlete_id, local_date=local_date)
+    conn.commit()
 
     conn.execute(
         ingest_run.update()

@@ -22,7 +22,7 @@ from sporthealth.adapters.garmin_connect import (
     sync_garmin_connect,
 )
 from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity_source_link, athlete, metadata, raw_object
+from sporthealth.db.schema import activity_source_link, athlete, day_rollup, metadata, raw_object
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_run.fit"
@@ -217,11 +217,15 @@ def test_sync_garmin_connect_full_orchestration_with_fake_client(tmp_path: Path)
                 select(raw_object.c.kind).where(raw_object.c.source == "garmin_connect")
             ).scalars()
         )
+        rollup_rows = conn.execute(select(day_rollup)).fetchall()
 
     assert summary.errors == []
     assert summary.items_seen == 1
     assert summary.items_new == 1
     assert kinds == {"garmin_connect_json", "fit_activity"}
+    # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation.
+    assert len(rollup_rows) == 1
+    assert rollup_rows[0].activity_count == 1
 
 
 def test_full_sync_with_injected_fake_client_archives_and_ingests(tmp_path: Path) -> None:

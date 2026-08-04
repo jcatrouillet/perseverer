@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlalchemy import Connection, select
@@ -23,6 +23,10 @@ class HealthIngestResult:
     stream_points_seen: int = 0
     sleep_sessions_seen: int = 0
     sleep_sessions_new: int = 0
+    # Distinct local_dates that gained a new observation/sleep session -- what callers
+    # accumulate across an ingest run and feed to rollups.refresh_daily_rollup once each. See
+    # docs/adr/0006-phase-3-read-api-and-rollups.md decision 3.
+    affected_local_dates: set[str] = field(default_factory=set)
 
 
 def ingest_health_batch(
@@ -74,6 +78,7 @@ def ingest_health_batch(
             )
         )
         result.observations_new += 1
+        result.affected_local_dates.add(obs.local_date)
 
     grouped: dict[tuple[str, str], list[HealthStreamPoint]] = defaultdict(list)
     for point in batch.stream_points:
@@ -138,6 +143,7 @@ def ingest_health_batch(
         assert insert_result.inserted_primary_key is not None
         session_id = insert_result.inserted_primary_key[0]
         result.sleep_sessions_new += 1
+        result.affected_local_dates.add(parsed_session.local_date)
 
         for stage in parsed_session.stages:
             conn.execute(

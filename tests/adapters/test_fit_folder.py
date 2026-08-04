@@ -11,7 +11,14 @@ from sqlalchemy import Engine, select
 
 from sporthealth.adapters.fit_folder import import_from_folder
 from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, athlete, health_observation, metadata, sleep_session
+from sporthealth.db.schema import (
+    activity,
+    athlete,
+    day_rollup,
+    health_observation,
+    metadata,
+    sleep_session,
+)
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.rebuild import rebuild_database
 
@@ -63,6 +70,11 @@ def test_import_is_idempotent(tmp_path: Path) -> None:
             conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID, folder=import_dir
         )
         activity_ids = conn.execute(select(activity.c.id)).scalars().all()
+        rollup_rows = conn.execute(select(day_rollup)).fetchall()
+
+    # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation.
+    assert len(rollup_rows) == 1
+    assert rollup_rows[0].activity_count == 1
 
     assert first.items_seen == 1
     assert first.items_new == 1

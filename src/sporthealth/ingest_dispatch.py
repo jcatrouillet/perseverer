@@ -46,6 +46,18 @@ class DispatchResult:
             )
         return False
 
+    def affected_local_dates(self) -> set[str]:
+        """Distinct local_dates newly touched by this dispatch -- what callers accumulate
+        across an ingest run and feed to rollups.refresh_daily_rollup once each, not once per
+        file. See docs/adr/0006-phase-3-read-api-and-rollups.md decision 3.
+        """
+        dates: set[str] = set()
+        if self.activity_result is not None and self.activity_result.local_date is not None:
+            dates.add(self.activity_result.local_date)
+        if self.health_result is not None:
+            dates |= self.health_result.affected_local_dates
+        return dates
+
 
 def ingest_fit_bytes(
     conn: Connection,

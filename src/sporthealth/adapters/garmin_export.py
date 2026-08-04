@@ -29,6 +29,7 @@ from sporthealth.db.schema import athlete, ingest_run
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import parse_garmin_export_json
 from sporthealth.ingest_dispatch import ingest_fit_bytes
+from sporthealth.rollups import refresh_daily_rollup
 
 SOURCE_NAME = "garmin_export"
 
@@ -164,6 +165,7 @@ def import_garmin_export(
     conn.commit()
 
     summary = IngestRunSummary(run_id=run_id)
+    touched_dates: set[str] = set()
     for file_path in sorted(p for p in root.rglob("*") if p.is_file()):
         suffix = file_path.suffix.lower()
         if suffix == ".zip":
@@ -188,6 +190,7 @@ def import_garmin_export(
                     locator=locator,
                     external_id_hint=external_id_hint,
                 )
+                touched_dates |= dispatch_result.affected_local_dates()
                 if dispatch_result.created:
                     summary.items_new += 1
             elif suffix == ".json" and _is_export_health_json(file_path, root):
@@ -205,6 +208,7 @@ def import_garmin_export(
                 health_result = ingest_health_batch(
                     conn, parquet_dir, athlete_id=athlete_id, source=SOURCE_NAME, batch=batch
                 )
+                touched_dates |= health_result.affected_local_dates
                 if health_result.observations_new > 0 or health_result.sleep_sessions_new > 0:
                     summary.items_new += 1
             else:
@@ -222,6 +226,10 @@ def import_garmin_export(
         except Exception as e:  # one bad file must not abort the whole backfill
             conn.rollback()
             summary.errors.append({"file": str(file_path), "error": str(e)})
+
+    for local_date in touched_dates:
+        refresh_daily_rollup(conn, athlete_id=athlete_id, local_date=local_date)
+    conn.commit()
 
     conn.execute(
         athlete.update()

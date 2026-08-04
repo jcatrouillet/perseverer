@@ -108,6 +108,11 @@ activity = Table(
     Column("start_time_utc", DateTime(), nullable=False),
     Column("utc_offset_s", Integer, nullable=False, default=0),
     Column("tz_name", String, nullable=True),
+    # ISO date (e.g. "2026-08-02") the activity belongs to in local time -- mirrors
+    # health_observation/sleep_session's own local_date column. Populated at ingest time;
+    # without it, rollups.refresh_daily_rollup would need UTC-offset arithmetic inline. See
+    # docs/adr/0006-phase-3-read-api-and-rollups.md decision 2.
+    Column("local_date", String, nullable=True),
     Column("sport", String, nullable=False),
     Column("sub_sport", String, nullable=True),
     Column("name", String, nullable=True),
@@ -123,6 +128,7 @@ activity = Table(
     Column("updated_at", DateTime(), nullable=False),
     Column("deleted_at", DateTime(), nullable=True),
     Index("ix_activity_athlete_start", "athlete_id", "start_time_utc"),
+    Index("ix_activity_athlete_local_date", "athlete_id", "local_date"),
 )
 
 activity_source_link = Table(
@@ -294,6 +300,72 @@ sleep_stage = Table(
     Column("stage", String, nullable=False),  # light | deep | rem | awake
     Column("start_time_utc", DateTime(), nullable=False),
     Column("end_time_utc", DateTime(), nullable=False),
+)
+
+# --- Rollups (Phase 3): derived caches, refreshed on ingest via rollups.refresh_daily_rollup,
+# never written to directly by adapters. Wiped/recomputed like any other _REBUILDABLE_TABLES
+# entry -- "never destructive" doesn't apply to a derived cache. See ADR 0006 decisions 1, 3. --
+
+day_rollup = Table(
+    "day_rollup",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("local_date", String, nullable=False),
+    Column("activity_count", Integer, nullable=False, default=0),
+    Column("activity_duration_s", Float, nullable=True),
+    Column("activity_moving_duration_s", Float, nullable=True),
+    Column("activity_distance_m", Float, nullable=True),
+    Column("activity_elevation_gain_m", Float, nullable=True),
+    Column("activity_calories", Float, nullable=True),
+    Column("sleep_total_s", Float, nullable=True),
+    Column("sleep_score", Float, nullable=True),
+    Column("refreshed_at", DateTime(), nullable=False),
+    UniqueConstraint("athlete_id", "local_date", name="uq_day_rollup_identity"),
+)
+
+health_metric_daily_rollup = Table(
+    "health_metric_daily_rollup",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("local_date", String, nullable=False),
+    Column("metric_key", String, ForeignKey("metric_definition.metric_key"), nullable=False),
+    Column("value_sum", Float, nullable=True),
+    Column("value_avg", Float, nullable=True),
+    Column("value_min", Float, nullable=True),
+    Column("value_max", Float, nullable=True),
+    # value_num of the observation with the latest observed_at_utc that day -- what a
+    # point-in-time metric (e.g. resting_heart_rate) usually wants, vs. sum/avg for a
+    # cumulative one (e.g. steps). The API picks per metric_key; this table stores all five so
+    # no per-metric aggregation-method registry is needed here. See ADR 0006 decision 1.
+    Column("value_last", Float, nullable=True),
+    Column("n_observations", Integer, nullable=False, default=0),
+    Column("refreshed_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id", "local_date", "metric_key", name="uq_health_rollup_identity"
+    ),
+    Index("ix_health_rollup_athlete_date", "athlete_id", "local_date"),
+)
+
+# --- Notes (Phase 3): the write path CLAUDE.md's mission statement calls for -- one
+# polymorphic table rather than per-entity note tables, matching the project's existing
+# preference for additively-extensible shapes. Scoped to activities/days only for now; a new
+# entity_type is a data-only addition, not a schema change. See ADR 0006 decision 7. ---------
+
+note = Table(
+    "note",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("entity_type", String, nullable=False),  # "activity" | "day"
+    # An activity ULID when entity_type="activity", an ISO local_date when entity_type="day".
+    Column("entity_id", String, nullable=False),
+    Column("body", Text, nullable=False),
+    Column("author", String, nullable=True),  # e.g. "agent", a human's name, or null
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    Index("ix_note_athlete_entity", "athlete_id", "entity_type", "entity_id"),
 )
 
 # --- Registries (exempt from athlete scoping — shared catalogs, not personal data) ---

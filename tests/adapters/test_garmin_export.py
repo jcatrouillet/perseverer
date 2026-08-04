@@ -21,6 +21,7 @@ from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import (
     activity_source_link,
     athlete,
+    day_rollup,
     health_observation,
     metadata,
     raw_object,
@@ -99,12 +100,16 @@ def test_recursive_fit_discovery_and_filename_external_id(tmp_path: Path) -> Non
         json_raw = conn.execute(
             select(raw_object.c.kind).where(raw_object.c.kind == "garmin_export_json")
         ).scalar_one_or_none()
+        rollup_rows = conn.execute(select(day_rollup)).fetchall()
 
     assert summary.items_seen == 2  # one .fit, one .json
     assert summary.items_new == 1
     assert summary.errors == []
     assert link == "55501234"  # from the filename, not derived from FIT content
     assert json_raw == "garmin_export_json"  # DI-Connect-User: not recognized, archived raw
+    # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation.
+    assert len(rollup_rows) == 1
+    assert rollup_rows[0].activity_count == 1
 
 
 def test_nested_zip_fit_is_discovered_and_ingested(tmp_path: Path) -> None:

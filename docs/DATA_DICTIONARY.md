@@ -56,7 +56,10 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
   `id` is a ULID, not an autoincrement int, so it's sortable and safe to expose externally
   later without leaking row counts. `primary_source` records which adapter's data currently
   populates the core fields (field-level provenance/override precedence is a later-phase
-  concern).
+  concern). `local_date` (added Phase 3) is the UTC calendar date of `start_time_utc` — *not*
+  offset-adjusted, deliberately matching `health_observation`/`sleep_session`'s own
+  `local_date` convention so `rollups.refresh_daily_rollup` can join across all three by that
+  string directly (see `docs/adr/0006-phase-3-read-api-and-rollups.md` decision 2).
 - **`activity_source_link`** — links one `activity` to every raw file/record that contributes
   to it. `external_id` is the adapter's idempotency key: for `fit_folder`, derived from the FIT
   file's device serial + start time (falling back to the file's sha256), deliberately never the
@@ -121,6 +124,38 @@ Daily steps/distance/calories are deliberately **not** reconstructed from `monit
 compressed cycle fields — `daily_summary_*.json` already has Garmin's own server-computed
 totals for exactly those fields (decision 2).
 
+### Rollups (Phase 3)
+
+Precomputed, derived caches — never written to directly by adapters, only by
+`rollups.refresh_daily_rollup`, called once per distinct `local_date` an ingest run touched.
+This is what makes the platform constraint in CLAUDE.md real: "every dashboard/calendar/recap
+view reads a `*_rollup` table refreshed on ingest, never scans at request time." See
+`docs/adr/0006-phase-3-read-api-and-rollups.md`.
+
+- **`day_rollup`** — one row per `(athlete_id, local_date)`: activity count/duration/
+  distance/elevation/calories (summed across every activity that day) plus
+  `sleep_total_s`/`sleep_score` (the longest session if multiple sources exist for one night).
+  Fixed columns, since `activity`/`sleep_session` both have fixed shapes to roll up.
+- **`health_metric_daily_rollup`** — one row per `(athlete_id, local_date, metric_key)`:
+  `value_sum`/`value_avg`/`value_min`/`value_max`/`value_last` (the value_num of the latest
+  `observed_at_utc` that day) + `n_observations`. Kept EAV-shaped rather than a wide table,
+  because `health_observation` itself is EAV with source-dependent metric_key namespaces (the
+  same physiological fact has a different key per source — `resting_heart_rate` vs.
+  `garmin.daily_summary.restingHeartRate` vs. `garmin.export.UDSFile.restingHeartRate`); a wide
+  rollup table would need a hardcoded metric_key→column map that breaks on every new source
+  (decision 1). Storing all five aggregates means the API picks whichever one a given metric
+  needs at read time, with zero code changes as new metric_keys appear.
+
+Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
+`_REBUILDABLE_TABLES` — a rollup is a cache, not raw data, so "never destructive" doesn't apply.
+
+### Notes (Phase 3)
+
+- **`note`** — the write path CLAUDE.md's mission statement calls for ("a REST/JSON API an AI
+  agent can write notes through"). One polymorphic table: `entity_type` (`"activity"` |
+  `"day"`), `entity_id` (an activity ULID or an ISO `local_date`). A new `entity_type` is a
+  data-only addition, not a schema change. See ADR 0006 decision 7.
+
 ### Registries (exempt from athlete-scoping — shared catalogs, not personal data)
 
 - **`metric_definition`** — the metric catalog. `metric_key` is the natural primary key.
@@ -159,3 +194,13 @@ further than the local monitoring folder), 1415 distinct metric keys are catalog
 Browse the live catalog via `select * from metric_definition` — there is no separate
 promoted-metrics document yet (Phase 3's `/metrics` endpoint and the frontend's metric
 registry browser, Phase 5+, are the intended long-term ways to browse this).
+
+## Read API (Phase 3)
+
+`GET /api/v1/activities`, `/activities/{id}`, `/activities/{id}/stream` (DuckDB-backed,
+downsampled to a `low`/`medium`/`high` tier — see `stream_query.py`), `/health/observations`,
+`/sleep`, `/calendar` (rollup-backed, the only one guaranteed not to scan), and
+`POST`/`GET /notes`. Every route except `/healthz`/`/version` requires an `X-API-Key` header
+matching `SPORTHEALTH_API_KEY` — unset means every protected route fails closed (503), never
+open. `SPORTHEALTH_CORS_ALLOWED_ORIGINS` (comma-separated) enables `CORSMiddleware` when set;
+unset means no CORS middleware at all. See `docs/adr/0006-phase-3-read-api-and-rollups.md`.

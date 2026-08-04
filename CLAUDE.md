@@ -6,8 +6,9 @@ Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing revers
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
 the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
-**Current phase: 2 (garmin_export importer, garmin_connect adapter, scheduler, staleness,
-health/wellness FIT + JSON ingestion).**
+**Current phase: 3 (read API, precomputed rollups, DuckDB, notes write path). Phase 2
+(garmin_export importer, garmin_connect adapter, scheduler, staleness, health/wellness FIT +
+JSON ingestion, real-export nested-zip discovery) is complete.**
 See the phase table in the project brief (kept outside this repo) for the full 10-phase plan.
 Do not skip ahead — each phase has its own ADR in `docs/adr/` and its own acceptance criterion.
 
@@ -52,9 +53,14 @@ because you don't recognize it — stop, that's the bug.
   the full table list.
 - **Parquet, one file per activity** (`data/parquet/<athlete_id>/<activity_id>.parquet`):
   full-resolution per-second activity streams. What you plot. Never rows-in-SQLite for this.
-  Downsampling into low/medium/high tiers is a Phase 3 (API-serving) concern, not ingestion.
-- **DuckDB**, attached read-only, for analytical queries spanning SQLite + Parquet in one
-  statement. (Not yet wired up — arrives with the read API in Phase 3.)
+  Downsampling into `low`/`medium`/`high` tiers happens at serving time
+  (`stream_query.py::downsample`, one DuckDB bucket-averaging SQL statement against the
+  Parquet file — never ingestion-time, never a Python loop).
+- **DuckDB**, attached read-only over the SQLite database (`api/duckdb_conn.py`), for the one
+  query that actually benefits from it: `GET /activities/{id}/stream`. Everything else in the
+  read API (activity list/detail, health, sleep, the rollup-backed calendar) stays on plain
+  SQLAlchemy — DuckDB isn't a general query-builder abstraction here. See
+  `docs/adr/0006-phase-3-read-api-and-rollups.md`.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Three exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash
@@ -139,6 +145,9 @@ npm run build                # tsc --noEmit && vite build
 # Full stack (Windows/Podman Desktop — compose.override.yml auto-merges)
 podman compose up --build
 curl http://localhost:8008/api/v1/healthz
+# Every route except /healthz and /version needs X-API-Key (SPORTHEALTH_API_KEY in .env) —
+# unset means those routes fail closed (503), never open.
+curl -H "X-API-Key: $SPORTHEALTH_API_KEY" http://localhost:8008/api/v1/calendar?start_date=2025-01-01&end_date=2025-01-31
 
 # NAS deploy — the NAS runs Docker (DSM Container Manager), not Podman; never build on the
 # NAS, see docs/DEPLOY.md
@@ -158,8 +167,12 @@ docker compose -f compose.yaml -f compose.nas.yml up -d
 - **Never build on the NAS.** Images are built on Windows or in CI, pushed to GHCR, pulled by
   the DS1019+'s Container Manager.
 - **Precomputed rollups are mandatory.** The Celeron cannot aggregate a decade of activities
-  per request — every dashboard/calendar/recap view reads a `*_rollup` table refreshed on
-  ingest, never scans at request time.
+  per request — every dashboard/calendar/recap view reads a `*_rollup` table (`day_rollup`,
+  `health_metric_daily_rollup`, `rollups.py`) refreshed on ingest, never scans at request time.
+  Every ingest entry point (`fit_folder`, `garmin_export`, `garmin_connect`, `rebuild`)
+  accumulates which `local_date`s it touched and calls `refresh_daily_rollup` once per
+  distinct date after its loop — bounded by dates touched, not files processed. A future
+  adapter must honor this same contract. See `docs/adr/0006-phase-3-read-api-and-rollups.md`.
 - **Windows dev, Linux prod.** LF enforced via `.gitattributes`. `pathlib` everywhere. The
   `fit_folder` watcher polls (no reliance on inotify — SMB/rsync-written files don't reliably
   fire inotify events inside a container).

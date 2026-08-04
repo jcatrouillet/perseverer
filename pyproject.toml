@@ -57,6 +57,12 @@ extend-exclude = ["alembic/versions"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's own canonical idiom is `param: X = Depends(...)`/`Query(...)` in a signature
+# default -- B008 exists to catch accidental mutable-default bugs, not this well-established,
+# framework-blessed pattern. See https://fastapi.tiangolo.com/tutorial/dependencies/.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

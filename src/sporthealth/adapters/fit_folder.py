@@ -42,6 +42,7 @@ from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import parse_daily_summary_json, parse_hydration_json
 from sporthealth.merge.engine import ActivityCandidate, is_same_activity
 from sporthealth.metrics.registry import get_or_register_metric
+from sporthealth.rollups import refresh_daily_rollup
 from sporthealth.streams import write_activity_stream
 
 _EPOCH = datetime.fromtimestamp(0, tz=UTC)
@@ -102,6 +103,9 @@ class FitFolderAdapter:
 class IngestResult:
     activity_id: str | None
     created: bool
+    # Set only when created=True -- a matched/merged activity touches no new rollup-relevant
+    # rows, so its date needs no refresh. See rollups.py / ADR 0006 decision 3.
+    local_date: str | None = None
 
 
 @dataclass
@@ -256,6 +260,10 @@ def ingest_canonical_batch(
                 start_time_utc=a.start_time_utc,
                 utc_offset_s=a.utc_offset_s,
                 tz_name=None,
+                # UTC date, not offset-adjusted -- matches the same (already-established)
+                # convention health_observation/sleep_session's local_date already uses, so
+                # rollups join cleanly across the two. See ADR 0006 decision 2.
+                local_date=a.start_time_utc.date().isoformat(),
                 sport=a.sport,
                 sub_sport=a.sub_sport,
                 name=a.name,
@@ -366,7 +374,8 @@ def ingest_canonical_batch(
         )
     )
 
-    return IngestResult(activity_id=activity_id, created=created)
+    local_date = a.start_time_utc.date().isoformat() if created else None
+    return IngestResult(activity_id=activity_id, created=created, local_date=local_date)
 
 
 def import_from_folder(
@@ -404,6 +413,7 @@ def import_from_folder(
     conn.commit()
 
     summary = IngestRunSummary(run_id=run_id)
+    touched_dates: set[str] = set()
     for ref in adapter.list_changed(since or _EPOCH):
         summary.items_seen += 1
         path = Path(ref.locator)
@@ -420,6 +430,7 @@ def import_from_folder(
                     locator=ref.locator,
                 )
                 conn.commit()
+                touched_dates |= dispatch_result.affected_local_dates()
                 if dispatch_result.created:
                     summary.items_new += 1
                 continue
@@ -445,11 +456,16 @@ def import_from_folder(
                 conn, parquet_dir, athlete_id=athlete_id, source=adapter.name, batch=health_batch
             )
             conn.commit()
+            touched_dates |= health_result.affected_local_dates
             if health_result.observations_new > 0 or health_result.sleep_sessions_new > 0:
                 summary.items_new += 1
         except Exception as e:  # one bad file must not abort the whole run
             conn.rollback()
             summary.errors.append({"file": ref.locator, "error": str(e)})
+
+    for local_date in touched_dates:
+        refresh_daily_rollup(conn, athlete_id=athlete_id, local_date=local_date)
+    conn.commit()
 
     conn.execute(
         ingest_run.update()
