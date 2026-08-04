@@ -1,11 +1,13 @@
 """Import + minimal-operation smoke test for our AVX-sensitive native dependencies.
 
 This file is run twice in CI (see .github/workflows/ci.yml): once natively in the `test`
-job, and once under `qemu-x86_64 -cpu qemu64` in the `avx-smoke` job. The `qemu64` CPU model
-has no AVX/AVX2, matching the DS1019+'s Celeron J3455 (Goldmont, SSE4.2 only) — if any of
-numpy/pyarrow/duckdb ship an AVX-only code path that isn't runtime-dispatched, this crashes
+job, and once under `qemu-x86_64 -cpu Westmere` in the `avx-smoke` job. Westmere has SSE4.2
+and AES-NI but no AVX, matching the DS1019+'s Celeron J3455 (Goldmont, SSE4.2 only) — if any
+of numpy/pyarrow/duckdb ship an AVX-only code path that isn't runtime-dispatched, this crashes
 with SIGILL under emulation instead of silently working on GitHub's AVX2-capable runners and
-then crashing on the NAS at 4am.
+then crashing on the NAS at 4am. (`-cpu qemu64`, tried first, turned out to lack even
+SSE4.1/SSE4.2 by default — stricter than the real NAS CPU, not an equivalent stand-in — see
+docs/adr/0001-phase-0-foundations.md decision 5.)
 """
 
 import duckdb

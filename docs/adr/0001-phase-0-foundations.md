@@ -62,21 +62,26 @@ right now" (plain `up` = dev, explicit NAS flags = prod) without needing to reme
 name, and the asymmetry (dev publishes ports, NAS never does) is exactly the kind of thing that
 should be structurally impossible to get backwards, not opt-in.
 
-### 5. AVX-masking verification strategy: QEMU `qemu64` CPU model in CI
+### 5. AVX-masking verification strategy: QEMU `Westmere` CPU model in CI
 
 GitHub Actions runners are AVX2-capable, so we can't rely on real hardware to catch an
-x86-64-v3-compiled dependency. The plan is to run the same pytest smoke test
-(`tests/test_avx_smoke.py`, exercising numpy/pyarrow/duckdb) both natively (`test` job) and
-under `qemu-x86_64 -cpu qemu64` (`avx-smoke` job) — the `qemu64` model has no AVX/AVX2, so an
-AVX-only code path SIGILLs under emulation instead of silently passing on the runner and then
-crashing on the NAS at 4am.
+x86-64-v3-compiled dependency. `tests/test_avx_smoke.py` (exercising numpy/pyarrow/duckdb) runs
+both natively (`test` job) and under `qemu-x86_64 -cpu <model>` (`avx-smoke` job) — an AVX-only
+code path SIGILLs under emulation instead of silently passing on the runner and then crashing on
+the NAS at 4am.
 
-**Flagged uncertainty**: this is the one piece of this ADR I haven't validated end-to-end in
-GitHub Actions yet. If `qemu-user-static` proves unreliable there, the fallback is manual wheel
-tag vetting (numpy/pyarrow/duckdb already ship `manylinux` wheels with runtime CPU dispatch)
-plus a one-time manual check on first NAS deploy, with the CI gate best-effort rather than a
-hard requirement. numpy/pyarrow/duckdb were added as dependencies in Phase 0 (unused until
-Phase 1+) specifically so this gate has something real to exercise from day one.
+**Resolved** (previously flagged as unvalidated): the first choice, `-cpu qemu64`, SIGILL'd on
+every single CI run once actually exercised — but not because of AVX/AVX2. QEMU's `qemu64`
+model is a generic baseline that, by default, doesn't even include SSE4.1/SSE4.2 — a *stricter*
+and non-representative floor than the real DS1019+ CPU, which has SSE4.2. numpy's own wheel
+crashes on that missing SSE4.x baseline before the AVX/AVX2 question this gate exists to answer
+is ever reached — a false alarm, confirmed by reproducing both outcomes directly (`qemu-x86_64
+-cpu qemu64 python3 -c "import numpy"` SIGILLs; the identical command with `-cpu Westmere`
+succeeds). Switched to `-cpu Westmere` (SSE4.2 + AES-NI, no AVX — both features Goldmont also
+has), which correctly represents the real target and lets the gate test what it's meant to:
+AVX/AVX2-only code paths, not an artificially narrower baseline. numpy/pyarrow/duckdb were
+added as dependencies in Phase 0 (unused until Phase 1+) specifically so this gate has
+something real to exercise from day one.
 
 ### 6. `pyarrow` mypy override
 
@@ -146,7 +151,9 @@ repo and one in the default Podman Desktop setup:
 - The `compose.override.yml` / `compose.nas.yml` split means "which environment am I looking
   at" is always answerable from the command line invocation alone — no hidden env-var-driven
   branching inside a single compose file.
-- If the AVX-masked CI gate doesn't pan out, first real validation of the AVX assumption moves
-  to "first deploy to the DS1019+" (end of Phase 3 per the phase table) — acceptable since
-  nothing ingests real data before then, but worth revisiting before Phase 1 backfill work
-  begins in earnest.
+- The AVX-masked CI gate did pan out, once pointed at the right QEMU CPU model (decision 5) —
+  it went from SIGILL-ing on every push (a false alarm from an overly-strict, non-representative
+  baseline) to green with no code changes needed elsewhere, confirming numpy/pyarrow/duckdb's
+  wheels genuinely do runtime-dispatch cleanly on an SSE4.2-no-AVX target. First deploy to the
+  DS1019+ is still the ultimate real-hardware confirmation, but this is no longer "flying blind"
+  until then.

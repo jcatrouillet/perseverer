@@ -160,8 +160,10 @@ docker compose -f compose.yaml -f compose.nas.yml up -d
 - **DS1019+ / Celeron J3455 (Goldmont): no AVX, no AVX2, only up to SSE4.2.** Anything built
   for x86-64-v3 illegal-instruction-crashes on the NAS. Native builds are capped at
   x86-64-v2; numpy/pyarrow/duckdb ship wheels that runtime-dispatch. CI runs an AVX-masked
-  (QEMU `qemu64` CPU model) import smoke test specifically to catch this before it reaches
-  the NAS.
+  (QEMU `Westmere` CPU model — SSE4.2 + AES-NI, no AVX, matching Goldmont; the generic
+  `qemu64` model tried first turned out to lack even SSE4.1/SSE4.2, a stricter and
+  non-representative baseline that false-positived on every push) import smoke test
+  specifically to catch this before it reaches the NAS.
 - **8GB RAM total, shared with DSM.** Whole stack budgeted at ~1.5GB. uvicorn runs 2 workers,
   not `cpu_count()`. This is also why SQLite, not Postgres.
 - **Never build on the NAS.** Images are built on Windows or in CI, pushed to GHCR, pulled by

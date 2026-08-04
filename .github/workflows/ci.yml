@@ -53,12 +53,15 @@ jobs:
       - run: npm run build
 
   avx-smoke:
-    # The DS1019+ (Celeron J3455 / Goldmont) has no AVX/AVX2. GitHub-hosted runners are
-    # AVX2-capable, so we can't rely on the runner's real hardware to catch a dependency
+    # The DS1019+ (Celeron J3455 / Goldmont) has SSE4.2 but no AVX/AVX2. GitHub-hosted runners
+    # are AVX2-capable, so we can't rely on the runner's real hardware to catch a dependency
     # compiled for x86-64-v3. Instead we run the same import/basic-op smoke test under
-    # `qemu-x86_64 -cpu qemu64`, whose CPU model has no AVX/AVX2 — an AVX-only code path
-    # SIGILLs here instead of silently working on this runner and crashing on the NAS.
-    # See docs/adr/0001-phase-0-foundations.md for the "not yet fully validated" caveat.
+    # `qemu-x86_64 -cpu Westmere` — Westmere has SSE4.2 (and AES-NI, also present on Goldmont)
+    # but no AVX, closely matching the real target. `-cpu qemu64` (tried first) is QEMU's
+    # generic baseline and turned out to lack even SSE4.1/SSE4.2 by default, well *below* the
+    # real NAS CPU's actual capability — every push SIGILL'd on numpy's own baseline dispatch
+    # code, a false alarm unrelated to the AVX/AVX2 question this gate exists to answer. See
+    # docs/adr/0001-phase-0-foundations.md decision 5 for the corrected CPU model choice.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,8 +72,8 @@ jobs:
       - run: uv sync --frozen --all-groups
       - name: Install qemu-user (same-arch CPU-feature emulation, not cross-arch)
         run: sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-static
-      - name: Run AVX-sensitive-import smoke test under an AVX-less CPU model
+      - name: Run AVX-sensitive-import smoke test under an AVX-less, SSE4.2-capable CPU model
         run: |
           set -euo pipefail
           PYBIN="$(uv run python -c 'import sys; print(sys.executable)')"
-          qemu-x86_64 -cpu qemu64 "$PYBIN" -m pytest tests/test_avx_smoke.py -q
+          qemu-x86_64 -cpu Westmere "$PYBIN" -m pytest tests/test_avx_smoke.py -q
