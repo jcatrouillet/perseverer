@@ -24,6 +24,7 @@ dependencies = [
   "garminconnect>=0.3.5",
   "apscheduler>=3.10",
   "httpx>=0.27",
+  "mcp>=1.9,<2",
 ]
 
 [project.scripts]
@@ -84,3 +85,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+# MCP tool functions (api/mcp_server.py) are async -- auto mode means `async def test_*`
+# just works without a per-test @pytest.mark.asyncio, matching how the rest of this project
+# avoids ceremony where it can.
+asyncio_mode = "auto"

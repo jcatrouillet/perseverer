@@ -204,3 +204,15 @@ downsampled to a `low`/`medium`/`high` tier — see `stream_query.py`), `/health
 matching `SPORTHEALTH_API_KEY` — unset means every protected route fails closed (503), never
 open. `SPORTHEALTH_CORS_ALLOWED_ORIGINS` (comma-separated) enables `CORSMiddleware` when set;
 unset means no CORS middleware at all. See `docs/adr/0006-phase-3-read-api-and-rollups.md`.
+
+## MCP server (Phase 4)
+
+`/mcp` (Streamable HTTP transport, same `api` container/process as the REST API, not a
+separate service) exposes eight tools — one per read endpoint above plus `create_note`/
+`list_notes` — so an AI agent can query and annotate the platform as first-class MCP tool
+calls instead of raw HTTP. Gated by the same `X-API-Key` as every REST route (a raw ASGI
+wrapper, since `Mount`-ed sub-apps bypass FastAPI's own `Depends`). Each tool calls its REST
+endpoint in-process, reusing 100% of the REST layer's logic rather than a second
+implementation. `get_activity_stream` always requests the `low` tier regardless of what's
+asked, since full-resolution stream data doesn't belong in an agent's context window. See
+`docs/adr/0007-phase-4-mcp-server.md`.

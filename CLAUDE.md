@@ -6,9 +6,10 @@ Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing revers
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
 the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
-**Current phase: 3 (read API, precomputed rollups, DuckDB, notes write path). Phase 2
-(garmin_export importer, garmin_connect adapter, scheduler, staleness, health/wellness FIT +
-JSON ingestion, real-export nested-zip discovery) is complete.**
+**Current phase: 4 (MCP server exposing the read API + notes). Phase 3 (read API, precomputed
+rollups, DuckDB, notes write path) and Phase 2 (garmin_export/garmin_connect adapters,
+scheduler, staleness, health/wellness ingestion, real-export nested-zip discovery) are
+complete.**
 See the phase table in the project brief (kept outside this repo) for the full 10-phase plan.
 Do not skip ahead — each phase has its own ADR in `docs/adr/` and its own acceptance criterion.
 
@@ -61,6 +62,14 @@ because you don't recognize it — stop, that's the bug.
   read API (activity list/detail, health, sleep, the rollup-backed calendar) stays on plain
   SQLAlchemy — DuckDB isn't a general query-builder abstraction here. See
   `docs/adr/0006-phase-3-read-api-and-rollups.md`.
+- **MCP server** (`api/mcp_server.py`), mounted at `/mcp` inside the same `api`
+  container/process, not a separate service — a deliberate, informed deviation from an early
+  Phase-0 guess, made once Streamable HTTP's actual shape (a plain mountable ASGI app) was
+  known. Eight tools, one per REST endpoint above plus `create_note`/`list_notes`; each tool
+  calls its REST endpoint in-process via `httpx.ASGITransport`, reusing the REST layer's logic
+  rather than a second implementation. Gated by the same `X-API-Key` via a raw ASGI wrapper
+  (`Mount` bypasses FastAPI's own `Depends`). `mcp>=1.9,<2` — 2.x just went stable and isn't
+  adopted yet. See `docs/adr/0007-phase-4-mcp-server.md`.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Three exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash
