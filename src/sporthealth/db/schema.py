@@ -52,6 +52,14 @@ athlete = Table(
     # Set by the garmin_export adapter on successful completion — the "days since last full
     # Garmin export" health signal (spec: nag past 90 days; see sporthealth/staleness.py).
     Column("last_full_export_at", DateTime(), nullable=True),
+    # Phase 5: per-athlete credentials (auth/passwords.py, auth/tokens.py). Nullable — an
+    # athlete may have neither, either, or both a password login and a standing API key. Never
+    # backfilled; existing athletes simply have no credentials until `sync athlete
+    # set-password`/`create-key` is run. See docs/adr/0008-phase-5-frontend.md.
+    Column("username", String, nullable=True, unique=True),
+    Column("password_hash", String, nullable=True),
+    Column("api_key_hash", String, nullable=True),
+    Column("api_key_created_at", DateTime(), nullable=True),
 )
 
 # --- Bronze: immutable raw archive --------------------------------------------

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Connection, select
@@ -14,13 +15,13 @@ from sqlalchemy import Connection, select
 from sporthealth.api.dependencies import get_conn, require_api_key
 from sporthealth.api.schemas.calendar import CalendarResponse, DayRollupOut, HealthMetricRollupOut
 from sporthealth.db.schema import day_rollup, health_metric_daily_rollup
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+router = APIRouter()
 
 
 @router.get("/calendar")
 def get_calendar(
+    athlete_id: Annotated[str, Depends(require_api_key)],
     start_date: date = Query(...),
     end_date: date = Query(...),
     metric_keys: list[str] | None = Query(None),
@@ -29,7 +30,7 @@ def get_calendar(
     day_rows = conn.execute(
         select(day_rollup)
         .where(
-            day_rollup.c.athlete_id == DEFAULT_ATHLETE_ID,
+            day_rollup.c.athlete_id == athlete_id,
             day_rollup.c.local_date >= start_date.isoformat(),
             day_rollup.c.local_date <= end_date.isoformat(),
         )
@@ -37,7 +38,7 @@ def get_calendar(
     ).fetchall()
 
     health_query = select(health_metric_daily_rollup).where(
-        health_metric_daily_rollup.c.athlete_id == DEFAULT_ATHLETE_ID,
+        health_metric_daily_rollup.c.athlete_id == athlete_id,
         health_metric_daily_rollup.c.local_date >= start_date.isoformat(),
         health_metric_daily_rollup.c.local_date <= end_date.isoformat(),
     )

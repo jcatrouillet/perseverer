@@ -6,10 +6,10 @@ Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing revers
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
 the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
-**Current phase: 4 (MCP server exposing the read API + notes). Phase 3 (read API, precomputed
-rollups, DuckDB, notes write path) and Phase 2 (garmin_export/garmin_connect adapters,
-scheduler, staleness, health/wellness ingestion, real-export nested-zip discovery) are
-complete.**
+**Current phase: 5 (core dashboard frontend + per-athlete auth). Phase 4 (MCP server exposing
+the read API + notes), Phase 3 (read API, precomputed rollups, DuckDB, notes write path), and
+Phase 2 (garmin_export/garmin_connect adapters, scheduler, staleness, health/wellness ingestion,
+real-export nested-zip discovery) are complete.**
 See the phase table in the project brief (kept outside this repo) for the full 10-phase plan.
 Do not skip ahead — each phase has its own ADR in `docs/adr/` and its own acceptance criterion.
 
@@ -70,6 +70,24 @@ because you don't recognize it — stop, that's the bug.
   rather than a second implementation. Gated by the same `X-API-Key` via a raw ASGI wrapper
   (`Mount` bypasses FastAPI's own `Depends`). `mcp>=1.9,<2` — 2.x just went stable and isn't
   adopted yet. See `docs/adr/0007-phase-4-mcp-server.md`.
+- **Per-athlete auth (Phase 5)**: `require_api_key` (`api/dependencies.py`) resolves — not just
+  gates — the authenticated `athlete_id` from any of three credentials: the legacy shared
+  `SPORTHEALTH_API_KEY` (→ `DEFAULT_ATHLETE_ID`, so the MCP server and existing scripts keep
+  working unchanged), a per-athlete `X-API-Key` (SHA-256-hashed, `athlete.api_key_hash`), or an
+  `Authorization: Bearer` JWT issued by `POST /auth/login` (password checked via stdlib
+  PBKDF2, `auth/passwords.py`; signed with `SPORTHEALTH_JWT_SECRET`, `auth/tokens.py`). Every
+  router query is scoped to the resolved athlete, not a hardcoded default. Provisioned via
+  `sync athlete set-password`/`create-key` — CLI-only, no self-service signup. See
+  `docs/adr/0008-phase-5-frontend.md`.
+- **Frontend** (`frontend/src/`): Vite + React 19 + TS-strict, `wouter` for routing,
+  `@tanstack/react-query` for data fetching, a hand-rolled SVG chart (no charting library) for
+  the one stream-chart need. The API base URL is runtime-configured
+  (`frontend/public/config.js`, regenerated at container start from
+  `SPORTHEALTH_API_BASE_URL` via nginx's own `docker-entrypoint.d` mechanism) — never baked
+  into the Vite build, since the reverse-proxy hostname doesn't resolve the same way inside vs.
+  outside the house (double-NAT/split-horizon DNS, see `docs/DEPLOY.md`). `AuthGate` offers
+  either credential path (password or a pasted API key); a background 401 clears the stored
+  credential and re-prompts automatically.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Three exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash
@@ -145,18 +163,24 @@ uv run sync auth login                   # interactive Garmin login (MFA prompt)
 uv run sync auth status                  # token store presence + age
 uv run sync report counts                # per-source activity counts + unmatched (single-source)
 uv run sync rebuild                      # wipe derived tables, replay the entire raw archive
+uv run sync athlete set-password         # interactive: set an athlete's username/password
+uv run sync athlete create-key           # generate a per-athlete API key (printed once)
 
 # Frontend
 cd frontend && npm install
 npm run typecheck            # tsc --noEmit
 npm run build                # tsc --noEmit && vite build
+npm run dev                  # Vite dev server w/ HMR — needs SPORTHEALTH_CORS_ALLOWED_ORIGINS
+                              # in .env to include its origin (default http://localhost:5173)
 
 # Full stack (Windows/Podman Desktop — compose.override.yml auto-merges)
 podman compose up --build
 curl http://localhost:8008/api/v1/healthz
-# Every route except /healthz and /version needs X-API-Key (SPORTHEALTH_API_KEY in .env) —
-# unset means those routes fail closed (503), never open.
+# Every route except /healthz, /version, and /auth/login needs X-API-Key or
+# Authorization: Bearer <jwt> — presenting neither fails closed (503) only when nothing is
+# configured at all, never open. See docs/adr/0008-phase-5-frontend.md.
 curl -H "X-API-Key: $SPORTHEALTH_API_KEY" http://localhost:8008/api/v1/calendar?start_date=2025-01-01&end_date=2025-01-31
+curl -X POST http://localhost:8008/api/v1/auth/login -H "Content-Type: application/json" -d '{"username":"...","password":"..."}'
 
 # NAS deploy — the NAS runs Docker (DSM Container Manager), not Podman; never build on the
 # NAS, see docs/DEPLOY.md

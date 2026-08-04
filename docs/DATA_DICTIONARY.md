@@ -49,6 +49,10 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
 - **`athlete`** — single row today (multi-tenancy scaffolding for a possible future).
   `last_full_export_at` is set by `garmin_export` on successful completion — the "days since
   last full Garmin export" health signal `sporthealth.staleness` nags on past 90 days.
+  `username`/`password_hash`/`api_key_hash`/`api_key_created_at` (Phase 5) are nullable —
+  an athlete may have neither, either, or both credential types; provisioned via
+  `sync athlete set-password`/`create-key`, never a self-service UI. See
+  `docs/adr/0008-phase-5-frontend.md`.
 - **`device`** — one row per distinct `(manufacturer, product, serial_number)` seen in a FIT
   file's `file_id` message. `product` prefers the SDK's friendly name (e.g. `"fr955"`) over
   the raw numeric product code.
@@ -200,10 +204,12 @@ registry browser, Phase 5+, are the intended long-term ways to browse this).
 `GET /api/v1/activities`, `/activities/{id}`, `/activities/{id}/stream` (DuckDB-backed,
 downsampled to a `low`/`medium`/`high` tier — see `stream_query.py`), `/health/observations`,
 `/sleep`, `/calendar` (rollup-backed, the only one guaranteed not to scan), and
-`POST`/`GET /notes`. Every route except `/healthz`/`/version` requires an `X-API-Key` header
-matching `SPORTHEALTH_API_KEY` — unset means every protected route fails closed (503), never
-open. `SPORTHEALTH_CORS_ALLOWED_ORIGINS` (comma-separated) enables `CORSMiddleware` when set;
-unset means no CORS middleware at all. See `docs/adr/0006-phase-3-read-api-and-rollups.md`.
+`POST`/`GET /notes`. Every route except `/healthz`/`/version`/`/auth/login` requires either an
+`X-API-Key` header or an `Authorization: Bearer <jwt>` header (Phase 5 broadened this from a
+single shared key — see below); presenting nothing at all fails closed (503) only when neither
+`SPORTHEALTH_API_KEY` nor `SPORTHEALTH_JWT_SECRET` is configured, never silently open.
+`SPORTHEALTH_CORS_ALLOWED_ORIGINS` (comma-separated) enables `CORSMiddleware` when set; unset
+means no CORS middleware at all. See `docs/adr/0006-phase-3-read-api-and-rollups.md`.
 
 ## MCP server (Phase 4)
 
@@ -216,3 +222,19 @@ endpoint in-process, reusing 100% of the REST layer's logic rather than a second
 implementation. `get_activity_stream` always requests the `low` tier regardless of what's
 asked, since full-resolution stream data doesn't belong in an agent's context window. See
 `docs/adr/0007-phase-4-mcp-server.md`.
+
+## Per-athlete auth + frontend (Phase 5)
+
+`POST /api/v1/auth/login` (unauthenticated, like `/healthz`) verifies `athlete.username`/
+`password_hash` and issues an HS256 JWT signed with `SPORTHEALTH_JWT_SECRET`
+(`SPORTHEALTH_JWT_EXPIRY_DAYS`, default 30). `require_api_key` (despite the name, now the
+shared auth dependency for every protected route) resolves the authenticated `athlete_id` from
+any of three credentials: the legacy shared `SPORTHEALTH_API_KEY` (resolves to
+`DEFAULT_ATHLETE_ID` — existing scripts and the Phase 4 MCP server need no changes), a
+per-athlete `X-API-Key` (hash-matched against `athlete.api_key_hash`), or a JWT bearer token.
+Every router query is scoped to the resolved `athlete_id`, not a hardcoded default. The
+frontend (`frontend/src/`) is a Vite/React SPA: `wouter` for routing, `@tanstack/react-query`
+for data fetching, a hand-rolled SVG chart for the one stream-chart need (no charting library).
+Its API base URL is runtime-configured via `frontend/public/config.js`, regenerated at
+container start from `SPORTHEALTH_API_BASE_URL` — never baked into the Vite build. See
+`docs/adr/0008-phase-5-frontend.md`.

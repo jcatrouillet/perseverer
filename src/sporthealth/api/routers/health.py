@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Connection, func, select
@@ -11,13 +12,13 @@ from sporthealth.api.dependencies import get_conn, require_api_key
 from sporthealth.api.schemas.common import Page, to_utc
 from sporthealth.api.schemas.health import HealthObservationOut
 from sporthealth.db.schema import health_observation
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+router = APIRouter()
 
 
 @router.get("/health/observations")
 def list_health_observations(
+    athlete_id: Annotated[str, Depends(require_api_key)],
     metric_key: list[str] = Query(...),
     start_date: date = Query(...),
     end_date: date = Query(...),
@@ -26,7 +27,7 @@ def list_health_observations(
     conn: Connection = Depends(get_conn),
 ) -> Page[HealthObservationOut]:
     query = select(health_observation).where(
-        health_observation.c.athlete_id == DEFAULT_ATHLETE_ID,
+        health_observation.c.athlete_id == athlete_id,
         health_observation.c.metric_key.in_(metric_key),
         health_observation.c.local_date >= start_date.isoformat(),
         health_observation.c.local_date <= end_date.isoformat(),

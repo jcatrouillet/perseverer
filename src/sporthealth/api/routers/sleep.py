@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Connection, select
@@ -11,13 +12,13 @@ from sporthealth.api.dependencies import get_conn, require_api_key
 from sporthealth.api.schemas.common import to_utc
 from sporthealth.api.schemas.sleep import SleepSessionOut, SleepStageOut
 from sporthealth.db.schema import sleep_session, sleep_stage
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+router = APIRouter()
 
 
 @router.get("/sleep")
 def list_sleep(
+    athlete_id: Annotated[str, Depends(require_api_key)],
     start_date: date = Query(...),
     end_date: date = Query(...),
     conn: Connection = Depends(get_conn),
@@ -25,7 +26,7 @@ def list_sleep(
     sessions = conn.execute(
         select(sleep_session)
         .where(
-            sleep_session.c.athlete_id == DEFAULT_ATHLETE_ID,
+            sleep_session.c.athlete_id == athlete_id,
             sleep_session.c.local_date >= start_date.isoformat(),
             sleep_session.c.local_date <= end_date.isoformat(),
         )

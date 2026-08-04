@@ -6,6 +6,7 @@ decision 7.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import Connection, select
@@ -14,18 +15,21 @@ from sporthealth.api.dependencies import get_conn, require_api_key
 from sporthealth.api.schemas.common import to_utc
 from sporthealth.api.schemas.notes import NoteCreate, NoteOut
 from sporthealth.db.schema import activity, note
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+router = APIRouter()
 
 
 @router.post("/notes", status_code=status.HTTP_201_CREATED)
-def create_note(payload: NoteCreate, conn: Connection = Depends(get_conn)) -> NoteOut:
+def create_note(
+    payload: NoteCreate,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> NoteOut:
     if payload.entity_type == "activity":
         exists = conn.execute(
             select(activity.c.id).where(
                 activity.c.id == payload.entity_id,
-                activity.c.athlete_id == DEFAULT_ATHLETE_ID,
+                activity.c.athlete_id == athlete_id,
                 activity.c.deleted_at.is_(None),
             )
         ).scalar_one_or_none()
@@ -37,7 +41,7 @@ def create_note(payload: NoteCreate, conn: Connection = Depends(get_conn)) -> No
     now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
     result = conn.execute(
         note.insert().values(
-            athlete_id=DEFAULT_ATHLETE_ID,
+            athlete_id=athlete_id,
             entity_type=payload.entity_type,
             entity_id=payload.entity_id,
             body=payload.body,
@@ -64,6 +68,7 @@ def create_note(payload: NoteCreate, conn: Connection = Depends(get_conn)) -> No
 
 @router.get("/notes")
 def list_notes(
+    athlete_id: Annotated[str, Depends(require_api_key)],
     entity_type: str = Query(...),
     entity_id: str = Query(...),
     conn: Connection = Depends(get_conn),
@@ -71,7 +76,7 @@ def list_notes(
     rows = conn.execute(
         select(note)
         .where(
-            note.c.athlete_id == DEFAULT_ATHLETE_ID,
+            note.c.athlete_id == athlete_id,
             note.c.entity_type == entity_type,
             note.c.entity_id == entity_id,
         )

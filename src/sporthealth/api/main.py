@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sporthealth import __version__
 from sporthealth.api.mcp_server import build_mcp_asgi_app, mcp_lifespan
-from sporthealth.api.routers import activities, calendar, health, notes, sleep
+from sporthealth.api.routers import activities, auth, calendar, health, notes, sleep
 from sporthealth.config import get_settings
 
 mcp_asgi_app = build_mcp_asgi_app()
@@ -33,10 +33,13 @@ if _settings.cors_origins_list:
         CORSMiddleware,
         allow_origins=_settings.cors_origins_list,
         allow_methods=["GET", "POST"],
-        allow_headers=["X-API-Key", "Content-Type"],
+        # Authorization added in Phase 5 for JWT bearer-token login (ADR 0008) -- X-API-Key
+        # and Content-Type predate it (ADR 0006 decision 8).
+        allow_headers=["X-API-Key", "Authorization", "Content-Type"],
         allow_credentials=False,
     )
 
+app.include_router(auth.router, prefix="/api/v1")
 app.include_router(activities.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(sleep.router, prefix="/api/v1")

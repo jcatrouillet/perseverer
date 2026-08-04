@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     # None locally, where DuckDB's own default cache/INSTALL is fine. See ADR 0006 decision 4.
     duckdb_extension_dir: Path | None = None
 
+    # --- Phase 5: per-athlete login (auth/tokens.py, api/routers/auth.py) ---
+    # Signs session JWTs. Unset -> /auth/login fails closed (503), mirroring api_key's
+    # unset-503 precedent. See ADR 0008.
+    jwt_secret: str | None = None
+    jwt_expiry_days: int = 30
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "sporthealth.db"

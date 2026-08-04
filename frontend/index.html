@@ -7,6 +7,9 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Runtime config, not a Vite entry -- must load before the app bundle so
+         window.__SPORTHEALTH_CONFIG__ exists when src/api/client.ts reads it. -->
+    <script src="/config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

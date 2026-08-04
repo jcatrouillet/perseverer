@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from typing import Annotated
 
 import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,14 +26,14 @@ from sporthealth.config import Settings, get_settings
 from sporthealth.db.schema import activity, activity_metric, activity_stream, lap, route_geom
 from sporthealth.db.schema import device as device_table
 from sporthealth.db.schema import split as split_table
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.stream_query import downsample
 
-router = APIRouter(dependencies=[Depends(require_api_key)])
+router = APIRouter()
 
 
 @router.get("/activities")
 def list_activities(
+    athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
@@ -58,7 +59,7 @@ def list_activities(
         activity.c.calories,
         activity.c.primary_source,
         stream_exists.label("stream_available"),
-    ).where(activity.c.athlete_id == DEFAULT_ATHLETE_ID, activity.c.deleted_at.is_(None))
+    ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
 
     if start_date is not None:
         query = query.where(activity.c.local_date >= start_date.isoformat())
@@ -93,11 +94,15 @@ def list_activities(
 
 
 @router.get("/activities/{activity_id}")
-def get_activity(activity_id: str, conn: Connection = Depends(get_conn)) -> ActivityDetail:
+def get_activity(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityDetail:
     row = conn.execute(
         select(activity).where(
             activity.c.id == activity_id,
-            activity.c.athlete_id == DEFAULT_ATHLETE_ID,
+            activity.c.athlete_id == athlete_id,
             activity.c.deleted_at.is_(None),
         )
     ).fetchone()
@@ -210,6 +215,7 @@ def get_activity(activity_id: str, conn: Connection = Depends(get_conn)) -> Acti
 @router.get("/activities/{activity_id}/stream")
 def get_activity_stream(
     activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
     tier: str = Query("medium", pattern="^(low|medium|high)$"),
     channels: list[str] | None = Query(None),
     conn: Connection = Depends(get_conn),
@@ -219,7 +225,7 @@ def get_activity_stream(
     activity_row = conn.execute(
         select(activity.c.duration_s).where(
             activity.c.id == activity_id,
-            activity.c.athlete_id == DEFAULT_ATHLETE_ID,
+            activity.c.athlete_id == athlete_id,
             activity.c.deleted_at.is_(None),
         )
     ).fetchone()

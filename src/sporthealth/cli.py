@@ -18,9 +18,12 @@ from sqlalchemy import func, select
 from sporthealth.adapters.fit_folder import import_from_folder
 from sporthealth.adapters.garmin_connect import RateLimitSettings, sync_garmin_connect
 from sporthealth.adapters.garmin_export import import_garmin_export
+from sporthealth.auth.api_keys import generate_api_key, hash_api_key
+from sporthealth.auth.passwords import hash_password
 from sporthealth.config import get_settings
 from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import activity, activity_source_link
+from sporthealth.db.schema import athlete as athlete_table
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.rebuild import rebuild_database
 
@@ -29,10 +32,12 @@ import_app = typer.Typer(help="One-shot imports from a source")
 watch_app = typer.Typer(help="Continuously poll a source on an interval")
 auth_app = typer.Typer(help="Garmin Connect authentication")
 report_app = typer.Typer(help="Reports over the ingested data")
+athlete_app = typer.Typer(help="Manage athlete login credentials (Phase 5 -- see ADR 0008)")
 app.add_typer(import_app, name="import")
 app.add_typer(watch_app, name="watch")
 app.add_typer(auth_app, name="auth")
 app.add_typer(report_app, name="report")
+app.add_typer(athlete_app, name="athlete")
 
 
 FolderArg = Annotated[
@@ -170,6 +175,57 @@ def auth_status() -> None:
     newest_mtime = max(f.stat().st_mtime for f in tokendir.rglob("*") if f.is_file())
     age_days = (datetime.now(UTC) - datetime.fromtimestamp(newest_mtime, tz=UTC)).days
     typer.echo(f"Token store present at {tokendir}, last written {age_days} day(s) ago.")
+
+
+@athlete_app.command("set-password")
+def athlete_set_password(
+    athlete_id: Annotated[str, typer.Option(help="Athlete id to update")] = DEFAULT_ATHLETE_ID,
+) -> None:
+    """Set or change an athlete's login username/password. Run by a human, interactively --
+    there is no self-service signup UI (see docs/adr/0008-phase-5-frontend.md).
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    username = typer.prompt("Username")
+    password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+    with engine.connect() as conn:
+        result = conn.execute(
+            athlete_table.update()
+            .where(athlete_table.c.id == athlete_id)
+            .values(username=username, password_hash=hash_password(password))
+        )
+        conn.commit()
+    if result.rowcount == 0:
+        typer.echo(f"No athlete with id {athlete_id}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"Password set for athlete {athlete_id} (username={username})")
+
+
+@athlete_app.command("create-key")
+def athlete_create_key(
+    athlete_id: Annotated[str, typer.Option(help="Athlete id to update")] = DEFAULT_ATHLETE_ID,
+) -> None:
+    """Generate a new standing API key for an athlete. Printed once -- the raw key is never
+    stored and can't be shown again; only its hash is kept (see auth/api_keys.py).
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    raw_key = generate_api_key()
+    with engine.connect() as conn:
+        result = conn.execute(
+            athlete_table.update()
+            .where(athlete_table.c.id == athlete_id)
+            .values(
+                api_key_hash=hash_api_key(raw_key),
+                api_key_created_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+        )
+        conn.commit()
+    if result.rowcount == 0:
+        typer.echo(f"No athlete with id {athlete_id}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo("API key created -- save it now, it will not be shown again:")
+    typer.echo(raw_key)
 
 
 @report_app.command("counts")

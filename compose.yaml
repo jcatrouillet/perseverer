@@ -27,6 +27,10 @@ services:
       SPORTHEALTH_API_KEY: ${SPORTHEALTH_API_KEY:-}
       # Unset -> no CORS middleware at all (no cross-origin browser access by default).
       SPORTHEALTH_CORS_ALLOWED_ORIGINS: ${SPORTHEALTH_CORS_ALLOWED_ORIGINS:-}
+      # Signs athlete login session JWTs (POST /auth/login). Unset -> that route 503s. See
+      # docs/adr/0008-phase-5-frontend.md.
+      SPORTHEALTH_JWT_SECRET: ${SPORTHEALTH_JWT_SECRET:-}
+      SPORTHEALTH_JWT_EXPIRY_DAYS: ${SPORTHEALTH_JWT_EXPIRY_DAYS:-30}
       # Hardcoded, not templated from .env: this is the container-internal mount point
       # (matches the volumes: entry below), an implementation detail of this compose file,
       # not something a host .env should override. .env's SPORTHEALTH_DATA_DIR is for
@@ -70,6 +74,12 @@ services:
       dockerfile: docker/frontend.Dockerfile
     image: sporthealth-frontend:local
     restart: unless-stopped
+    environment:
+      # Regenerates frontend/public/config.js at container start (docker/frontend-entrypoint.d)
+      # -- never baked into the Vite build. Unset -> the image's committed dev-default
+      # (http://localhost:8008) is served as-is, which only matters for a raw `docker run`
+      # without this compose file. See docs/DEPLOY.md and docs/adr/0008-phase-5-frontend.md.
+      SPORTHEALTH_API_BASE_URL: ${SPORTHEALTH_API_BASE_URL:-}
 
 volumes:
   sporthealth-data:
