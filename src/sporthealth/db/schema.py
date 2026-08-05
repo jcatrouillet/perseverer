@@ -356,6 +356,90 @@ health_metric_daily_rollup = Table(
     Index("ix_health_rollup_athlete_date", "athlete_id", "local_date"),
 )
 
+# --- Period rollups (Phase 6): the same day_rollup/health_metric_daily_rollup shape, one
+# level coarser -- week and month share a `period_type` discriminator column rather than four
+# separate tables, since they're the same shape at two grains and a caller almost always wants
+# "periods of type X in this range." Computed as a rollup OF day_rollup/
+# health_metric_daily_rollup (sum-of-sums), never of raw tables -- see rollups.py::
+# refresh_period_rollup and docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+# period_start/period_end are stored, not derived at query time, since callers (the calendar
+# grid) need them to render period boundaries and they're already known at refresh time.
+
+period_rollup = Table(
+    "period_rollup",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("period_type", String, nullable=False),  # "week" | "month"
+    Column("period_start", String, nullable=False),  # local_date, e.g. Monday for a week
+    Column("period_end", String, nullable=False),  # inclusive
+    Column("activity_count", Integer, nullable=False, default=0),
+    Column("activity_duration_s", Float, nullable=True),
+    Column("activity_moving_duration_s", Float, nullable=True),
+    Column("activity_distance_m", Float, nullable=True),
+    Column("activity_elevation_gain_m", Float, nullable=True),
+    Column("activity_calories", Float, nullable=True),
+    # Distinct days within the period with >=1 activity -- a standard "X of 7 days active"
+    # signal, cheap to add while already computing the row, not present at daily grain (a day
+    # is trivially 0 or 1 active by definition there).
+    Column("activity_days_count", Integer, nullable=False, default=0),
+    Column("sleep_total_s", Float, nullable=True),
+    Column("sleep_score", Float, nullable=True),
+    Column("refreshed_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id", "period_type", "period_start", name="uq_period_rollup_identity"
+    ),
+)
+
+health_metric_period_rollup = Table(
+    "health_metric_period_rollup",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("period_type", String, nullable=False),
+    Column("period_start", String, nullable=False),
+    Column("metric_key", String, ForeignKey("metric_definition.metric_key"), nullable=False),
+    Column("value_sum", Float, nullable=True),
+    # Weighted by each day's n_observations, not a naive average of daily averages -- see
+    # refresh_period_rollup.
+    Column("value_avg", Float, nullable=True),
+    Column("value_min", Float, nullable=True),
+    Column("value_max", Float, nullable=True),
+    Column("value_last", Float, nullable=True),
+    Column("n_observations", Integer, nullable=False, default=0),
+    Column("refreshed_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id",
+        "period_type",
+        "period_start",
+        "metric_key",
+        name="uq_health_period_rollup_identity",
+    ),
+    Index("ix_health_period_rollup_athlete_period", "athlete_id", "period_type", "period_start"),
+)
+
+# --- Fitness & Form (Phase 6): an independently-computed Banister/Coggan CTL(42d)/ATL(7d)/TSB
+# EWMA over daily fit.session.training_load_peak, compared against (not required to match)
+# Garmin's own TrainingReadinessDTO/TrainingHistory signals in the frontend -- Garmin's raw
+# exports have no CTL/ATL/TSB triplet at all (confirmed). Whole-athlete-history grain, full
+# recompute on every relevant ingest run -- see fitness.py::refresh_fitness_rollup and ADR 0009.
+
+fitness_daily_rollup = Table(
+    "fitness_daily_rollup",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("local_date", String, nullable=False),
+    # The deduplicated daily input that fed the EWMA -- stored alongside the derived values so
+    # the model is debuggable without re-deriving it (raw-first/provenance instinct).
+    Column("training_load", Float, nullable=False, default=0.0),
+    Column("ctl", Float, nullable=False),
+    Column("atl", Float, nullable=False),
+    Column("tsb", Float, nullable=False),
+    Column("refreshed_at", DateTime(), nullable=False),
+    UniqueConstraint("athlete_id", "local_date", name="uq_fitness_daily_rollup_identity"),
+)
+
 # --- Notes (Phase 3): the write path CLAUDE.md's mission statement calls for -- one
 # polymorphic table rather than per-entity note tables, matching the project's existing
 # preference for additively-extensible shapes. Scoped to activities/days only for now; a new

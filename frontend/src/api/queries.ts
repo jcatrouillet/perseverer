@@ -8,9 +8,13 @@ import type {
   ActivityDetail,
   ActivitySummary,
   CalendarResponse,
+  FitnessDailyRollupOut,
+  HealthDashboardOut,
+  HealthObservationOut,
   NoteCreate,
   NoteOut,
   Page,
+  PeriodCalendarResponse,
   SleepSessionOut,
   StreamResponse,
 } from "./types";
@@ -38,6 +42,61 @@ export function useCalendar(startDate: string, endDate: string) {
     queryFn: () =>
       apiGet<CalendarResponse>(
         `/api/v1/calendar${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+export function useCalendarWeeks(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["calendar-weeks", startDate, endDate],
+    queryFn: () =>
+      apiGet<PeriodCalendarResponse>(
+        `/api/v1/calendar/weeks${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+export function useCalendarMonths(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["calendar-months", startDate, endDate],
+    queryFn: () =>
+      apiGet<PeriodCalendarResponse>(
+        `/api/v1/calendar/months${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+export function useFitness(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["fitness", startDate, endDate],
+    queryFn: () =>
+      apiGet<FitnessDailyRollupOut[]>(
+        `/api/v1/fitness${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+export function useHealthObservations(metricKeys: string[], startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["health-observations", metricKeys, startDate, endDate],
+    queryFn: () => {
+      const search = new URLSearchParams();
+      for (const key of metricKeys) search.append("metric_key", key);
+      search.set("start_date", startDate);
+      search.set("end_date", endDate);
+      search.set("limit", "500");
+      return apiGet<Page<HealthObservationOut>>(`/api/v1/health/observations?${search.toString()}`);
+    },
+    enabled: metricKeys.length > 0,
+  });
+}
+
+export function useHealthDashboard(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["health-dashboard", startDate, endDate],
+    queryFn: () =>
+      apiGet<HealthDashboardOut>(
+        `/api/v1/health/dashboard${buildQuery({ start_date: startDate, end_date: endDate })}`,
       ),
   });
 }

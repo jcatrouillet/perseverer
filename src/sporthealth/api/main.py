@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sporthealth import __version__
 from sporthealth.api.mcp_server import build_mcp_asgi_app, mcp_lifespan
-from sporthealth.api.routers import activities, auth, calendar, health, notes, sleep
+from sporthealth.api.routers import activities, auth, calendar, fitness, health, notes, sleep
 from sporthealth.config import get_settings
 
 mcp_asgi_app = build_mcp_asgi_app()
@@ -44,6 +44,7 @@ app.include_router(activities.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(sleep.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
+app.include_router(fitness.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")
 
 

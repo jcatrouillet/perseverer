@@ -38,15 +38,24 @@ from sporthealth.db.schema import (
 )
 from sporthealth.fit.parser import parse_fit
 from sporthealth.fit.types import CanonicalBatch, ParsedDevice
+from sporthealth.fitness import refresh_fitness_rollup
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import parse_daily_summary_json, parse_hydration_json
 from sporthealth.merge.engine import ActivityCandidate, is_same_activity
 from sporthealth.metrics.registry import get_or_register_metric
-from sporthealth.rollups import refresh_daily_rollup
+from sporthealth.rollups import refresh_daily_and_period_rollups
 from sporthealth.streams import write_activity_stream
 
 _EPOCH = datetime.fromtimestamp(0, tz=UTC)
 _MERGE_WINDOW = timedelta(days=1)
+
+
+def _local_date(start_time_utc: datetime, utc_offset_s: int) -> str:
+    """The calendar date the athlete would call "today" for an activity starting at
+    `start_time_utc`, given that activity's own recorded offset -- not the raw UTC date. An
+    evening activity in a negative-offset (west of UTC) timezone can otherwise roll into the
+    next UTC day. See ADR 0009 decision 8."""
+    return (start_time_utc + timedelta(seconds=utc_offset_s)).date().isoformat()
 
 # fit_folder's charter is FIT files, plus these two specific Garmin Connect-shaped JSON
 # filename patterns confirmed against real data (see docs/adr/0004-phase-2-health-ingestion.md)
@@ -260,10 +269,15 @@ def ingest_canonical_batch(
                 start_time_utc=a.start_time_utc,
                 utc_offset_s=a.utc_offset_s,
                 tz_name=None,
-                # UTC date, not offset-adjusted -- matches the same (already-established)
-                # convention health_observation/sleep_session's local_date already uses, so
-                # rollups join cleanly across the two. See ADR 0006 decision 2.
-                local_date=a.start_time_utc.date().isoformat(),
+                # Offset-adjusted, not a raw UTC date -- an evening activity in a non-UTC
+                # timezone can otherwise land on the wrong calendar day relative to what the
+                # athlete (and Garmin Connect/any third-party platform) considers "today",
+                # breaking week/month reconciliation. start_time_utc itself stays untouched
+                # (still the raw, naive-UTC instant); only this derived column is adjusted.
+                # See ADR 0009 decision 8. NB: health_observation/sleep_session's local_date is
+                # still plain UTC-date (no reliable per-record offset for every health FIT
+                # message type has been verified yet) -- a known, documented inconsistency.
+                local_date=_local_date(a.start_time_utc, a.utc_offset_s),
                 sport=a.sport,
                 sub_sport=a.sub_sport,
                 name=a.name,
@@ -374,7 +388,7 @@ def ingest_canonical_batch(
         )
     )
 
-    local_date = a.start_time_utc.date().isoformat() if created else None
+    local_date = _local_date(a.start_time_utc, a.utc_offset_s) if created else None
     return IngestResult(activity_id=activity_id, created=created, local_date=local_date)
 
 
@@ -463,8 +477,9 @@ def import_from_folder(
             conn.rollback()
             summary.errors.append({"file": ref.locator, "error": str(e)})
 
-    for local_date in touched_dates:
-        refresh_daily_rollup(conn, athlete_id=athlete_id, local_date=local_date)
+    refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
+    if touched_dates:
+        refresh_fitness_rollup(conn, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(

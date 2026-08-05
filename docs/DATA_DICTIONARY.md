@@ -60,10 +60,16 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
   `id` is a ULID, not an autoincrement int, so it's sortable and safe to expose externally
   later without leaking row counts. `primary_source` records which adapter's data currently
   populates the core fields (field-level provenance/override precedence is a later-phase
-  concern). `local_date` (added Phase 3) is the UTC calendar date of `start_time_utc` — *not*
-  offset-adjusted, deliberately matching `health_observation`/`sleep_session`'s own
-  `local_date` convention so `rollups.refresh_daily_rollup` can join across all three by that
-  string directly (see `docs/adr/0006-phase-3-read-api-and-rollups.md` decision 2).
+  concern). `local_date` (added Phase 3) is **offset-adjusted** — `(start_time_utc +
+  utc_offset_s).date()`, not the raw UTC calendar date — as of Phase 6 (see
+  `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md` decision 8;
+  `adapters/fit_folder.py::_local_date`). `start_time_utc` itself is untouched, still the raw
+  naive-UTC instant; only this derived column is adjusted. **Known inconsistency**:
+  `health_observation`/`sleep_session.local_date` are still the raw UTC calendar date (see their
+  own entries below) — a `day_rollup` row's activity data and health data can reference
+  boundaries up to `utc_offset_s` apart for a non-UTC athlete. `local_date` originally matched
+  `health_observation`/`sleep_session`'s UTC-date convention exactly (ADR 0006 decision 2); that
+  symmetry no longer holds for `activity` after this fix.
 - **`activity_source_link`** — links one `activity` to every raw file/record that contributes
   to it. `external_id` is the adapter's idempotency key: for `fit_folder`, derived from the FIT
   file's device serial + start time (falling back to the file's sha256), deliberately never the
@@ -110,7 +116,9 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
   `EnduranceScore`, and ~20 more, all through one generic parser rather than bespoke code per
   kind — see ADR 0005 decisions 3-4). `nap` is a single `aggregation="interval"` row per nap
   (`interval_start`/`interval_end`, `value_text` = feedback) rather than a dedicated table
-  (ADR 0004 decision 4).
+  (ADR 0004 decision 4). `local_date` here (and on `sleep_session` below) is still the raw UTC
+  calendar date of the observation's timestamp, unlike `activity.local_date` (offset-adjusted as
+  of Phase 6, ADR 0009 decision 8) — a known, documented inconsistency, not an oversight.
 - **`health_stream`** — Parquet-backed intraday time series, one row per `(metric_key,
   year_month)`: `heart_rate` (from `monitoring_mesgs`, `timestamp_16`-corrected — decision 1),
   `stress_level`, `respiration_rate`, `spo2`, `hrv`. Unlike `activity_stream`, a month's file is
@@ -152,6 +160,18 @@ view reads a `*_rollup` table refreshed on ingest, never scans at request time."
 
 Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
 `_REBUILDABLE_TABLES` — a rollup is a cache, not raw data, so "never destructive" doesn't apply.
+
+- **`period_rollup`** / **`health_metric_period_rollup`** (Phase 6) — the same two shapes one
+  grain coarser, discriminated by `period_type` (`"week"` | `"month"`) rather than four separate
+  tables. Computed as a rollup OF `day_rollup`/`health_metric_daily_rollup` (sum-of-sums,
+  weighted `value_avg`), not of raw tables — see `rollups.py::refresh_period_rollup` and
+  `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md`. Week starts Monday (confirmed
+  against the user's Garmin Connect account, for exact reconciliation).
+- **`fitness_daily_rollup`** (Phase 6) — one row per `(athlete_id, local_date)`:
+  `training_load` (the deduplicated daily sum of `fit.session.training_load_peak`), and the
+  derived `ctl`/`atl`/`tsb` from an independently-computed Coggan/Banister EWMA — see
+  `fitness.py::refresh_fitness_rollup`. Garmin's own exports have no CTL/ATL/TSB triplet at
+  all, so this is genuinely independent, not a mirror of a Garmin-provided value.
 
 ### Notes (Phase 3)
 
@@ -238,3 +258,20 @@ for data fetching, a hand-rolled SVG chart for the one stream-chart need (no cha
 Its API base URL is runtime-configured via `frontend/public/config.js`, regenerated at
 container start from `SPORTHEALTH_API_BASE_URL` — never baked into the Vite build. See
 `docs/adr/0008-phase-5-frontend.md`.
+
+## Calendar grid, Fitness & Form, health dashboard (Phase 6)
+
+`GET /api/v1/calendar/weeks`, `/calendar/months` (rollup-backed, same shape as `/calendar` one
+grain coarser — see `period_rollup`/`health_metric_period_rollup` above), `GET /fitness`
+(reads `fitness_daily_rollup` — an independently-computed CTL/ATL/TSB, not a Garmin-sourced
+value), and `GET /health/dashboard` (merges each logical metric's several raw `metric_key`
+aliases into one series via a hardcoded `LOGICAL_METRICS` table in
+`api/routers/health.py`, verified field-by-field against the real `metric_definition` catalog —
+see ADR 0009). All follow the same per-endpoint `Depends(require_api_key)` pattern as every
+other Phase 5+ route. The frontend gained a real year/month/week calendar grid (replacing
+Phase 5's flat day list), a Fitness & Form page (`FitnessChart.tsx`, extending
+`StreamChart.tsx`'s hand-rolled-SVG pattern), and a Health page (core daily summary / sleep /
+HRV-SpO2-stress sections) — plus Vitest + React Testing Library, the frontend's first automated
+test coverage. `sync rebuild`'s `garmin_export_health_json` replay gap (open since Phase 3) was
+fixed in this phase, since Fitness & Form and the health dashboard both lean heavily on that
+data. See `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md`.

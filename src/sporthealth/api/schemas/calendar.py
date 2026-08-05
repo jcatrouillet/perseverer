@@ -35,3 +35,36 @@ class DayRollupOut(BaseModel):
 
 class CalendarResponse(BaseModel):
     days: list[DayRollupOut]
+
+
+# --- Period (week/month) rollups, Phase 6 -- see docs/adr/0009-phase-6-*.md ---
+
+
+class PeriodHealthMetricRollupOut(BaseModel):
+    metric_key: str
+    value_sum: float | None
+    value_avg: float | None
+    value_min: float | None
+    value_max: float | None
+    value_last: float | None
+    n_observations: int
+
+
+class PeriodRollupOut(BaseModel):
+    period_type: str
+    period_start: str
+    period_end: str
+    activity_count: int
+    activity_duration_s: float | None
+    activity_moving_duration_s: float | None
+    activity_distance_m: float | None
+    activity_elevation_gain_m: float | None
+    activity_calories: float | None
+    activity_days_count: int
+    sleep_total_s: float | None
+    sleep_score: float | None
+    health_metrics: list[PeriodHealthMetricRollupOut]
+
+
+class PeriodCalendarResponse(BaseModel):
+    periods: list[PeriodRollupOut]

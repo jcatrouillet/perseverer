@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy import Engine, select
 
-from sporthealth.adapters.fit_folder import import_from_folder
+from sporthealth.adapters.fit_folder import _local_date, import_from_folder
 from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import (
     activity,
@@ -81,6 +81,44 @@ def test_import_is_idempotent(tmp_path: Path) -> None:
     assert first.errors == []
     assert second.items_new == 0
     assert len(activity_ids) == 1
+
+
+def test_local_date_is_offset_adjusted_not_raw_utc_date() -> None:
+    # 2024-06-01 03:00 UTC, offset -8h -> 2024-05-31 19:00 local: a real evening activity that
+    # would otherwise roll into the wrong (next) UTC calendar day. See ADR 0009 decision 8 --
+    # this is exactly the bug real Garmin/intervals.icu reconciliation surfaced.
+    crossing = dt.datetime(2024, 6, 1, 3, 0, tzinfo=dt.UTC)
+    assert _local_date(crossing, -28800) == "2024-05-31"
+
+    # The synthetic_run.fit fixture's own timestamp (08:00 UTC, offset -8h -> local midnight)
+    # happens not to cross a boundary -- confirms the no-crossing case is unaffected.
+    non_crossing = dt.datetime(2024, 6, 1, 8, 0, tzinfo=dt.UTC)
+    assert _local_date(non_crossing, -28800) == "2024-06-01"
+
+    # UTC athletes (utc_offset_s=0, the default for every existing fixture/seed) are
+    # unaffected -- offset-adjustment is a no-op.
+    assert _local_date(non_crossing, 0) == "2024-06-01"
+
+
+def test_import_uses_offset_adjusted_local_date_for_rollups(tmp_path: Path) -> None:
+    # synthetic_run.fit's start_time_utc (2024-06-01 08:00 UTC) with its baked-in utc_offset_s
+    # of -28800 lands on local midnight, so the UTC date and local date happen to coincide --
+    # this just confirms the real ingest path calls the offset-adjusted helper and stores its
+    # result, not that day-crossing itself round-trips (covered above as a pure function).
+    engine, import_dir = _setup(tmp_path)
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+
+    with engine.connect() as conn:
+        import_from_folder(
+            conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID, folder=import_dir
+        )
+        row = conn.execute(
+            select(activity.c.local_date, activity.c.utc_offset_s)
+        ).one()
+
+    assert row.utc_offset_s == -28800
+    assert row.local_date == "2024-06-01"
 
 
 def test_rebuild_from_archive_after_deleting_the_database(tmp_path: Path) -> None:

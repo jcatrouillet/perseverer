@@ -6,9 +6,10 @@ Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing revers
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
 the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
-**Current phase: 5 (core dashboard frontend + per-athlete auth). Phase 4 (MCP server exposing
-the read API + notes), Phase 3 (read API, precomputed rollups, DuckDB, notes write path), and
-Phase 2 (garmin_export/garmin_connect adapters, scheduler, staleness, health/wellness ingestion,
+**Current phase: 6 (calendar grid, weekly/monthly rollups, Fitness & Form, health dashboard).
+Phase 5 (core dashboard frontend + per-athlete auth), Phase 4 (MCP server exposing the read API
++ notes), Phase 3 (read API, precomputed rollups, DuckDB, notes write path), and Phase 2
+(garmin_export/garmin_connect adapters, scheduler, staleness, health/wellness ingestion,
 real-export nested-zip discovery) are complete.**
 See the phase table in the project brief (kept outside this repo) for the full 10-phase plan.
 Do not skip ahead — each phase has its own ADR in `docs/adr/` and its own acceptance criterion.
@@ -88,6 +89,19 @@ because you don't recognize it — stop, that's the bug.
   outside the house (double-NAT/split-horizon DNS, see `docs/DEPLOY.md`). `AuthGate` offers
   either credential path (password or a pasted API key); a background 401 clears the stored
   credential and re-prompts automatically.
+- **Weekly/monthly rollups + Fitness & Form (Phase 6)**: `period_rollup`/
+  `health_metric_period_rollup` are a rollup OF `day_rollup`/`health_metric_daily_rollup`
+  (sum-of-sums, weighted averages), not of raw tables — `period_type` (`"week"`|`"month"`)
+  discriminated rather than four separate tables. Week starts Monday. `fitness_daily_rollup`
+  stores an independently-computed Coggan/Banister CTL(42d)/ATL(7d)/TSB EWMA over daily
+  `fit.session.training_load_peak` — Garmin's own exports have no CTL/ATL/TSB at all, so the
+  frontend shows this alongside (not reconciled against) Garmin's own Training Readiness/Status.
+  Full history recompute on every relevant ingest run (`fitness.py::refresh_fitness_rollup`),
+  not incremental — cheap even at ~1,400+ days, and a retroactive correction invalidates
+  everything forward from it regardless of scheme. `GET /health/dashboard` merges the same
+  logical field's several raw `metric_key` namespaces (`api/routers/health.py::
+  LOGICAL_METRICS`, verified field-by-field against the real database, not assumed from parser
+  docstrings). See `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md`.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Three exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash

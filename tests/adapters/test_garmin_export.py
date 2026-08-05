@@ -14,8 +14,8 @@ from sqlalchemy import Engine, select
 
 from sporthealth.adapters.garmin_export import (
     _derive_export_external_id,
-    _report_kind_from_filename,
     import_garmin_export,
+    report_kind_from_filename,
 )
 from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import (
@@ -186,17 +186,17 @@ def test_derive_export_external_id_tries_both_patterns_then_falls_back() -> None
     assert _derive_export_external_id("someone@example.com_LhaBackup.fit") is None
 
 
-def test_report_kind_from_filename() -> None:
-    assert _report_kind_from_filename("2023-01-12_2023-04-22_87061520_sleepData.json") == (
+def testreport_kind_from_filename() -> None:
+    assert report_kind_from_filename("2023-01-12_2023-04-22_87061520_sleepData.json") == (
         "sleepData"
     )
-    assert _report_kind_from_filename("UDSFile_2022-10-03_2023-01-11.json") == "UDSFile"
+    assert report_kind_from_filename("UDSFile_2022-10-03_2023-01-11.json") == "UDSFile"
     assert (
-        _report_kind_from_filename("ActivityVo2Max_20241204_20250314_87061520.json")
+        report_kind_from_filename("ActivityVo2Max_20241204_20250314_87061520.json")
         == "ActivityVo2Max"
     )
     assert (
-        _report_kind_from_filename("TrainingReadinessDTO_20241204_20250314_87061520.json")
+        report_kind_from_filename("TrainingReadinessDTO_20241204_20250314_87061520.json")
         == "TrainingReadinessDTO"
     )
 

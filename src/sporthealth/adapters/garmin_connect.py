@@ -46,7 +46,8 @@ from sporthealth.adapters.fit_folder import IngestResult, IngestRunSummary, inge
 from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.schema import ingest_run
 from sporthealth.fit.parser import parse_fit
-from sporthealth.rollups import refresh_daily_rollup
+from sporthealth.fitness import refresh_fitness_rollup
+from sporthealth.rollups import refresh_daily_and_period_rollups
 
 SOURCE_NAME = "garmin_connect"
 
@@ -278,8 +279,12 @@ def sync_garmin_connect(
     except (GarminAuthRequired, GarminRateLimitAborted) as e:
         summary.errors.append({"error": str(e)})
 
-    for local_date in touched_dates:
-        refresh_daily_rollup(conn, athlete_id=athlete_id, local_date=local_date)
+    refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
+    # Unconditional, unlike the other three ingest entry points: this is the daily scheduled
+    # sync path (worker/main.py runs it once/day regardless of whether new activities were
+    # found), so the Fitness & Form series' end date must keep advancing through rest days --
+    # see fitness.py and docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+    refresh_fitness_rollup(conn, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(

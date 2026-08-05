@@ -26,10 +26,11 @@ from sqlalchemy import Connection
 from sporthealth.adapters.fit_folder import IngestRunSummary
 from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.schema import athlete, ingest_run
+from sporthealth.fitness import refresh_fitness_rollup
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import parse_garmin_export_json
 from sporthealth.ingest_dispatch import ingest_fit_bytes
-from sporthealth.rollups import refresh_daily_rollup
+from sporthealth.rollups import refresh_daily_and_period_rollups
 
 SOURCE_NAME = "garmin_export"
 
@@ -61,7 +62,11 @@ _PROFILE_ID_RE = re.compile(r"^\d{5,}$")
 _MAX_ZIP_EXTRACT_DEPTH = 5
 
 
-def _report_kind_from_filename(name: str) -> str:
+def report_kind_from_filename(name: str) -> str:
+    """Public since Phase 6: also used by rebuild.py to replay garmin_export_health_json raw
+    objects, deriving report_kind from the archived source_locator (the original filename)
+    rather than re-deciding it.
+    """
     stem = Path(name).stem
     parts = [p for p in stem.split("_") if p]
     kept = [p for p in parts if not _DATE_TOKEN_RE.match(p) and not _PROFILE_ID_RE.match(p)]
@@ -203,7 +208,7 @@ def import_garmin_export(
                     content=content,
                     locator=locator,
                 )
-                report_kind = _report_kind_from_filename(file_path.name)
+                report_kind = report_kind_from_filename(file_path.name)
                 batch = parse_garmin_export_json(content, report_kind=report_kind)
                 health_result = ingest_health_batch(
                     conn, parquet_dir, athlete_id=athlete_id, source=SOURCE_NAME, batch=batch
@@ -227,8 +232,9 @@ def import_garmin_export(
             conn.rollback()
             summary.errors.append({"file": str(file_path), "error": str(e)})
 
-    for local_date in touched_dates:
-        refresh_daily_rollup(conn, athlete_id=athlete_id, local_date=local_date)
+    refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
+    if touched_dates:
+        refresh_fitness_rollup(conn, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(

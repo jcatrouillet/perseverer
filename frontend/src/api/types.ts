@@ -140,6 +140,70 @@ export interface CalendarResponse {
   days: DayRollupOut[];
 }
 
+// --- Period (week/month) rollups, Fitness & Form, health dashboard (Phase 6) -- see
+// docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+
+export interface PeriodHealthMetricRollupOut {
+  metric_key: string;
+  value_sum: number | null;
+  value_avg: number | null;
+  value_min: number | null;
+  value_max: number | null;
+  value_last: number | null;
+  n_observations: number;
+}
+
+export type PeriodType = "week" | "month";
+
+export interface PeriodRollupOut {
+  period_type: PeriodType;
+  period_start: string;
+  period_end: string;
+  activity_count: number;
+  activity_duration_s: number | null;
+  activity_moving_duration_s: number | null;
+  activity_distance_m: number | null;
+  activity_elevation_gain_m: number | null;
+  activity_calories: number | null;
+  activity_days_count: number;
+  sleep_total_s: number | null;
+  sleep_score: number | null;
+  health_metrics: PeriodHealthMetricRollupOut[];
+}
+
+export interface PeriodCalendarResponse {
+  periods: PeriodRollupOut[];
+}
+
+export interface FitnessDailyRollupOut {
+  local_date: string;
+  training_load: number;
+  ctl: number;
+  atl: number;
+  tsb: number;
+}
+
+export interface HealthDashboardDayOut {
+  local_date: string;
+  value_sum: number | null;
+  value_avg: number | null;
+  value_min: number | null;
+  value_max: number | null;
+  value_last: number | null;
+  n_observations: number;
+  source_metric_key: string;
+}
+
+export interface HealthDashboardMetricOut {
+  logical_metric: string;
+  last_observed: string | null;
+  daily: HealthDashboardDayOut[];
+}
+
+export interface HealthDashboardOut {
+  metrics: HealthDashboardMetricOut[];
+}
+
 export type EntityType = "activity" | "day";
 
 export interface NoteOut {

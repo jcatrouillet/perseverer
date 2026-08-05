@@ -133,6 +133,18 @@ there is currently no migration step for the containerized deploy's data volume 
 at all (`docker compose ... up -d` alone does not run `alembic upgrade head` against it) — a gap
 this phase found but did not fix, since it predates Phase 5 and isn't specific to it.
 
+## One-time backfills
+
+- **Phase 6 `activity.local_date` offset fix** (ADR 0009 decision 8): any database populated
+  before this fix has activity rows whose `local_date` is the raw UTC calendar date instead of
+  the offset-adjusted one — wrong for any athlete not on UTC. Run
+  `scripts/backfill_local_date_offset.py` once against that database (stop the API container
+  first to avoid a concurrent-write race, since it opens the SQLite file directly) — it recomputes
+  `local_date` from the already-correct stored `utc_offset_s` (no FIT re-parsing) and refreshes
+  every rollup table for every date/period it touched. Safe to re-run (idempotent: a
+  database already on the offset-adjusted convention has nothing left to change). Not needed for
+  a fresh install — new ingests already use the fixed convention.
+
 ## Backups (Phase 9)
 
 TODO: `VACUUM INTO` snapshot schedule, rsync of the raw archive + Parquet trees, and an
