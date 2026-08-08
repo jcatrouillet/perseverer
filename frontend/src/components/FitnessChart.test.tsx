@@ -25,19 +25,29 @@ describe("FitnessChart", () => {
     expect(screen.getByText(/not enough data/i)).toBeInTheDocument();
   });
 
-  it("renders three SVG paths (CTL, ATL, TSB) for a real series", () => {
+  it("renders all three series (CTL, ATL, TSB) for a real series", () => {
     const series = [
       point("2025-06-01", 100, 2.35, 13.31, 0),
       point("2025-06-02", 0, 2.3, 11.54, -10.96),
       point("2025-06-03", 150, 5.77, 29.97, -9.24),
     ];
     const { container } = render(<FitnessChart series={series} />);
-    const paths = container.querySelectorAll("path");
-    expect(paths).toHaveLength(3);
-    for (const path of paths) {
-      // Three points -> "M x y L x y L x y"
-      expect(path.getAttribute("d")).toMatch(/^M .+ L .+ L .+$/);
-    }
+    // CTL is an area (it's the baseline the other two are read against) and ATL/TSB are lines,
+    // so this counts series rather than one specific Recharts element type.
+    expect(container.querySelectorAll(".recharts-area")).toHaveLength(1);
+    expect(container.querySelectorAll(".recharts-line")).toHaveLength(2);
+  });
+
+  it("marks only the most recent point on each series", () => {
+    const series = [
+      point("2025-06-01", 100, 2.35, 13.31, 0),
+      point("2025-06-02", 0, 2.3, 11.54, -10.96),
+      point("2025-06-03", 150, 5.77, 29.97, -9.24),
+    ];
+    const { container } = render(<FitnessChart series={series} />);
+    // Three points x three series would be nine dots if every point were marked; the endpoint
+    // treatment means exactly one per series.
+    expect(container.querySelectorAll(".chart-endpoint")).toHaveLength(3);
   });
 
   it("summarizes the latest day's CTL/ATL/TSB values", () => {
@@ -45,8 +55,10 @@ describe("FitnessChart", () => {
       point("2025-06-01", 100, 2.35, 13.31, 0),
       point("2025-06-02", 0, 2.3, 11.54, -10.96),
     ];
-    render(<FitnessChart series={series} />);
-    expect(screen.getByText(/2025-06-02/)).toBeInTheDocument();
-    expect(screen.getByText(/2\.3/)).toBeInTheDocument();
+    const { container } = render(<FitnessChart series={series} />);
+    const paragraphs = Array.from(container.querySelectorAll("p"));
+    const summary = paragraphs.find((p) => p.textContent?.includes("Latest"));
+    expect(summary?.textContent).toMatch(/2025-06-02/);
+    expect(summary?.textContent).toMatch(/2\.3/);
   });
 });

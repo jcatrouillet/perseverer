@@ -13,6 +13,8 @@ import {
   storeApiKey,
   storeJwt,
 } from "../api/client";
+import "../styles/auth.css";
+import { ThemeToggle } from "./ThemeToggle";
 
 type Tab = "login" | "api-key";
 
@@ -44,10 +46,11 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   }
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)}>
-      <label>
+    <form className="auth-form" onSubmit={(e) => void handleSubmit(e)}>
+      <label className="field">
         Username
         <input
+          className="input"
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -55,9 +58,10 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           required
         />
       </label>
-      <label>
+      <label className="field">
         Password
         <input
+          className="input"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -65,8 +69,12 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           required
         />
       </label>
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={submitting}>
+      {error && (
+        <p className="auth-form__error" role="alert">
+          {error}
+        </p>
+      )}
+      <button className="button button--primary button--full" type="submit" disabled={submitting}>
         {submitting ? "Signing in…" : "Log in"}
       </button>
     </form>
@@ -86,10 +94,11 @@ function ApiKeyForm({ onSuccess }: { onSuccess: () => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <label>
+    <form className="auth-form" onSubmit={handleSubmit}>
+      <label className="field">
         API key
         <input
+          className="input"
           type="password"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
@@ -97,7 +106,9 @@ function ApiKeyForm({ onSuccess }: { onSuccess: () => void }) {
           required
         />
       </label>
-      <button type="submit">Use this key</button>
+      <button className="button button--primary button--full" type="submit">
+        Use this key
+      </button>
     </form>
   );
 }
@@ -119,21 +130,44 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <main>
-      <h1>Sport Health Data Platform</h1>
-      <nav>
-        <button type="button" onClick={() => setTab("login")} disabled={tab === "login"}>
-          Log in
-        </button>
-        <button type="button" onClick={() => setTab("api-key")} disabled={tab === "api-key"}>
-          Use an API key
-        </button>
-      </nav>
-      {tab === "login" ? (
-        <LoginForm onSuccess={() => setAuthenticated(true)} />
-      ) : (
-        <ApiKeyForm onSuccess={() => setAuthenticated(true)} />
-      )}
-    </main>
+    <div className="auth-page">
+      <div className="auth-page__toggle">
+        <ThemeToggle />
+      </div>
+      <main className="auth-card">
+        <div className="auth-card__brand">
+          <div className="auth-card__logo">SH</div>
+          <h1>Sport Health</h1>
+          <p className="auth-card__subtitle">Sign in to view your training and health data</p>
+        </div>
+        <div className="auth-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "login"}
+            className={tab === "login" ? "is-active" : ""}
+            onClick={() => setTab("login")}
+            disabled={tab === "login"}
+          >
+            Log in
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "api-key"}
+            className={tab === "api-key" ? "is-active" : ""}
+            onClick={() => setTab("api-key")}
+            disabled={tab === "api-key"}
+          >
+            API key
+          </button>
+        </div>
+        {tab === "login" ? (
+          <LoginForm onSuccess={() => setAuthenticated(true)} />
+        ) : (
+          <ApiKeyForm onSuccess={() => setAuthenticated(true)} />
+        )}
+      </main>
+    </div>
   );
 }

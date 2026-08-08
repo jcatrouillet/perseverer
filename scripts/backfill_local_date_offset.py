@@ -21,7 +21,12 @@ from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import activity
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.fitness import refresh_fitness_rollup
-from sporthealth.rollups import month_start, refresh_daily_rollup, refresh_period_rollup, week_start_monday
+from sporthealth.rollups import (
+    month_start,
+    refresh_daily_rollup,
+    refresh_period_rollup,
+    week_start_monday,
+)
 
 DB_PATH = Path(__file__).parent.parent / "data" / "sporthealth.db"
 
@@ -65,7 +70,10 @@ def main() -> None:
 
         for period_type, period_start in sorted(periods):
             refresh_period_rollup(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, period_type=period_type, period_start=period_start
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                period_type=period_type,
+                period_start=period_start,
             )
 
         refresh_fitness_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)

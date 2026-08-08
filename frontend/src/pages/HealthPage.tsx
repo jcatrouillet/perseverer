@@ -9,7 +9,9 @@ import { useHealthDashboard, useSleep } from "../api/queries";
 import type { HealthDashboardMetricOut } from "../api/types";
 import { isoDate } from "../dateUtils";
 
-const CORE_METRICS = [
+// Exported so other pages (e.g. YearView's year-in-review stats) can reuse the exact same
+// categorization rather than maintaining a second, driftable copy of this list.
+export const CORE_METRICS = [
   "steps",
   "calories",
   "resting_heart_rate",
@@ -17,7 +19,7 @@ const CORE_METRICS = [
   "floors_ascended",
   "vo2max",
 ];
-const HRV_SPO2_STRESS_METRICS = ["hrv_nightly_average", "spo2_average", "stress_average"];
+export const HRV_SPO2_STRESS_METRICS = ["hrv_nightly_average", "spo2_average", "stress_average"];
 
 function defaultRange(): { start: string; end: string } {
   const end = new Date();

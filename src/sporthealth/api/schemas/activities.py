@@ -55,20 +55,23 @@ class ActivityMetricOut(BaseModel):
 class ActivitySummary(BaseModel):
     id: str
     start_time_utc: datetime
+    utc_offset_s: int
     local_date: str | None
     sport: str
     sub_sport: str | None
     name: str | None
     duration_s: float | None
+    moving_duration_s: float | None
     distance_m: float | None
     elevation_gain_m: float | None
     calories: float | None
+    avg_hr_bpm: float | None
+    max_hr_bpm: float | None
     primary_source: str
     stream_available: bool
 
 
 class ActivityDetail(ActivitySummary):
-    moving_duration_s: float | None
     device: DeviceOut | None
     laps: list[LapOut]
     splits: list[SplitOut]

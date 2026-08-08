@@ -1,0 +1,117 @@
+/* Design tokens. Dark is the default (Garmin Connect-inspired); [data-theme="light"] overrides
+   the same variable set rather than duplicating rules -- every component styles against these
+   variables only, never a hardcoded color, so the toggle in ThemeToggle.tsx needs no per-
+   component logic. */
+
+:root {
+  --color-bg: #12151c;
+  --color-surface: #1b1f29;
+  --color-surface-raised: #232836;
+  --color-border: #2e3441;
+  --color-text: #eef1f6;
+  --color-text-muted: #9aa3b5;
+  --color-text-faint: #6b7386;
+
+  --color-accent: #4da3ff;
+  --color-accent-strong: #7cb9ff;
+
+  /* One color per data type, reused consistently across cards, charts, and stat tiles. Every
+     tinted surface in the app (icon chips, hero tiles, sport pills) is a color-mix() off one of
+     these -- see the tone classes in layout.css -- so a hue on screen always identifies a
+     metric or a sport family, and no component ever hardcodes a color. metricStyle.ts maps
+     sports and health metrics onto them. */
+  --color-heart-rate: #ef5a6f;
+  --color-pace: #4da3ff;
+  --color-elevation: #4caf7d;
+  --color-power: #b57bee;
+  --color-cadence: #3fb6c9;
+  --color-temperature: #e8a33d;
+  --color-load: #e8a33d;
+
+  /* Deliberately separate tokens from the data colors above, even though three of them
+     currently hold identical values. They answer different questions -- "is this good or bad"
+     vs. "which metric is this" -- and collapsing them would mean that shifting the shade of
+     "good" silently shifts elevation with it. Same values today, independent tomorrow. */
+  --color-success: #4caf7d;
+  --color-warning: #e8a33d;
+  --color-danger: #ef5a6f;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2.5rem;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-size-sm: 0.8125rem;
+  --font-size-base: 0.9375rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.5rem;
+}
+
+:root[data-theme="light"] {
+  --color-bg: #f4f6f9;
+  --color-surface: #ffffff;
+  /* Distinct from --color-surface (unlike an earlier version of this token, which set both to
+     #ffffff -- making every "raised" element, from chart tooltips to a hovered table row,
+     silently invisible in light theme even though the underlying interaction fired correctly).
+     Reuses the page background's subtle gray-blue, giving raised surfaces a visible tint
+     against a white card. */
+  --color-surface-raised: #f4f6f9;
+  --color-border: #dde2ea;
+  --color-text: #1a1d24;
+  --color-text-muted: #5a6273;
+  --color-text-faint: #8a92a3;
+
+  --color-accent: #1a73e8;
+  --color-accent-strong: #0f5bc4;
+
+  --color-heart-rate: #d43a52;
+  --color-pace: #1a73e8;
+  --color-elevation: #2f9160;
+  --color-power: #8c4fd6;
+  --color-cadence: #1f92a3;
+  --color-temperature: #c47f1a;
+  --color-load: #c47f1a;
+
+  --color-success: #2f9160;
+  --color-warning: #c47f1a;
+  --color-danger: #d43a52;
+
+  --shadow-card: 0 1px 3px rgba(20, 25, 35, 0.08);
+}
+
+/* Fallback for a viewer with no stored preference yet and no explicit toggle interaction --
+   matches whichever theme the OS/browser reports, still overridable by the toggle afterward. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --color-bg: #f4f6f9;
+    --color-surface: #ffffff;
+    --color-surface-raised: #f4f6f9;
+    --color-border: #dde2ea;
+    --color-text: #1a1d24;
+    --color-text-muted: #5a6273;
+    --color-text-faint: #8a92a3;
+    --color-accent: #1a73e8;
+    --color-accent-strong: #0f5bc4;
+    --color-heart-rate: #d43a52;
+    --color-pace: #1a73e8;
+    --color-elevation: #2f9160;
+    --color-power: #8c4fd6;
+    --color-cadence: #1f92a3;
+    --color-temperature: #c47f1a;
+    --color-load: #c47f1a;
+    --color-success: #2f9160;
+    --color-warning: #c47f1a;
+    --color-danger: #d43a52;
+    --shadow-card: 0 1px 3px rgba(20, 25, 35, 0.08);
+  }
+}

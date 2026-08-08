@@ -57,20 +57,23 @@ export interface ActivityMetricOut {
 export interface ActivitySummary {
   id: string;
   start_time_utc: string;
+  utc_offset_s: number;
   local_date: string | null;
   sport: string;
   sub_sport: string | null;
   name: string | null;
   duration_s: number | null;
+  moving_duration_s: number | null;
   distance_m: number | null;
   elevation_gain_m: number | null;
   calories: number | null;
+  avg_hr_bpm: number | null;
+  max_hr_bpm: number | null;
   primary_source: string;
   stream_available: boolean;
 }
 
 export interface ActivityDetail extends ActivitySummary {
-  moving_duration_s: number | null;
   device: DeviceOut | null;
   laps: LapOut[];
   splits: SplitOut[];

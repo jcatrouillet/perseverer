@@ -176,6 +176,10 @@ activity_metric = Table(
         "source",
         name="uq_activity_metric_identity",
     ),
+    # The uniqueness index above leads with athlete_id, so it can't serve a lookup keyed on
+    # activity_id first (e.g. the /activities list endpoint's per-row avg/max heart rate
+    # correlated subqueries) without a full scan. This index serves that access pattern.
+    Index("ix_activity_metric_activity_key", "activity_id", "metric_key"),
 )
 
 activity_stream = Table(

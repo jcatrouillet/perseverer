@@ -46,19 +46,45 @@ def list_activities(
         .where(activity_stream.c.activity_id == activity.c.id)
         .exists()
     )
+    # Whole-activity avg/max heart rate isn't a fixed column on `activity` (see
+    # docs/DATA_DICTIONARY.md) -- it's a FIT session-message metric, one EAV row per activity.
+    # Correlated scalar subqueries keep this a single query, matching the existing
+    # `stream_exists` pattern immediately above, rather than an N+1 per-activity lookup.
+    avg_hr_subq = (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key == "fit.session.avg_heart_rate",
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
+    max_hr_subq = (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key == "fit.session.max_heart_rate",
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
     query = select(
         activity.c.id,
         activity.c.start_time_utc,
+        activity.c.utc_offset_s,
         activity.c.local_date,
         activity.c.sport,
         activity.c.sub_sport,
         activity.c.name,
         activity.c.duration_s,
+        activity.c.moving_duration_s,
         activity.c.distance_m,
         activity.c.elevation_gain_m,
         activity.c.calories,
         activity.c.primary_source,
         stream_exists.label("stream_available"),
+        avg_hr_subq.label("avg_hr_bpm"),
+        max_hr_subq.label("max_hr_bpm"),
     ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
 
     if start_date is not None:
@@ -68,7 +94,20 @@ def list_activities(
     if sport is not None:
         query = query.where(activity.c.sport == sport)
 
-    total = conn.execute(select(func.count()).select_from(query.subquery())).scalar_one()
+    # Counted directly against `activity` -- not `select(func.count()).select_from(query.
+    # subquery())`, which would force the engine to evaluate the avg/max heart rate correlated
+    # subqueries (and stream_exists) for every matching row a second time just to discard them.
+    count_query = select(func.count()).select_from(activity).where(
+        activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None)
+    )
+    if start_date is not None:
+        count_query = count_query.where(activity.c.local_date >= start_date.isoformat())
+    if end_date is not None:
+        count_query = count_query.where(activity.c.local_date <= end_date.isoformat())
+    if sport is not None:
+        count_query = count_query.where(activity.c.sport == sport)
+    total = conn.execute(count_query).scalar_one()
+
     rows = conn.execute(
         query.order_by(activity.c.start_time_utc.desc()).limit(limit).offset(offset)
     ).fetchall()
@@ -77,14 +116,18 @@ def list_activities(
         ActivitySummary(
             id=r.id,
             start_time_utc=to_utc(r.start_time_utc),
+            utc_offset_s=r.utc_offset_s,
             local_date=r.local_date,
             sport=r.sport,
             sub_sport=r.sub_sport,
             name=r.name,
             duration_s=r.duration_s,
+            moving_duration_s=r.moving_duration_s,
             distance_m=r.distance_m,
             elevation_gain_m=r.elevation_gain_m,
             calories=r.calories,
+            avg_hr_bpm=r.avg_hr_bpm,
+            max_hr_bpm=r.max_hr_bpm,
             primary_source=r.primary_source,
             stream_available=bool(r.stream_available),
         )
@@ -135,10 +178,12 @@ def get_activity(
     metrics = conn.execute(
         select(activity_metric).where(activity_metric.c.activity_id == activity_id)
     ).fetchall()
+    metrics_by_key = {m.metric_key: m.value_num for m in metrics}
 
     return ActivityDetail(
         id=row.id,
         start_time_utc=to_utc(row.start_time_utc),
+        utc_offset_s=row.utc_offset_s,
         local_date=row.local_date,
         sport=row.sport,
         sub_sport=row.sub_sport,
@@ -147,6 +192,8 @@ def get_activity(
         distance_m=row.distance_m,
         elevation_gain_m=row.elevation_gain_m,
         calories=row.calories,
+        avg_hr_bpm=metrics_by_key.get("fit.session.avg_heart_rate"),
+        max_hr_bpm=metrics_by_key.get("fit.session.max_heart_rate"),
         primary_source=row.primary_source,
         stream_available=stream_row is not None,
         moving_duration_s=row.moving_duration_s,

@@ -1,0 +1,582 @@
+/* App shell + shared component classes. Plain global CSS, no framework/modules -- see ADR
+   0010: one new dependency (Recharts) for this phase is enough, a CSS framework on top of it
+   isn't earning its weight for an app this size. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  line-height: 1.45;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+h1 {
+  font-size: var(--font-size-xl);
+}
+
+h2 {
+  font-size: var(--font-size-lg);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* App shell */
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Stretches to the nav's full content height so the active tab's underline below can sit
+   exactly on the nav's bottom border instead of floating at a guessed offset. */
+.app-nav__links {
+  display: flex;
+  align-self: stretch;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.app-nav__links a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-weight: 500;
+  position: relative;
+}
+
+.app-nav__links a .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.app-nav__links a:hover {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.app-nav__links a.is-active {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+/* Underline sits on the nav's own bottom border rather than under the text, so the active
+   section reads as a tab without adding height to the bar. */
+.app-nav__links a.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(-1 * var(--space-3) - 1px);
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--color-accent);
+}
+
+.app-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+/* Shared building blocks */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+}
+
+.card + .card {
+  margin-top: var(--space-4);
+}
+
+/* Cards inside a grid (e.g. month tiles) rely on the grid's own `gap` for spacing --
+   the sibling margin above is for stacked page sections. Without this override, the stray
+   margin on every tile but the first makes Grid's auto row-sizing (which must fit each item's
+   full margin box) taller than the margin-less first tile actually needs, and `stretch`
+   alignment then renders that first tile visibly taller than its siblings. */
+.stat-grid > .card + .card {
+  margin-top: 0;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--color-accent);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button--primary {
+  justify-content: center;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.button--primary:hover {
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+}
+
+.button--full {
+  width: 100%;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.input {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem var(--space-2);
+  border-radius: 999px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+}
+
+/* Icons -- see components/Icon.tsx. Stroke-only and currentColor, so one glyph serves every
+   hue; size lives here rather than on a width/height attribute so a caller can override it
+   with a plain CSS rule. */
+
+.icon {
+  width: 1em;
+  height: 1em;
+  display: block;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Tone = "which metric is this". One utility class binds --tone to a colour theme.css already
+   ships; every tinted surface below is a color-mix() off that single variable -- so no new hex
+   value enters the codebase, both themes keep working with no extra rules, and a new tone means
+   one line here rather than a rule per consuming component. `--tone` inherits, so a container
+   can set it once for everything inside. */
+
+.tone-neutral {
+  --tone: var(--color-text-muted);
+}
+.tone-pace {
+  --tone: var(--color-pace);
+}
+.tone-hr {
+  --tone: var(--color-heart-rate);
+}
+.tone-elevation {
+  --tone: var(--color-elevation);
+}
+.tone-power {
+  --tone: var(--color-power);
+}
+.tone-cadence {
+  --tone: var(--color-cadence);
+}
+.tone-load {
+  --tone: var(--color-load);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* A heading directly following a stat grid (e.g. "Activities by type" after the year totals)
+   needs breathing room -- h1/h2/h3's own margin is bottom-only. */
+.stat-grid + h3 {
+  margin-top: var(--space-5);
+}
+
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Caption is deliberately smaller and quieter than the figure it labels -- previously both sat
+   at the same weight, which is why nothing on the page read as a headline. */
+.stat-tile__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* A 22px square of colour rather than a colour field: enough to identify the metric at a
+   glance, small enough that eight tiles read as eight quiet signals instead of eight blocks. */
+.stat-tile__icon {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 15%, transparent);
+}
+
+.stat-tile__icon .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.stat-tile__value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.026em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The unit rides inside the value but recedes, so the number itself carries the line. */
+.stat-tile__value small {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--color-text-faint);
+  margin-left: 0.2rem;
+}
+
+.stat-tile__meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-faint);
+}
+
+/* Promoted tile: at most three per card. The wash is faint on purpose -- it's the coloured
+   numeral that does the work, the background just groups it. */
+.stat-tile--hero {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--tone) 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--tone) 22%, transparent);
+}
+
+.stat-tile--hero .stat-tile__value {
+  color: var(--tone);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.15rem var(--space-3) 0.15rem var(--space-2);
+  border-radius: 999px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 26%, transparent);
+}
+
+.chip .icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* "Activities by type" -- a ranked list with a proportional bar, since the real counts span
+   two orders of magnitude and a grid of equal tiles hides that entirely. */
+
+.type-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.type-list__row {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.type-list__row:last-child {
+  border-bottom: 0;
+}
+
+.type-list__bar {
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--color-text-faint) 22%, transparent);
+  overflow: hidden;
+}
+
+.type-list__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--tone);
+}
+
+.type-list__count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+th,
+td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+
+th {
+  font-size: 0.65625rem;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ChartLegend */
+
+.chart-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-faint);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* For a legend sitting under a chart that's itself centered in its column (e.g. the Time of
+   day pie) -- left-aligning it there reads as offset from the chart above it. */
+.chart-legend--center {
+  justify-content: center;
+}
+
+.chart-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chart-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* DateNavigator -- deliberately dense: this sits above every calendar page, so its own
+   footprint should stay small relative to the actual content below it. */
+
+.date-nav {
+  display: inline-block;
+  width: max-content;
+  max-width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  font-size: 0.75rem;
+}
+
+.date-nav__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  line-height: 1.6;
+}
+
+/* Years has far fewer items than months (9 vs 12) -- extra gap keeps the two rows visually
+   about the same length instead of years looking cramped/short by comparison. */
+.date-nav__row--years {
+  gap: var(--space-4);
+}
+
+.date-nav__row + .date-nav__row {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+
+.date-nav__row a,
+.date-nav__week-row a {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.date-nav__row a:hover,
+.date-nav__week-row a:hover {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.date-nav__row a.is-active,
+.date-nav__week-row a.is-active {
+  color: var(--color-bg);
+  background: var(--color-accent);
+  border-radius: var(--radius-sm);
+  padding: 0 0.3rem;
+}
+
+.date-nav__all-time {
+  margin-right: var(--space-1);
+  text-transform: uppercase;
+}
+
+.date-nav__page {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.date-nav__page:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.date-nav__weeks {
+  margin-top: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.date-nav__week-row {
+  display: grid;
+  /* Day columns stretch (1fr) to fill the row -- same width as the years/months rows above,
+     rather than a hand-picked rem value that only happens to match at one point in time. */
+  grid-template-columns: 2rem repeat(7, 1fr);
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.date-nav__week-row a {
+  text-align: center;
+  border-radius: var(--radius-sm);
+  padding: 0.05rem 0;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.date-nav__week-row .date-nav__week-handle {
+  color: var(--color-text-faint);
+  font-weight: 400;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.date-nav__week-row a.is-outside {
+  color: var(--color-text-faint);
+  font-weight: 400;
+}

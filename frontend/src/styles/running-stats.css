@@ -1,0 +1,204 @@
+.running-stats h3 {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+
+/* A fixed 2 columns, not auto-fit -- at the card's usual width auto-fit let 3 charts share a
+   row and stranded the 4th alone on its own, leaving Pace vs distance and Time of day
+   misaligned. Two even rows of two give every chart more width and read as a balanced grid. */
+.running-stats__charts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-5);
+  margin-top: var(--space-5);
+}
+
+.running-heatmap {
+  margin-top: var(--space-5);
+}
+
+/* No horizontal scroll, ever: every week column is a fractional share of the grid's own width
+   (not a fixed px), so a full year (52-53 weeks) always fits a desktop viewport -- cells just
+   shrink instead of the grid overflowing behind a slider. The grid's own max-width is capped to
+   roughly week-count * 20px (~18px cell + 2px gap), so a short range (a month's ~5-6 weeks)
+   renders cells at the same ~18px size as a year view instead of stretching those few columns
+   to fill the whole card. */
+.running-heatmap__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  max-width: min(100%, calc(28px + var(--week-count, 53) * 20px));
+}
+
+.running-heatmap__row {
+  display: grid;
+  grid-template-columns: 28px repeat(var(--week-count, 53), 1fr);
+  align-items: center;
+  gap: 2px;
+}
+
+.running-heatmap__row-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* A 4-digit year label needs more room than a 3-letter weekday abbreviation. */
+.running-heatmap__grid--years .running-heatmap__row {
+  grid-template-columns: 34px repeat(var(--week-count, 53), 1fr);
+}
+
+/* A month (or shorter) fits on one line -- every day side by side with its day number
+   underneath, no week-wrapping and no month-label row (the page heading already says which
+   month this is). */
+.running-heatmap__strip {
+  display: grid;
+  grid-template-columns: repeat(var(--day-count, 31), 1fr);
+  gap: 4px;
+}
+
+.running-heatmap__strip-day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+
+.running-heatmap__day-label {
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.running-heatmap__row--months {
+  margin-bottom: 1px;
+}
+
+.running-heatmap__month-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  overflow: visible;
+  white-space: nowrap;
+}
+
+/* A bordered "slot" for every day of the year (so the grid reads as complete even for months
+   with no runs yet). Two distinct encodings for two distinct kinds of day: an ordinary day
+   (0-10km) washes the whole cell with a blue color-mix proportional to distance; a long run
+   (>10km, see .running-heatmap__pie) instead draws a proportional circle on top -- a shape that
+   visually pops out of the grid rather than blending into the same gradient as every other run. */
+.running-heatmap__cell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-pace) var(--heat-pct, 0%), var(--color-surface));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.running-heatmap__cell.is-empty {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Marks the last week of each calendar month so the grid reads as distinct month columns
+   instead of one undifferentiated block of weeks. */
+.running-heatmap__cell.is-month-end {
+  border-right: 2px solid var(--color-text-faint);
+}
+
+/* Hovering a legend swatch highlights every cell in that same distance bucket and fades the
+   rest, so "which days were roughly this far" reads at a glance. */
+.running-heatmap__cell.is-highlighted {
+  box-shadow: 0 0 0 2px var(--color-accent);
+  z-index: 1;
+}
+
+.running-heatmap__cell.is-dimmed {
+  opacity: 0.25;
+}
+
+.running-heatmap__pie {
+  width: 72%;
+  height: 72%;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--color-pace) var(--pie-deg, 0deg),
+    color-mix(in srgb, var(--color-pace) 15%, transparent) 0
+  );
+}
+
+.running-heatmap__legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  flex-wrap: wrap;
+}
+
+.running-heatmap__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Legend swatches sit outside the grid, so .running-heatmap__cell's grid-column-relative
+   width:100% needs an explicit fallback size here. */
+.running-heatmap__legend .running-heatmap__cell {
+  width: 14px;
+}
+
+/* CSS-only tooltip: no per-cell JS state for 350+ cells, just a hidden absolutely-positioned
+   card revealed on :hover, matching the reference image's "date + stats" hover card. */
+.running-heatmap__tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+.running-heatmap__cell:not(.is-empty):hover .running-heatmap__tooltip {
+  display: flex;
+}
+
+.running-stats__pie-caption {
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.running-records {
+  margin-top: var(--space-5);
+}
+
+.running-records__caveat {
+  font-weight: 400;
+  color: var(--color-text-faint);
+}
+
+.running-records__table {
+  margin-top: var(--space-2);
+}
+
+.running-records__table tbody tr.is-hovered {
+  background: var(--color-surface-raised);
+}

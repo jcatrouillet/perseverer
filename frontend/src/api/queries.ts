@@ -117,6 +117,36 @@ export function useActivities(filters: ActivityFilters) {
   });
 }
 
+/** Pages through every matching activity rather than capping at one request's 500-row limit --
+ * an "all time" view can span a decade-plus of history, well past what's fine for a single
+ * year/month view's one-shot fetch. Returns a flat array (not a Page<>), since every caller
+ * just wants the full list to aggregate over client-side. */
+export function useAllActivities(filters: Omit<ActivityFilters, "limit" | "offset">) {
+  return useQuery({
+    queryKey: ["all-activities", filters],
+    queryFn: async () => {
+      const pageSize = 500;
+      const items: ActivitySummary[] = [];
+      let offset = 0;
+      for (;;) {
+        const page = await apiGet<Page<ActivitySummary>>(
+          `/api/v1/activities${buildQuery({
+            start_date: filters.startDate,
+            end_date: filters.endDate,
+            sport: filters.sport,
+            limit: pageSize,
+            offset,
+          })}`,
+        );
+        items.push(...page.items);
+        if (page.items.length === 0 || items.length >= page.total) break;
+        offset += pageSize;
+      }
+      return items;
+    },
+  });
+}
+
 export function useActivity(activityId: string) {
   return useQuery({
     queryKey: ["activity", activityId],

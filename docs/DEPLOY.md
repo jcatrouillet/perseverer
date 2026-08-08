@@ -68,6 +68,23 @@ If you ever need the Docker CLI locally (e.g. to sanity-check an image before it
 NAS), Podman Desktop can also emulate the `docker` command; not required for the dev loop
 above.
 
+**Known issue: the podman `api` container's named volume corrupts `sporthealth.db` on
+Windows.** Confirmed via `PRAGMA integrity_check`/`page_count`: the file gets silently
+truncated within seconds of the `api` container starting, even from a hash-verified clean
+copy with no stale `-wal`/`-shm` files — `db/engine.py` only sets standard WAL-mode pragmas,
+so this points at Podman Desktop's Windows volume backend mishandling SQLite WAL's mmap/
+locking, not application code. The host file itself is never affected, only the container's
+copy. For day-to-day API verification, run the API directly on the host instead — it serves
+the same port the frontend's `config.js` already points at, so the already-running frontend
+container (or `npm run dev`) works against it with zero changes:
+```bash
+uv run uvicorn sporthealth.api.main:app --host 0.0.0.0 --port 8008
+```
+Reserve `podman compose up --build` (api container included) for occasionally confirming the
+container still builds/runs — not for iterative dev work. Unconfirmed whether this reproduces
+on the NAS (native Linux/Docker storage, not the same virtualized volume backend) — treat as
+Windows-dev-specific until shown otherwise.
+
 ## NAS deploy
 
 The NAS runs Docker (DSM Container Manager), not Podman — this step is unaffected by the dev

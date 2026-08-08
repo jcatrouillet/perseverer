@@ -1,0 +1,354 @@
+import { describe, expect, it } from "vitest";
+
+import type { ActivitySummary } from "./api/types";
+import {
+  amPmCounts,
+  DAILY_HEATMAP_SCALE,
+  dailyStats,
+  distanceByDay,
+  distanceByYear,
+  distinctActiveDates,
+  formatMinPerKm,
+  isLongRun,
+  localHour,
+  longestStreakAndBreak,
+  longRunPieDeg,
+  monthlyDistanceM,
+  nearestLegendKm,
+  personalRecords,
+  rollingDistanceKm,
+  scatterPointOpacities,
+  shortRunHeatPct,
+  weekdayStats,
+  WEEKLY_HEATMAP_SCALE,
+} from "./runningStats";
+
+function activity(
+  local_date: string,
+  distance_m: number,
+  overrides: Partial<ActivitySummary> = {},
+): ActivitySummary {
+  return {
+    id: local_date,
+    start_time_utc: `${local_date}T12:00:00Z`,
+    utc_offset_s: 0,
+    local_date,
+    sport: "running",
+    sub_sport: null,
+    name: null,
+    duration_s: 1800,
+    moving_duration_s: 1800,
+    distance_m,
+    elevation_gain_m: null,
+    calories: null,
+    avg_hr_bpm: null,
+    max_hr_bpm: null,
+    primary_source: "test",
+    stream_available: false,
+    ...overrides,
+  };
+}
+
+describe("monthlyDistanceM", () => {
+  it("buckets distance by calendar month", () => {
+    const totals = monthlyDistanceM([
+      activity("2025-01-05", 1000),
+      activity("2025-01-20", 2000),
+      activity("2025-03-01", 500),
+    ]);
+    expect(totals[0]).toBe(3000);
+    expect(totals[2]).toBe(500);
+    expect(totals[1]).toBe(0);
+  });
+});
+
+describe("formatMinPerKm", () => {
+  it("formats a plain pace as M:SS", () => {
+    expect(formatMinPerKm(5.5)).toBe("5:30");
+  });
+
+  it("carries a rounded-up 60 seconds into the next minute (a confirmed real bug)", () => {
+    // 6.9992 minutes: floor is 6, (0.9992 * 60) rounds to 60 -- must not print "6:60".
+    expect(formatMinPerKm(6.9992)).toBe("7:00");
+  });
+});
+
+describe("distanceByDay", () => {
+  it("produces one bucket per calendar day in range, zero-filled where there's no run", () => {
+    const buckets = distanceByDay(
+      [activity("2025-06-02", 5000), activity("2025-06-04", 3000)],
+      "2025-06-01",
+      "2025-06-05",
+    );
+    expect(buckets).toEqual([
+      { label: "1", km: 0 },
+      { label: "2", km: 5 },
+      { label: "3", km: 0 },
+      { label: "4", km: 3 },
+      { label: "5", km: 0 },
+    ]);
+  });
+});
+
+describe("distanceByYear", () => {
+  it("sums each calendar year into its own bucket, not collapsed by month across years", () => {
+    const buckets = distanceByYear(
+      [
+        activity("2022-01-15", 5000),
+        activity("2023-01-15", 3000),
+        activity("2023-06-01", 2000),
+      ],
+      "2022-01-01",
+      "2023-12-31",
+    );
+    expect(buckets).toEqual([
+      { label: "2022", km: 5 },
+      { label: "2023", km: 5 },
+    ]);
+  });
+});
+
+describe("scatterPointOpacities", () => {
+  it("gives a repeated distance/pace combo full opacity and a one-off point the fade floor", () => {
+    const points = scatterPointOpacities([
+      { km: 5, pace: 5 },
+      { km: 5, pace: 5.1 }, // same coarse bucket as the point above (nearest 1km, 0.5 min/km)
+      { km: 12, pace: 6 }, // no other point shares its bucket
+    ]);
+    expect(points[0]!.opacity).toBe(1);
+    expect(points[1]!.opacity).toBe(1);
+    expect(points[2]!.opacity).toBe(0.2);
+  });
+
+  it("gives every point full opacity when nothing repeats and there's only one point", () => {
+    const points = scatterPointOpacities([{ km: 10, pace: 5 }]);
+    expect(points[0]!.opacity).toBe(1);
+  });
+});
+
+describe("heatmap scale", () => {
+  it("the weekly scale's full circle is 70km, not the daily scale's marathon", () => {
+    expect(WEEKLY_HEATMAP_SCALE.fullCircleKm).toBe(70);
+    expect(DAILY_HEATMAP_SCALE.fullCircleKm).toBe(42.195);
+  });
+
+  it("switches from gradient to pie exactly at the scale's own boundary", () => {
+    expect(isLongRun(40, WEEKLY_HEATMAP_SCALE)).toBe(false);
+    expect(isLongRun(40.1, WEEKLY_HEATMAP_SCALE)).toBe(true);
+    expect(isLongRun(10, DAILY_HEATMAP_SCALE)).toBe(false);
+    expect(isLongRun(10.1, DAILY_HEATMAP_SCALE)).toBe(true);
+  });
+
+  it("fills the weekly pie completely at 70km and clamps beyond it", () => {
+    expect(longRunPieDeg(70, WEEKLY_HEATMAP_SCALE)).toBe(360);
+    expect(longRunPieDeg(72.2, WEEKLY_HEATMAP_SCALE)).toBe(360); // the biggest real week on record
+  });
+
+  it("scales the weekly pie linearly between its own boundary and 70km", () => {
+    // Halfway from 40km to 70km is 55km -> a half-filled circle.
+    expect(longRunPieDeg(55, WEEKLY_HEATMAP_SCALE)).toBeCloseTo(180, 5);
+  });
+
+  it("buckets a real week's distance to the nearest weekly legend reference", () => {
+    expect(nearestLegendKm(52, WEEKLY_HEATMAP_SCALE)).toBe(50);
+    expect(nearestLegendKm(38, WEEKLY_HEATMAP_SCALE)).toBe(40);
+  });
+
+  it("keeps the daily and weekly gradient floors independent", () => {
+    // Same 8km distance: unremarkable for a week (scaled against a 40km ceiling), but most of
+    // the way up the scale for a single day (scaled against a 10km ceiling).
+    const daily = shortRunHeatPct(8, DAILY_HEATMAP_SCALE);
+    const weekly = shortRunHeatPct(8, WEEKLY_HEATMAP_SCALE);
+    expect(daily).toBeGreaterThan(weekly);
+  });
+});
+
+describe("weekdayStats", () => {
+  it("uses Monday=0..Sunday=6, matching the app's Monday-start convention", () => {
+    // 2025-06-02 is a Monday (confirmed elsewhere in dateUtils.test.ts).
+    const stats = weekdayStats([activity("2025-06-02", 5000)]);
+    expect(stats[0]!.day).toBe(0);
+    expect(stats[0]!.count).toBe(1);
+    expect(stats[0]!.avgDistanceM).toBe(5000);
+    expect(stats[6]!.count).toBe(0);
+  });
+
+  it("averages distance across multiple activities on the same weekday", () => {
+    const stats = weekdayStats([activity("2025-06-02", 4000), activity("2025-06-09", 6000)]);
+    expect(stats[0]!.count).toBe(2);
+    expect(stats[0]!.avgDistanceM).toBe(5000);
+  });
+});
+
+describe("distinctActiveDates", () => {
+  it("dedupes multiple activities on the same day and sorts ascending", () => {
+    expect(
+      distinctActiveDates([
+        activity("2025-06-03", 1000),
+        activity("2025-06-01", 1000),
+        activity("2025-06-03", 2000),
+      ]),
+    ).toEqual(["2025-06-01", "2025-06-03"]);
+  });
+});
+
+describe("longestStreakAndBreak", () => {
+  it("finds a run of consecutive days as the longest streak", () => {
+    const result = longestStreakAndBreak([
+      "2025-06-01",
+      "2025-06-02",
+      "2025-06-03",
+      "2025-06-10",
+    ]);
+    expect(result.longestStreakDays).toBe(3);
+    expect(result.longestStreakStart).toBe("2025-06-01");
+    expect(result.longestStreakEnd).toBe("2025-06-03");
+  });
+
+  it("resets the streak start when a later, longer streak beats an earlier one", () => {
+    const result = longestStreakAndBreak([
+      "2025-06-01",
+      "2025-06-05",
+      "2025-06-06",
+      "2025-06-07",
+      "2025-06-08",
+    ]);
+    expect(result.longestStreakDays).toBe(4);
+    expect(result.longestStreakStart).toBe("2025-06-05");
+    expect(result.longestStreakEnd).toBe("2025-06-08");
+  });
+
+  it("finds the largest gap between active dates as the longest break", () => {
+    const result = longestStreakAndBreak(["2025-06-01", "2025-06-02", "2025-06-20"]);
+    expect(result.longestBreakDays).toBe(17);
+    expect(result.longestBreakStart).toBe("2025-06-02");
+    expect(result.longestBreakEnd).toBe("2025-06-20");
+  });
+
+  it("handles a single date with no streak or break", () => {
+    const result = longestStreakAndBreak(["2025-06-01"]);
+    expect(result.longestStreakDays).toBe(1);
+    expect(result.longestBreakDays).toBe(0);
+  });
+
+  it("handles no dates at all", () => {
+    const result = longestStreakAndBreak([]);
+    expect(result.longestStreakDays).toBe(0);
+    expect(result.longestBreakDays).toBe(0);
+  });
+});
+
+describe("rollingDistanceKm", () => {
+  it("sums distance within the trailing window, dropping days that fall out of it", () => {
+    const activities = [activity("2025-01-01", 1000), activity("2025-01-05", 2000)];
+    const points = rollingDistanceKm(activities, "2025-01-01", "2025-01-10", 3);
+    const byDate = new Map(points.map((p) => [p.local_date, p.distanceM]));
+    expect(byDate.get("2025-01-01")).toBe(1000);
+    expect(byDate.get("2025-01-03")).toBe(1000); // still within a 3-day trailing window
+    expect(byDate.get("2025-01-04")).toBe(0); // Jan 1 has fallen out of the window
+    expect(byDate.get("2025-01-05")).toBe(2000);
+    expect(byDate.get("2025-01-07")).toBe(2000);
+    expect(byDate.get("2025-01-08")).toBe(0);
+  });
+
+  it("produces one point per day in the requested range", () => {
+    const points = rollingDistanceKm([], "2025-01-01", "2025-01-05", 90);
+    expect(points).toHaveLength(5);
+  });
+});
+
+describe("dailyStats", () => {
+  it("sums distance, duration, and elevation across same-day activities", () => {
+    const stats = dailyStats([
+      activity("2025-06-01", 5000, { duration_s: 1500, elevation_gain_m: 50 }),
+      activity("2025-06-01", 3000, { duration_s: 900, elevation_gain_m: 20 }),
+    ]);
+    expect(stats.get("2025-06-01")).toEqual({
+      distanceM: 8000,
+      durationS: 2400,
+      elevationGainM: 70,
+    });
+  });
+
+  it("treats a missing elevation_gain_m as 0 rather than dropping the day", () => {
+    const stats = dailyStats([activity("2025-06-01", 5000, { elevation_gain_m: null })]);
+    expect(stats.get("2025-06-01")?.elevationGainM).toBe(0);
+  });
+});
+
+describe("localHour", () => {
+  it("derives local hour from the activity's own utc_offset_s, not UTC", () => {
+    // 08:00 UTC with a -7h offset (Mountain Time) is 01:00 local.
+    const a = activity("2025-06-01", 5000, {
+      start_time_utc: "2025-06-01T08:00:00Z",
+      utc_offset_s: -25200,
+    });
+    expect(localHour(a)).toBe(1);
+  });
+
+  it("handles a positive offset crossing into the next UTC day", () => {
+    // 22:00 UTC with a +3h offset is 01:00 the next local day.
+    const a = activity("2025-06-01", 5000, {
+      start_time_utc: "2025-06-01T22:00:00Z",
+      utc_offset_s: 10800,
+    });
+    expect(localHour(a)).toBe(1);
+  });
+});
+
+describe("amPmCounts", () => {
+  it("splits activities by local hour, not UTC hour", () => {
+    const activities = [
+      // 08:00 UTC, -7h offset -> 01:00 local -> AM.
+      activity("2025-06-01", 5000, { start_time_utc: "2025-06-01T08:00:00Z", utc_offset_s: -25200 }),
+      // 20:00 UTC, -7h offset -> 13:00 local -> PM.
+      activity("2025-06-02", 5000, { start_time_utc: "2025-06-02T20:00:00Z", utc_offset_s: -25200 }),
+    ];
+    expect(amPmCounts(activities)).toEqual({ am: 1, pm: 1 });
+  });
+});
+
+describe("personalRecords", () => {
+  it("picks the fastest activity within a tolerance band of each standard distance", () => {
+    const activities = [
+      // 5.1km in 25:00 moving -> 4:54/km.
+      activity("2025-05-01", 5100, { duration_s: 1600, moving_duration_s: 1500 }),
+      // 5.05km in 23:20 moving -> faster.
+      activity("2025-05-15", 5050, { duration_s: 1500, moving_duration_s: 1400 }),
+      // marathon, not a 5k match.
+      activity("2025-06-01", 42195, { duration_s: 14500, moving_duration_s: 14400 }),
+    ];
+    const records = personalRecords(activities);
+    const fiveK = records.find((r) => r.label === "5 km");
+    expect(fiveK).toBeDefined();
+    expect(fiveK!.date).toBe("2025-05-15");
+    expect(fiveK!.eligibleCount).toBe(2);
+  });
+
+  it("uses moving time over elapsed time when both are present (a confirmed real bug fix)", () => {
+    // Same elapsed time, but activity B paused for a long break -- its true moving pace is
+    // much faster and should win, even though its elapsed time is slower.
+    const activities = [
+      activity("2025-05-01", 5000, { duration_s: 1500, moving_duration_s: 1500 }), // 5:00/km
+      activity("2025-05-15", 5000, { duration_s: 1500, moving_duration_s: 1200 }), // 4:00/km moving
+    ];
+    const records = personalRecords(activities);
+    const fiveK = records.find((r) => r.label === "5 km")!;
+    expect(fiveK.date).toBe("2025-05-15");
+    expect(fiveK.paceMinPerKm).toBeCloseTo(4, 5);
+  });
+
+  it("omits a distance with no eligible activity rather than inventing one", () => {
+    const records = personalRecords([activity("2025-05-01", 5000, { duration_s: 1500 })]);
+    expect(records.find((r) => r.label === "Half marathon")).toBeUndefined();
+  });
+
+  it("computes pace and speed from the matched activity's own real numbers", () => {
+    const records = personalRecords([
+      activity("2025-05-01", 5000, { duration_s: 1600, moving_duration_s: 1500 }),
+    ]);
+    const fiveK = records.find((r) => r.label === "5 km")!;
+    expect(fiveK.paceMinPerKm).toBeCloseTo(5, 5); // 25:00 moving for 5km = 5:00/km
+    expect(fiveK.speedKmh).toBeCloseTo(12, 5);
+  });
+});
