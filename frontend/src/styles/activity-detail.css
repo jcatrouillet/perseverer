@@ -1,0 +1,87 @@
+/* ActivityDetailPage (Milestone C): the multi-panel stream charts, stats grid, time-in-zone
+   chart, and laps table. */
+
+.activity-detail__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.activity-detail__title {
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-detail__sport {
+  text-transform: capitalize;
+}
+
+.activity-detail__meta {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin: 0 0 var(--space-4);
+}
+
+.activity-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.activity-charts__panel h4 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+
+.time-in-zone__bar-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 60px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.time-in-zone__bar-track {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-text-faint) 18%, transparent);
+  overflow: hidden;
+}
+
+.time-in-zone__bar-fill {
+  height: 100%;
+  background: var(--tone);
+}
+
+.time-in-zone__bar-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.laps-table td,
+.laps-table th {
+  text-align: right;
+}
+
+.laps-table td:first-child,
+.laps-table th:first-child {
+  text-align: left;
+}
+
+.activity-context__headline {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.activity-context__headline strong {
+  color: var(--color-text);
+}

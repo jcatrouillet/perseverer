@@ -28,6 +28,8 @@ export type IconName =
   | "stairs"
   | "steps"
   | "trend"
+  | "thermometer"
+  | "battery"
   // Sports
   | "run"
   | "walk"
@@ -104,6 +106,15 @@ export function IconSprite() {
         <symbol viewBox="0 0 24 24" id="i-trend">
           <path d="M3.2 16.6 9 10.8l3.6 3.6 8.2-8.2" />
           <path d="M15.4 6.2h5.4v5.4" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-thermometer">
+          <path d="M12 3.6a2.1 2.1 0 0 0-2.1 2.1v8.6a3.6 3.6 0 1 0 4.2 0V5.7A2.1 2.1 0 0 0 12 3.6Z" />
+          <path d="M12 10.4v5.4" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-battery">
+          <rect x="2.6" y="7.5" width="16" height="9" rx="2" />
+          <path d="M20.6 10.5h1v3h-1" />
+          <path d="M6.4 10.2v3.6M10 10.2v3.6M13.6 10.2v3.6" />
         </symbol>
 
         <symbol viewBox="0 0 24 24" id="i-run">

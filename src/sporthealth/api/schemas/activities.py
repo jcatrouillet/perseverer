@@ -67,6 +67,11 @@ class ActivitySummary(BaseModel):
     calories: float | None
     avg_hr_bpm: float | None
     max_hr_bpm: float | None
+    training_load: float | None
+    # Borg CR10 effort rating (0-10, half-point resolution): fit.session.workout_rpe's raw FIT
+    # value is the same scale x10 (see routers/activities.py's read of this field for the
+    # profile.py introspection that confirmed this) -- this is the descaled, presentation value.
+    workout_rpe: float | None
     primary_source: str
     stream_available: bool
 
@@ -77,3 +82,21 @@ class ActivityDetail(ActivitySummary):
     splits: list[SplitOut]
     route: RouteOut | None
     metrics: list[ActivityMetricOut]
+
+
+class ActivityContextRecentOut(BaseModel):
+    id: str
+    local_date: str | None
+    distance_m: float
+    # Moving-preferred effective duration (moving_duration_s, falling back to duration_s) --
+    # same convention as the frontend's effectiveDurationS(), computed once here rather than
+    # exposing both raw fields and making every consumer re-derive it.
+    duration_s: float
+
+
+class ActivityContextOut(BaseModel):
+    # None when there are no other same-sport, similar-distance activities to compare against
+    # (comparable_count == 0) -- never a fabricated number for a first-of-its-kind effort.
+    percentile_rank: float | None
+    comparable_count: int
+    recent: list[ActivityContextRecentOut]

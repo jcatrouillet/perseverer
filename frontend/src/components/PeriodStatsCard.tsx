@@ -8,6 +8,7 @@ import { sportStyle } from "../metricStyle";
 import {
   distinctActiveDates,
   effectiveDurationS,
+  formatDurationHM,
   longestStreakAndBreak,
   weekdayLabel,
   weekdayStats,
@@ -27,12 +28,6 @@ import {
 function sumOrNull(values: (number | null)[]): number | null {
   const present = values.filter((v): v is number => v != null);
   return present.length > 0 ? present.reduce((a, b) => a + b, 0) : null;
-}
-
-function formatClock(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.round((totalSeconds % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 export function PeriodStatsCard({
@@ -143,7 +138,7 @@ export function PeriodStatsCard({
         {avgDurationS != null && (
           <StatTile
             label="Average time"
-            value={formatClock(avgDurationS)}
+            value={formatDurationHM(avgDurationS)}
             meta="per activity"
             icon="clock"
             tone="cadence"

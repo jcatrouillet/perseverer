@@ -1,0 +1,200 @@
+// Categorized stat tiles for the activity detail page (Milestone C). Every value here comes
+// from `ActivityDetail.metrics` (the full per-activity EAV list the API already returns) or the
+// core `ActivityDetail` fields -- no new backend endpoint. Each section (and each tile within
+// it) renders only when the underlying field is actually present for this activity: a walk has
+// no Power section, an indoor ride has no Elevation section, and a device without a footpod
+// has no Running Dynamics section. Nothing here is estimated or backfilled.
+import type { ActivityDetail } from "../api/types";
+import { metricValue } from "../activityMetrics";
+import { effectiveDurationS, formatDurationHM, formatPaceMinPerKm, isPaceSport } from "../runningStats";
+import { StatTile } from "./StatTile";
+
+export function ActivityStatsGrid({ activity }: { activity: ActivityDetail }) {
+  const metrics = activity.metrics;
+  const durationS = effectiveDurationS(activity);
+  const paceSport = isPaceSport(activity.sport);
+
+  const totalDescent = metricValue(metrics, "fit.session.total_descent");
+  const aerobicEffect = metricValue(metrics, "fit.session.total_training_effect");
+  const anaerobicEffect = metricValue(metrics, "fit.session.total_anaerobic_training_effect");
+  const avgPower = metricValue(metrics, "fit.session.avg_power");
+  const maxPower = metricValue(metrics, "fit.session.max_power");
+  const normalizedPower = metricValue(metrics, "fit.session.normalized_power");
+  // FIT's avg_running_cadence is a single-foot rate; Garmin Connect's own "avg cadence" for a
+  // run is that figure doubled (confirmed against real data: session values of ~75-88
+  // correspond to the conventional 150-176 spm runners actually see displayed).
+  const avgRunningCadenceRaw = metricValue(metrics, "fit.session.avg_running_cadence");
+  const avgVerticalOscillation = metricValue(metrics, "fit.session.avg_vertical_oscillation");
+  const avgStanceTime = metricValue(metrics, "fit.session.avg_stance_time");
+  const avgStepLengthMm = metricValue(metrics, "fit.session.avg_step_length");
+  const avgVerticalRatio = metricValue(metrics, "fit.session.avg_vertical_ratio");
+  const avgTemp = metricValue(metrics, "fit.session.avg_temperature");
+  const minTemp = metricValue(metrics, "fit.session.min_temperature");
+  const maxTemp = metricValue(metrics, "fit.session.max_temperature");
+
+  const hasTrainingEffect = aerobicEffect != null || anaerobicEffect != null || activity.training_load != null || activity.workout_rpe != null;
+  const hasRunningDynamics =
+    avgRunningCadenceRaw != null || avgVerticalOscillation != null || avgStanceTime != null || avgStepLengthMm != null;
+  const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
+  const hasTemperature = avgTemp != null;
+  const hasPower = avgPower != null || maxPower != null || normalizedPower != null;
+
+  return (
+    <div className="activity-stats">
+      <h3>Distance &amp; time</h3>
+      <div className="stat-grid">
+        {activity.distance_m != null && (
+          <StatTile
+            label="Distance"
+            value={(activity.distance_m / 1000).toFixed(2)}
+            unit="km"
+            icon="route"
+            tone="pace"
+            hero
+          />
+        )}
+        {durationS != null && (
+          <StatTile label="Moving time" value={formatDurationHM(durationS)} icon="clock" tone="cadence" hero />
+        )}
+        {/* distance_m > 0, not just non-null -- see ActivityCard's identical guard. */}
+        {activity.distance_m != null && activity.distance_m > 0 && durationS != null && durationS > 0 && (
+          <StatTile
+            label={paceSport ? "Avg pace" : "Avg speed"}
+            value={
+              paceSport
+                ? formatPaceMinPerKm(durationS, activity.distance_m)
+                : (activity.distance_m / 1000 / (durationS / 3600)).toFixed(1)
+            }
+            unit={paceSport ? "/km" : "km/h"}
+            icon="gauge"
+            tone="pace"
+          />
+        )}
+        {activity.calories != null && (
+          <StatTile label="Calories" value={activity.calories.toFixed(0)} unit="kcal" icon="flame" tone="load" />
+        )}
+      </div>
+
+      {(activity.avg_hr_bpm != null || activity.max_hr_bpm != null) && (
+        <>
+          <h3>Heart rate</h3>
+          <div className="stat-grid">
+            {activity.avg_hr_bpm != null && (
+              <StatTile
+                label="Avg heart rate"
+                value={Math.round(activity.avg_hr_bpm)}
+                unit="bpm"
+                icon="heart"
+                tone="hr"
+                hero
+              />
+            )}
+            {activity.max_hr_bpm != null && (
+              <StatTile label="Max heart rate" value={Math.round(activity.max_hr_bpm)} unit="bpm" icon="heart" tone="hr" />
+            )}
+          </div>
+        </>
+      )}
+
+      {hasTrainingEffect && (
+        <>
+          <h3>Training effect</h3>
+          <div className="stat-grid">
+            {aerobicEffect != null && (
+              <StatTile label="Aerobic effect" value={aerobicEffect.toFixed(1)} icon="trend" tone="power" />
+            )}
+            {anaerobicEffect != null && (
+              <StatTile label="Anaerobic effect" value={anaerobicEffect.toFixed(1)} icon="bolt" tone="power" />
+            )}
+            {activity.training_load != null && (
+              <StatTile label="Training load" value={Math.round(activity.training_load)} icon="bolt" tone="load" />
+            )}
+            {activity.workout_rpe != null && (
+              <StatTile label="Perceived effort" value={activity.workout_rpe.toFixed(1)} unit="RPE" icon="flame" tone="load" />
+            )}
+          </div>
+        </>
+      )}
+
+      {hasPower && (
+        <>
+          <h3>Power</h3>
+          <div className="stat-grid">
+            {avgPower != null && <StatTile label="Avg power" value={Math.round(avgPower)} unit="W" icon="bolt" tone="power" />}
+            {maxPower != null && <StatTile label="Max power" value={Math.round(maxPower)} unit="W" icon="bolt" tone="power" />}
+            {normalizedPower != null && (
+              <StatTile label="Normalized power" value={Math.round(normalizedPower)} unit="W" icon="bolt" tone="power" />
+            )}
+          </div>
+        </>
+      )}
+
+      {hasRunningDynamics && (
+        <>
+          <h3>Running dynamics</h3>
+          <div className="stat-grid">
+            {avgRunningCadenceRaw != null && (
+              <StatTile
+                label="Avg cadence"
+                value={Math.round(avgRunningCadenceRaw * 2)}
+                unit="spm"
+                icon="steps"
+                tone="cadence"
+              />
+            )}
+            {avgStepLengthMm != null && (
+              <StatTile label="Step length" value={(avgStepLengthMm / 10).toFixed(0)} unit="cm" icon="route" tone="cadence" />
+            )}
+            {avgStanceTime != null && (
+              <StatTile label="Ground contact time" value={Math.round(avgStanceTime)} unit="ms" icon="clock" tone="cadence" />
+            )}
+            {avgVerticalOscillation != null && (
+              <StatTile
+                label="Vertical oscillation"
+                value={avgVerticalOscillation.toFixed(1)}
+                unit="mm"
+                icon="trend"
+                tone="cadence"
+              />
+            )}
+            {avgVerticalRatio != null && (
+              <StatTile label="Vertical ratio" value={avgVerticalRatio.toFixed(1)} unit="%" icon="trend" tone="cadence" />
+            )}
+          </div>
+        </>
+      )}
+
+      {hasElevation && (
+        <>
+          <h3>Elevation</h3>
+          <div className="stat-grid">
+            {activity.elevation_gain_m != null && (
+              <StatTile label="Elevation gain" value={activity.elevation_gain_m.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
+            )}
+            {totalDescent != null && (
+              <StatTile label="Elevation loss" value={totalDescent.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
+            )}
+          </div>
+        </>
+      )}
+
+      {hasTemperature && (
+        <>
+          <h3>Temperature</h3>
+          <div className="stat-grid">
+            <StatTile label="Avg temperature" value={avgTemp!.toFixed(0)} unit="°C" icon="thermometer" tone="load" />
+            {minTemp != null && maxTemp != null && (
+              <StatTile
+                label="Temperature range"
+                value={`${minTemp.toFixed(0)}–${maxTemp.toFixed(0)}`}
+                unit="°C"
+                icon="thermometer"
+                tone="load"
+              />
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

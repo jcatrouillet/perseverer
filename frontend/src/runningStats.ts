@@ -28,6 +28,47 @@ export function formatMinPerKm(minPerKm: number): string {
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
+/** Pace over the given duration/distance, using `formatMinPerKm`'s carry-safe rounding.
+ * Exported so any per-activity display (ActivityCard) computes pace the same way the running
+ * stats charts/tables already do, rather than a second ad-hoc `durationS / 60 / km` inline. */
+export function formatPaceMinPerKm(durationS: number, distanceM: number): string {
+  if (distanceM <= 0) return "—";
+  return formatMinPerKm(durationS / 60 / (distanceM / 1000));
+}
+
+// Foot sports read naturally as a pace (min/km); wheeled/oared ones read naturally as a speed
+// (km/h) -- matching how Garmin Connect itself splits these, not an arbitrary per-app choice.
+// Shared by ActivityCard's summary pace/speed chip and ActivityCharts' per-second stream panel,
+// so the two can't disagree about which sports get which unit.
+const PACE_SPORTS = new Set(["running", "walking", "hiking", "snowshoeing"]);
+
+export function isPaceSport(sport: string): boolean {
+  return PACE_SPORTS.has(sport);
+}
+
+/** A stream's raw `speed_mps` sample converted to whatever unit `sport` reads naturally in.
+ * Below 0.3 m/s (slower than a ~55min/km walk) is treated as stationary, not a real pace --
+ * without this floor, a runner paused at a light produces a momentary "pace" of several
+ * thousand min/km that dwarfs the rest of the chart's y-axis. Matches the same threshold
+ * several consumer GPS devices use for auto-pause. */
+export function streamSpeedValue(sport: string, speedMps: number | null): number | null {
+  if (speedMps == null) return null;
+  if (isPaceSport(sport)) {
+    if (speedMps < 0.3) return null;
+    return 1000 / (speedMps * 60);
+  }
+  return speedMps * 3.6;
+}
+
+/** "1h 14m" / "42m" duration formatting -- the compact, human form used anywhere a duration is
+ * a supporting stat rather than the record itself (contrast the personal-records table's exact
+ * "1:14:00" clock format, which stays local to that table). */
+export function formatDurationHM(totalSeconds: number): string {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.round((totalSeconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function weekdayLabel(index: number): string {
@@ -271,6 +312,19 @@ export function dailyStats(activities: ActivitySummary[]): Map<string, DailyStat
 export function localHour(activity: ActivitySummary): number {
   const localMs = new Date(activity.start_time_utc).getTime() + activity.utc_offset_s * 1000;
   return new Date(localMs).getUTCHours();
+}
+
+/** "6:32 AM" -- the activity's own local start time (same utc_offset_s math as `localHour`),
+ * for a per-activity card where the date is already shown by the day it's grouped under and
+ * only the time of day is new information. */
+export function localTimeLabel(activity: ActivitySummary): string {
+  const localMs = new Date(activity.start_time_utc).getTime() + activity.utc_offset_s * 1000;
+  const d = new Date(localMs);
+  const hour24 = d.getUTCHours();
+  const minute = d.getUTCMinutes();
+  const period = hour24 < 12 ? "AM" : "PM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${minute.toString().padStart(2, "0")} ${period}`;
 }
 
 export interface AmPmCounts {

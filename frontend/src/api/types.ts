@@ -69,6 +69,8 @@ export interface ActivitySummary {
   calories: number | null;
   avg_hr_bpm: number | null;
   max_hr_bpm: number | null;
+  training_load: number | null;
+  workout_rpe: number | null;
   primary_source: string;
   stream_available: boolean;
 }
@@ -79,6 +81,19 @@ export interface ActivityDetail extends ActivitySummary {
   splits: SplitOut[];
   route: RouteOut | null;
   metrics: ActivityMetricOut[];
+}
+
+export interface ActivityContextRecentOut {
+  id: string;
+  local_date: string | null;
+  distance_m: number;
+  duration_s: number;
+}
+
+export interface ActivityContextOut {
+  percentile_rank: number | null;
+  comparable_count: number;
+  recent: ActivityContextRecentOut[];
 }
 
 export interface StreamResponse {

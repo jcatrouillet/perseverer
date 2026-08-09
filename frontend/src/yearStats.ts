@@ -37,6 +37,30 @@ export function busiestMonth(activities: ActivitySummary[]): number | null {
   return counts.indexOf(max) + 1;
 }
 
+export interface ActivityDayGroup {
+  localDate: string;
+  activities: ActivitySummary[];
+}
+
+/** Groups a flat activity list into one bucket per local_date, preserving each group's
+ * position at its first-encountered activity's index -- so grouping a `GET /activities` page
+ * (already sorted newest-first) yields days newest-first too, with no separate sort step here
+ * that could disagree with the caller's own ordering. Falls back to the UTC calendar date only
+ * for the (should-be-nonexistent, post-Phase-6-fix) case of a null local_date. */
+export function groupByLocalDate(activities: ActivitySummary[]): ActivityDayGroup[] {
+  const groups = new Map<string, ActivitySummary[]>();
+  for (const a of activities) {
+    const key = a.local_date ?? a.start_time_utc.slice(0, 10);
+    const existing = groups.get(key);
+    if (existing) existing.push(a);
+    else groups.set(key, [a]);
+  }
+  return Array.from(groups.entries()).map(([localDate, dayActivities]) => ({
+    localDate,
+    activities: dayActivities,
+  }));
+}
+
 /** The calendar year with the most activities -- the all-time-view analog of busiestMonth.
  * Ties resolve to the earliest year. */
 export function busiestYear(activities: ActivitySummary[]): number | null {
@@ -128,7 +152,9 @@ export interface ActivityTypeCount {
 // its own (sub_sport is just 'generic'), so this substitution is scoped to "training" only.
 const GENERIC_CONTAINER_SPORTS = new Set(["training"]);
 
-function displaySport(activity: ActivitySummary): string {
+/** Exported so any per-activity display (ActivityCard, the type-count breakdown here) applies
+ * the exact same "training" substitution rather than each inventing its own sport-label rule. */
+export function displaySport(activity: ActivitySummary): string {
   if (GENERIC_CONTAINER_SPORTS.has(activity.sport) && activity.sub_sport) {
     return activity.sub_sport;
   }

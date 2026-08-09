@@ -1,4 +1,4 @@
-import type { HealthDashboardMetricOut } from "./api/types";
+import type { HealthDashboardMetricOut, HealthObservationOut } from "./api/types";
 
 /** Weighted average across every day with data -- `sum(value_sum) / sum(n_observations)`, the
  * same "weighted, not naive average-of-averages" rule the backend's own period rollups use
@@ -15,6 +15,35 @@ export function weightedAverage(metric: HealthDashboardMetricOut | undefined): n
     }
   }
   return sumObservations > 0 ? sumValues / sumObservations : null;
+}
+
+/** A metric's value for one specific day -- `value_avg` falling back to `value_last`, matching
+ * `mergeTrendSeries`'s own choice below so a single-day readout (a wellness strip) and a trend
+ * chart never disagree about which field represents "the" value for a day that has more than
+ * one observation. */
+export function valueForDate(
+  metric: HealthDashboardMetricOut | undefined,
+  localDate: string,
+): number | null {
+  if (!metric) return null;
+  const day = metric.daily.find((d) => d.local_date === localDate);
+  if (!day) return null;
+  return day.value_avg ?? day.value_last;
+}
+
+/** The freshest raw observation for one metric_key -- some `health_observation` metrics (device-
+ * pushed readings like Training Readiness, not the daily-aggregated `health_metric_daily_rollup`
+ * ones `valueForDate` reads) arrive several times a day, and "today's" reading is conventionally
+ * the latest one, matching how Garmin Connect itself shows a single current value rather than
+ * a list. Returns null when the metric has no observation at all (rather than picking an
+ * arbitrary one), so a caller can tell "no data" from "data, but somehow unordered". */
+export function latestObservation(
+  observations: HealthObservationOut[],
+  metricKey: string,
+): HealthObservationOut | null {
+  const matches = observations.filter((o) => o.metric_key === metricKey);
+  if (matches.length === 0) return null;
+  return matches.reduce((latest, o) => (o.observed_at_utc > latest.observed_at_utc ? o : latest));
 }
 
 export interface MergedTrendPoint {

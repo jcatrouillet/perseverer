@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated
 
 import duckdb
@@ -12,6 +12,8 @@ from sqlalchemy import Connection, func, select
 
 from sporthealth.api.dependencies import get_conn, get_duckdb, require_api_key
 from sporthealth.api.schemas.activities import (
+    ActivityContextOut,
+    ActivityContextRecentOut,
     ActivityDetail,
     ActivityMetricOut,
     ActivitySummary,
@@ -29,6 +31,14 @@ from sporthealth.db.schema import split as split_table
 from sporthealth.stream_query import downsample
 
 router = APIRouter()
+
+# fit.session.workout_rpe is an unrecognized/generic field (see fit/parser.py's docstring), so
+# nothing descales it on ingest -- its stored value_num is the raw FIT uint8, Borg CR10 x10 per
+# the installed garmin_fit_sdk's profile.py (field 193: "Common Borg CR10 / 0-10 RPE scale,
+# multiplied 10x"). One helper so list_activities and get_activity apply the exact same
+# conversion rather than each hand-rolling `/ 10`.
+def _workout_rpe_from_raw(raw: float | None) -> float | None:
+    return raw / 10 if raw is not None else None
 
 
 @router.get("/activities")
@@ -68,6 +78,31 @@ def list_activities(
         .limit(1)
         .scalar_subquery()
     )
+    # Same EAV pattern as avg/max heart rate above. training_load_peak's stored value_num is
+    # already the real Training Load figure -- the FIT SDK profile gives it `scale: 65536`,
+    # which its own decoder applies before we ever see the value (confirmed by introspecting
+    # the installed garmin_fit_sdk's profile.py, not assumed).
+    training_load_subq = (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key == "fit.session.training_load_peak",
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
+    # workout_rpe's raw stored value is the Borg CR10 scale x10 (an unmapped/generic field, so
+    # nothing descales it on ingest) -- fetched raw here, descaled below in Python alongside
+    # get_activity's identical conversion, so the two code paths can't drift out of sync.
+    workout_rpe_subq = (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key == "fit.session.workout_rpe",
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
     query = select(
         activity.c.id,
         activity.c.start_time_utc,
@@ -85,6 +120,8 @@ def list_activities(
         stream_exists.label("stream_available"),
         avg_hr_subq.label("avg_hr_bpm"),
         max_hr_subq.label("max_hr_bpm"),
+        training_load_subq.label("training_load"),
+        workout_rpe_subq.label("workout_rpe_raw"),
     ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
 
     if start_date is not None:
@@ -128,6 +165,8 @@ def list_activities(
             calories=r.calories,
             avg_hr_bpm=r.avg_hr_bpm,
             max_hr_bpm=r.max_hr_bpm,
+            training_load=r.training_load,
+            workout_rpe=_workout_rpe_from_raw(r.workout_rpe_raw),
             primary_source=r.primary_source,
             stream_available=bool(r.stream_available),
         )
@@ -194,6 +233,8 @@ def get_activity(
         calories=row.calories,
         avg_hr_bpm=metrics_by_key.get("fit.session.avg_heart_rate"),
         max_hr_bpm=metrics_by_key.get("fit.session.max_heart_rate"),
+        training_load=metrics_by_key.get("fit.session.training_load_peak"),
+        workout_rpe=_workout_rpe_from_raw(metrics_by_key.get("fit.session.workout_rpe")),
         primary_source=row.primary_source,
         stream_available=stream_row is not None,
         moving_duration_s=row.moving_duration_s,
@@ -256,6 +297,123 @@ def get_activity(
             )
             for m in metrics
         ],
+    )
+
+
+_CONTEXT_DISTANCE_BAND_FRACTION = 0.15
+_CONTEXT_RECENT_WINDOW_DAYS = 90
+
+
+@router.get("/activities/{activity_id}/context")
+def get_activity_context(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityContextOut:
+    """A deliberately small, honest comparison view -- not a reproduction of Garmin/intervals.icu's
+    proprietary Performance Condition/SPI models, which this project has no way to replicate (see
+    CLAUDE.md's "never invent a plausible-looking number" rule).
+
+    `percentile_rank`: the share of this athlete's *other* same-sport activities within +/-15% of
+    this one's distance that this activity was faster than or equal to (by effective pace,
+    moving-duration-preferred). None when there's nothing to compare against yet -- a first
+    5K has no percentile, and that's the honest answer, not 0 or 100.
+
+    `recent`: same-sport activities in the 90 days up to and including this one's own date (not
+    "today" -- viewing an old activity should show its own contemporaries), for a compact
+    sparkline/bubble strip. Computed as a direct query against `activity`, not rollup-backed --
+    matching the existing precedent that `/activities` itself queries `activity` directly, since
+    this is a bounded single-activity lookup, not a decade-spanning dashboard aggregate.
+    """
+    row = conn.execute(
+        select(
+            activity.c.sport,
+            activity.c.local_date,
+            activity.c.distance_m,
+            activity.c.duration_s,
+            activity.c.moving_duration_s,
+        ).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+
+    effective_duration_expr = func.coalesce(activity.c.moving_duration_s, activity.c.duration_s)
+    this_effective_duration = (
+        row.moving_duration_s if row.moving_duration_s is not None else row.duration_s
+    )
+
+    percentile_rank: float | None = None
+    comparable_count = 0
+    if (
+        row.distance_m is not None
+        and row.distance_m > 0
+        and this_effective_duration is not None
+        and this_effective_duration > 0
+    ):
+        low = row.distance_m * (1 - _CONTEXT_DISTANCE_BAND_FRACTION)
+        high = row.distance_m * (1 + _CONTEXT_DISTANCE_BAND_FRACTION)
+        band_rows = conn.execute(
+            select(activity.c.id, activity.c.distance_m, effective_duration_expr.label("eff_s"))
+            .where(
+                activity.c.athlete_id == athlete_id,
+                activity.c.deleted_at.is_(None),
+                activity.c.sport == row.sport,
+                activity.c.distance_m >= low,
+                activity.c.distance_m <= high,
+                effective_duration_expr.is_not(None),
+                effective_duration_expr > 0,
+            )
+        ).fetchall()
+
+        this_pace_s_per_m = this_effective_duration / row.distance_m
+        # Seconds-per-metre for each *other* comparable activity -- lower is faster. Excluding
+        # self from both the count and the comparison is what makes comparable_count == 0 mean
+        # "nothing to rank against yet" rather than always at least 1 (itself).
+        other_paces = [
+            r.eff_s / r.distance_m for r in band_rows if r.id != activity_id and r.distance_m > 0
+        ]
+        comparable_count = len(other_paces)
+        if comparable_count > 0:
+            slower_or_equal = sum(1 for p in other_paces if p >= this_pace_s_per_m)
+            percentile_rank = round(100 * slower_or_equal / comparable_count, 1)
+
+    recent: list[ActivityContextRecentOut] = []
+    if row.local_date is not None:
+        window_start_date = date.fromisoformat(row.local_date) - timedelta(
+            days=_CONTEXT_RECENT_WINDOW_DAYS
+        )
+        window_start = window_start_date.isoformat()
+        recent_rows = conn.execute(
+            select(
+                activity.c.id,
+                activity.c.local_date,
+                activity.c.distance_m,
+                effective_duration_expr.label("eff_s"),
+            )
+            .where(
+                activity.c.athlete_id == athlete_id,
+                activity.c.deleted_at.is_(None),
+                activity.c.sport == row.sport,
+                activity.c.local_date >= window_start,
+                activity.c.local_date <= row.local_date,
+                activity.c.distance_m.is_not(None),
+                effective_duration_expr.is_not(None),
+            )
+            .order_by(activity.c.local_date.asc())
+        ).fetchall()
+        recent = [
+            ActivityContextRecentOut(
+                id=r.id, local_date=r.local_date, distance_m=r.distance_m, duration_s=r.eff_s
+            )
+            for r in recent_rows
+        ]
+
+    return ActivityContextOut(
+        percentile_rank=percentile_rank, comparable_count=comparable_count, recent=recent
     )
 
 

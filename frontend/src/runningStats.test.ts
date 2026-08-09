@@ -8,9 +8,13 @@ import {
   distanceByDay,
   distanceByYear,
   distinctActiveDates,
+  formatDurationHM,
   formatMinPerKm,
+  formatPaceMinPerKm,
   isLongRun,
+  isPaceSport,
   localHour,
+  localTimeLabel,
   longestStreakAndBreak,
   longRunPieDeg,
   monthlyDistanceM,
@@ -19,6 +23,7 @@ import {
   rollingDistanceKm,
   scatterPointOpacities,
   shortRunHeatPct,
+  streamSpeedValue,
   weekdayStats,
   WEEKLY_HEATMAP_SCALE,
 } from "./runningStats";
@@ -43,6 +48,8 @@ function activity(
     calories: null,
     avg_hr_bpm: null,
     max_hr_bpm: null,
+    training_load: null,
+    workout_rpe: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,
@@ -59,6 +66,64 @@ describe("monthlyDistanceM", () => {
     expect(totals[0]).toBe(3000);
     expect(totals[2]).toBe(500);
     expect(totals[1]).toBe(0);
+  });
+});
+
+describe("formatPaceMinPerKm", () => {
+  it("computes pace from duration and distance", () => {
+    // 30:00 for 5km -> 6:00/km.
+    expect(formatPaceMinPerKm(1800, 5000)).toBe("6:00");
+  });
+
+  it("returns an em dash rather than dividing by zero when distance is zero", () => {
+    expect(formatPaceMinPerKm(1800, 0)).toBe("—");
+  });
+});
+
+describe("formatDurationHM", () => {
+  it("formats under an hour as minutes only", () => {
+    expect(formatDurationHM(42 * 60)).toBe("42m");
+  });
+
+  it("formats an hour or more as \"Xh Ym\"", () => {
+    expect(formatDurationHM(74 * 60)).toBe("1h 14m");
+  });
+});
+
+describe("isPaceSport", () => {
+  it("treats foot sports as pace sports", () => {
+    expect(isPaceSport("running")).toBe(true);
+    expect(isPaceSport("walking")).toBe(true);
+    expect(isPaceSport("hiking")).toBe(true);
+  });
+
+  it("treats wheeled/oared sports as speed sports, not pace", () => {
+    expect(isPaceSport("cycling")).toBe(false);
+    expect(isPaceSport("rowing")).toBe(false);
+  });
+});
+
+describe("streamSpeedValue", () => {
+  it("converts a foot sport's speed to pace (min/km)", () => {
+    // 1000m at 10 min/km -> 600s -> 1.667 m/s.
+    expect(streamSpeedValue("running", 1000 / 600)).toBeCloseTo(10, 5);
+  });
+
+  it("converts a wheeled sport's speed to km/h", () => {
+    expect(streamSpeedValue("cycling", 10)).toBeCloseTo(36, 5);
+  });
+
+  it("treats near-zero speed as stationary (null pace) for a foot sport", () => {
+    // Below the 0.3 m/s floor -- a real pause, not a legitimate multi-thousand min/km pace spike.
+    expect(streamSpeedValue("running", 0.1)).toBeNull();
+  });
+
+  it("does not apply the pace floor to a wheeled sport (0 km/h is a valid reading)", () => {
+    expect(streamSpeedValue("cycling", 0)).toBe(0);
+  });
+
+  it("passes through null unchanged", () => {
+    expect(streamSpeedValue("running", null)).toBeNull();
   });
 });
 
@@ -293,6 +358,33 @@ describe("localHour", () => {
       utc_offset_s: 10800,
     });
     expect(localHour(a)).toBe(1);
+  });
+});
+
+describe("localTimeLabel", () => {
+  it("formats a morning local time with leading-zero minutes", () => {
+    // 13:05 UTC with a -7h offset is 06:05 local.
+    const a = activity("2025-06-01", 5000, {
+      start_time_utc: "2025-06-01T13:05:00Z",
+      utc_offset_s: -25200,
+    });
+    expect(localTimeLabel(a)).toBe("6:05 AM");
+  });
+
+  it("formats noon as 12 PM, not 0 PM", () => {
+    const a = activity("2025-06-01", 5000, {
+      start_time_utc: "2025-06-01T12:00:00Z",
+      utc_offset_s: 0,
+    });
+    expect(localTimeLabel(a)).toBe("12:00 PM");
+  });
+
+  it("formats midnight as 12 AM, not 0 AM", () => {
+    const a = activity("2025-06-01", 5000, {
+      start_time_utc: "2025-06-01T00:00:00Z",
+      utc_offset_s: 0,
+    });
+    expect(localTimeLabel(a)).toBe("12:00 AM");
   });
 });
 

@@ -258,6 +258,10 @@ select {
   --tone: var(--color-load);
 }
 
+.faint {
+  color: var(--color-text-faint);
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -291,8 +295,10 @@ select {
 }
 
 /* A 22px square of colour rather than a colour field: enough to identify the metric at a
-   glance, small enough that eight tiles read as eight quiet signals instead of eight blocks. */
-.stat-tile__icon {
+   glance, small enough that eight tiles read as eight quiet signals instead of eight blocks.
+   Shared beyond StatTile -- anywhere a metric/sport needs its icon "chipped" in its tone
+   (ActivityCard's header, for one) reuses this rather than a second copy of the same rule. */
+.icon-chip {
   width: 22px;
   height: 22px;
   border-radius: var(--radius-sm);
@@ -300,9 +306,10 @@ select {
   place-items: center;
   color: var(--tone);
   background: color-mix(in srgb, var(--tone) 15%, transparent);
+  flex: none;
 }
 
-.stat-tile__icon .icon {
+.icon-chip .icon {
   width: 13px;
   height: 13px;
 }

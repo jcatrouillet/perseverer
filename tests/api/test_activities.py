@@ -1,5 +1,6 @@
 """Tests for GET /activities, GET /activities/{id}, GET /activities/{id}/stream."""
 
+import datetime as dt
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -7,11 +8,39 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import activity_stream
+from sporthealth.db.schema import activity_metric, activity_stream, metric_definition
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.fit.types import StreamPoint
 from sporthealth.streams import write_activity_stream
 from tests.api.conftest import seed_activity
+
+
+def _add_metric(engine: Engine, *, activity_id: str, metric_key: str, value: float) -> None:
+    now = dt.datetime.now(dt.UTC)
+    with engine.connect() as conn:
+        # activity_metric.metric_key FKs to metric_definition -- real ingestion auto-registers
+        # this via metrics/registry.py before ever writing a value; tests have to do the same.
+        conn.execute(
+            metric_definition.insert().values(
+                metric_key=metric_key,
+                display_name=metric_key,
+                category="activity",
+                value_type="numeric",
+                first_seen_at=now,
+                first_seen_source="fit_folder",
+            )
+        )
+        conn.execute(
+            activity_metric.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id=activity_id,
+                metric_key=metric_key,
+                value_num=value,
+                source="fit_folder",
+                created_at=now,
+            )
+        )
+        conn.commit()
 
 
 def test_list_activities_paginates_and_filters_by_sport(
@@ -36,6 +65,50 @@ def test_list_activities_paginates_and_filters_by_sport(
     body = r.json()
     assert body["total"] == 2
     assert len(body["items"]) == 1
+
+
+def test_list_and_detail_surface_hr_load_and_descaled_rpe(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    _add_metric(engine, activity_id="a1", metric_key="fit.session.avg_heart_rate", value=142.0)
+    _add_metric(engine, activity_id="a1", metric_key="fit.session.max_heart_rate", value=171.0)
+    _add_metric(
+        engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=81.8
+    )
+    # Raw FIT value is Borg CR10 x10 (see routers/activities.py's _workout_rpe_from_raw comment,
+    # sourced from introspecting the installed garmin_fit_sdk's profile.py field 193) -- 46 raw
+    # must come back as 4.6, not 46.
+    _add_metric(engine, activity_id="a1", metric_key="fit.session.workout_rpe", value=46.0)
+
+    r = client.get("/api/v1/activities", headers=auth_headers)
+    assert r.status_code == 200
+    item = r.json()["items"][0]
+    assert item["avg_hr_bpm"] == 142.0
+    assert item["max_hr_bpm"] == 171.0
+    assert item["training_load"] == 81.8
+    assert item["workout_rpe"] == 4.6
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    detail = r.json()
+    assert detail["avg_hr_bpm"] == 142.0
+    assert detail["training_load"] == 81.8
+    assert detail["workout_rpe"] == 4.6
+
+
+def test_list_activities_omits_hr_load_rpe_when_absent(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+
+    r = client.get("/api/v1/activities", headers=auth_headers)
+    item = r.json()["items"][0]
+    assert item["avg_hr_bpm"] is None
+    assert item["training_load"] is None
+    assert item["workout_rpe"] is None
 
 
 def test_get_activity_detail_404_for_unknown_id(

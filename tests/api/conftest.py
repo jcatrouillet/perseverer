@@ -84,6 +84,7 @@ def seed_activity(
     sport: str = "running",
     duration_s: float = 1800.0,
     distance_m: float = 5000.0,
+    moving_duration_s: float | None = None,
 ) -> None:
     now = dt.datetime(2025, 6, 1, 10, 0, 0)
     conn.execute(
@@ -95,7 +96,9 @@ def seed_activity(
             local_date=local_date,
             sport=sport,
             duration_s=duration_s,
-            moving_duration_s=duration_s * 0.95,
+            moving_duration_s=(
+                moving_duration_s if moving_duration_s is not None else duration_s * 0.95
+            ),
             distance_m=distance_m,
             elevation_gain_m=50.0,
             calories=300.0,

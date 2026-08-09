@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiGet, apiPost } from "./client";
 import type {
+  ActivityContextOut,
   ActivityDetail,
   ActivitySummary,
   CalendarResponse,
@@ -154,12 +155,21 @@ export function useActivity(activityId: string) {
   });
 }
 
-export function useActivityStream(activityId: string, enabled: boolean) {
+export function useActivityContext(activityId: string) {
   return useQuery({
-    queryKey: ["activity-stream", activityId],
-    // Always the low tier -- matches the Phase 4 MCP tool's own choice (ADR 0007 decision 7):
-    // this is a dashboard overview chart, not a full-resolution analysis view.
-    queryFn: () => apiGet<StreamResponse>(`/api/v1/activities/${activityId}/stream?tier=low`),
+    queryKey: ["activity-context", activityId],
+    queryFn: () => apiGet<ActivityContextOut>(`/api/v1/activities/${activityId}/context`),
+  });
+}
+
+/** `tier` defaults to "low" (matches the Phase 4 MCP tool's own choice, ADR 0007 decision 7) --
+ * fine for a compact single overview chart, but the Milestone C multi-panel activity detail
+ * view asks for "medium" explicitly since several synced panels at once can use the extra
+ * resolution. */
+export function useActivityStream(activityId: string, enabled: boolean, tier: string = "low") {
+  return useQuery({
+    queryKey: ["activity-stream", activityId, tier],
+    queryFn: () => apiGet<StreamResponse>(`/api/v1/activities/${activityId}/stream?tier=${tier}`),
     enabled,
   });
 }

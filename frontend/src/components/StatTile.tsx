@@ -32,7 +32,7 @@ export function StatTile({
     <div className={`stat-tile tone-${tone}${hero ? " stat-tile--hero" : ""}`}>
       <span className="stat-tile__label">
         {icon && (
-          <span className="stat-tile__icon">
+          <span className="icon-chip">
             <Icon name={icon} />
           </span>
         )}

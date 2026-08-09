@@ -6,11 +6,13 @@ Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing revers
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
 the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
-**Current phase: 6 (calendar grid, weekly/monthly rollups, Fitness & Form, health dashboard).
-Phase 5 (core dashboard frontend + per-athlete auth), Phase 4 (MCP server exposing the read API
-+ notes), Phase 3 (read API, precomputed rollups, DuckDB, notes write path), and Phase 2
-(garmin_export/garmin_connect adapters, scheduler, staleness, health/wellness ingestion,
-real-export nested-zip discovery) are complete.**
+**Current phase: 6.1 (frontend design overhaul — theming, Recharts, colour/icon system,
+calendar date-navigator, rich activity cards, multi-panel activity detail, day view, bounded
+activity-context enrichment). Phase 6 (calendar grid, weekly/monthly rollups, Fitness & Form,
+health dashboard), Phase 5 (core dashboard frontend + per-athlete auth), Phase 4 (MCP server
+exposing the read API + notes), Phase 3 (read API, precomputed rollups, DuckDB, notes write
+path), and Phase 2 (garmin_export/garmin_connect adapters, scheduler, staleness, health/wellness
+ingestion, real-export nested-zip discovery) are complete.**
 See the phase table in the project brief (kept outside this repo) for the full 10-phase plan.
 Do not skip ahead — each phase has its own ADR in `docs/adr/` and its own acceptance criterion.
 

@@ -36,6 +36,7 @@ import {
   distinctActiveDates,
   effectiveDurationS,
   formatMinPerKm,
+  formatPaceMinPerKm,
   isLongRun,
   longestStreakAndBreak,
   longRunPieDeg,
@@ -52,11 +53,6 @@ import {
 import "../styles/running-stats.css";
 
 const MS_PER_DAY = 86_400_000;
-
-function formatPace(totalDurationS: number, totalDistanceM: number): string {
-  if (totalDistanceM <= 0) return "—";
-  return formatMinPerKm(totalDurationS / 60 / (totalDistanceM / 1000));
-}
 
 function formatDuration(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
@@ -389,7 +385,7 @@ export function RunningStats({
         />
         <StatTile
           label="Average pace"
-          value={formatPace(totalMovingDurationS, totalDistanceM)}
+          value={formatPaceMinPerKm(totalMovingDurationS, totalDistanceM)}
           unit="/km"
           icon="clock"
           tone="pace"

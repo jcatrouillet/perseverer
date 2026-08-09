@@ -10,6 +10,8 @@ import {
   busiestMonth,
   busiestWeekStart,
   busiestYear,
+  displaySport,
+  groupByLocalDate,
   longestActivity,
   maxHeartRateBpm,
   totalElevationM,
@@ -35,6 +37,8 @@ function activity(
     calories: null,
     avg_hr_bpm: null,
     max_hr_bpm: null,
+    training_load: null,
+    workout_rpe: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,
@@ -194,5 +198,62 @@ describe("activityTypeCounts", () => {
       { sport: "yoga", count: 2 },
       { sport: "strength_training", count: 1 },
     ]);
+  });
+});
+
+describe("displaySport", () => {
+  it("substitutes sub_sport for the generic 'training' container", () => {
+    expect(displaySport(activity("2025-01-01", 1000, { sport: "training", sub_sport: "yoga" }))).toBe(
+      "yoga",
+    );
+  });
+
+  it("leaves a non-container sport alone even when sub_sport is set", () => {
+    expect(
+      displaySport(activity("2025-01-01", 1000, { sport: "running", sub_sport: "trail_running" })),
+    ).toBe("running");
+  });
+
+  it("falls back to the raw sport when 'training' has no sub_sport", () => {
+    expect(displaySport(activity("2025-01-01", 1000, { sport: "training", sub_sport: null }))).toBe(
+      "training",
+    );
+  });
+});
+
+describe("groupByLocalDate", () => {
+  it("groups consecutive-or-not activities sharing a local_date into one bucket", () => {
+    const groups = groupByLocalDate([
+      activity("2025-06-02", 1000, { id: "a" }),
+      activity("2025-06-01", 1000, { id: "b" }),
+      activity("2025-06-02", 1000, { id: "c" }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toEqual({
+      localDate: "2025-06-02",
+      activities: [expect.objectContaining({ id: "a" }), expect.objectContaining({ id: "c" })],
+    });
+    expect(groups[1]!.localDate).toBe("2025-06-01");
+  });
+
+  it("orders groups by each date's first-encountered activity, not re-sorted", () => {
+    // A descending-by-time API page (newest first) should yield newest-day-first groups,
+    // without groupByLocalDate imposing its own date sort on top.
+    const groups = groupByLocalDate([
+      activity("2025-06-03", 1000),
+      activity("2025-06-01", 1000),
+      activity("2025-06-02", 1000),
+    ]);
+    expect(groups.map((g) => g.localDate)).toEqual(["2025-06-03", "2025-06-01", "2025-06-02"]);
+  });
+
+  it("falls back to the UTC date slice when local_date is null", () => {
+    const groups = groupByLocalDate([
+      activity("2025-06-01", 1000, {
+        local_date: null,
+        start_time_utc: "2025-06-01T08:00:00Z",
+      }),
+    ]);
+    expect(groups[0]!.localDate).toBe("2025-06-01");
   });
 });

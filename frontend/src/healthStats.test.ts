@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import type { HealthDashboardMetricOut } from "./api/types";
-import { mergeTrendSeries, weightedAverage } from "./healthStats";
+import type { HealthDashboardMetricOut, HealthObservationOut } from "./api/types";
+import { latestObservation, mergeTrendSeries, valueForDate, weightedAverage } from "./healthStats";
+
+function observation(
+  metric_key: string,
+  observed_at_utc: string,
+  overrides: Partial<HealthObservationOut> = {},
+): HealthObservationOut {
+  return {
+    metric_key,
+    observed_at_utc,
+    local_date: observed_at_utc.slice(0, 10),
+    aggregation: "instant",
+    value_num: null,
+    value_text: null,
+    unit: null,
+    source: "test",
+    ...overrides,
+  };
+}
 
 function metric(
   logical_metric: string,
@@ -48,6 +66,48 @@ describe("weightedAverage", () => {
       { local_date: "2025-01-02", value_sum: 0, n_observations: 0 },
     ]);
     expect(weightedAverage(m)).toBe(50);
+  });
+});
+
+describe("valueForDate", () => {
+  it("returns the given day's value, not some other day's", () => {
+    const m = metric("steps", [
+      { local_date: "2025-01-01", value_sum: 8000, n_observations: 1 },
+      { local_date: "2025-01-02", value_sum: 12000, n_observations: 1 },
+    ]);
+    expect(valueForDate(m, "2025-01-02")).toBe(12000);
+  });
+
+  it("returns null when the date has no data", () => {
+    const m = metric("steps", [{ local_date: "2025-01-01", value_sum: 8000, n_observations: 1 }]);
+    expect(valueForDate(m, "2025-01-02")).toBeNull();
+  });
+
+  it("returns null for an undefined metric", () => {
+    expect(valueForDate(undefined, "2025-01-01")).toBeNull();
+  });
+});
+
+describe("latestObservation", () => {
+  it("picks the most recent of several same-day observations, not the first or last-inserted", () => {
+    const obs = [
+      observation("readiness.score", "2026-08-02T07:42:11Z", { value_num: 26 }),
+      observation("readiness.score", "2026-08-02T14:44:06Z", { value_num: 35 }),
+      observation("readiness.score", "2026-08-02T02:59:45Z", { value_num: 16 }),
+    ];
+    expect(latestObservation(obs, "readiness.score")?.value_num).toBe(35);
+  });
+
+  it("ignores observations for a different metric_key", () => {
+    const obs = [
+      observation("readiness.score", "2026-08-02T07:42:11Z", { value_num: 26 }),
+      observation("training_status", "2026-08-02T14:44:06Z", { value_text: "PRODUCTIVE" }),
+    ];
+    expect(latestObservation(obs, "training_status")?.value_text).toBe("PRODUCTIVE");
+  });
+
+  it("returns null when the metric has no observation at all", () => {
+    expect(latestObservation([], "readiness.score")).toBeNull();
   });
 });
 

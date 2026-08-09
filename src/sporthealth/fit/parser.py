@@ -142,6 +142,48 @@ def _generic_metrics_from_row(
     return metrics
 
 
+def _time_in_zone_metrics(row: dict[Any, Any]) -> list[ParsedMetric]:
+    """Expands one `time_in_zone_mesgs` row into a `ParsedMetric` per zone index.
+
+    `_generic_metrics_from_row` skips list-valued fields entirely (real component fields it
+    can't interpret) -- `time_in_zone_mesgs` is the one message type where that would throw
+    away the *entire point* of the message: `time_in_hr_zone` (seconds per HR zone) and its
+    `hr_zone_high_boundary` companion (each zone's upper bpm bound) are both arrays, confirmed
+    against real device data (introspected directly, not assumed from the FIT SDK's profile
+    docs) -- one real file carried `time_in_hr_zone: [17.573, 12.0, 80.003, 2096.94, 0, 0, 0]`
+    alongside `hr_zone_high_boundary: [89, 105, 124, 140, 159, 175]`: 7 time buckets for 6
+    configured zone boundaries, where index 0 is "time below zone 1". Power/speed/cadence zones
+    (`time_in_power_zone` etc.) follow the identical shape when a device reports them (e.g. a
+    power meter) and are expanded the same way, generically -- not hardcoded to HR only.
+
+    Zone *count* is read from whatever the device actually reported, never assumed to be 5.
+    """
+    metrics: list[ParsedMetric] = []
+    for field_key, value in row.items():
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                num = _to_float(item)
+                if num is None:
+                    continue
+                metrics.append(
+                    ParsedMetric(
+                        key=f"{_metric_key('time_in_zone_mesgs', field_key)}_{i}",
+                        value_num=num,
+                    )
+                )
+        else:
+            num = _to_float(value)
+            text = None if num is not None else (str(value) if value is not None else None)
+            if num is None and text is None:
+                continue
+            metrics.append(
+                ParsedMetric(
+                    key=_metric_key("time_in_zone_mesgs", field_key), value_num=num, value_text=text
+                )
+            )
+    return metrics
+
+
 def _parse_device(file_id_row: dict[Any, Any] | None) -> ParsedDevice | None:
     if not file_id_row:
         return None
@@ -311,6 +353,22 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
             frozenset({"manufacturer", "product", "garmin_product", "serial_number", "type"}),
         )
 
+    # `time_in_zone_mesgs` carries one row per lap PLUS one whole-activity row, distinguished
+    # by `reference_mesg` -- only the whole-activity ("session") row is what an activity-level
+    # "time in zones" view wants; per-lap zone breakdowns aren't modeled here (no lap-level UI
+    # consumes them yet, and lap.py's ParsedLap has no field for it). Confirmed some real
+    # devices/firmware never emit this message at all -- absent is absent, not an error.
+    session_zone_row = next(
+        (
+            row
+            for row in messages.get("time_in_zone_mesgs", [])
+            if row.get("reference_mesg") == "session"
+        ),
+        None,
+    )
+    if session_zone_row is not None:
+        extra_metrics += _time_in_zone_metrics(session_zone_row)
+
     laps = []
     for i, row in enumerate(messages.get("lap_mesgs", [])):
         lap_start = row.get("start_time")
@@ -366,6 +424,7 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
         "lap_mesgs",
         "split_mesgs",
         "record_mesgs",
+        "time_in_zone_mesgs",
     }
     unrecognized_types = []
     for message_type, rows in messages.items():
