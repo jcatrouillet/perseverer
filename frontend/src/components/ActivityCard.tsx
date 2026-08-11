@@ -32,7 +32,16 @@ function paceOrSpeedLabel(sport: string, durationS: number, distanceM: number): 
   return `${kmh.toFixed(1)} km/h`;
 }
 
-export function ActivityCard({ activity }: { activity: ActivitySummary }) {
+export function ActivityCard({
+  activity,
+  iconSize = "default",
+}: {
+  activity: ActivitySummary;
+  /** "large" is used by the day view, where one card per activity (rather than a long list of
+   * them) leaves room for the sport icon to actually carry the "what is this" signal instead of
+   * being a small colour swatch next to the text that says the same thing. */
+  iconSize?: "default" | "large";
+}) {
   const sport = displaySport(activity);
   const style = sportStyle(sport);
   const durationS = effectiveDurationS(activity);
@@ -40,7 +49,9 @@ export function ActivityCard({ activity }: { activity: ActivitySummary }) {
   return (
     <Link href={`/activities/${activity.id}`} className="activity-card">
       <div className="activity-card__header">
-        <span className={`icon-chip tone-${style.tone}`}>
+        <span
+          className={`icon-chip tone-${style.tone}${iconSize === "large" ? " icon-chip--lg" : ""}`}
+        >
           <Icon name={style.icon} />
         </span>
         <div className="activity-card__title">

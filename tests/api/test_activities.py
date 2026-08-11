@@ -8,11 +8,18 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import activity_metric, activity_stream, metric_definition
+from sporthealth.db.schema import (
+    activity_metric,
+    activity_stream,
+    health_observation,
+    metric_definition,
+)
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.fit.types import StreamPoint
 from sporthealth.streams import write_activity_stream
 from tests.api.conftest import seed_activity
+
+_SWEAT_LOSS_METRIC_KEY = "garmin.export.HydrationLogFile.estimatedSweatLossInML"
 
 
 def _add_metric(engine: Engine, *, activity_id: str, metric_key: str, value: float) -> None:
@@ -38,6 +45,43 @@ def _add_metric(engine: Engine, *, activity_id: str, metric_key: str, value: flo
                 value_num=value,
                 source="fit_folder",
                 created_at=now,
+            )
+        )
+        conn.commit()
+
+
+def _add_health_observation(
+    engine: Engine,
+    *,
+    observed_at_utc: datetime,
+    value_num: float,
+    metric_key: str = _SWEAT_LOSS_METRIC_KEY,
+) -> None:
+    now = dt.datetime.now(dt.UTC)
+    with engine.connect() as conn:
+        exists = conn.execute(
+            metric_definition.select().where(metric_definition.c.metric_key == metric_key)
+        ).fetchone()
+        if exists is None:
+            conn.execute(
+                metric_definition.insert().values(
+                    metric_key=metric_key,
+                    display_name=metric_key,
+                    category="health",
+                    value_type="numeric",
+                    first_seen_at=now,
+                    first_seen_source="garmin_export",
+                )
+            )
+        conn.execute(
+            health_observation.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric_key=metric_key,
+                observed_at_utc=observed_at_utc,
+                local_date=observed_at_utc.date().isoformat(),
+                aggregation="daily",
+                value_num=value_num,
+                source="garmin_export",
             )
         )
         conn.commit()
@@ -81,6 +125,7 @@ def test_list_and_detail_surface_hr_load_and_descaled_rpe(
     # sourced from introspecting the installed garmin_fit_sdk's profile.py field 193) -- 46 raw
     # must come back as 4.6, not 46.
     _add_metric(engine, activity_id="a1", metric_key="fit.session.workout_rpe", value=46.0)
+    _add_metric(engine, activity_id="a1", metric_key="fit.user_profile.weight", value=80.1)
 
     r = client.get("/api/v1/activities", headers=auth_headers)
     assert r.status_code == 200
@@ -89,6 +134,7 @@ def test_list_and_detail_surface_hr_load_and_descaled_rpe(
     assert item["max_hr_bpm"] == 171.0
     assert item["training_load"] == 81.8
     assert item["workout_rpe"] == 4.6
+    assert item["weight_kg"] == 80.1
 
     r = client.get("/api/v1/activities/a1", headers=auth_headers)
     assert r.status_code == 200
@@ -96,6 +142,7 @@ def test_list_and_detail_surface_hr_load_and_descaled_rpe(
     assert detail["avg_hr_bpm"] == 142.0
     assert detail["training_load"] == 81.8
     assert detail["workout_rpe"] == 4.6
+    assert detail["weight_kg"] == 80.1
 
 
 def test_list_activities_omits_hr_load_rpe_when_absent(
@@ -108,6 +155,7 @@ def test_list_activities_omits_hr_load_rpe_when_absent(
     item = r.json()["items"][0]
     assert item["avg_hr_bpm"] is None
     assert item["training_load"] is None
+    assert item["weight_kg"] is None
     assert item["workout_rpe"] is None
 
 
@@ -133,6 +181,67 @@ def test_get_activity_detail_returns_full_shape(
     assert body["laps"] == []
     assert body["device"] is None
     assert body["route"] is None
+
+
+def test_get_activity_detail_includes_nearby_sweat_loss_observation(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # seed_activity's fixed start (2025-06-01 10:00:00) + its default 1800s duration ends at
+    # 10:30:00 -- real archived activities each paired with a hydration-log entry landing about
+    # a minute after their own end (see _estimated_sweat_loss_ml's docstring), so 53s after here.
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    _add_health_observation(
+        engine, observed_at_utc=datetime(2025, 6, 1, 10, 30, 53), value_num=1234.0
+    )
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["estimated_sweat_loss_ml"] == 1234.0
+
+
+def test_get_activity_detail_sweat_loss_null_when_no_nearby_observation(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["estimated_sweat_loss_ml"] is None
+
+
+def test_get_activity_detail_sweat_loss_ignores_observation_outside_match_window(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    # 2000s after the 10:30:00 end -- past the 1800s window, so this must not be attributed to
+    # this activity (it's more plausibly a later, unrelated activity's own hydration entry).
+    _add_health_observation(
+        engine, observed_at_utc=datetime(2025, 6, 1, 11, 3, 20), value_num=999.0
+    )
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["estimated_sweat_loss_ml"] is None
+
+
+def test_get_activity_detail_sweat_loss_picks_the_nearest_observation(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    _add_health_observation(
+        engine, observed_at_utc=datetime(2025, 6, 1, 10, 45, 0), value_num=999.0
+    )
+    _add_health_observation(
+        engine, observed_at_utc=datetime(2025, 6, 1, 10, 31, 40), value_num=500.0
+    )
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["estimated_sweat_loss_ml"] == 500.0
 
 
 def test_stream_endpoint_downsamples_and_404s_without_stream(

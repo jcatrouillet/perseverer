@@ -39,6 +39,7 @@ function activity(
     max_hr_bpm: null,
     training_load: null,
     workout_rpe: null,
+    weight_kg: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,

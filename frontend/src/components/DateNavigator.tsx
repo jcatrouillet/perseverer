@@ -17,15 +17,20 @@ const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 /** The persistent year -> month -> week navigation bar shared by the year/month/week/day
  * views. The day grid is a real Monday-aligned mini calendar (one row per week): clicking the
  * week affordance at the start of a row goes to that week (`/calendar/week/:monday`); clicking
- * a specific day goes straight to that day (`/day/:date`). */
+ * a specific day goes straight to that day (`/day/:date`). `selectedDate` highlights one day
+ * cell (Day View); `selectedWeekStart` highlights an entire week row (Week View) instead --
+ * kept as separate props rather than one, since a week's Monday and "the selected day" are
+ * different things and conflating them mis-highlighted just the Monday cell for Week View. */
 export function DateNavigator({
   year,
   month,
   selectedDate,
+  selectedWeekStart,
 }: {
   year: number;
   month?: number;
   selectedDate?: string;
+  selectedWeekStart?: string;
 }) {
   const [location] = useLocation();
   const allActivities = useAllActivities({});
@@ -111,32 +116,38 @@ export function DateNavigator({
 
       {month != null && weeks.length > 0 && (
         <div className="date-nav__weeks">
-          {weeks.map((week) => (
-            <div key={week[0]} className="date-nav__week-row">
-              <Link
-                href={`/calendar/week/${week[0]}`}
-                className="date-nav__week-handle"
-                aria-label={`View week of ${week[0]}`}
+          {weeks.map((week) => {
+            const isSelectedWeek = week[0] === selectedWeekStart;
+            return (
+              <div
+                key={week[0]}
+                className={`date-nav__week-row${isSelectedWeek ? " is-selected" : ""}`}
               >
-                W{isoWeekNumber(week[0]!)}
-              </Link>
-              {week.map((date) => {
-                const inMonth = date >= monthStart && date <= monthEnd;
-                return (
-                  <Link
-                    key={date}
-                    href={`/day/${date}`}
-                    className={
-                      (date === selectedDate ? "is-active " : "") +
-                      (inMonth ? "" : "is-outside")
-                    }
-                  >
-                    {parseIsoDate(date).getUTCDate()}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+                <Link
+                  href={`/calendar/week/${week[0]}`}
+                  className={`date-nav__week-handle${isSelectedWeek ? " is-active" : ""}`}
+                  aria-label={`View week of ${week[0]}`}
+                >
+                  W{isoWeekNumber(week[0]!)}
+                </Link>
+                {week.map((date) => {
+                  const inMonth = date >= monthStart && date <= monthEnd;
+                  return (
+                    <Link
+                      key={date}
+                      href={`/day/${date}`}
+                      className={
+                        (date === selectedDate ? "is-active " : "") +
+                        (inMonth ? "" : "is-outside")
+                      }
+                    >
+                      {parseIsoDate(date).getUTCDate()}
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       )}
     </nav>

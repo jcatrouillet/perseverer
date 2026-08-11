@@ -31,6 +31,16 @@ describe("TimeInZoneChart", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it("scales bar widths against the total time in zone, not the single largest zone", () => {
+    const { container } = render(<TimeInZoneChart metrics={realShape} />);
+    const fills = container.querySelectorAll<HTMLElement>(".time-in-zone__bar-fill");
+    // Zone 1 (1544.902s) is the largest zone but only ~66% of the 2351.075s total -- scaling
+    // against the max zone (the pre-fix behavior) would render it at 100% width, which made
+    // every other real, nonzero zone shrink to a near-invisible sliver.
+    expect(fills[1]!.style.width).not.toBe("100%");
+    expect(screen.getByText(/66%/)).toBeInTheDocument();
+  });
+
   it("renders nothing when every zone is zero seconds (present but empty)", () => {
     const allZero: ActivityMetricOut[] = [
       metric("fit.time_in_zone.time_in_hr_zone_0", 0),

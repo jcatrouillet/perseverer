@@ -23,7 +23,7 @@ import {
 import type { LapOut, StreamResponse } from "../api/types";
 import type { IconName } from "./Icon";
 import { toneColor, type Tone } from "../metricStyle";
-import { isPaceSport, streamSpeedValue } from "../runningStats";
+import { formatClockDuration, isPaceSport, streamSpeedValue } from "../runningStats";
 import { Icon } from "./Icon";
 
 interface Panel {
@@ -71,6 +71,16 @@ function panelsFor(sport: string): Panel[] {
       formatValue: (v) => `${v.toFixed(0)} bpm`,
     },
     {
+      key: "respiration_rate",
+      title: "Respiration",
+      icon: "pulse",
+      tone: "cadence",
+      kind: "line",
+      unit: "brpm",
+      transform: (v) => v,
+      formatValue: (v) => `${v.toFixed(0)} brpm`,
+    },
+    {
       key: "cadence",
       title: "Cadence",
       icon: "steps",
@@ -107,16 +117,6 @@ function formatPace(minPerKm: number): string {
   const min = Math.floor(minPerKm);
   const sec = Math.round((minPerKm - min) * 60);
   return `${min}:${sec.toString().padStart(2, "0")}`;
-}
-
-function formatElapsed(totalSeconds: number): string {
-  const s = Math.round(totalSeconds);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  return h > 0
-    ? `${h}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`
-    : `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
 export function ActivityCharts({
@@ -182,14 +182,14 @@ export function ActivityCharts({
                     dataKey="t"
                     stroke="var(--color-text-muted)"
                     fontSize={11}
-                    tickFormatter={formatElapsed}
+                    tickFormatter={formatClockDuration}
                   />
                   <YAxis stroke="var(--color-text-muted)" fontSize={11} width={40} domain={["auto", "auto"]} />
                   {lapMarks.map((t) => (
                     <ReferenceLine key={t} x={t} stroke="var(--color-text-faint)" strokeDasharray="2 2" />
                   ))}
                   <Tooltip
-                    labelFormatter={(t) => formatElapsed(Number(t))}
+                    labelFormatter={(t) => formatClockDuration(Number(t))}
                     formatter={(value) => [panel.formatValue(Number(value)), panel.title] as [string, string]}
                     contentStyle={{
                       background: "var(--color-surface-raised)",
@@ -214,14 +214,14 @@ export function ActivityCharts({
                     dataKey="t"
                     stroke="var(--color-text-muted)"
                     fontSize={11}
-                    tickFormatter={formatElapsed}
+                    tickFormatter={formatClockDuration}
                   />
                   <YAxis stroke="var(--color-text-muted)" fontSize={11} width={40} domain={["auto", "auto"]} />
                   {lapMarks.map((t) => (
                     <ReferenceLine key={t} x={t} stroke="var(--color-text-faint)" strokeDasharray="2 2" />
                   ))}
                   <Tooltip
-                    labelFormatter={(t) => formatElapsed(Number(t))}
+                    labelFormatter={(t) => formatClockDuration(Number(t))}
                     formatter={(value) => [panel.formatValue(Number(value)), panel.title] as [string, string]}
                     contentStyle={{
                       background: "var(--color-surface-raised)",

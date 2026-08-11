@@ -139,7 +139,7 @@ export function DayViewPage({ date }: { date: string }) {
       )}
       <div className="activity-day-group__list">
         {activities.data?.items.map((activity) => (
-          <ActivityCard key={activity.id} activity={activity} />
+          <ActivityCard key={activity.id} activity={activity} iconSize="large" />
         ))}
       </div>
 

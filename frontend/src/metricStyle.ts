@@ -92,6 +92,11 @@ const HEALTH_METRIC_STYLES: Record<string, MetricStyle> = {
   // reading that suits an oxygen measure.
   spo2_average: { tone: "elevation", icon: "waves" },
   stress_average: { tone: "load", icon: "bolt" },
+  // Distinct tones, not just distinct icons -- these two appear together on one chart (the week
+  // view's wellness section), so they need the same kind of separation HRV/SpO2/stress already
+  // have from each other, per this file's own governing rule.
+  sleep_respiration_rate: { tone: "cadence", icon: "pulse" },
+  waking_respiration_rate: { tone: "power", icon: "pulse" },
 };
 
 export function healthMetricStyle(logicalMetric: string): MetricStyle {

@@ -41,7 +41,7 @@ export function HealthTrendChart({
 
   return (
     <div>
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={160}>
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
           <XAxis
@@ -50,7 +50,13 @@ export function HealthTrendChart({
             fontSize={11}
             tickFormatter={(iso: string) => iso.slice(5)}
           />
-          <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} />
+          {/* Recharts' own default domain is [0, "auto"], which forces every line down into a
+              sliver at the top of the chart for a metric whose real range never goes near zero
+              (resting heart rate, respiration, ...). "auto" on both ends instead zooms to the
+              data's own range (with Recharts' usual padded/rounded tick bounds), the same way
+              the pace-vs-distance scatter charts already zoom to their own data instead of
+              starting at 0. */}
+          <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} domain={["auto", "auto"]} />
           <Tooltip
             contentStyle={{
               background: "var(--color-surface-raised)",
@@ -71,12 +77,16 @@ export function HealthTrendChart({
           ))}
         </LineChart>
       </ResponsiveContainer>
-      <ChartLegend
-        items={present.map((key) => ({
-          label: key.replace(/_/g, " "),
-          color: seriesColor(key),
-        }))}
-      />
+      {/* A legend only earns its space once there's more than one line to tell apart -- for a
+          single series the chart's own heading already says what it is. */}
+      {present.length > 1 && (
+        <ChartLegend
+          items={present.map((key) => ({
+            label: key.replace(/_/g, " "),
+            color: seriesColor(key),
+          }))}
+        />
+      )}
       {missing.length > 0 && (
         <p className="chart-note">
           No data in this range for: {missing.map((k) => k.replace(/_/g, " ")).join(", ")}

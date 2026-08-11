@@ -43,6 +43,15 @@ describe("ActivityCharts", () => {
     expect(screen.queryByText("Pace")).not.toBeInTheDocument();
   });
 
+  it("shows a Respiration panel when the activity has a respiration_rate stream, e.g. yoga", () => {
+    const withRespiration = stream({
+      channels: ["heart_rate", "respiration_rate"],
+      series: { heart_rate: [80, 82, 81], respiration_rate: [14, 15, 14] },
+    });
+    render(<ActivityCharts stream={withRespiration} laps={[]} sport="training" />);
+    expect(screen.getByText("Respiration")).toBeInTheDocument();
+  });
+
   it("labels the speed panel 'Pace' for a foot sport and 'Speed' for a wheeled one", () => {
     const withSpeed = stream({
       channels: ["speed_mps"],

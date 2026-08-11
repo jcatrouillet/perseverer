@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Annotated
 
 import duckdb
@@ -25,7 +25,14 @@ from sporthealth.api.schemas.activities import (
 from sporthealth.api.schemas.common import Page, to_utc
 from sporthealth.api.schemas.streams import StreamResponse
 from sporthealth.config import Settings, get_settings
-from sporthealth.db.schema import activity, activity_metric, activity_stream, lap, route_geom
+from sporthealth.db.schema import (
+    activity,
+    activity_metric,
+    activity_stream,
+    health_observation,
+    lap,
+    route_geom,
+)
 from sporthealth.db.schema import device as device_table
 from sporthealth.db.schema import split as split_table
 from sporthealth.stream_query import downsample
@@ -39,6 +46,37 @@ router = APIRouter()
 # conversion rather than each hand-rolling `/ 10`.
 def _workout_rpe_from_raw(raw: float | None) -> float | None:
     return raw / 10 if raw is not None else None
+
+
+# Garmin's estimated sweat loss isn't a FIT session field at all -- it's logged to the athlete's
+# daily hydration log (`garmin.export.HydrationLogFile.estimatedSweatLossInML`, a
+# `health_observation`, not an `activity_metric`) with no activity_id of its own. Verified
+# directly against the real archive before building this (per CLAUDE.md's verify-don't-assume
+# rule): every one of 13 real activities spanning a week each had exactly one hydration-log entry
+# landing within about a minute after the activity's own end time (`start_time_utc + duration_s`)
+# -- e.g. an activity ending at 18:26:00 paired with a log entry at 18:26:53. The 30-minute window
+# below is deliberately generous relative to that ~1-minute real-world gap, to tolerate sync
+# delay, without risking a false match to an unrelated later activity's own hydration entry.
+_SWEAT_LOSS_METRIC_KEY = "garmin.export.HydrationLogFile.estimatedSweatLossInML"
+_SWEAT_LOSS_MATCH_WINDOW_S = 1800
+
+
+def _estimated_sweat_loss_ml(
+    conn: Connection, athlete_id: str, activity_end_utc: datetime
+) -> float | None:
+    row = conn.execute(
+        select(health_observation.c.value_num)
+        .where(
+            health_observation.c.athlete_id == athlete_id,
+            health_observation.c.metric_key == _SWEAT_LOSS_METRIC_KEY,
+            health_observation.c.observed_at_utc >= activity_end_utc,
+            health_observation.c.observed_at_utc
+            <= activity_end_utc + timedelta(seconds=_SWEAT_LOSS_MATCH_WINDOW_S),
+        )
+        .order_by(health_observation.c.observed_at_utc.asc())
+        .limit(1)
+    ).fetchone()
+    return row.value_num if row is not None else None
 
 
 @router.get("/activities")
@@ -103,6 +141,19 @@ def list_activities(
         .limit(1)
         .scalar_subquery()
     )
+    # fit.user_profile.weight -- the athlete's recorded body weight at the time of this specific
+    # activity (a generic per-session field, present on ~99% of the real archive). Exposed so the
+    # frontend can derive MET-minutes without a second per-activity fetch (see ActivitySummary's
+    # weight_kg docstring).
+    weight_subq = (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key == "fit.user_profile.weight",
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
     query = select(
         activity.c.id,
         activity.c.start_time_utc,
@@ -122,6 +173,7 @@ def list_activities(
         max_hr_subq.label("max_hr_bpm"),
         training_load_subq.label("training_load"),
         workout_rpe_subq.label("workout_rpe_raw"),
+        weight_subq.label("weight_kg"),
     ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
 
     if start_date is not None:
@@ -167,6 +219,7 @@ def list_activities(
             max_hr_bpm=r.max_hr_bpm,
             training_load=r.training_load,
             workout_rpe=_workout_rpe_from_raw(r.workout_rpe_raw),
+            weight_kg=r.weight_kg,
             primary_source=r.primary_source,
             stream_available=bool(r.stream_available),
         )
@@ -219,6 +272,11 @@ def get_activity(
     ).fetchall()
     metrics_by_key = {m.metric_key: m.value_num for m in metrics}
 
+    estimated_sweat_loss_ml = None
+    if row.duration_s is not None:
+        activity_end = row.start_time_utc + timedelta(seconds=row.duration_s)
+        estimated_sweat_loss_ml = _estimated_sweat_loss_ml(conn, athlete_id, activity_end)
+
     return ActivityDetail(
         id=row.id,
         start_time_utc=to_utc(row.start_time_utc),
@@ -235,9 +293,11 @@ def get_activity(
         max_hr_bpm=metrics_by_key.get("fit.session.max_heart_rate"),
         training_load=metrics_by_key.get("fit.session.training_load_peak"),
         workout_rpe=_workout_rpe_from_raw(metrics_by_key.get("fit.session.workout_rpe")),
+        weight_kg=metrics_by_key.get("fit.user_profile.weight"),
         primary_source=row.primary_source,
         stream_available=stream_row is not None,
         moving_duration_s=row.moving_duration_s,
+        estimated_sweat_loss_ml=estimated_sweat_loss_ml,
         device=(
             DeviceOut(
                 manufacturer=device_row.manufacturer,

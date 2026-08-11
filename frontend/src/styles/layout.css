@@ -314,6 +314,19 @@ select {
   height: 13px;
 }
 
+/* Day view's activity cards: one per card rather than a dense list, so the icon can carry more
+   of the "what is this" signal at a glance -- roughly double the default chip. */
+.icon-chip--lg {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+}
+
+.icon-chip--lg .icon {
+  width: 26px;
+  height: 26px;
+}
+
 .stat-tile__value {
   font-size: 1.5rem;
   font-weight: 600;
@@ -566,6 +579,13 @@ tbody tr:last-child td {
   grid-template-columns: 2rem repeat(7, 1fr);
   align-items: center;
   gap: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+/* Week View selects the whole week, not one day within it -- tint the entire row rather than
+   reusing the single-day `a.is-active` treatment on just its Monday cell. */
+.date-nav__week-row.is-selected {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
 }
 
 .date-nav__week-row a {

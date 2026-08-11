@@ -4,6 +4,7 @@
 // design system (Icon, StatTile, sportStyle, tone colours).
 import { Link } from "wouter";
 
+import { extractHrZones } from "../activityMetrics";
 import { useActivity, useActivityContext, useActivityStream } from "../api/queries";
 import { ActivityCharts } from "../components/ActivityCharts";
 import { ActivityContextStrip } from "../components/ActivityContextStrip";
@@ -12,7 +13,7 @@ import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
 import { sportStyle } from "../metricStyle";
-import { formatPaceMinPerKm, isPaceSport, localTimeLabel } from "../runningStats";
+import { formatClockDuration, formatPaceMinPerKm, isPaceSport, localTimeLabel } from "../runningStats";
 import { displaySport } from "../yearStats";
 import "../styles/activity-detail.css";
 
@@ -28,6 +29,16 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const sport = displaySport(a);
   const style = sportStyle(sport);
   const paceSport = isPaceSport(sport);
+  // HR zones are a training-load concept that's meaningful for running and cycling; showing it
+  // for e.g. strength training or yoga would just be noise even on the rare activity that has a
+  // stray zone metric. Also guards against the empty-card case: a zone metric key can be present
+  // (cataloged) with no actual seconds recorded, which extractHrZones already treats as "nothing
+  // to show" for the chart itself, but the section wrapper needs to know that too.
+  const hrZones = extractHrZones(a.metrics);
+  const showTimeInZone =
+    (sport === "running" || sport === "cycling") &&
+    hrZones != null &&
+    hrZones.some((z) => z.seconds > 0);
 
   return (
     <main>
@@ -55,7 +66,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
         <ActivityContextStrip context={context.data} sport={sport} currentActivityId={id} />
       )}
 
-      {a.metrics.some((m) => m.metric_key.startsWith("fit.time_in_zone.")) && (
+      {showTimeInZone && (
         <section className="card">
           <h2>Time in zones</h2>
           <TimeInZoneChart metrics={a.metrics} />
@@ -64,8 +75,8 @@ export function ActivityDetailPage({ id }: { id: string }) {
 
       {a.laps.length > 0 && (
         <section className="card">
-          <h2>Laps</h2>
-          <table className="laps-table">
+          <h2>Intervals</h2>
+          <table className="intervals-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -80,7 +91,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
               {a.laps.map((lap) => (
                 <tr key={lap.lap_index}>
                   <td>{lap.lap_index + 1}</td>
-                  <td>{lap.duration_s != null ? `${Math.round(lap.duration_s)}s` : "—"}</td>
+                  <td>{lap.duration_s != null ? formatClockDuration(lap.duration_s) : "—"}</td>
                   <td>{lap.distance_m != null ? `${(lap.distance_m / 1000).toFixed(2)} km` : "—"}</td>
                   <td>
                     {lap.duration_s != null && lap.distance_m != null && lap.distance_m > 0

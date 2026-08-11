@@ -30,6 +30,7 @@ export type IconName =
   | "trend"
   | "thermometer"
   | "battery"
+  | "droplet"
   // Sports
   | "run"
   | "walk"
@@ -115,6 +116,9 @@ export function IconSprite() {
           <rect x="2.6" y="7.5" width="16" height="9" rx="2" />
           <path d="M20.6 10.5h1v3h-1" />
           <path d="M6.4 10.2v3.6M10 10.2v3.6M13.6 10.2v3.6" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-droplet">
+          <path d="M12 3.2s6.2 7 6.2 11.3a6.2 6.2 0 1 1-12.4 0C5.8 10.2 12 3.2 12 3.2Z" />
         </symbol>
 
         <symbol viewBox="0 0 24 24" id="i-run">

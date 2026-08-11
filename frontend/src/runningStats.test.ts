@@ -13,10 +13,12 @@ import {
   formatPaceMinPerKm,
   isLongRun,
   isPaceSport,
+  isPlausibleRunPace,
   localHour,
   localTimeLabel,
   longestStreakAndBreak,
   longRunPieDeg,
+  metMinutes,
   monthlyDistanceM,
   nearestLegendKm,
   personalRecords,
@@ -24,7 +26,9 @@ import {
   scatterPointOpacities,
   shortRunHeatPct,
   streamSpeedValue,
+  weekdayIndex,
   weekdayStats,
+  weeklyDistanceSeries,
   WEEKLY_HEATMAP_SCALE,
 } from "./runningStats";
 
@@ -50,6 +54,7 @@ function activity(
     max_hr_bpm: null,
     training_load: null,
     workout_rpe: null,
+    weight_kg: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,
@@ -442,5 +447,62 @@ describe("personalRecords", () => {
     const fiveK = records.find((r) => r.label === "5 km")!;
     expect(fiveK.paceMinPerKm).toBeCloseTo(5, 5); // 25:00 moving for 5km = 5:00/km
     expect(fiveK.speedKmh).toBeCloseTo(12, 5);
+  });
+});
+
+describe("isPlausibleRunPace", () => {
+  it("accepts the real archive's slowest genuine run (7.6 min/km)", () => {
+    // 5km in 38 minutes -> 7.6 min/km.
+    expect(isPlausibleRunPace(38 * 60, 5000)).toBe(true);
+  });
+
+  it("rejects the real archive's mislabeled hikes (10.9-15.3 min/km), which sit well past the gap", () => {
+    // A real one: 1.77km in 19.3 minutes -> 10.9 min/km.
+    expect(isPlausibleRunPace(19.3 * 60, 1770)).toBe(false);
+  });
+
+  it("rejects a zero-or-negative distance rather than dividing by it", () => {
+    expect(isPlausibleRunPace(1800, 0)).toBe(false);
+  });
+});
+
+describe("metMinutes", () => {
+  it("computes MET-minutes as (calories / weight_kg) * 60, the standard gross-MET approximation", () => {
+    // A real archived run: 1978 kcal at 80.1 kg body weight.
+    expect(metMinutes(1978, 80.1)).toBeCloseTo(1481.6, 1);
+  });
+
+  it("scales linearly with calories and inversely with weight", () => {
+    expect(metMinutes(200, 100)).toBeCloseTo(120, 5); // 2 MET-hours = 120 MET-minutes
+    expect(metMinutes(400, 100)).toBeCloseTo(240, 5);
+    expect(metMinutes(200, 50)).toBeCloseTo(240, 5);
+  });
+});
+
+describe("weekdayIndex", () => {
+  it("maps Monday to 0 and Sunday to 6, not JS's native Sunday=0", () => {
+    expect(weekdayIndex("2025-06-02")).toBe(0); // a real Monday
+    expect(weekdayIndex("2025-06-08")).toBe(6); // the following Sunday
+  });
+});
+
+describe("weeklyDistanceSeries", () => {
+  it("buckets distance into one point per Monday-starting week across the range", () => {
+    const activities = [
+      activity("2025-06-02", 5000), // week of 2025-06-02 (Mon)
+      activity("2025-06-04", 3000), // same week
+      activity("2025-06-09", 10000), // next week
+    ];
+    const series = weeklyDistanceSeries(activities, "2025-06-02", "2025-06-15");
+    expect(series).toEqual([
+      { weekStart: "2025-06-02", km: 8 },
+      { weekStart: "2025-06-09", km: 10 },
+    ]);
+  });
+
+  it("includes weeks with zero distance as real zero-km points, not gaps", () => {
+    const activities = [activity("2025-06-02", 5000)];
+    const series = weeklyDistanceSeries(activities, "2025-06-02", "2025-06-15");
+    expect(series.map((p) => p.km)).toEqual([5, 0]);
   });
 });

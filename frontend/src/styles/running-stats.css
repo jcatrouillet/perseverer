@@ -8,6 +8,13 @@
 /* A fixed 2 columns, not auto-fit -- at the card's usual width auto-fit let 3 charts share a
    row and stranded the 4th alone on its own, leaving Pace vs distance and Time of day
    misaligned. Two even rows of two give every chart more width and read as a balanced grid. */
+.week-mets-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
 .running-stats__charts {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

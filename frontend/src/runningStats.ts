@@ -3,7 +3,7 @@
 // direct, non-rollup-backed queries) rather than a new backend endpoint -- these are one-off,
 // bounded-by-a-year client-side aggregates, not a decade-spanning dashboard scan.
 import type { ActivitySummary } from "./api/types";
-import { parseIsoDate } from "./dateUtils";
+import { isoDate, mondayOf, parseIsoDate } from "./dateUtils";
 
 // Elapsed time (duration_s) includes any paused/stopped time (waiting at a light, tying a
 // shoe); moving time excludes it. Pace/speed should always be computed from moving time when
@@ -69,6 +69,21 @@ export function formatDurationHM(totalSeconds: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/** "1:14:23" / "3:45" clock-format duration, precise to the second -- for anywhere a duration
+ * needs to stay legible at both interval-training scale (a 45s rep must not round away to "1m",
+ * formatDurationHM's granularity) and multi-hour scale in the same column (e.g. an activity with
+ * a single lap spanning its whole multi-hour duration). Promoted out of ActivityCharts.tsx's
+ * private x-axis formatter for reuse by the interval table, which had the same real needs. */
+export function formatClockDuration(totalSeconds: number): string {
+  const s = Math.round(totalSeconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0
+    ? `${h}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`
+    : `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function weekdayLabel(index: number): string {
@@ -77,7 +92,7 @@ export function weekdayLabel(index: number): string {
 
 /** Monday=0 .. Sunday=6, matching this app's Monday-start convention everywhere else
  * (mondayOf/WEEKDAY_LABELS in dateUtils.ts and MonthView), not JS's native Sunday=0. */
-function weekdayIndex(localDate: string): number {
+export function weekdayIndex(localDate: string): number {
   return (parseIsoDate(localDate).getUTCDay() + 6) % 7;
 }
 
@@ -475,6 +490,68 @@ export function personalRecords(activities: ActivitySummary[]): PersonalRecord[]
     });
   }
   return records;
+}
+
+export interface WeeklyDistancePoint {
+  weekStart: string;
+  km: number;
+}
+
+/** One bucket per Monday-starting ISO week from `startDate` through `endDate`, summing distance
+ * across all `activities` that land in it -- the week-over-time counterpart to
+ * distanceByDay/distanceByYear, used for a "weekly distance over the last N months" bar chart. */
+export function weeklyDistanceSeries(
+  activities: ActivitySummary[],
+  startDate: string,
+  endDate: string,
+): WeeklyDistancePoint[] {
+  const byWeek = new Map<string, number>();
+  for (const a of activities) {
+    if (!a.local_date || a.distance_m == null) continue;
+    const monday = isoDate(mondayOf(parseIsoDate(a.local_date)));
+    byWeek.set(monday, (byWeek.get(monday) ?? 0) + a.distance_m);
+  }
+  const points: WeeklyDistancePoint[] = [];
+  const cursor = mondayOf(parseIsoDate(startDate));
+  const last = parseIsoDate(endDate);
+  while (cursor <= last) {
+    const iso = isoDate(cursor);
+    points.push({ weekStart: iso, km: Math.round((byWeek.get(iso) ?? 0) / 100) / 10 });
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+  return points;
+}
+
+// Above this, a "running"-tagged activity's own pace is implausible for actual running --
+// walking/hiking speed, not a genuinely slow run. Calibrated against the real archive, not
+// picked arbitrarily: across 635 real running activities, the slowest genuine run is 7.6
+// min/km and the next-slowest is 10.9 min/km -- a wide, clean gap with nothing in between, so
+// 8.5 min/km sits safely in the middle. These are activities the device/export itself tagged
+// sport=running (verified: real GPS tracks, ~3.4 km/h average speed, mountain altitude --
+// hikes, not corrupted data) -- excluding them from aggregate running comparisons never
+// touches the activity's own stored sport classification, which stays exactly what was
+// recorded; it only keeps derived views (pace-vs-distance, weekly-distance totals) from being
+// skewed by a handful of real hikes wearing the wrong label.
+const IMPLAUSIBLE_RUN_PACE_MIN_PER_KM = 8.5;
+
+/** True if `durationS`/`distanceM` describes a pace plausible for actual running (see
+ * IMPLAUSIBLE_RUN_PACE_MIN_PER_KM's own comment for how the cutoff was chosen). */
+export function isPlausibleRunPace(durationS: number, distanceM: number): boolean {
+  if (distanceM <= 0) return false;
+  return durationS / 60 / (distanceM / 1000) <= IMPLAUSIBLE_RUN_PACE_MIN_PER_KM;
+}
+
+/** MET-minutes for one activity, the standard gross-MET approximation used by WHO/CDC physical-
+ * activity guidelines and most consumer fitness platforms: 1 MET-hour of *gross* energy
+ * expenditure (i.e. including resting metabolism, which is what Garmin's own `calories` already
+ * is) burns approximately 1 kcal per kg of body weight, so MET-hours = calories / weight_kg,
+ * and MET-minutes = that * 60. Not a reproduction of any specific vendor's internal MET
+ * calculation (which may use net/active calories or a different constant) -- an honest,
+ * standard-formula approximation from this activity's own real calories and the athlete's own
+ * recorded weight at the time (fit.user_profile.weight), same posture as Fitness & Form's
+ * independently-computed CTL/ATL/TSB. */
+export function metMinutes(calories: number, weightKg: number): number {
+  return (calories / weightKg) * 60;
 }
 
 export interface RollingPoint {

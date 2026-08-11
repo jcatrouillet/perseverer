@@ -71,6 +71,7 @@ export interface ActivitySummary {
   max_hr_bpm: number | null;
   training_load: number | null;
   workout_rpe: number | null;
+  weight_kg: number | null;
   primary_source: string;
   stream_available: boolean;
 }
@@ -81,6 +82,7 @@ export interface ActivityDetail extends ActivitySummary {
   splits: SplitOut[];
   route: RouteOut | null;
   metrics: ActivityMetricOut[];
+  estimated_sweat_loss_ml: number | null;
 }
 
 export interface ActivityContextRecentOut {

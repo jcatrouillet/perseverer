@@ -22,6 +22,7 @@ function activity(overrides: Partial<ActivitySummary> = {}): ActivitySummary {
     max_hr_bpm: null,
     training_load: null,
     workout_rpe: null,
+    weight_kg: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,
@@ -96,5 +97,13 @@ describe("ActivityCard", () => {
   it("substitutes sub_sport for the generic 'training' container, matching the type list elsewhere", () => {
     render(<ActivityCard activity={activity({ sport: "training", sub_sport: "yoga" })} />);
     expect(screen.getByText("yoga")).toBeInTheDocument();
+  });
+
+  it("renders the default-size icon chip unless iconSize is explicitly 'large'", () => {
+    const { container, rerender } = render(<ActivityCard activity={activity()} />);
+    expect(container.querySelector(".icon-chip--lg")).not.toBeInTheDocument();
+
+    rerender(<ActivityCard activity={activity()} iconSize="large" />);
+    expect(container.querySelector(".icon-chip--lg")).toBeInTheDocument();
   });
 });

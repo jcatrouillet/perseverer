@@ -173,3 +173,31 @@ def test_health_dashboard_omits_logical_metrics_with_no_data_at_all(
     )
     logical_metrics = {m["logical_metric"] for m in r.json()["metrics"]}
     assert logical_metrics == {"steps"}
+
+
+def test_health_dashboard_keeps_waking_and_sleep_respiration_distinct(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # These are two real, different readings (see LOGICAL_METRICS' own comment) -- a day can
+    # have one, the other, both, or neither, and they must never merge into a single value.
+    _seed_rollup(
+        engine,
+        metric_key="garmin.daily_summary.avgWakingRespirationValue",
+        local_date="2025-06-01",
+        value=14.0,
+    )
+    _seed_rollup(
+        engine,
+        metric_key="garmin.export.sleepData.averageRespiration",
+        local_date="2025-06-01",
+        value=13.4,
+    )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2025-06-01&end_date=2025-06-30",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    assert metrics["waking_respiration_rate"]["daily"][0]["value_last"] == 14.0
+    assert metrics["sleep_respiration_rate"]["daily"][0]["value_last"] == 13.4

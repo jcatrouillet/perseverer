@@ -31,6 +31,9 @@ export function ActivityStatsGrid({ activity }: { activity: ActivityDetail }) {
   const avgTemp = metricValue(metrics, "fit.session.avg_temperature");
   const minTemp = metricValue(metrics, "fit.session.min_temperature");
   const maxTemp = metricValue(metrics, "fit.session.max_temperature");
+  const avgRespiration = metricValue(metrics, "fit.session.enhanced_avg_respiration_rate");
+  const maxRespiration = metricValue(metrics, "fit.session.enhanced_max_respiration_rate");
+  const minRespiration = metricValue(metrics, "fit.session.enhanced_min_respiration_rate");
 
   const hasTrainingEffect = aerobicEffect != null || anaerobicEffect != null || activity.training_load != null || activity.workout_rpe != null;
   const hasRunningDynamics =
@@ -38,6 +41,8 @@ export function ActivityStatsGrid({ activity }: { activity: ActivityDetail }) {
   const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
   const hasTemperature = avgTemp != null;
   const hasPower = avgPower != null || maxPower != null || normalizedPower != null;
+  const hasRespiration = avgRespiration != null || maxRespiration != null;
+  const hasHydration = activity.estimated_sweat_loss_ml != null;
 
   return (
     <div className="activity-stats">
@@ -91,6 +96,23 @@ export function ActivityStatsGrid({ activity }: { activity: ActivityDetail }) {
             )}
             {activity.max_hr_bpm != null && (
               <StatTile label="Max heart rate" value={Math.round(activity.max_hr_bpm)} unit="bpm" icon="heart" tone="hr" />
+            )}
+          </div>
+        </>
+      )}
+
+      {hasRespiration && (
+        <>
+          <h3>Respiration</h3>
+          <div className="stat-grid">
+            {avgRespiration != null && (
+              <StatTile label="Avg respiration" value={avgRespiration.toFixed(0)} unit="brpm" icon="pulse" tone="cadence" />
+            )}
+            {maxRespiration != null && (
+              <StatTile label="Max respiration" value={maxRespiration.toFixed(0)} unit="brpm" icon="pulse" tone="cadence" />
+            )}
+            {minRespiration != null && (
+              <StatTile label="Min respiration" value={minRespiration.toFixed(0)} unit="brpm" icon="pulse" tone="cadence" />
             )}
           </div>
         </>
@@ -192,6 +214,25 @@ export function ActivityStatsGrid({ activity }: { activity: ActivityDetail }) {
                 tone="load"
               />
             )}
+          </div>
+        </>
+      )}
+
+      {hasHydration && (
+        <>
+          <h3>Hydration</h3>
+          <div className="stat-grid">
+            {/* Not a stored per-activity field -- matched at read time to the nearest hydration-
+                log entry logged shortly after this activity ended (see routers/activities.py::
+                _estimated_sweat_loss_ml). Absent whenever nothing landed close enough to be
+                confidently this activity's, same as every other conditional tile here. */}
+            <StatTile
+              label="Estimated sweat loss"
+              value={(activity.estimated_sweat_loss_ml! / 1000).toFixed(2)}
+              unit="L"
+              icon="droplet"
+              tone="pace"
+            />
           </div>
         </>
       )}

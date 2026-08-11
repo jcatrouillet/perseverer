@@ -16,8 +16,11 @@ export function TimeInZoneChart({ metrics }: { metrics: ActivityMetricOut[] }) {
   const zones = extractHrZones(metrics);
   if (!zones || zones.every((z) => z.seconds === 0)) return null;
 
-  const totalSeconds = zones.reduce((sum, z) => sum + z.seconds, 0);
-  const maxSeconds = Math.max(...zones.map((z) => z.seconds), 1);
+  // Widths are relative to the activity's total time-in-zone, not the single largest zone --
+  // scaling against the max zone was a real bug: one dominant zone (e.g. 90% of a run spent in
+  // Z3) rendered at 100% width while every other real, nonzero zone shrank to a near-invisible
+  // sliver (under 1% wide), reading as "broken" even though the underlying data was correct.
+  const totalSeconds = zones.reduce((sum, z) => sum + z.seconds, 0) || 1;
 
   return (
     <div className="time-in-zone">
@@ -32,11 +35,13 @@ export function TimeInZoneChart({ metrics }: { metrics: ActivityMetricOut[] }) {
           <span className="time-in-zone__bar-track">
             <span
               className="time-in-zone__bar-fill"
-              style={{ width: `${(zone.seconds / maxSeconds) * 100}%` }}
+              style={{ width: `${(zone.seconds / totalSeconds) * 100}%` }}
             />
           </span>
           <span className="time-in-zone__bar-value">
-            {zone.seconds > 0 ? formatDurationHM(zone.seconds) : "—"}
+            {zone.seconds > 0
+              ? `${formatDurationHM(zone.seconds)} · ${Math.round((zone.seconds / totalSeconds) * 100)}%`
+              : "—"}
           </span>
         </div>
       ))}

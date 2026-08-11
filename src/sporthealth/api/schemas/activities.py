@@ -72,6 +72,12 @@ class ActivitySummary(BaseModel):
     # value is the same scale x10 (see routers/activities.py's read of this field for the
     # profile.py introspection that confirmed this) -- this is the descaled, presentation value.
     workout_rpe: float | None
+    # The athlete's recorded body weight at the time of this specific activity
+    # (fit.user_profile.weight, a generic per-session field -- present on ~99% of activities,
+    # confirmed against the real archive). Exposed so the frontend can derive MET-minutes
+    # (calories / weight_kg, a standard gross-MET approximation) without a second per-activity
+    # fetch -- not itself a metric anyone reads directly.
+    weight_kg: float | None
     primary_source: str
     stream_available: bool
 
@@ -82,6 +88,12 @@ class ActivityDetail(ActivitySummary):
     splits: list[SplitOut]
     route: RouteOut | None
     metrics: list[ActivityMetricOut]
+    # Not a stored per-activity field -- Garmin logs this to the athlete's daily hydration log,
+    # not to the activity itself, so it's matched by nearest timestamp at read time (see
+    # routers/activities.py::_estimated_sweat_loss_ml for the real-data verification that
+    # justified this). None whenever no hydration-log entry lands close enough after the
+    # activity to be confidently this one's -- never a guessed number.
+    estimated_sweat_loss_ml: float | None
 
 
 class ActivityContextRecentOut(BaseModel):

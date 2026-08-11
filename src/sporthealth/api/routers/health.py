@@ -60,6 +60,13 @@ LOGICAL_METRICS: dict[str, list[str]] = {
         "garmin.daily_summary.averageStressLevel",
         "garmin.export.UDSFile.allDayStress",
     ],
+    # Two genuinely distinct readings, not aliases of each other -- confirmed against the real
+    # archive: waking respiration (a daily-summary figure, 103 real observations, coverage ends
+    # 2025-04-17) and sleep respiration (from the night's sleep session, 1365 real observations,
+    # current through the latest ingested night). Kept as separate logical metrics rather than
+    # merged, since a caller (the week view's wellness charts) wants to show both at once.
+    "waking_respiration_rate": ["garmin.daily_summary.avgWakingRespirationValue"],
+    "sleep_respiration_rate": ["garmin.export.sleepData.averageRespiration"],
 }
 
 
