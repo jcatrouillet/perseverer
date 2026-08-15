@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 
-import { useActivities, useHealthDashboard, useSleep } from "../api/queries";
+import { useActivities, useActivityRoutes, useHealthDashboard, useSleep } from "../api/queries";
 import { ActivityCard } from "../components/ActivityCard";
 import { MetricChip } from "../components/StatTile";
 import { isoDate } from "../dateUtils";
@@ -36,6 +36,14 @@ export function ActivityListPage() {
   const activities = useActivities({ sport: sport || undefined, limit: PAGE_SIZE, offset });
 
   const groups = groupByLocalDate(activities.data?.items ?? []);
+  // One batch request for the whole page's routes rather than one per card -- see
+  // useActivityRoutes' own docstring.
+  const routes = useActivityRoutes((activities.data?.items ?? []).map((a) => a.id));
+  const polylineById = new Map(
+    (routes.data ?? [])
+      .filter((r) => r.simplified_polyline != null)
+      .map((r) => [r.id, r.simplified_polyline!]),
+  );
   const sortedDates = groups.map((g) => g.localDate).slice().sort();
   const today = isoDate(new Date());
   const rangeStart = sortedDates[0] ?? today;
@@ -115,7 +123,11 @@ export function ActivityListPage() {
             </div>
             <div className="activity-day-group__list">
               {group.activities.map((activity) => (
-                <ActivityCard key={activity.id} activity={activity} />
+                <ActivityCard
+                  key={activity.id}
+                  activity={activity}
+                  encodedPolyline={polylineById.get(activity.id)}
+                />
               ))}
             </div>
           </section>

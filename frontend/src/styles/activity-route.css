@@ -1,0 +1,106 @@
+/* The detailed route section (ActivityRoute.tsx): pace-coloured map + player on the left,
+   scrollable per-km splits table on the right. Leaflet needs an explicit pixel height, same
+   constraint as ActivityMap.tsx's thumbnail and MapExplorerPage's own map. */
+
+.activity-route__layout {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.activity-route__map-col {
+  flex: 2 1 420px;
+  min-width: 320px;
+}
+
+.activity-route__splits-col {
+  flex: 1 1 220px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.activity-route-map {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.activity-route-map .leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: var(--color-surface);
+}
+
+.activity-route-map__legend {
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.activity-route-map__legend-bar {
+  width: 56px;
+  height: 6px;
+  border-radius: 3px;
+  /* Same two endpoint tokens ActivityRouteMap.tsx resolves for the actual route gradient --
+     fast (blue) on the left reading toward slow (red) on the right, left-to-right matching the
+     "Faster"/"Slower" labels either side of it. */
+  background: linear-gradient(to right, var(--color-pace), var(--color-heart-rate));
+}
+
+.activity-route__player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.activity-route__player .button {
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-2);
+  line-height: 0;
+}
+
+.activity-route__scrubber {
+  flex: 1 1 auto;
+}
+
+.activity-route__player-readout {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  min-width: 9ch;
+  text-align: right;
+}
+
+.splits-table td,
+.splits-table th {
+  text-align: right;
+}
+
+.splits-table td:first-child,
+.splits-table th:first-child {
+  text-align: left;
+}
+
+.splits-table__row--hovered {
+  background: color-mix(in srgb, var(--color-load) 16%, transparent);
+}
+
+.splits-table tbody tr {
+  cursor: default;
+}

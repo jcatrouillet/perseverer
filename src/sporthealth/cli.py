@@ -25,6 +25,7 @@ from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import activity, activity_source_link
 from sporthealth.db.schema import athlete as athlete_table
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from sporthealth.garmin_activity_summary import backfill_activity_corrections
 from sporthealth.rebuild import rebuild_database
 
 app = typer.Typer(help="sporthealth sync CLI")
@@ -274,6 +275,34 @@ def rebuild() -> None:
             conn, settings.raw_archive_dir, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID
         )
     typer.echo(f"Replayed {replayed} raw objects")
+
+
+@app.command("correct-garmin-activities")
+def correct_garmin_activities() -> None:
+    """Corrects activity.sport/name for already-ingested garmin_export activities using
+    Garmin's own reclassification (summarizedActivitiesExport, already in the raw archive from
+    a prior `import garmin-export` run -- no network call, no need to re-run the import). See
+    garmin_activity_summary.py's own docstring for why this exists: a FIT file's recorded sport
+    can simply be wrong (e.g. a hike recorded with the watch's "Run" profile still selected),
+    and this export file is where the athlete's own after-the-fact correction actually lives.
+    New `import garmin-export` runs apply this automatically; this command is for backfilling
+    activities that were already ingested before this correction existed.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        result = backfill_activity_corrections(
+            conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID
+        )
+        conn.commit()
+    typer.echo(
+        f"corrected={result.corrected} unchanged={result.matched_no_change} "
+        f"unmatched_entries={result.unmatched_entries}"
+    )
+    for activity_id, old_sport, new_sport, old_name, new_name in result.corrections:
+        typer.echo(
+            f"  {activity_id}: sport {old_sport!r}->{new_sport!r}, name {old_name!r}->{new_name!r}"
+        )
 
 
 if __name__ == "__main__":

@@ -123,6 +123,9 @@ class IngestRunSummary:
     items_seen: int = 0
     items_new: int = 0
     errors: list[dict[str, str]] = field(default_factory=list)
+    # Only ever set by garmin_export's own post-processing step (see garmin_activity_summary.py)
+    # -- how many activities had their sport/name corrected from Garmin's own reclassification.
+    activities_corrected: int = 0
 
 
 def _derive_external_id(start_time_utc: datetime, device: ParsedDevice | None, sha256: str) -> str:

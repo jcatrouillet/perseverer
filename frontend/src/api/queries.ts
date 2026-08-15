@@ -7,7 +7,10 @@ import { apiGet, apiPost } from "./client";
 import type {
   ActivityContextOut,
   ActivityDetail,
+  ActivityMapPointOut,
+  ActivityRouteOut,
   ActivitySummary,
+  ActivityWeatherOut,
   CalendarResponse,
   FitnessDailyRollupOut,
   HealthDashboardOut,
@@ -155,10 +158,50 @@ export function useActivity(activityId: string) {
   });
 }
 
+/** Every GPS-bearing activity's start point (ADR 0011) -- a bounded, unpaginated response by
+ * design (real scale: 904 of 1250 activities), so the map explorer fetches it in one shot. */
+export function useActivityMapPoints(filters: ActivityFilters) {
+  return useQuery({
+    queryKey: ["activity-map-points", filters],
+    queryFn: () =>
+      apiGet<ActivityMapPointOut[]>(
+        `/api/v1/activities/map${buildQuery({
+          start_date: filters.startDate,
+          end_date: filters.endDate,
+          sport: filters.sport,
+        })}`,
+      ),
+  });
+}
+
+/** Batch polyline lookup for thumbnail maps -- one request per rendered page of ActivityCards
+ * (activity list / day view) rather than one request per card. `ids` is deliberately part of
+ * the query key (not just enabled-gated) so switching pages/dates gets its own cache entry
+ * rather than serving a stale page's routes. Disabled entirely for an empty id list -- there's
+ * nothing to fetch, and an empty `ids=` string would still be a real (wasted) request. */
+export function useActivityRoutes(ids: string[]) {
+  return useQuery({
+    queryKey: ["activity-routes", ids],
+    queryFn: () => apiGet<ActivityRouteOut[]>(`/api/v1/activities/routes?ids=${ids.join(",")}`),
+    enabled: ids.length > 0,
+  });
+}
+
 export function useActivityContext(activityId: string) {
   return useQuery({
     queryKey: ["activity-context", activityId],
     queryFn: () => apiGet<ActivityContextOut>(`/api/v1/activities/${activityId}/context`),
+  });
+}
+
+/** `enabled` should be false when the activity has no GPS start point (checked from its own
+ * `route` field, already in hand from `useActivity`) -- no point issuing a request the backend
+ * will just answer `available: false` for. */
+export function useActivityWeather(activityId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["activity-weather", activityId],
+    queryFn: () => apiGet<ActivityWeatherOut>(`/api/v1/activities/${activityId}/weather`),
+    enabled,
   });
 }
 

@@ -112,3 +112,39 @@ class ActivityContextOut(BaseModel):
     percentile_rank: float | None
     comparable_count: int
     recent: list[ActivityContextRecentOut]
+
+
+class ActivityWeatherOut(BaseModel):
+    # False whenever there's nothing to show -- no GPS start point to query against, or the
+    # Open-Meteo fetch failed/returned no usable data for this activity's time window. Never a
+    # fabricated range (CLAUDE.md's raw-first rule): every non-null field below came from a real
+    # archived Open-Meteo response.
+    available: bool
+    temperature_min_c: float | None = None
+    temperature_max_c: float | None = None
+    humidity_min_pct: float | None = None
+    humidity_max_pct: float | None = None
+    # WMO weather code (https://open-meteo.com/en/docs -- the same taxonomy the archive API
+    # returns) at the hour closest to the activity's own start. Icon mapping is a frontend
+    # presentation concern, not modeled here.
+    weather_code: int | None = None
+
+
+class ActivityMapPointOut(BaseModel):
+    id: str
+    local_date: str | None
+    sport: str
+    name: str | None
+    distance_m: float | None
+    start_lat: float
+    start_lng: float
+
+
+class ActivityRouteOut(BaseModel):
+    id: str
+    # simplified_polyline (not encoded_polyline): a batch response for a page of thumbnail-sized
+    # maps should stay small, and simplified_polyline is exactly the "cheaper to render" variant
+    # route_geom already carries (currently identical bytes to encoded_polyline -- see ADR 0002 --
+    # but this is the field that would shrink if real Douglas-Peucker simplification lands later,
+    # so callers that only need a thumbnail shouldn't have to change).
+    simplified_polyline: str | None

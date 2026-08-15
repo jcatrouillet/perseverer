@@ -17,12 +17,16 @@ import {
 } from "recharts";
 
 import type { ActivitySummary } from "../api/types";
+import { Icon } from "./Icon";
 import {
   effectiveDurationS,
   formatDurationHM,
   formatMinPerKm,
   isPlausibleRunPace,
   metMinutes,
+  newAllTimePrs,
+  personalRecords,
+  type PersonalRecord,
   weekdayIndex,
   weekdayLabel,
   weeklyDistanceSeries,
@@ -44,7 +48,9 @@ export function WeekRunningStats({
   rangeEnd,
   weekStart,
   weekEnd,
-  priorWeekDistanceM,
+  priorWeekStart,
+  priorWeekEnd,
+  allTimeRecords,
 }: {
   /** Running activities across `rangeStart`..`rangeEnd` (a trailing window, e.g. the last 12
    * months) -- includes this week's own runs, used both for the weekly-distance bar chart and
@@ -54,8 +60,16 @@ export function WeekRunningStats({
   rangeEnd: string;
   weekStart: string;
   weekEnd: string;
-  /** Null when there's no prior week to compare against (e.g. the athlete's very first week). */
-  priorWeekDistanceM: number | null;
+  /** The immediately preceding calendar week's bounds, used to show *that* week's own running
+   * distance as a small caption on the Total distance tile (a real prior total, not a +/- delta
+   * the user found disconnected from the number it was relative to -- see PeriodStatsCard's
+   * compareMeta and WeekView's priorWeekMeta). Computed here (not passed as a single number) so
+   * it goes through the same plausible-pace filtering as every other total on this card. */
+  priorWeekStart: string;
+  priorWeekEnd: string;
+  /** This athlete's true all-time personal records -- see RunningStats.tsx's own prop
+   * docstring. Optional so the component still works without it. */
+  allTimeRecords?: PersonalRecord[];
 }) {
   // A handful of real activities in this athlete's archive are tagged sport=running by the
   // device/export but are actually hikes (real GPS tracks, ~3.4 km/h average speed, mountain
@@ -73,6 +87,11 @@ export function WeekRunningStats({
   );
   if (thisWeek.length === 0) return null;
 
+  // Phase 7 "PBs set" recap ingredient (ADR 0011 decision 3) -- same cross-reference as
+  // RunningStats.tsx's year/month tables, just without the full records table this card
+  // doesn't otherwise have.
+  const newPrsThisWeek = newAllTimePrs(personalRecords(thisWeek), allTimeRecords ?? []);
+
   const totalDistanceM = thisWeek.reduce((sum, a) => sum + (a.distance_m ?? 0), 0);
   const totalDurationS = thisWeek.reduce((sum, a) => sum + (effectiveDurationS(a) ?? 0), 0);
   const totalCalories = thisWeek.reduce((sum, a) => sum + (a.calories ?? 0), 0);
@@ -84,7 +103,11 @@ export function WeekRunningStats({
       return fastest == null || pace < fastest ? pace : fastest;
     }, null);
   const dayEquivalentPct = (totalDurationS / 86400) * 100;
-  const deltaDistanceM = priorWeekDistanceM != null ? totalDistanceM - priorWeekDistanceM : null;
+  const priorWeekRuns = plausibleRuns.filter(
+    (a) => a.local_date != null && a.local_date >= priorWeekStart && a.local_date <= priorWeekEnd,
+  );
+  const priorWeekDistanceM = priorWeekRuns.reduce((sum, a) => sum + (a.distance_m ?? 0), 0);
+  const priorWeekMeta = `${(priorWeekDistanceM / 1000).toFixed(1)}km previous week`;
 
   // METs (see metMinutes' own docstring for the standard gross-MET formula) -- grouped by day,
   // skipping any run missing calories or a body-weight reading rather than guessing either.
@@ -118,11 +141,19 @@ export function WeekRunningStats({
   return (
     <section className="card running-stats">
       <h2>Running</h2>
+      {newPrsThisWeek.length > 0 && (
+        <p className="running-records__new-prs">
+          <Icon name="trophy" /> {newPrsThisWeek.length} all-time PR
+          {newPrsThisWeek.length === 1 ? "" : "s"} set this week:{" "}
+          {newPrsThisWeek.map((r) => r.label).join(", ")}
+        </p>
+      )}
       <div className="stat-grid">
         <StatTile
           label="Total distance"
           value={(totalDistanceM / 1000).toFixed(1)}
           unit="km"
+          meta={priorWeekMeta}
           icon="route"
           tone="pace"
           hero
@@ -141,15 +172,6 @@ export function WeekRunningStats({
             icon="flame"
             tone="load"
             hero
-          />
-        )}
-        {deltaDistanceM != null && (
-          <StatTile
-            label="vs last week"
-            value={`${deltaDistanceM >= 0 ? "+" : ""}${(deltaDistanceM / 1000).toFixed(1)}`}
-            unit="km"
-            icon="trend"
-            tone="pace"
           />
         )}
         {fastestPaceMinPerKm != null && (

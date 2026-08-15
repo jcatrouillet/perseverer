@@ -15,8 +15,11 @@ from sporthealth.api.schemas.activities import (
     ActivityContextOut,
     ActivityContextRecentOut,
     ActivityDetail,
+    ActivityMapPointOut,
     ActivityMetricOut,
+    ActivityRouteOut,
     ActivitySummary,
+    ActivityWeatherOut,
     DeviceOut,
     LapOut,
     RouteOut,
@@ -36,6 +39,7 @@ from sporthealth.db.schema import (
 from sporthealth.db.schema import device as device_table
 from sporthealth.db.schema import split as split_table
 from sporthealth.stream_query import downsample
+from sporthealth.weather import get_or_fetch_activity_weather
 
 router = APIRouter()
 
@@ -226,6 +230,97 @@ def list_activities(
         for r in rows
     ]
     return Page(items=items, total=total, limit=limit, offset=offset)
+
+
+# Registered before /activities/{activity_id} -- FastAPI matches routes in registration order,
+# and /activities/map would otherwise be swallowed by {activity_id} (with activity_id="map").
+@router.get("/activities/map")
+def list_activity_map_points(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+    sport: str | None = Query(None),
+) -> list[ActivityMapPointOut]:
+    """Every GPS-bearing activity's start point in one response -- the map explorer's whole data
+    need (ADR 0011 decision 2). Real scale confirmed against the archive before building this:
+    904 of 1250 activities have a route_geom row with a start point; the rest are indoor/no-GPS
+    activities that correctly have none. That keeps this one unbounded query with no pagination,
+    matching the phase's own "renders in under 1s" acceptance criterion -- 904 rows is nowhere
+    near where pagination would start to matter.
+    """
+    query = (
+        select(
+            activity.c.id,
+            activity.c.local_date,
+            activity.c.sport,
+            activity.c.name,
+            activity.c.distance_m,
+            route_geom.c.start_lat,
+            route_geom.c.start_lng,
+        )
+        .select_from(activity.join(route_geom, route_geom.c.activity_id == activity.c.id))
+        .where(
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+            route_geom.c.start_lat.is_not(None),
+            route_geom.c.start_lng.is_not(None),
+        )
+    )
+    if start_date is not None:
+        query = query.where(activity.c.local_date >= start_date.isoformat())
+    if end_date is not None:
+        query = query.where(activity.c.local_date <= end_date.isoformat())
+    if sport is not None:
+        query = query.where(activity.c.sport == sport)
+
+    rows = conn.execute(query).fetchall()
+    return [
+        ActivityMapPointOut(
+            id=r.id,
+            local_date=r.local_date,
+            sport=r.sport,
+            name=r.name,
+            distance_m=r.distance_m,
+            start_lat=r.start_lat,
+            start_lng=r.start_lng,
+        )
+        for r in rows
+    ]
+
+
+# Registered before /activities/{activity_id} for the same route-ordering reason as
+# /activities/map above.
+@router.get("/activities/routes")
+def list_activity_routes(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    ids: str = Query(..., description="Comma-separated activity ids"),
+) -> list[ActivityRouteOut]:
+    """Batch polyline lookup for the activity list / day view's thumbnail maps -- one request per
+    page of cards (bounded by however many ids the caller sends, typically that page's own
+    activity count) rather than one request per card. Activities with no route_geom row (no GPS)
+    are simply absent from the response, not returned with a null polyline.
+    """
+    id_list = [i for i in (part.strip() for part in ids.split(",")) if i]
+    if not id_list:
+        return []
+    # A generous cap, not a real observed ceiling -- this endpoint is only ever called with one
+    # page's worth of ids (activity list pages at 50, day view at a handful), so 200 is headroom
+    # against a misbehaving caller, not a tuned limit.
+    id_list = id_list[:200]
+
+    rows = conn.execute(
+        select(route_geom.c.activity_id, route_geom.c.simplified_polyline).where(
+            route_geom.c.athlete_id == athlete_id,
+            route_geom.c.activity_id.in_(id_list),
+            route_geom.c.simplified_polyline.is_not(None),
+        )
+    ).fetchall()
+    return [
+        ActivityRouteOut(id=r.activity_id, simplified_polyline=r.simplified_polyline)
+        for r in rows
+    ]
 
 
 @router.get("/activities/{activity_id}")
@@ -474,6 +569,62 @@ def get_activity_context(
 
     return ActivityContextOut(
         percentile_rank=percentile_rank, comparable_count=comparable_count, recent=recent
+    )
+
+
+@router.get("/activities/{activity_id}/weather")
+def get_activity_weather(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> ActivityWeatherOut:
+    """Temperature/humidity range and a representative WMO weather code for this activity's own
+    time window, sourced from Open-Meteo's historical archive (see weather.py's own docstring
+    for the raw-first/cache-forever design). `available=False` -- never a fabricated range --
+    whenever the activity has no GPS start point to query against, or the fetch/parse comes back
+    empty (e.g. Open-Meteo unreachable)."""
+    row = conn.execute(
+        select(
+            activity.c.start_time_utc,
+            activity.c.duration_s,
+            route_geom.c.start_lat,
+            route_geom.c.start_lng,
+        )
+        .select_from(activity.outerjoin(route_geom, activity.c.id == route_geom.c.activity_id))
+        .where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+
+    if row.start_lat is None or row.start_lng is None or row.duration_s is None:
+        return ActivityWeatherOut(available=False)
+
+    summary = get_or_fetch_activity_weather(
+        conn,
+        settings.raw_archive_dir,
+        athlete_id=athlete_id,
+        activity_id=activity_id,
+        start_time_utc=to_utc(row.start_time_utc),
+        duration_s=row.duration_s,
+        lat=row.start_lat,
+        lon=row.start_lng,
+    )
+    conn.commit()
+    if summary is None:
+        return ActivityWeatherOut(available=False)
+
+    return ActivityWeatherOut(
+        available=True,
+        temperature_min_c=summary.temperature_min_c,
+        temperature_max_c=summary.temperature_max_c,
+        humidity_min_pct=summary.humidity_min_pct,
+        humidity_max_pct=summary.humidity_max_pct,
+        weather_code=summary.weather_code,
     )
 
 

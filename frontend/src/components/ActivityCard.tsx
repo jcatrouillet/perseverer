@@ -12,7 +12,7 @@
 import { Link } from "wouter";
 
 import type { ActivitySummary } from "../api/types";
-import { sportStyle } from "../metricStyle";
+import { sportStyle, toneColor } from "../metricStyle";
 import {
   effectiveDurationS,
   formatDurationHM,
@@ -21,6 +21,7 @@ import {
   localTimeLabel,
 } from "../runningStats";
 import { displaySport } from "../yearStats";
+import { ActivityMap } from "./ActivityMap";
 import { Icon } from "./Icon";
 import { MetricChip } from "./StatTile";
 
@@ -35,12 +36,18 @@ function paceOrSpeedLabel(sport: string, durationS: number, distanceM: number): 
 export function ActivityCard({
   activity,
   iconSize = "default",
+  encodedPolyline,
 }: {
   activity: ActivitySummary;
   /** "large" is used by the day view, where one card per activity (rather than a long list of
    * them) leaves room for the sport icon to actually carry the "what is this" signal instead of
    * being a small colour swatch next to the text that says the same thing. */
   iconSize?: "default" | "large";
+  /** This activity's route, if it has one -- the caller (ActivityListPage/DayViewPage) batch-
+   * fetches routes for a whole page of cards via `useActivityRoutes()` and passes each one down,
+   * rather than every card fetching its own (an N-cards-per-page N+1 problem). Undefined for a
+   * GPS-less activity (e.g. strength training) or while the batch fetch hasn't resolved yet. */
+  encodedPolyline?: string;
 }) {
   const sport = displaySport(activity);
   const style = sportStyle(sport);
@@ -100,6 +107,14 @@ export function ActivityCard({
           />
         )}
       </div>
+
+      {encodedPolyline && (
+        <ActivityMap
+          encodedPolyline={encodedPolyline}
+          color={toneColor(style.tone)}
+          size={iconSize === "large" ? "large" : "thumbnail"}
+        />
+      )}
     </Link>
   );
 }

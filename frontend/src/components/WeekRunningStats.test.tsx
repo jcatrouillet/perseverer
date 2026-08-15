@@ -38,7 +38,8 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
     expect(container).toBeEmptyDOMElement();
@@ -56,7 +57,8 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
     expect(screen.getByText("15.0")).toBeInTheDocument(); // total distance, km
@@ -78,7 +80,8 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
     // Total distance should reflect only the real run (5.0km), not 6.77km including the hike.
@@ -99,7 +102,8 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
     expect(screen.getByText("Total elevation")).toBeInTheDocument();
@@ -112,13 +116,14 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
     expect(screen.queryByText("Total elevation")).not.toBeInTheDocument();
   });
 
-  it("shows the vs-last-week delta with a sign, only when a prior week total is available", () => {
+  it("shows the prior week's own running total as a caption on Total distance, not a +/- delta", () => {
     const { rerender } = render(
       <WeekRunningStats
         runningActivities={[activity("2025-06-02", { distance_m: 10000 })]}
@@ -126,23 +131,29 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
-    expect(screen.queryByText("vs last week")).not.toBeInTheDocument();
+    // No runs at all in the prior week's date range -> a real zero, not a delta.
+    expect(screen.getByText("0.0km previous week")).toBeInTheDocument();
 
     rerender(
       <WeekRunningStats
-        runningActivities={[activity("2025-06-02", { distance_m: 10000 })]}
+        runningActivities={[
+          activity("2025-06-02", { id: "this-week", distance_m: 10000 }),
+          activity("2025-05-28", { id: "prior-week", distance_m: 5300 }),
+        ]}
         rangeStart="2025-05-01"
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={5300}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
-    expect(screen.getByText("vs last week")).toBeInTheDocument();
-    expect(screen.getByText("+4.7")).toBeInTheDocument();
+    expect(screen.getByText("5.3km previous week")).toBeInTheDocument();
+    expect(screen.queryByText("vs last week")).not.toBeInTheDocument();
   });
 
   it("shows Total METs and a per-day breakdown only for runs with both calories and weight", () => {
@@ -156,7 +167,8 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
     expect(screen.getByText("Total METs")).toBeInTheDocument();
@@ -180,7 +192,8 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
     const cells = [...container.querySelectorAll(".recharts-scatter-symbol path")];
@@ -188,6 +201,51 @@ describe("WeekRunningStats", () => {
     // The last-painted (topmost) point must be this week's solid one, not a faded older run.
     expect(opacities.at(-1)).toBe("1");
     expect(opacities.slice(0, -1).every((o) => o === "0.35")).toBe(true);
+  });
+
+  it("shows the all-time-PR headline only when this week's own best matches an all-time record", () => {
+    const thisWeekRun = activity("2025-06-02", {
+      id: "pr-run",
+      distance_m: 5000,
+      duration_s: 1500,
+      moving_duration_s: 1500,
+    });
+    const { rerender } = render(
+      <WeekRunningStats
+        runningActivities={[thisWeekRun]}
+        rangeStart="2025-05-01"
+        rangeEnd="2025-06-08"
+        weekStart="2025-06-02"
+        weekEnd="2025-06-08"
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
+      />,
+    );
+    expect(screen.queryByText(/all-time PR/)).not.toBeInTheDocument();
+
+    rerender(
+      <WeekRunningStats
+        runningActivities={[thisWeekRun]}
+        rangeStart="2025-05-01"
+        rangeEnd="2025-06-08"
+        weekStart="2025-06-02"
+        weekEnd="2025-06-08"
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
+        allTimeRecords={[
+          {
+            label: "5 km",
+            date: "2025-06-02", // same date as thisWeekRun's own best 5k -> a genuine all-time PR
+            actualDistanceM: 5000,
+            durationS: 1500,
+            paceMinPerKm: 5,
+            speedKmh: 12,
+            eligibleCount: 1,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/1 all-time PR set this week: 5 km/)).toBeInTheDocument();
   });
 
   it("omits Total METs entirely when no run this week has both calories and weight", () => {
@@ -198,7 +256,8 @@ describe("WeekRunningStats", () => {
         rangeEnd="2025-06-08"
         weekStart="2025-06-02"
         weekEnd="2025-06-08"
-        priorWeekDistanceM={null}
+        priorWeekStart="2025-05-26"
+        priorWeekEnd="2025-06-01"
       />,
     );
     expect(screen.queryByText("Total METs")).not.toBeInTheDocument();

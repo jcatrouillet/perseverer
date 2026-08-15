@@ -13,6 +13,7 @@ from sporthealth.db.schema import (
     activity_stream,
     health_observation,
     metric_definition,
+    route_geom,
 )
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.fit.types import StreamPoint
@@ -290,3 +291,100 @@ def test_stream_endpoint_downsamples_and_404s_without_stream(
         "/api/v1/activities/a1/stream?channels=not_a_channel", headers=auth_headers
     )
     assert r.status_code == 400
+
+
+def _add_route(
+    engine: Engine,
+    *,
+    activity_id: str,
+    start_lat: float = 47.6,
+    start_lng: float = -122.3,
+    simplified_polyline: str | None = None,
+) -> None:
+    with engine.connect() as conn:
+        conn.execute(
+            route_geom.insert().values(
+                activity_id=activity_id,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_lat=start_lat,
+                start_lng=start_lng,
+                end_lat=start_lat,
+                end_lng=start_lng,
+                min_lat=start_lat,
+                min_lng=start_lng,
+                max_lat=start_lat,
+                max_lng=start_lng,
+                simplified_polyline=simplified_polyline,
+            )
+        )
+        conn.commit()
+
+
+def test_activity_map_points_returns_only_gps_bearing_activities(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1", sport="running", local_date="2025-06-01")
+        seed_activity(conn, activity_id="a2", sport="strength_training", local_date="2025-06-02")
+    _add_route(engine, activity_id="a1", start_lat=47.6, start_lng=-122.3)
+    # a2 has no route_geom row (e.g. an indoor activity) -- must not appear.
+
+    r = client.get("/api/v1/activities/map", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["id"] == "a1"
+    assert body[0]["start_lat"] == 47.6
+    assert body[0]["start_lng"] == -122.3
+
+
+def test_activity_map_points_filters_by_sport_and_date(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="run1", sport="running", local_date="2025-06-01")
+        seed_activity(conn, activity_id="ride1", sport="cycling", local_date="2025-07-01")
+    _add_route(engine, activity_id="run1")
+    _add_route(engine, activity_id="ride1")
+
+    r = client.get("/api/v1/activities/map?sport=cycling", headers=auth_headers)
+    assert [p["id"] for p in r.json()] == ["ride1"]
+
+    r = client.get(
+        "/api/v1/activities/map?start_date=2025-06-15&end_date=2025-06-30", headers=auth_headers
+    )
+    assert r.json() == []
+
+    r = client.get(
+        "/api/v1/activities/map?start_date=2025-05-01&end_date=2025-06-30", headers=auth_headers
+    )
+    assert [p["id"] for p in r.json()] == ["run1"]
+
+
+def test_activity_routes_returns_only_requested_gps_bearing_ids(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1", sport="running", local_date="2025-06-01")
+        seed_activity(conn, activity_id="a2", sport="running", local_date="2025-06-02")
+        seed_activity(conn, activity_id="a3", sport="strength_training", local_date="2025-06-03")
+    _add_route(engine, activity_id="a1", simplified_polyline="abc123")
+    _add_route(engine, activity_id="a2", simplified_polyline="def456")
+    # a3 has no route_geom row (indoor activity) -- must not appear even if its id is requested.
+
+    r = client.get("/api/v1/activities/routes?ids=a1,a3,not-an-activity", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body == [{"id": "a1", "simplified_polyline": "abc123"}]
+
+    # a2 not requested -- must not be returned even though it has a route.
+    r = client.get("/api/v1/activities/routes?ids=a1", headers=auth_headers)
+    assert [p["id"] for p in r.json()] == ["a1"]
+
+
+def test_activity_routes_empty_ids_returns_empty_list(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/activities/routes?ids=", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == []

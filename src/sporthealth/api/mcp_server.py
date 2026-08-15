@@ -15,7 +15,7 @@ from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from sporthealth.config import get_settings
@@ -171,6 +171,19 @@ def _require_api_key_asgi(inner_app: ASGIApp) -> ASGIApp:
     async def wrapped(scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await inner_app(scope, receive, send)
+            return
+        # This wrapper sits behind `app.mount("/", mcp_asgi_app)` (main.py) -- Starlette's Mount
+        # catches every request FastAPI's own routers didn't match, not just ones actually meant
+        # for the MCP tool surface. Without this check, ANY unmatched path (a typo'd frontend
+        # request, a route that failed to register on a stale/reloading process, a future bug)
+        # gets intercepted here and turned into a misleading "invalid API key" 401 instead of a
+        # normal 404 -- which is exactly indistinguishable from a real auth failure to a client,
+        # and was confirmed to cause a very confusing real incident: a JWT-authenticated frontend
+        # session got silently logged out because one specific endpoint fell through to this
+        # X-API-Key-only check, which JWT bearer tokens can never satisfy. Only requests actually
+        # under /mcp should ever reach the auth check below.
+        if not scope["path"].startswith("/mcp"):
+            await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
             return
         settings = get_settings()
         headers = dict(scope["headers"])

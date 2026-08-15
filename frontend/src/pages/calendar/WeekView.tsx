@@ -16,7 +16,7 @@ import { MetricChip, StatTile } from "../../components/StatTile";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
 import { WeekWellnessCharts } from "../../components/WeekWellnessCharts";
 import { eachDate, isoDate, parseIsoDate, weekRange } from "../../dateUtils";
-import { formatDurationHM } from "../../runningStats";
+import { formatDurationHM, personalRecords } from "../../runningStats";
 import { groupByLocalDate } from "../../yearStats";
 import "../../styles/activity-list.css";
 import "../../styles/calendar.css";
@@ -57,6 +57,10 @@ export function WeekView({ date }: { date: string }) {
     startDate: runningRangeStart,
     endDate: end,
   });
+  // Unbounded (distinct from `runningHistory`'s 52-week window) so the "PBs set this week"
+  // callout can tell a genuine all-time PR apart from merely a strong trailing-year effort --
+  // see ADR 0011 decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
+  const allTimeRunning = useAllActivities({ sport: "running" });
   // Also spans the prior week, for the ramp (week-over-week CTL change) comparison below.
   const fitness = useFitness(priorWeekStart, end);
   const health = useHealthDashboard(start, end);
@@ -65,6 +69,14 @@ export function WeekView({ date }: { date: string }) {
   const weekTotal = weeks.data?.periods.find((p) => p.period_start === start);
   const priorWeekTotal = weeks.data?.periods.find((p) => p.period_start === priorWeekStart);
   const monthOfWeekStart = start.slice(0, 7); // YYYY-MM
+  // Week-over-week comparison: always the immediately preceding calendar week (not "this week
+  // last year" -- week numbers don't align cleanly across years the way months/years do), shown
+  // as that week's own total distance rather than a +/- delta (the user found a bare delta
+  // disconnected from the number it was relative to -- see PeriodStatsCard's compareMeta).
+  const priorWeekMeta =
+    priorWeekTotal?.activity_distance_m != null
+      ? `${(priorWeekTotal.activity_distance_m / 1000).toFixed(1)}km previous week`
+      : null;
 
   const activitiesByDate = new Map(
     groupByLocalDate(activities.data?.items ?? []).map((g) => [g.localDate, g.activities]),
@@ -103,6 +115,7 @@ export function WeekView({ date }: { date: string }) {
               label="Total distance"
               value={((weekTotal.activity_distance_m ?? 0) / 1000).toFixed(1)}
               unit="km"
+              meta={priorWeekMeta}
               icon="route"
               tone="pace"
               hero
@@ -179,7 +192,9 @@ export function WeekView({ date }: { date: string }) {
           rangeEnd={end}
           weekStart={start}
           weekEnd={end}
-          priorWeekDistanceM={priorWeekTotal?.activity_distance_m ?? null}
+          priorWeekStart={priorWeekStart}
+          priorWeekEnd={priorWeekEnd}
+          allTimeRecords={personalRecords(allTimeRunning.data ?? [])}
         />
       )}
 

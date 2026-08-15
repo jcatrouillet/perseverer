@@ -3,7 +3,9 @@ import { Link } from "wouter";
 
 import {
   useActivities,
+  useAllActivities,
   useCalendar,
+  useCalendarMonths,
   useCalendarWeeks,
   useFitness,
   useHealthDashboard,
@@ -17,6 +19,7 @@ import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { monthGridWeeks, monthName, monthRange, parseIsoDate } from "../../dateUtils";
 import { CORE_METRICS, HRV_SPO2_STRESS_METRICS } from "../HealthPage";
+import { personalRecords } from "../../runningStats";
 import { busiestWeekStart } from "../../yearStats";
 import "../../styles/calendar.css";
 
@@ -33,11 +36,19 @@ function formatBusiestWeek(monday: string): string {
 
 export function MonthView({ year, month }: { year: number; month: number }) {
   const { start, end } = monthRange(year, month);
+  const priorYearRange = monthRange(year - 1, month);
   const calendar = useCalendar(start, end);
+  // Rollup-backed single-month lookup for the year-over-year delta tile (ADR 0011 decision 3) --
+  // reuses /calendar/months rather than fetching a whole prior-year month's raw activities.
+  const priorYearMonth = useCalendarMonths(priorYearRange.start, priorYearRange.end);
   const fitness = useFitness(start, end);
   const health = useHealthDashboard(start, end);
   const allActivities = useActivities({ startDate: start, endDate: end, limit: 500 });
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
+  // Unbounded, all-history fetch (distinct from `runs`' period-scoped one) so RunningStats can
+  // tell a genuine all-time PR apart from merely "fastest within this month" -- see ADR 0011
+  // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
+  const allTimeRunning = useAllActivities({ sport: "running" });
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
   const weekRows = monthGridWeeks(year, month);
@@ -51,6 +62,22 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   const all = allActivities.data?.items ?? [];
   const busiestWeek = busiestWeekStart(all);
   const periodLabel = `${monthName(month)} ${year}`;
+  const priorYearMonthDistanceM = priorYearMonth.data?.periods[0]?.activity_distance_m ?? null;
+  const compareLabel = `${monthName(month).slice(0, 3)} ${year - 1}`;
+  // Running-only prior-year-same-month distance for RunningStats' own comparison (distinct from
+  // priorYearMonthDistanceM above, which is all-sport, rollup-backed) -- filtered client-side
+  // from the unbounded `allTimeRunning` fetch already made for PR detection, rather than a
+  // third network call. Null (not 0) while that fetch is still loading.
+  const priorYearMonthRunningDistanceM = allTimeRunning.data
+    ? allTimeRunning.data
+        .filter(
+          (a) =>
+            a.local_date != null &&
+            a.local_date >= priorYearRange.start &&
+            a.local_date <= priorYearRange.end,
+        )
+        .reduce((sum, a) => sum + (a.distance_m ?? 0), 0)
+    : null;
 
   return (
     <main>
@@ -64,6 +91,8 @@ export function MonthView({ year, month }: { year: number; month: number }) {
         activities={all}
         busiestLabel="Busiest week"
         busiestValue={busiestWeek != null ? formatBusiestWeek(busiestWeek) : null}
+        compareLabel={compareLabel}
+        compareDistanceM={priorYearMonthDistanceM}
       />
 
       {runs.data && (
@@ -73,6 +102,9 @@ export function MonthView({ year, month }: { year: number; month: number }) {
           endDate={end}
           periodLabel={periodLabel}
           trailingWindowDays={7}
+          allTimeRecords={personalRecords(allTimeRunning.data ?? [])}
+          compareLabel={compareLabel}
+          compareDistanceM={priorYearMonthRunningDistanceM}
         />
       )}
 

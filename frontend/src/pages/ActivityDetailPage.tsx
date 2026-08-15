@@ -5,10 +5,12 @@
 import { Link } from "wouter";
 
 import { extractHrZones } from "../activityMetrics";
-import { useActivity, useActivityContext, useActivityStream } from "../api/queries";
+import { useActivity, useActivityContext, useActivityStream, useActivityWeather } from "../api/queries";
 import { ActivityCharts } from "../components/ActivityCharts";
 import { ActivityContextStrip } from "../components/ActivityContextStrip";
+import { ActivityRoute } from "../components/ActivityRoute";
 import { ActivityStatsGrid } from "../components/ActivityStatsGrid";
+import { ActivityWeather } from "../components/ActivityWeather";
 import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
@@ -20,7 +22,13 @@ import "../styles/activity-detail.css";
 export function ActivityDetailPage({ id }: { id: string }) {
   const activity = useActivity(id);
   const stream = useActivityStream(id, activity.data?.stream_available ?? false, "medium");
+  // A separate, higher-resolution fetch just for the route map + per-km splits below -- those
+  // need per-km precision the multi-panel charts' "medium" tier (1000 points) doesn't give, but
+  // there's no reason to pay that cost for the charts too, so it's fetched independently rather
+  // than bumping the shared `stream` query's tier.
+  const routeStream = useActivityStream(id, activity.data?.stream_available ?? false, "high");
   const context = useActivityContext(id);
+  const weather = useActivityWeather(id, activity.data?.route?.start_lat != null);
 
   if (activity.isLoading) return <p>Loading…</p>;
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
@@ -59,8 +67,12 @@ export function ActivityDetailPage({ id }: { id: string }) {
         {a.local_date ?? a.start_time_utc.slice(0, 10)} · {localTimeLabel(a)}
         {a.device && a.device.manufacturer && ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
       </p>
+      {weather.data && <ActivityWeather weather={weather.data} />}
 
-      <ActivityStatsGrid activity={a} />
+      <ActivityStatsGrid
+        activity={a}
+        afterHeartRate={routeStream.data && <ActivityRoute stream={routeStream.data} sport={sport} />}
+      />
 
       {context.data && (
         <ActivityContextStrip context={context.data} sport={sport} currentActivityId={id} />

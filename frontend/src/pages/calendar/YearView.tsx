@@ -1,6 +1,12 @@
 import { Link } from "wouter";
 
-import { useActivities, useCalendarMonths, useFitness, useHealthDashboard } from "../../api/queries";
+import {
+  useActivities,
+  useAllActivities,
+  useCalendarMonths,
+  useFitness,
+  useHealthDashboard,
+} from "../../api/queries";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
@@ -9,20 +15,48 @@ import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { monthName, yearRange } from "../../dateUtils";
 import { CORE_METRICS, HRV_SPO2_STRESS_METRICS } from "../HealthPage";
+import { personalRecords } from "../../runningStats";
 import { busiestMonth } from "../../yearStats";
 import "../../styles/calendar.css";
 
 export function YearView({ year }: { year: number }) {
   const { start, end } = yearRange(year);
+  const priorYear = yearRange(year - 1);
   const months = useCalendarMonths(start, end);
+  // Rollup-backed (not a raw activity fetch) -- reuses the same /calendar/months endpoint the
+  // month-tile grid below already calls, summed across all 12 months, for the year-over-year
+  // delta tile (ADR 0011 decision 3).
+  const priorYearMonths = useCalendarMonths(priorYear.start, priorYear.end);
   const fitness = useFitness(start, end);
   const health = useHealthDashboard(start, end);
   const allActivities = useActivities({ startDate: start, endDate: end, limit: 500 });
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
+  // Unbounded, all-history fetch (distinct from `runs`' period-scoped one) so RunningStats can
+  // tell a genuine all-time PR apart from merely "fastest within this year" -- see ADR 0011
+  // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
+  const allTimeRunning = useAllActivities({ sport: "running" });
   const byMonth = new Map(months.data?.periods.map((p) => [p.period_start.slice(5, 7), p]));
 
   const all = allActivities.data?.items ?? [];
   const busiest = busiestMonth(all);
+  const priorYearDistances = priorYearMonths.data?.periods
+    .map((p) => p.activity_distance_m)
+    .filter((v): v is number => v != null);
+  const priorYearDistanceM =
+    priorYearDistances != null && priorYearDistances.length > 0
+      ? priorYearDistances.reduce((a, b) => a + b, 0)
+      : null;
+  // Running-only prior-year distance for RunningStats' own comparison (distinct from
+  // priorYearDistanceM above, which is all-sport) -- filtered client-side from the unbounded
+  // `allTimeRunning` fetch already made for PR detection, rather than a third network call.
+  // Null (not 0) while that fetch is still loading, so the tile doesn't briefly show a false zero.
+  const priorYearRunningDistanceM = allTimeRunning.data
+    ? allTimeRunning.data
+        .filter(
+          (a) => a.local_date != null && a.local_date >= priorYear.start && a.local_date <= priorYear.end,
+        )
+        .reduce((sum, a) => sum + (a.distance_m ?? 0), 0)
+    : null;
 
   return (
     <main>
@@ -36,6 +70,8 @@ export function YearView({ year }: { year: number }) {
         activities={all}
         busiestLabel="Busiest month"
         busiestValue={busiest != null ? monthName(busiest) : null}
+        compareLabel={String(year - 1)}
+        compareDistanceM={priorYearDistanceM}
       />
 
       {runs.data && (
@@ -45,6 +81,9 @@ export function YearView({ year }: { year: number }) {
           endDate={end}
           periodLabel={String(year)}
           trailingWindowDays={90}
+          allTimeRecords={personalRecords(allTimeRunning.data ?? [])}
+          compareLabel={String(year - 1)}
+          compareDistanceM={priorYearRunningDistanceM}
         />
       )}
 

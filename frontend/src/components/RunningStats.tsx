@@ -24,9 +24,10 @@ import {
 
 import type { ActivitySummary } from "../api/types";
 import { ChartLegend } from "./ChartLegend";
+import { Icon } from "./Icon";
 import { StatTile } from "./StatTile";
 import { isoDate, mondayOf, monthName, parseIsoDate } from "../dateUtils";
-import type { DistanceBucket } from "../runningStats";
+import type { DistanceBucket, PersonalRecord } from "../runningStats";
 import {
   amPmCounts,
   DAILY_HEATMAP_SCALE,
@@ -42,6 +43,7 @@ import {
   longRunPieDeg,
   monthlyDistanceM,
   nearestLegendKm,
+  newAllTimePrs,
   personalRecords,
   rollingDistanceKm,
   scatterPointOpacities,
@@ -125,12 +127,32 @@ export function RunningStats({
   endDate,
   periodLabel,
   trailingWindowDays = 90,
+  allTimeRecords,
+  compareLabel,
+  compareDistanceM,
 }: {
   activities: ActivitySummary[];
   startDate: string;
   endDate: string;
   periodLabel: string;
   trailingWindowDays?: number;
+  /** This athlete's true all-time personal records (personalRecords() over their *entire*
+   * running history, not just this period) -- optional so RunningStats still works standalone
+   * without it. When provided, the personal-records table below can tell "fastest within this
+   * period" (which `records` already is, computed from the period-scoped `activities`) apart
+   * from "an actual all-time best that happened to land in this period" (Phase 7's "PBs set"
+   * recap ingredient, ADR 0011 decision 3) -- the same date at the same distance in both lists
+   * means this period's best *is* the all-time best, not just the best of a narrower slice. */
+  allTimeRecords?: PersonalRecord[];
+  /** Label for the year-over-year comparison period, e.g. "2025" or "Jul 2025" -- see
+   * PeriodStatsCard's own prop of the same name. */
+  compareLabel?: string;
+  /** This athlete's *running-only* distance for the comparison period -- deliberately a
+   * separate number from PeriodStatsCard's all-sport compareDistanceM, since "Kilometers run"
+   * here is running-only and comparing it against an all-sport total would be misleading. Shown
+   * as "Xkm in <compareLabel>" under the Kilometers run tile, not a +/- delta (same reasoning
+   * as PeriodStatsCard's compareMeta). */
+  compareDistanceM?: number | null;
 }) {
   // Which legend reference distance (if any) is currently hovered, to highlight matching cells.
   const [hoveredLegendKm, setHoveredLegendKm] = useState<number | "none" | null>(null);
@@ -173,6 +195,12 @@ export function RunningStats({
   const leastOften = weekdays.reduce((min, d) => (d.count < min.count ? d : min));
   const { am, pm } = amPmCounts(activities);
   const records = personalRecords(activities);
+  const newPrsThisPeriod = newAllTimePrs(records, allTimeRecords ?? []);
+  const newPrLabels = new Set(newPrsThisPeriod.map((r) => r.label));
+  const compareMeta =
+    compareLabel != null && compareDistanceM != null
+      ? `${(compareDistanceM / 1000).toFixed(0)}km in ${compareLabel}`
+      : null;
 
   const bucketData: DistanceBucket[] = useDailyBuckets
     ? distanceByDay(activities, startDate, endDate)
@@ -379,6 +407,7 @@ export function RunningStats({
           label="Kilometers run"
           value={(totalDistanceM / 1000).toFixed(0)}
           unit="km"
+          meta={compareMeta}
           icon="route"
           tone="pace"
           hero
@@ -690,6 +719,13 @@ export function RunningStats({
               (fastest whole recorded run near each distance, not a true best-effort segment)
             </span>
           </h3>
+          {newPrsThisPeriod.length > 0 && (
+            <p className="running-records__new-prs">
+              <Icon name="trophy" /> {newPrsThisPeriod.length} all-time PR
+              {newPrsThisPeriod.length === 1 ? "" : "s"} set this period:{" "}
+              {newPrsThisPeriod.map((r) => r.label).join(", ")}
+            </p>
+          )}
           <table className="running-records__table">
             <thead>
               <tr>
@@ -703,22 +739,32 @@ export function RunningStats({
               </tr>
             </thead>
             <tbody>
-              {records.map((r) => (
-                <tr
-                  key={r.label}
-                  className={hoveredRecordLabel === r.label ? "is-hovered" : ""}
-                  onMouseEnter={() => setHoveredRecordLabel(r.label)}
-                  onMouseLeave={() => setHoveredRecordLabel(null)}
-                >
-                  <td>{r.label}</td>
-                  <td>{r.date}</td>
-                  <td>{formatMinPerKm(r.paceMinPerKm)} /km</td>
-                  <td>{r.speedKmh.toFixed(2)} km/h</td>
-                  <td>{(r.actualDistanceM / 1000).toFixed(2)} km</td>
-                  <td>{formatDuration(r.durationS)}</td>
-                  <td>{r.eligibleCount}</td>
-                </tr>
-              ))}
+              {records.map((r) => {
+                const isAllTimePr = newPrLabels.has(r.label);
+                return (
+                  <tr
+                    key={r.label}
+                    className={hoveredRecordLabel === r.label ? "is-hovered" : ""}
+                    onMouseEnter={() => setHoveredRecordLabel(r.label)}
+                    onMouseLeave={() => setHoveredRecordLabel(null)}
+                  >
+                    <td>{r.label}</td>
+                    <td>
+                      {r.date}
+                      {isAllTimePr && (
+                        <span className="running-records__pr-badge" title="All-time PR">
+                          <Icon name="trophy" />
+                        </span>
+                      )}
+                    </td>
+                    <td>{formatMinPerKm(r.paceMinPerKm)} /km</td>
+                    <td>{r.speedKmh.toFixed(2)} km/h</td>
+                    <td>{(r.actualDistanceM / 1000).toFixed(2)} km</td>
+                    <td>{formatDuration(r.durationS)}</td>
+                    <td>{r.eligibleCount}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

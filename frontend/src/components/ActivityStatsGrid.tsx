@@ -9,7 +9,17 @@ import { metricValue } from "../activityMetrics";
 import { effectiveDurationS, formatDurationHM, formatPaceMinPerKm, isPaceSport } from "../runningStats";
 import { StatTile } from "./StatTile";
 
-export function ActivityStatsGrid({ activity }: { activity: ActivityDetail }) {
+export function ActivityStatsGrid({
+  activity,
+  afterHeartRate,
+}: {
+  activity: ActivityDetail;
+  /** Rendered immediately after the Heart rate section (before Respiration/Training effect/etc.)
+   * -- a slot rather than this component reaching out to fetch/render the route map itself,
+   * since ActivityStatsGrid's whole job is "one categorized read of `activity.metrics`", not
+   * knowing about the separate high-tier stream fetch the route map needs. */
+  afterHeartRate?: React.ReactNode;
+}) {
   const metrics = activity.metrics;
   const durationS = effectiveDurationS(activity);
   const paceSport = isPaceSport(activity.sport);
@@ -100,6 +110,8 @@ export function ActivityStatsGrid({ activity }: { activity: ActivityDetail }) {
           </div>
         </>
       )}
+
+      {afterHeartRate}
 
       {hasRespiration && (
         <>

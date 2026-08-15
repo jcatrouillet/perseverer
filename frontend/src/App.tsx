@@ -13,6 +13,7 @@ import { YearView } from "./pages/calendar/YearView";
 import { DayViewPage } from "./pages/DayViewPage";
 import { FitnessPage } from "./pages/FitnessPage";
 import { HealthPage } from "./pages/HealthPage";
+import { MapExplorerPage } from "./pages/MapExplorerPage";
 
 function Today() {
   const today = new Date();
@@ -62,6 +63,9 @@ export function App() {
           <NavLink href="/health" icon="heart">
             Health
           </NavLink>
+          <NavLink href="/map" icon="map">
+            Map
+          </NavLink>
         </div>
         <ThemeToggle />
       </nav>
@@ -73,6 +77,7 @@ export function App() {
           <Route path="/activities" component={ActivityListPage} />
           <Route path="/fitness" component={FitnessPage} />
           <Route path="/health" component={HealthPage} />
+          <Route path="/map" component={MapExplorerPage} />
           <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>
           <Route path="/calendar/week/:date">
             {(params) => <WeekView date={params.date ?? isoDate(new Date())} />}

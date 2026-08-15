@@ -7,9 +7,12 @@ through the same unified dispatch as `fit_folder` (`ingest_dispatch.ingest_fit_b
 activity-or-health) -- this adapter is a thin discovery/dispatch layer, not a new parser.
 Health JSON under DI-Connect-Wellness/Metrics/Aggregator goes through a generic,
 report-kind-namespaced parser (`health.json_parser.parse_garmin_export_json`) -- see ADR 0005
-for why that's generic rather than bespoke per report kind. Everything else (account data,
-bulk activity summaries, and the many non-fitness product domains a Garmin account's export
-can bundle) is archived raw for completeness (raw-first holds regardless), but not
+for why that's generic rather than bespoke per report kind. `summarizedActivitiesExport` JSON
+(DI-Connect-Fitness) is archived raw during the main walk below like everything else, then
+parsed in a separate post-processing pass (`garmin_activity_summary.py`) to correct
+`activity.sport`/`name` using Garmin's own reclassification -- see that module's docstring for
+why. Everything else (account data and the many non-fitness product domains a Garmin account's
+export can bundle) is archived raw for completeness (raw-first holds regardless), but not
 structurally parsed.
 """
 
@@ -27,6 +30,7 @@ from sporthealth.adapters.fit_folder import IngestRunSummary
 from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.schema import athlete, ingest_run
 from sporthealth.fitness import refresh_fitness_rollup
+from sporthealth.garmin_activity_summary import backfill_activity_corrections
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import parse_garmin_export_json
 from sporthealth.ingest_dispatch import ingest_fit_bytes
@@ -236,6 +240,13 @@ def import_garmin_export(
     if touched_dates:
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
     conn.commit()
+
+    # Corrects sport/name using Garmin's own reclassification from summarizedActivitiesExport
+    # (see garmin_activity_summary.py) -- re-derived from the raw archive just written above,
+    # not from in-memory state, so this is exactly as re-runnable as everything else here.
+    correction = backfill_activity_corrections(conn, archive_root, athlete_id=athlete_id)
+    conn.commit()
+    summary.activities_corrected = correction.corrected
 
     conn.execute(
         athlete.update()

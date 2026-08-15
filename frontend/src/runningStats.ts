@@ -492,6 +492,21 @@ export function personalRecords(activities: ActivitySummary[]): PersonalRecord[]
   return records;
 }
 
+/** Which of `periodRecords` (personalRecords() over some period-scoped activity array) are
+ * *genuine* all-time bests, not just the fastest within that narrower slice -- determined by
+ * matching `(label, date)` against `allTimeRecords` (personalRecords() over the athlete's
+ * entire running history). A period record and its all-time counterpart are the same real
+ * effort exactly when they share both the distance label and the date; a coincidentally
+ * identical pace on a different date is not a match. Phase 7 "PBs set" recap ingredient, see
+ * ADR 0011 decision 3. */
+export function newAllTimePrs(
+  periodRecords: PersonalRecord[],
+  allTimeRecords: PersonalRecord[],
+): PersonalRecord[] {
+  const allTimeDateByLabel = new Map(allTimeRecords.map((r) => [r.label, r.date]));
+  return periodRecords.filter((r) => allTimeDateByLabel.get(r.label) === r.date);
+}
+
 export interface WeeklyDistancePoint {
   weekStart: string;
   km: number;

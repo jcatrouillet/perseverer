@@ -22,6 +22,7 @@ import {
 
 import type { LapOut, StreamResponse } from "../api/types";
 import type { IconName } from "./Icon";
+import { gapSeriesMinPerKm } from "../gap";
 import { toneColor, type Tone } from "../metricStyle";
 import { formatClockDuration, isPaceSport, streamSpeedValue } from "../runningStats";
 import { Icon } from "./Icon";
@@ -39,7 +40,7 @@ interface Panel {
 
 function panelsFor(sport: string): Panel[] {
   const paceSport = isPaceSport(sport);
-  return [
+  const panels: Panel[] = [
     {
       key: "altitude_m",
       title: "Elevation",
@@ -60,6 +61,24 @@ function panelsFor(sport: string): Panel[] {
       transform: (v) => streamSpeedValue(sport, v),
       formatValue: (v) => (paceSport ? `${formatPace(v)} /km` : `${v.toFixed(1)} km/h`),
     },
+  ];
+  // GAP is a running-specific concept (gap.ts's own docstring) -- right after Pace, matching
+  // where the user asked for it. Its values live on a synthetic "gap" channel this component
+  // computes itself (see the `series` augmentation below), not a raw stream channel, since GAP
+  // is derived from distance_m + altitude_m + speed_mps together rather than read off one.
+  if (paceSport) {
+    panels.push({
+      key: "gap",
+      title: "Grade Adjusted Pace",
+      icon: "trend",
+      tone: "load",
+      kind: "line",
+      unit: "/km",
+      transform: (v) => v,
+      formatValue: (v) => `${formatPace(v)} /km`,
+    });
+  }
+  panels.push(
     {
       key: "heart_rate",
       title: "Heart rate",
@@ -110,7 +129,8 @@ function panelsFor(sport: string): Panel[] {
       transform: (v) => v,
       formatValue: (v) => `${v.toFixed(0)}°C`,
     },
-  ];
+  );
+  return panels;
 }
 
 function formatPace(minPerKm: number): string {
@@ -143,8 +163,20 @@ export function ActivityCharts({
     .map((lap) => (new Date(lap.start_time_utc).getTime() - startMs) / 1000)
     .filter((t) => t > 1 && t < maxT);
 
+  // GAP isn't a raw stream channel -- it's derived from distance_m + altitude_m + the same
+  // speed_mps->pace conversion the Pace panel already does -- so it's computed once here onto a
+  // synthetic "gap" channel, letting the rest of this component treat it like any other panel
+  // (including the panel-presence filter below, which naturally drops it when there's no
+  // altitude data to derive a grade from).
+  const paceSeries = stream.series.speed_mps?.map((v) => streamSpeedValue(sport, v)) ?? [];
+  const gapSeries =
+    isPaceSport(sport) && stream.series.distance_m != null && stream.series.altitude_m != null
+      ? gapSeriesMinPerKm(stream.series.distance_m, stream.series.altitude_m, paceSeries)
+      : null;
+  const series = gapSeries != null ? { ...stream.series, gap: gapSeries } : stream.series;
+
   const panels = panelsFor(sport).filter((panel) => {
-    const raw = stream.series[panel.key];
+    const raw = series[panel.key];
     return raw != null && raw.some((v) => panel.transform(v) != null);
   });
 
@@ -157,7 +189,7 @@ export function ActivityCharts({
       {panels.map((panel) => {
         const data = elapsed.map((t, i) => ({
           t,
-          v: panel.transform(stream.series[panel.key]?.[i] ?? null),
+          v: panel.transform(series[panel.key]?.[i] ?? null),
         }));
         const color = toneColor(panel.tone);
         return (

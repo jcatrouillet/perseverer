@@ -41,6 +41,7 @@ describe("ActivityCharts", () => {
     expect(screen.queryByText("Cadence")).not.toBeInTheDocument();
     expect(screen.queryByText("Temperature")).not.toBeInTheDocument();
     expect(screen.queryByText("Pace")).not.toBeInTheDocument();
+    expect(screen.queryByText("Grade Adjusted Pace")).not.toBeInTheDocument();
   });
 
   it("shows a Respiration panel when the activity has a respiration_rate stream, e.g. yoga", () => {
@@ -64,6 +65,41 @@ describe("ActivityCharts", () => {
     rerender(<ActivityCharts stream={withSpeed} laps={[]} sport="cycling" />);
     expect(screen.getByText("Speed")).toBeInTheDocument();
     expect(screen.queryByText("Pace")).not.toBeInTheDocument();
+  });
+
+  it("shows a Grade Adjusted Pace panel right after Pace for a foot sport with elevation data", () => {
+    const withElevation = stream({
+      channels: ["speed_mps", "distance_m", "altitude_m"],
+      series: {
+        speed_mps: [3.0, 3.0, 3.0],
+        distance_m: [0, 30, 60],
+        altitude_m: [0, 3, 6], // a steady steep-enough grade to survive the smoothing window
+      },
+    });
+    const { container } = render(
+      <ActivityCharts stream={withElevation} laps={[]} sport="running" />,
+    );
+    const titles = Array.from(container.querySelectorAll(".activity-charts__panel h4")).map(
+      (h) => h.textContent,
+    );
+    const paceIdx = titles.findIndex((t) => t?.includes("Pace") && !t.includes("Grade"));
+    const gapIdx = titles.findIndex((t) => t?.includes("Grade Adjusted Pace"));
+    expect(paceIdx).toBeGreaterThanOrEqual(0);
+    expect(gapIdx).toBe(paceIdx + 1);
+  });
+
+  it("does not show Grade Adjusted Pace for a wheeled sport even with elevation data", () => {
+    const withElevation = stream({
+      channels: ["speed_mps", "distance_m", "altitude_m"],
+      series: {
+        speed_mps: [5.0, 5.0, 5.0],
+        distance_m: [0, 50, 100],
+        altitude_m: [0, 5, 10],
+      },
+    });
+    render(<ActivityCharts stream={withElevation} laps={[]} sport="cycling" />);
+    expect(screen.getByText("Speed")).toBeInTheDocument();
+    expect(screen.queryByText("Grade Adjusted Pace")).not.toBeInTheDocument();
   });
 
   it("shows a fallback message rather than an empty chart grid when no known channel is present", () => {

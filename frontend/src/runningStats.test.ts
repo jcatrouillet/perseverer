@@ -21,6 +21,7 @@ import {
   metMinutes,
   monthlyDistanceM,
   nearestLegendKm,
+  newAllTimePrs,
   personalRecords,
   rollingDistanceKm,
   scatterPointOpacities,
@@ -447,6 +448,39 @@ describe("personalRecords", () => {
     const fiveK = records.find((r) => r.label === "5 km")!;
     expect(fiveK.paceMinPerKm).toBeCloseTo(5, 5); // 25:00 moving for 5km = 5:00/km
     expect(fiveK.speedKmh).toBeCloseTo(12, 5);
+  });
+});
+
+describe("newAllTimePrs", () => {
+  it("flags a period record as an all-time PR when the same label+date appears in allTimeRecords", () => {
+    const periodRecords = personalRecords([
+      activity("2025-05-15", 5050, { duration_s: 1500, moving_duration_s: 1400 }),
+    ]);
+    // The same 2025-05-15 effort is also the athlete's all-time best 5k.
+    const allTimeRecords = personalRecords([
+      activity("2025-01-01", 5000, { duration_s: 2000, moving_duration_s: 2000 }), // slower
+      activity("2025-05-15", 5050, { duration_s: 1500, moving_duration_s: 1400 }), // same effort
+    ]);
+    const result = newAllTimePrs(periodRecords, allTimeRecords);
+    expect(result.map((r) => r.label)).toEqual(["5 km"]);
+  });
+
+  it("does not flag a period record when a faster all-time effort exists on a different date", () => {
+    const periodRecords = personalRecords([
+      activity("2025-05-15", 5050, { duration_s: 1500, moving_duration_s: 1400 }),
+    ]);
+    const allTimeRecords = personalRecords([
+      activity("2025-05-15", 5050, { duration_s: 1500, moving_duration_s: 1400 }),
+      activity("2024-01-01", 5000, { duration_s: 1200, moving_duration_s: 1200 }), // faster, wins
+    ]);
+    expect(newAllTimePrs(periodRecords, allTimeRecords)).toEqual([]);
+  });
+
+  it("returns an empty array when allTimeRecords is empty (component used standalone)", () => {
+    const periodRecords = personalRecords([
+      activity("2025-05-15", 5050, { duration_s: 1500, moving_duration_s: 1400 }),
+    ]);
+    expect(newAllTimePrs(periodRecords, [])).toEqual([]);
   });
 });
 

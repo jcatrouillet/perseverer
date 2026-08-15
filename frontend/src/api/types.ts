@@ -98,6 +98,30 @@ export interface ActivityContextOut {
   recent: ActivityContextRecentOut[];
 }
 
+export interface ActivityMapPointOut {
+  id: string;
+  local_date: string | null;
+  sport: string;
+  name: string | null;
+  distance_m: number | null;
+  start_lat: number;
+  start_lng: number;
+}
+
+export interface ActivityRouteOut {
+  id: string;
+  simplified_polyline: string | null;
+}
+
+export interface ActivityWeatherOut {
+  available: boolean;
+  temperature_min_c: number | null;
+  temperature_max_c: number | null;
+  humidity_min_pct: number | null;
+  humidity_max_pct: number | null;
+  weather_code: number | null;
+}
+
 export interface StreamResponse {
   activity_id: string;
   tier: string;

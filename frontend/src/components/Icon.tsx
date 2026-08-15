@@ -44,7 +44,17 @@ export type IconName =
   | "waves"
   // Navigation
   | "grid"
-  | "list";
+  | "list"
+  | "map"
+  // Route playback
+  | "play"
+  | "pause"
+  // Weather (WMO code groups -- see weatherCode.ts)
+  | "sun"
+  | "cloud"
+  | "rain"
+  | "fog"
+  | "storm";
 
 export function IconSprite() {
   return (
@@ -169,6 +179,36 @@ export function IconSprite() {
         </symbol>
         <symbol viewBox="0 0 24 24" id="i-list">
           <path d="M8.4 6.4h12M8.4 12h12M8.4 17.6h12M3.8 6.4h.01M3.8 12h.01M3.8 17.6h.01" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-map">
+          <path d="M9 4.4 3.6 6.2v13.4L9 17.8l6 1.8 5.4-1.8V4.4L14.4 6.2 9 4.4Z" />
+          <path d="M9 4.4v13.4M15 6.2v13.4" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-play">
+          <path d="M6.5 4.2v15.6l13.2-7.8L6.5 4.2Z" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-pause">
+          <path d="M6.8 4.4h4v15.2h-4zM13.2 4.4h4v15.2h-4z" />
+        </symbol>
+
+        <symbol viewBox="0 0 24 24" id="i-sun">
+          <circle cx="12" cy="12" r="4.6" />
+          <path d="M12 2.6v3M12 18.4v3M4.6 12h-3M22.4 12h-3M6.3 6.3 4.2 4.2M19.8 19.8l-2.1-2.1M6.3 17.7l-2.1 2.1M19.8 4.2l-2.1 2.1" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-cloud">
+          <path d="M6.8 18.4a4.4 4.4 0 0 1-.6-8.75 5.6 5.6 0 0 1 10.9-1.9 4.2 4.2 0 0 1-.5 10.65H6.8Z" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-rain">
+          <path d="M6.8 13.4a4.4 4.4 0 0 1-.6-8.75 5.6 5.6 0 0 1 10.9-1.9 4.2 4.2 0 0 1-.5 10.65H6.8Z" />
+          <path d="M8.4 17.4 7 21M12.6 17.4 11.2 21M16.8 17.4l-1.4 3.6" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-fog">
+          <path d="M6.8 11.2a4.4 4.4 0 0 1-.4-8.75 5.6 5.6 0 0 1 10.7-2 4.2 4.2 0 0 1-.4 10.75Z" transform="translate(0 -1.5) scale(0.9)" />
+          <path d="M3.4 14.6h17.2M3.4 18h17.2M3.4 21.4h17.2" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-storm">
+          <path d="M6.8 12.6a4.4 4.4 0 0 1-.5-8.75 5.6 5.6 0 0 1 10.8-1.9 4.2 4.2 0 0 1-.5 10.65H6.8Z" />
+          <path d="M13 13.6l-3.4 5.2h3l-2 4.6 5.4-6.4h-3.2l2.4-3.4z" />
         </symbol>
       </defs>
     </svg>

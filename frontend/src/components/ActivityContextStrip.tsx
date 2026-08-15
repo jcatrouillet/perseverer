@@ -23,6 +23,39 @@ function avgPaceOrSpeedValue(sport: string, durationS: number, distanceM: number
   return isPaceSport(sport) ? durationS / 60 / (distanceM / 1000) : distanceM / 1000 / (durationS / 3600);
 }
 
+interface ContextPoint {
+  id: string;
+  date: string;
+  distanceKm: number;
+  value: number;
+  isCurrent: boolean;
+}
+
+/** A custom tooltip, not Recharts' default `formatter` -- a scatter point is plotted from three
+ * separate dataKeys (X's date, Y's pace/speed, Z's bubble-size distance), and Recharts' default
+ * tooltip runs *every one* of them through the same `formatter`, producing three "Pace" lines
+ * (one of them the date string coerced through pace formatting into "NaN:NaN /km") instead of
+ * one. Reading the point's own original data off `payload[0].payload` sidesteps that entirely. */
+function ContextTooltip({
+  active,
+  payload,
+  paceSport,
+}: {
+  active?: boolean;
+  payload?: { payload: ContextPoint }[];
+  paceSport: boolean;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const p = payload[0]!.payload;
+  return (
+    <div className="activity-context__tooltip">
+      <div className="activity-context__tooltip-date">{p.date}</div>
+      <div>{paceSport ? `${formatMinPerKm(p.value)} /km` : `${p.value.toFixed(1)} km/h`}</div>
+      <div className="activity-context__tooltip-distance">{p.distanceKm.toFixed(2)} km</div>
+    </div>
+  );
+}
+
 export function ActivityContextStrip({
   context,
   sport,
@@ -50,7 +83,8 @@ export function ActivityContextStrip({
   const color = toneColor("pace");
 
   return (
-    <div className="activity-context">
+    <section className="card activity-context">
+      <h2>Recent efforts</h2>
       {context.percentile_rank != null && (
         <p className="activity-context__headline">
           Faster than <strong>{context.percentile_rank.toFixed(0)}%</strong> of{" "}
@@ -81,17 +115,7 @@ export function ActivityContextStrip({
             {/* Bubble size = distance -- the "bubble" half of the plan's "bubble/sparkline
                 strip", so a long run and a short shakeout at the same pace read differently. */}
             <ZAxis dataKey="distanceKm" range={[36, 260]} />
-            <Tooltip
-              formatter={(value) =>
-                paceSport
-                  ? [`${formatMinPerKm(Number(value))} /km`, "Pace"]
-                  : [`${Number(value).toFixed(1)} km/h`, "Speed"]
-              }
-              contentStyle={{
-                background: "var(--color-surface-raised)",
-                border: "1px solid var(--color-border)",
-              }}
-            />
+            <Tooltip content={<ContextTooltip paceSport={paceSport} />} />
             <Scatter data={points} isAnimationActive={false}>
               {points.map((p) => (
                 <Cell
@@ -106,6 +130,6 @@ export function ActivityContextStrip({
           </ScatterChart>
         </ResponsiveContainer>
       )}
-    </div>
+    </section>
   );
 }

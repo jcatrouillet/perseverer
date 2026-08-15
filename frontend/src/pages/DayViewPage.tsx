@@ -17,6 +17,8 @@ import { Link } from "wouter";
 
 import {
   useActivities,
+  useActivityRoutes,
+  useAllActivities,
   useCalendar,
   useFitness,
   useHealthDashboard,
@@ -25,13 +27,16 @@ import {
 } from "../api/queries";
 import { ActivityCard } from "../components/ActivityCard";
 import { DateNavigator } from "../components/DateNavigator";
+import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
 import { StatTile } from "../components/StatTile";
 import { mondayOf, parseIsoDate } from "../dateUtils";
 import { latestObservation, valueForDate } from "../healthStats";
 import { healthMetricStyle } from "../metricStyle";
+import { newAllTimePrs, personalRecords } from "../runningStats";
 import "../styles/activity-list.css";
 import "../styles/calendar.css";
+import "../styles/running-stats.css";
 
 const READINESS_KEY = "garmin.export.TrainingReadinessDTO.score";
 const TRAINING_STATUS_KEY = "garmin.export.TrainingHistory.trainingStatus";
@@ -49,12 +54,26 @@ const OBSERVATION_KEYS = [
 export function DayViewPage({ date }: { date: string }) {
   const calendar = useCalendar(date, date);
   const activities = useActivities({ startDate: date, endDate: date, limit: 50 });
+  // Unbounded all-time running history, for the "PBs set today" callout below -- see ADR 0011
+  // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
+  const allTimeRunning = useAllActivities({ sport: "running" });
   const fitness = useFitness(date, date);
   const health = useHealthDashboard(date, date);
   const sleep = useSleep(date, date);
   const observations = useHealthObservations(OBSERVATION_KEYS, date, date);
 
   const day = calendar.data?.days[0];
+  const routes = useActivityRoutes((activities.data?.items ?? []).map((a) => a.id));
+  const polylineById = new Map(
+    (routes.data ?? [])
+      .filter((r) => r.simplified_polyline != null)
+      .map((r) => [r.id, r.simplified_polyline!]),
+  );
+  const dayRunning = activities.data?.items.filter((a) => a.sport === "running") ?? [];
+  const newPrsToday = newAllTimePrs(
+    personalRecords(dayRunning),
+    personalRecords(allTimeRunning.data ?? []),
+  );
   const weekStart = mondayOf(parseIsoDate(date));
   const year = weekStart.getUTCFullYear();
   const month = weekStart.getUTCMonth() + 1;
@@ -132,6 +151,13 @@ export function DayViewPage({ date }: { date: string }) {
         </p>
       )}
 
+      {newPrsToday.length > 0 && (
+        <p className="running-records__new-prs">
+          <Icon name="trophy" /> {newPrsToday.length} all-time PR
+          {newPrsToday.length === 1 ? "" : "s"} set today: {newPrsToday.map((r) => r.label).join(", ")}
+        </p>
+      )}
+
       {activities.isLoading && <p>Loading…</p>}
       {activities.isError && <p role="alert">Could not load activities.</p>}
       {activities.data && activities.data.items.length === 0 && (
@@ -139,7 +165,12 @@ export function DayViewPage({ date }: { date: string }) {
       )}
       <div className="activity-day-group__list">
         {activities.data?.items.map((activity) => (
-          <ActivityCard key={activity.id} activity={activity} iconSize="large" />
+          <ActivityCard
+            key={activity.id}
+            activity={activity}
+            iconSize="large"
+            encodedPolyline={polylineById.get(activity.id)}
+          />
         ))}
       </div>
 
