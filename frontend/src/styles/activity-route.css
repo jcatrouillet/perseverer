@@ -9,8 +9,44 @@
 }
 
 .activity-route__map-col {
+  position: relative;
   flex: 2 1 420px;
   min-width: 320px;
+}
+
+/* A full-viewport overlay rather than the browser Fullscreen API -- no permission prompt, works
+   the same inside an iframe/PWA shell, and Escape-to-exit is handled by the same component
+   (ActivityRoute.tsx) instead of relying on the browser's own fullscreenchange event. */
+.activity-route__map-col--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  overflow-y: auto;
+}
+
+.activity-route__map-col--fullscreen .activity-route-map {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.activity-route__fullscreen-btn {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1001;
+  padding: var(--space-1);
+  line-height: 0;
+}
+
+.activity-route__map-col--fullscreen .activity-route__fullscreen-btn {
+  position: static;
+  align-self: flex-end;
+  margin-bottom: var(--space-2);
 }
 
 .activity-route__splits-col {
@@ -22,7 +58,11 @@
 .activity-route-map {
   position: relative;
   width: 100%;
-  height: 420px;
+  /* Shared with the day view's own route map (DayViewActivityRoute) and the activity list's
+     static thumbnail (ActivityMap) -- the same height everywhere a route map appears, so
+     bumping it here raises all three together rather than making the detail page's Route
+     section inconsistent with the rest of the app again. */
+  height: 360px;
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--color-border);
@@ -32,6 +72,13 @@
   width: 100%;
   height: 100%;
   background: var(--color-surface);
+}
+
+/* Leaflet's default .leaflet-div-icon adds its own white background + border box, which would
+   double up with the finish marker's own circle+checker SVG. */
+.activity-route-map__finish-icon {
+  background: transparent;
+  border: none;
 }
 
 .activity-route-map__legend {
@@ -56,9 +103,9 @@
   height: 6px;
   border-radius: 3px;
   /* Same two endpoint tokens ActivityRouteMap.tsx resolves for the actual route gradient --
-     fast (blue) on the left reading toward slow (red) on the right, left-to-right matching the
+     fast (red) on the left reading toward slow (blue) on the right, left-to-right matching the
      "Faster"/"Slower" labels either side of it. */
-  background: linear-gradient(to right, var(--color-pace), var(--color-heart-rate));
+  background: linear-gradient(to right, var(--color-heart-rate), var(--color-pace));
 }
 
 .activity-route__player {
@@ -85,6 +132,12 @@
   color: var(--color-text-muted);
   min-width: 9ch;
   text-align: right;
+}
+
+.activity-route__export-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .splits-table td,

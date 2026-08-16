@@ -17,6 +17,7 @@ function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
     sport: "running",
     sub_sport: null,
     name: null,
+    is_race: null,
     duration_s: 1800,
     moving_duration_s: 1800,
     distance_m: 5000,

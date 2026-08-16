@@ -60,6 +60,109 @@ export function streamSpeedValue(sport: string, speedMps: number | null): number
   return speedMps * 3.6;
 }
 
+/** Nulls out isolated samples that differ wildly from their immediate neighbors -- a brief GPS/
+ * footpod glitch or a momentary near-stop (crossing a road, a red light) mid-activity, not a
+ * genuine change in pace. Confirmed against real data: Garmin Connect's own pace graph excludes
+ * exactly these single-point outliers rather than plotting (and auto-scaling the whole chart
+ * around) them, while still showing a genuinely sustained slow stretch (e.g. a real recovery
+ * jog) in full. Operates on raw speed (m/s) rather than pace -- a near-zero-speed glitch would
+ * otherwise explode into an enormous pace number, so working in speed units catches a
+ * slow-direction and a fast-direction (e.g. a GPS jump) glitch symmetrically with one threshold.
+ * A *local* window (not the whole series' median) is essential: a long steady interval at a
+ * genuinely different pace from the rest of the activity must not itself be flagged just because
+ * it differs from the global median. */
+export function rejectSpeedOutliers(values: (number | null)[]): (number | null)[] {
+  const WINDOW = 4;
+  const MIN_NEIGHBORS = 3;
+  const MIN_THRESHOLD_MPS = 0.6;
+  const MAD_MULTIPLIER = 4;
+
+  return values.map((v, i) => {
+    if (v == null) return v;
+    const neighbors: number[] = [];
+    for (let j = Math.max(0, i - WINDOW); j <= Math.min(values.length - 1, i + WINDOW); j++) {
+      if (j === i) continue;
+      const nv = values[j];
+      if (nv != null) neighbors.push(nv);
+    }
+    if (neighbors.length < MIN_NEIGHBORS) return v;
+    const sorted = [...neighbors].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)]!;
+    const deviations = sorted.map((n) => Math.abs(n - median)).sort((a, b) => a - b);
+    const mad = deviations[Math.floor(deviations.length / 2)]!;
+    const threshold = Math.max(MIN_THRESHOLD_MPS, MAD_MULTIPLIER * mad);
+    return Math.abs(v - median) > threshold ? null : v;
+  });
+}
+
+/** A device pause found in a stream's own per-sample elapsed times: a gap between two
+ * consecutive recorded samples far larger than the stream's typical sample interval.
+ * `postGapIndex` is the index of the first sample recorded after the pause -- that sample's own
+ * value is suspect too (GPS reacquisition / stride restart, the same category of artifact as the
+ * very first sample of the whole activity), not just the gap itself. */
+export interface PauseGap {
+  postGapIndex: number;
+  gapSeconds: number;
+}
+
+export interface PauseDetection {
+  gaps: PauseGap[];
+  /** The stream's typical (median) sample interval, in seconds -- also what a detected pause
+   * compresses down to, so a compressed gap still advances the x-axis a little rather than
+   * jumping instantaneously, matching how an ordinary (non-paused) gap between samples looks. */
+  typicalIntervalS: number;
+}
+
+/** Finds real device pauses/stops from a stream's own per-sample elapsed times -- a gap far
+ * larger than the stream's own typical spacing. A *local, per-stream* threshold (not a fixed
+ * number of seconds) is essential: different tiers/activities have different typical sample
+ * spacing, so what counts as "way bigger than normal" has to be relative to this stream, not an
+ * arbitrary constant. */
+export function detectPauseGaps(rawElapsed: number[]): PauseDetection {
+  const deltas: number[] = [];
+  for (let i = 1; i < rawElapsed.length; i++) {
+    const d = rawElapsed[i]! - rawElapsed[i - 1]!;
+    if (d > 0) deltas.push(d);
+  }
+  if (deltas.length === 0) return { gaps: [], typicalIntervalS: 1 };
+  const sorted = [...deltas].sort((a, b) => a - b);
+  const typicalIntervalS = sorted[Math.floor(sorted.length / 2)]!;
+  const threshold = Math.max(30, typicalIntervalS * 4);
+  const gaps: PauseGap[] = [];
+  for (let i = 1; i < rawElapsed.length; i++) {
+    const gap = rawElapsed[i]! - rawElapsed[i - 1]!;
+    if (gap > threshold) gaps.push({ postGapIndex: i, gapSeconds: gap });
+  }
+  return { gaps, typicalIntervalS };
+}
+
+/** Turns wall-clock elapsed time into "moving" elapsed time by subtracting every detected pause
+ * that occurred before a given point -- the same concept as activity.moving_duration_s
+ * (effectiveDurationS above), just applied per-second to a chart's x-axis instead of once to a
+ * whole activity's summary stat. A pause isn't erased to a single instant -- it collapses to one
+ * typical sample interval, matching how an ordinary (non-paused) gap between two samples already
+ * looks, rather than creating a suspicious zero-width jump. Returns the identity function when
+ * there's nothing to compress, so callers can apply it unconditionally. */
+export function buildPauseCompressor(
+  rawElapsed: number[],
+  detection: PauseDetection,
+): (rawT: number) => number {
+  if (detection.gaps.length === 0) return (t) => t;
+  let totalCut = 0;
+  const cutPoints = detection.gaps.map((g) => {
+    totalCut += g.gapSeconds - detection.typicalIntervalS;
+    return { at: rawElapsed[g.postGapIndex]!, subtract: totalCut };
+  });
+  return (rawT: number) => {
+    let subtract = 0;
+    for (const cp of cutPoints) {
+      if (rawT >= cp.at) subtract = cp.subtract;
+      else break;
+    }
+    return rawT - subtract;
+  };
+}
+
 /** "1h 14m" / "42m" duration formatting -- the compact, human form used anywhere a duration is
  * a supporting stat rather than the record itself (contrast the personal-records table's exact
  * "1:14:00" clock format, which stays local to that table). */
@@ -169,7 +272,9 @@ export interface ScatterPoint {
  * counted within a coarse bucket (nearest 1km, nearest 0.5 min/km), not exact equality, since
  * real GPS-derived distance/pace values essentially never repeat exactly even for genuinely the
  * same effort. */
-export function scatterPointOpacities(points: { km: number; pace: number }[]): ScatterPoint[] {
+export function scatterPointOpacities<T extends { km: number; pace: number }>(
+  points: T[],
+): (T & { opacity: number })[] {
   function bucketKey(km: number, pace: number): string {
     return `${Math.round(km)}_${Math.round(pace * 2) / 2}`;
   }
@@ -450,6 +555,7 @@ export const STANDARD_DISTANCES: StandardDistance[] = [
 export interface PersonalRecord {
   label: string;
   date: string;
+  activityId: string;
   actualDistanceM: number;
   durationS: number;
   paceMinPerKm: number;
@@ -482,6 +588,7 @@ export function personalRecords(activities: ActivitySummary[]): PersonalRecord[]
     records.push({
       label: std.label,
       date: best.local_date ?? best.start_time_utc.slice(0, 10),
+      activityId: best.id,
       actualDistanceM: best.distance_m!,
       durationS: bestDurationS,
       paceMinPerKm: bestDurationS / 60 / distanceKm,

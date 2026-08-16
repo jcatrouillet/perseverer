@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { ActivitySummary } from "./api/types";
 import {
   amPmCounts,
+  buildPauseCompressor,
   DAILY_HEATMAP_SCALE,
   dailyStats,
+  detectPauseGaps,
   distanceByDay,
   distanceByYear,
   distinctActiveDates,
@@ -23,6 +25,7 @@ import {
   nearestLegendKm,
   newAllTimePrs,
   personalRecords,
+  rejectSpeedOutliers,
   rollingDistanceKm,
   scatterPointOpacities,
   shortRunHeatPct,
@@ -46,6 +49,7 @@ function activity(
     sport: "running",
     sub_sport: null,
     name: null,
+    is_race: null,
     duration_s: 1800,
     moving_duration_s: 1800,
     distance_m,
@@ -130,6 +134,89 @@ describe("streamSpeedValue", () => {
 
   it("passes through null unchanged", () => {
     expect(streamSpeedValue("running", null)).toBeNull();
+  });
+});
+
+describe("rejectSpeedOutliers", () => {
+  it("nulls out an isolated near-stop glitch surrounded by steady speed", () => {
+    const values = Array(11).fill(2.5);
+    values[5] = 0.8; // a momentary near-stop -- crossing a road, a red light.
+    const result = rejectSpeedOutliers(values);
+    expect(result[5]).toBeNull();
+    expect(result.filter((_v, i) => i !== 5)).toEqual(Array(10).fill(2.5));
+  });
+
+  it("nulls out an isolated fast-direction glitch (e.g. a GPS jump) the same way", () => {
+    const values = Array(11).fill(2.5);
+    values[5] = 8.0;
+    expect(rejectSpeedOutliers(values)[5]).toBeNull();
+  });
+
+  it("does not reject a genuinely sustained slower stretch, even far from the global median", () => {
+    // A real recovery jog: 10 steady-state points at 2.5 m/s, 10 at a genuinely slower 1.5 m/s,
+    // 10 back at 2.5 m/s -- every point agrees with its own local neighbors, so none should be
+    // flagged despite the slow plateau being nowhere near the overall series' median.
+    const values = [...Array(10).fill(2.5), ...Array(10).fill(1.5), ...Array(10).fill(2.5)];
+    const result = rejectSpeedOutliers(values);
+    expect(result).toEqual(values);
+  });
+
+  it("leaves a value unchanged when there aren't enough neighbors to judge it", () => {
+    expect(rejectSpeedOutliers([2.5, 0.1])).toEqual([2.5, 0.1]);
+  });
+
+  it("passes null values through untouched", () => {
+    const values = [2.5, null, 2.5, 2.5, 2.5, 2.5];
+    expect(rejectSpeedOutliers(values)).toEqual(values);
+  });
+});
+
+describe("detectPauseGaps", () => {
+  it("finds no gaps in an evenly-spaced stream", () => {
+    const elapsed = [0, 5, 10, 15, 20, 25, 30];
+    expect(detectPauseGaps(elapsed).gaps).toEqual([]);
+  });
+
+  it("flags a gap far larger than the stream's own typical sample interval", () => {
+    // Typical spacing is 5s; a real ~15min device pause between samples 7 and 8.
+    const elapsed = [0, 5, 10, 15, 20, 25, 30, 35, 935, 940, 945];
+    const detection = detectPauseGaps(elapsed);
+    expect(detection.gaps).toEqual([{ postGapIndex: 8, gapSeconds: 900 }]);
+    expect(detection.typicalIntervalS).toBe(5);
+  });
+
+  it("does not flag an ordinary irregular-but-not-huge gap", () => {
+    // A few slightly-longer-than-usual gaps (GPS jitter), none anywhere near a real pause.
+    const elapsed = [0, 5, 11, 16, 22, 27, 33];
+    expect(detectPauseGaps(elapsed).gaps).toEqual([]);
+  });
+});
+
+describe("buildPauseCompressor", () => {
+  it("is the identity function when there are no pauses", () => {
+    const elapsed = [0, 5, 10, 15, 20];
+    const compress = buildPauseCompressor(elapsed, detectPauseGaps(elapsed));
+    expect(elapsed.map(compress)).toEqual(elapsed);
+  });
+
+  it("compresses a detected pause down to one typical sample interval", () => {
+    const elapsed = [0, 5, 10, 15, 915, 920, 925];
+    const detection = detectPauseGaps(elapsed);
+    const compress = buildPauseCompressor(elapsed, detection);
+    const compressed = elapsed.map(compress);
+    // Before the pause: unchanged. After: the 900s gap (15 -> 915) collapses to the typical 5s
+    // interval, and every later point shifts back by the same amount.
+    expect(compressed).toEqual([0, 5, 10, 15, 20, 25, 30]);
+  });
+
+  it("keeps the compressed axis monotonically increasing across multiple pauses", () => {
+    const elapsed = [0, 5, 10, 910, 915, 920, 1820, 1825];
+    const detection = detectPauseGaps(elapsed);
+    const compress = buildPauseCompressor(elapsed, detection);
+    const compressed = elapsed.map(compress);
+    for (let i = 1; i < compressed.length; i++) {
+      expect(compressed[i]).toBeGreaterThan(compressed[i - 1]!);
+    }
   });
 });
 

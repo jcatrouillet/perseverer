@@ -49,6 +49,9 @@ export type IconName =
   // Route playback
   | "play"
   | "pause"
+  | "download"
+  | "expand"
+  | "collapse"
   // Weather (WMO code groups -- see weatherCode.ts)
   | "sun"
   | "cloud"
@@ -189,6 +192,16 @@ export function IconSprite() {
         </symbol>
         <symbol viewBox="0 0 24 24" id="i-pause">
           <path d="M6.8 4.4h4v15.2h-4zM13.2 4.4h4v15.2h-4z" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-download">
+          <path d="M12 3.6v11.2M7.6 10.4 12 14.8l4.4-4.4" />
+          <path d="M4.4 17.2v2a1.8 1.8 0 0 0 1.8 1.8h11.6a1.8 1.8 0 0 0 1.8-1.8v-2" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-expand">
+          <path d="M9 3.6H4.4V8.2M15 3.6h4.6V8.2M9 20.4H4.4v-4.6M15 20.4h4.6v-4.6" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-collapse">
+          <path d="M4.4 8.6H9V4M19.6 8.6H15V4M4.4 15.4H9V20M19.6 15.4H15V20" />
         </symbol>
 
         <symbol viewBox="0 0 24 24" id="i-sun">

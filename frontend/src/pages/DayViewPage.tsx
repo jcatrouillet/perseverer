@@ -27,6 +27,7 @@ import {
 } from "../api/queries";
 import { ActivityCard } from "../components/ActivityCard";
 import { DateNavigator } from "../components/DateNavigator";
+import { DayViewActivityRoute } from "../components/DayViewActivityRoute";
 import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
 import { StatTile } from "../components/StatTile";
@@ -170,6 +171,15 @@ export function DayViewPage({ date }: { date: string }) {
             activity={activity}
             iconSize="large"
             encodedPolyline={polylineById.get(activity.id)}
+            // Only attempt the per-activity high-tier stream fetch for an activity that
+            // actually has a route at all -- reuses the same routes batch fetch above (already
+            // needed for the static-thumbnail fallback) as the gate, rather than every card
+            // firing a stream request for e.g. a GPS-less strength-training session.
+            animatedRoute={
+              polylineById.has(activity.id) ? (
+                <DayViewActivityRoute activityId={activity.id} />
+              ) : undefined
+            }
           />
         ))}
       </div>

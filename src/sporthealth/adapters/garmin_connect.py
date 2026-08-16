@@ -47,6 +47,7 @@ from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.schema import ingest_run
 from sporthealth.fit.parser import parse_fit
 from sporthealth.fitness import refresh_fitness_rollup
+from sporthealth.insights.engine import refresh_insights
 from sporthealth.rollups import refresh_daily_and_period_rollups
 
 SOURCE_NAME = "garmin_connect"
@@ -280,11 +281,15 @@ def sync_garmin_connect(
         summary.errors.append({"error": str(e)})
 
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
-    # Unconditional, unlike the other three ingest entry points: this is the daily scheduled
+    # Unconditional, unlike the other four ingest entry points: this is the daily scheduled
     # sync path (worker/main.py runs it once/day regardless of whether new activities were
     # found), so the Fitness & Form series' end date must keep advancing through rest days --
-    # see fitness.py and docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+    # see fitness.py and docs/adr/0009-phase-6-calendar-rollups-fitness-health.md. The same
+    # reasoning is why refresh_insights is unconditional here too (ADR 0012): a window like
+    # "last 30 days" shifts every day even with zero new ingests, and this daily cron run is
+    # this codebase's only naturally-daily trigger point -- no separate scheduled job needed.
     refresh_fitness_rollup(conn, athlete_id=athlete_id)
+    refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(

@@ -85,6 +85,7 @@ def seed_activity(
     duration_s: float = 1800.0,
     distance_m: float = 5000.0,
     moving_duration_s: float | None = None,
+    is_race: bool | None = None,
 ) -> None:
     now = dt.datetime(2025, 6, 1, 10, 0, 0)
     conn.execute(
@@ -95,6 +96,7 @@ def seed_activity(
             utc_offset_s=0,
             local_date=local_date,
             sport=sport,
+            is_race=is_race,
             duration_s=duration_s,
             moving_duration_s=(
                 moving_duration_s if moving_duration_s is not None else duration_s * 0.95

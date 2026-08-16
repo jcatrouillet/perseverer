@@ -6,26 +6,42 @@ Registered as a console script (`uv run sync ...`) — see pyproject.toml's [pro
 from __future__ import annotations
 
 import os
+import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 import typer
+
+# Windows' default console codepage (cp1252) can't encode an emoji in e.g. a Garmin-sourced
+# activity name ("☀️ San Jose Half Marathon 2026") -- confirmed the hard way: `sync
+# correct-garmin-activities` crashed mid-report on a real one, after its own DB commit had
+# already succeeded, losing nothing but the printed summary. utf-8 with errors="replace" makes
+# every `typer.echo` call safe regardless of what a vendor's own text field contains, rather
+# than every future command needing to know this about its own output.
+if sys.stdout.encoding is not None and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+if sys.stderr.encoding is not None and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 from garminconnect import Garmin
 from sqlalchemy import func, select
 
 from sporthealth.adapters.fit_folder import import_from_folder
 from sporthealth.adapters.garmin_connect import RateLimitSettings, sync_garmin_connect
 from sporthealth.adapters.garmin_export import import_garmin_export
+from sporthealth.adapters.strava_export import import_strava_export
 from sporthealth.auth.api_keys import generate_api_key, hash_api_key
 from sporthealth.auth.passwords import hash_password
+from sporthealth.backfill_lap_moving_duration import backfill_lap_moving_duration
+from sporthealth.backfill_workouts import backfill_workouts
 from sporthealth.config import get_settings
 from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import activity, activity_source_link
 from sporthealth.db.schema import athlete as athlete_table
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.garmin_activity_summary import backfill_activity_corrections
+from sporthealth.insights.engine import refresh_insights
 from sporthealth.rebuild import rebuild_database
 
 app = typer.Typer(help="sporthealth sync CLI")
@@ -113,6 +129,31 @@ def import_garmin_export_cmd(
     if summary.errors:
         for e in summary.errors:
             typer.echo(f"  {e['file']}: {e['error']}", err=True)
+        raise typer.Exit(code=1)
+
+
+@import_app.command("strava-export")
+def import_strava_export_cmd(
+    path: Annotated[
+        Path, typer.Argument(exists=True, help="Directory or .zip of a Strava export archive")
+    ],
+) -> None:
+    """One-shot backfill from Strava's "export your data" archive. Zero network calls."""
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        summary = import_strava_export(
+            conn,
+            settings.raw_archive_dir,
+            settings.parquet_dir,
+            settings.data_dir / "tmp" / "strava_export",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            path=path,
+        )
+    typer.echo(f"seen={summary.items_seen} new={summary.items_new} errors={len(summary.errors)}")
+    if summary.errors:
+        for e in summary.errors:
+            typer.echo(f"  {e['activity_id']}: {e['error']}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -277,6 +318,20 @@ def rebuild() -> None:
     typer.echo(f"Replayed {replayed} raw objects")
 
 
+@app.command("refresh-insights")
+def refresh_insights_cmd() -> None:
+    """Recomputes every insight from already-ingested data (no network call) -- for backfilling
+    after this feature was added, or after adjusting a rule's thresholds. Every ingest entry
+    point already calls this automatically; this command is for a manual, out-of-band refresh.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        count = refresh_insights(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+    typer.echo(f"computed {count} insights")
+
+
 @app.command("correct-garmin-activities")
 def correct_garmin_activities() -> None:
     """Corrects activity.sport/name for already-ingested garmin_export activities using
@@ -303,6 +358,42 @@ def correct_garmin_activities() -> None:
         typer.echo(
             f"  {activity_id}: sport {old_sport!r}->{new_sport!r}, name {old_name!r}->{new_name!r}"
         )
+
+
+@app.command("backfill-workouts")
+def backfill_workouts_cmd() -> None:
+    """Backfills activity_workout/activity_workout_step for already-ingested activities from
+    their already-archived raw FIT bytes -- no full `sync rebuild` needed. See
+    backfill_workouts.py's own docstring for why: this is a purely additive parser change (a new
+    message type this parser didn't model before), so a full rebuild's wipe-and-replay-everything
+    is real overkill for it. New imports pick this up automatically going forward; this command
+    is for backfilling activities ingested before workout parsing existed.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        count = backfill_workouts(conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+    typer.echo(f"backfilled {count} activities with a workout plan")
+
+
+@app.command("backfill-lap-moving-duration")
+def backfill_lap_moving_duration_cmd() -> None:
+    """Backfills lap.moving_duration_s for already-ingested activities from their already-
+    archived raw FIT bytes -- no full `sync rebuild` needed. See
+    backfill_lap_moving_duration.py's own docstring: a lap's `duration_s` (total_elapsed_time)
+    includes any device pause within that lap, while `moving_duration_s` (total_timer_time)
+    doesn't -- a purely additive column this command backfills for laps ingested before it
+    existed.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        count = backfill_lap_moving_duration(
+            conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID
+        )
+        conn.commit()
+    typer.echo(f"backfilled moving_duration_s for {count} laps")
 
 
 if __name__ == "__main__":

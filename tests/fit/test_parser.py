@@ -10,7 +10,7 @@ from pathlib import Path
 
 import fitdecode
 
-from sporthealth.fit.parser import _time_in_zone_metrics, parse_fit
+from sporthealth.fit.parser import _parse_workout, _time_in_zone_metrics, parse_fit
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_run.fit"
 
@@ -45,6 +45,18 @@ def test_laps_extracted() -> None:
     assert batch.activity is not None
     assert len(batch.activity.laps) == 1
     assert batch.activity.laps[0].distance_m == 750.0
+
+
+def test_lap_moving_duration_uses_total_timer_time() -> None:
+    """`duration_s` is FIT's total_elapsed_time (real wall-clock); `moving_duration_s` is
+    total_timer_time, which excludes a device pause within the lap -- equal here since the
+    fixture's one lap has no pause, but a real paused lap has elapsed >> timer (confirmed
+    against a real archived FIT file: 1008.2s vs 90.0s across a genuine ~15min pause)."""
+    batch = parse_fit(FIXTURE.read_bytes())
+    assert batch.activity is not None
+    lap = batch.activity.laps[0]
+    assert lap.moving_duration_s == 300.0
+    assert lap.moving_duration_s == lap.duration_s
 
 
 def test_unhandled_but_valid_record_field_is_cataloged_not_dropped() -> None:
@@ -126,3 +138,144 @@ def test_cross_check_against_fitdecode() -> None:
     assert session.get_value("total_distance") == batch.activity.distance_m
     assert session.get_value("total_calories") == batch.activity.calories
     assert session.get_value("sport") == batch.activity.sport
+
+
+def test_workout_absent_from_a_file_with_no_structured_workout() -> None:
+    """The synthetic fixture has no workout_mesgs/workout_step_mesgs -- most activities don't;
+    must parse cleanly with workout=None, not error."""
+    batch = parse_fit(FIXTURE.read_bytes())
+    assert batch.activity is not None
+    assert batch.activity.workout is None
+
+
+class TestParseWorkout:
+    """Row shapes are direct transcriptions of a real structured-workout FIT file (a warmup, a
+    5x-repeated [1km interval, 75s recovery] block, and a cooldown, each with a target pace
+    range) -- see `_parse_workout`'s own docstring for the confirmation."""
+
+    def test_extracts_name_from_the_garbled_wkt_name_list(self) -> None:
+        # `wkt_name` decodes as a list of fragments on real files -- only the first is real.
+        workout_row = {
+            "capabilities": "tcx",
+            "wkt_name": ["W9 Tue · 5x1km Threshold", "", "ng R"],
+            "wkt_description": "Focus: Lactate threshold.",
+            "num_valid_steps": 5,
+            "sport": "running",
+            "sub_sport": "generic",
+        }
+        workout, _ = _parse_workout(workout_row, [])
+        assert workout is not None
+        assert workout.name == "W9 Tue · 5x1km Threshold"
+        assert workout.description == "Focus: Lactate threshold."
+
+    def test_parses_a_time_based_speed_target_step(self) -> None:
+        step = {
+            "duration_value": 900000,
+            "target_value": 0,
+            "custom_target_value_low": 2439,
+            "custom_target_value_high": 2597,
+            "secondary_target_value": 0,
+            "message_index": 0,
+            "duration_type": "time",
+            "target_type": "speed",
+            "intensity": "warmup",
+            "duration_time": 900.0,
+            "target_speed_zone": 0,
+            "custom_target_speed_low": 2.439,
+            "custom_target_speed_high": 2.597,
+        }
+        workout, _ = _parse_workout(None, [step])
+        assert workout is not None
+        assert len(workout.steps) == 1
+        s = workout.steps[0]
+        assert s.step_index == 0
+        assert s.duration_type == "time"
+        assert s.duration_time_s == 900.0
+        assert s.duration_distance_m is None
+        assert s.target_type == "speed"
+        assert s.target_low_mps == 2.439
+        assert s.target_high_mps == 2.597
+        assert s.intensity == "warmup"
+        assert s.repeat_from_step is None
+        assert s.repeat_count is None
+
+    def test_parses_a_distance_based_step(self) -> None:
+        step = {
+            "duration_value": 100000,
+            "message_index": 1,
+            "duration_type": "distance",
+            "target_type": "speed",
+            "intensity": "active",
+            "duration_distance": 1000.0,
+            "custom_target_speed_low": 3.226,
+            "custom_target_speed_high": 3.333,
+        }
+        workout, _ = _parse_workout(None, [step])
+        assert workout is not None
+        s = workout.steps[0]
+        assert s.duration_type == "distance"
+        assert s.duration_distance_m == 1000.0
+        assert s.duration_time_s is None
+        assert s.target_low_mps == 3.226
+        assert s.target_high_mps == 3.333
+
+    def test_parses_a_repeat_step(self) -> None:
+        step = {
+            "duration_value": 1,
+            "target_value": 5,
+            "message_index": 3,
+            "duration_type": "repeat_until_steps_cmplt",
+            "duration_step": 1,
+            "repeat_steps": 5,
+        }
+        workout, _ = _parse_workout(None, [step])
+        assert workout is not None
+        s = workout.steps[0]
+        assert s.duration_type == "repeat_until_steps_cmplt"
+        assert s.repeat_from_step == 1
+        assert s.repeat_count == 5
+        # A repeat step carries no target/intensity of its own.
+        assert s.target_type is None
+        assert s.intensity is None
+
+    def test_does_not_extract_a_target_range_for_a_non_speed_target_type(self) -> None:
+        """Only target_type == "speed" has a real-data-confirmed extraction (see module
+        docstring) -- a heart_rate-targeted step must not get a fabricated pace range."""
+        step = {
+            "message_index": 0,
+            "duration_type": "time",
+            "target_type": "heart_rate",
+            "custom_target_value_low": 120,
+            "custom_target_value_high": 140,
+        }
+        workout, _ = _parse_workout(None, [step])
+        assert workout is not None
+        s = workout.steps[0]
+        assert s.target_type == "heart_rate"
+        assert s.target_low_mps is None
+        assert s.target_high_mps is None
+
+    def test_steps_are_ordered_by_message_index_regardless_of_input_order(self) -> None:
+        steps = [
+            {"message_index": 2, "duration_type": "time", "duration_time_s": 3},
+            {"message_index": 0, "duration_type": "time", "duration_time_s": 1},
+            {"message_index": 1, "duration_type": "time", "duration_time_s": 2},
+        ]
+        workout, _ = _parse_workout(None, steps)
+        assert workout is not None
+        assert [s.step_index for s in workout.steps] == [0, 1, 2]
+
+    def test_unmapped_step_field_becomes_a_per_step_extra_metric_not_dropped(self) -> None:
+        """A field on a step row that isn't part of the small core-fields mapping (here, an
+        SDK-unmapped numeric key, as seen on a real repeat step) must still be cataloged --
+        never silently discarded, same "never drop a field" rule as every other message type."""
+        step = {"message_index": 3, "duration_type": "repeat_until_steps_cmplt", 18: 0}
+        _, extra_metrics = _parse_workout(None, [step])
+        keys = {m.key for m in extra_metrics}
+        # `_message_short_name` strips the "_mesgs" suffix from the message-type-derived prefix.
+        assert "fit.workout_step_3.18" in keys
+
+    def test_returns_none_when_there_is_no_workout_data_at_all(self) -> None:
+        workout, extra_metrics = _parse_workout(None, [])
+        assert workout is None
+        assert extra_metrics == []

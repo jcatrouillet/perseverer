@@ -75,11 +75,21 @@ GARMIN_ACTIVITY_TYPE_MAP: dict[str, tuple[str, str]] = {
 }
 
 
+# Garmin Connect's own event-type classification -- confirmed against this athlete's real
+# export (not assumed from any documentation): eventTypeId 1 matches exclusively real named
+# races ("Bay to Breakers", "Golden Gate Half Marathon", "JP Morgan Corporate Challenge 2023",
+# etc., 12 of 13 occurrences); 9 is the overwhelming default ("uncategorized", 1709
+# occurrences); 4 occurred once, on a plain "Long run". Nothing here is FIT-derivable -- a FIT
+# file has no concept of "this was a race", only Garmin Connect's own activity record does.
+GARMIN_RACE_EVENT_TYPE_ID = 1
+
+
 @dataclass(frozen=True)
 class GarminActivitySummaryEntry:
     garmin_activity_id: int | None
     name: str | None
     activity_type: str | None
+    event_type_id: int | None
     # Naive, implicitly UTC -- matches every other DateTime in this codebase (CLAUDE.md decision
     # 10), so it compares directly against `activity.start_time_utc` with no tzinfo juggling.
     begin_timestamp_utc: datetime
@@ -112,6 +122,7 @@ def parse_summarized_activities_json(content: bytes) -> list[GarminActivitySumma
                     garmin_activity_id=raw_entry.get("activityId"),
                     name=raw_entry.get("name"),
                     activity_type=raw_entry.get("activityType"),
+                    event_type_id=raw_entry.get("eventTypeId"),
                     begin_timestamp_utc=datetime.fromtimestamp(
                         begin_ts / 1000, tz=UTC
                     ).replace(tzinfo=None),
@@ -125,10 +136,17 @@ def correct_activities_from_summary(
 ) -> CorrectionResult:
     """Matches each summary entry to this athlete's closest activity by start time (within
     `_MATCH_TOLERANCE_S`) and, when matched, corrects `sport`/`sub_sport` (only when
-    `activity_type` maps to something different from what's stored) and fills in `name` (only
-    when Garmin has a real one the activity doesn't already have -- this never blanks out an
-    existing name). Never touches an activity with no matching entry, and never invents a
-    mapping for an unrecognized `activity_type`."""
+    `activity_type` maps to something different from what's stored) and `is_race` (only when
+    `eventTypeId` is known and differs from what's stored -- see GARMIN_RACE_EVENT_TYPE_ID).
+    `name` is always overwritten with Garmin's own name when it differs from what's stored --
+    an explicit athlete directive, not an inferred heuristic: Garmin Connect's own `name` is
+    *not* reliably a real athlete-given title (confirmed against this athlete's real archive --
+    it can be just as generic a location+activity-type auto-template as the FIT-derived default,
+    e.g. "Santa Clara Other" for hundreds of dissimilar, unrelated activities across years, which
+    replaces an already-more-specific stored name like "Morning Run" with a less informative
+    one), but the athlete has chosen to always prefer whatever Garmin Connect itself shows
+    regardless. Never touches an activity with no matching entry, and never invents a mapping
+    for an unrecognized `activity_type`."""
     rows = conn.execute(
         select(
             activity.c.id,
@@ -136,6 +154,7 @@ def correct_activities_from_summary(
             activity.c.sport,
             activity.c.sub_sport,
             activity.c.name,
+            activity.c.is_race,
         )
         .where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
         .order_by(activity.c.start_time_utc)
@@ -166,8 +185,16 @@ def correct_activities_from_summary(
         updates: dict[str, object] = {}
         if mapped is not None and (row.sport, row.sub_sport) != mapped:
             updates["sport"], updates["sub_sport"] = mapped
-        # Fill only -- an existing name (however it got there) is left alone, not overwritten.
-        if entry.name and row.name is None:
+
+        is_race = (
+            entry.event_type_id == GARMIN_RACE_EVENT_TYPE_ID
+            if entry.event_type_id is not None
+            else None
+        )
+        if is_race is not None and is_race != row.is_race:
+            updates["is_race"] = is_race
+
+        if entry.name and entry.name != row.name:
             updates["name"] = entry.name
 
         if not updates:

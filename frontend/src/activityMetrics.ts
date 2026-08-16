@@ -8,6 +8,18 @@ export function metricValue(metrics: ActivityMetricOut[], key: string): number |
   return metrics.find((m) => m.metric_key === key)?.value_num ?? null;
 }
 
+/** Same alias-merge as api/routers/activities.py's `_aliased_metric_subquery` -- `keys` is
+ * ordered by priority, not just membership. GPX/TCX-sourced Strava activities have no
+ * fit.session.* keys at all (see ADR 0013); this lets a caller ask for a logical field without
+ * knowing which source namespace populated it for a given activity. */
+export function metricValueAliased(metrics: ActivityMetricOut[], keys: string[]): number | null {
+  for (const key of keys) {
+    const value = metricValue(metrics, key);
+    if (value != null) return value;
+  }
+  return null;
+}
+
 export interface HrZone {
   index: number;
   seconds: number;

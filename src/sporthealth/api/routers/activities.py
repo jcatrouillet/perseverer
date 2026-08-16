@@ -8,18 +8,32 @@ from typing import Annotated
 
 import duckdb
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Connection, func, select
+from sqlalchemy import Connection, case, func, select
 
+from sporthealth.adapters.fit_folder import _local_date, _upsert_device, insert_new_activity
+from sporthealth.adapters.strava_export import _overlay_csv_totals
 from sporthealth.api.dependencies import get_conn, get_duckdb, require_api_key
 from sporthealth.api.schemas.activities import (
     ActivityContextOut,
     ActivityContextRecentOut,
     ActivityDetail,
     ActivityMapPointOut,
+    ActivityMergeDecisionOut,
     ActivityMetricOut,
+    ActivityNameOverrideIn,
+    ActivityNameOverrideOut,
+    ActivityRaceOverrideIn,
+    ActivityRaceOverrideOut,
     ActivityRouteOut,
+    ActivitySourceOut,
+    ActivitySourcesOut,
+    ActivitySplitOut,
+    ActivitySportOverrideIn,
+    ActivitySportOverrideOut,
     ActivitySummary,
     ActivityWeatherOut,
+    ActivityWorkoutOut,
+    ActivityWorkoutStepOut,
     DeviceOut,
     LapOut,
     RouteOut,
@@ -27,21 +41,64 @@ from sporthealth.api.schemas.activities import (
 )
 from sporthealth.api.schemas.common import Page, to_utc
 from sporthealth.api.schemas.streams import StreamResponse
+from sporthealth.archive import read_raw_bytes
 from sporthealth.config import Settings, get_settings
 from sporthealth.db.schema import (
     activity,
     activity_metric,
+    activity_source_link,
     activity_stream,
+    activity_workout,
+    activity_workout_step,
     health_observation,
     lap,
+    merge_decision,
+    raw_object,
     route_geom,
 )
 from sporthealth.db.schema import device as device_table
 from sporthealth.db.schema import split as split_table
+from sporthealth.reparse import reparse_raw_object
+from sporthealth.rollups import refresh_daily_and_period_rollups
+from sporthealth.sport_override import set_name_override, set_race_override, set_sport_override
 from sporthealth.stream_query import downsample
 from sporthealth.weather import get_or_fetch_activity_weather
 
 router = APIRouter()
+
+# Avg/max heart rate lives under one of two metric_key namespaces depending on source: FIT's own
+# session field for fit_folder/garmin_export/garmin_connect, or activities.csv's own Average/Max
+# Heart Rate columns (strava_export.py's CSV-totals overlay) for GPX/TCX-sourced Strava
+# activities, which have no FIT session message to read a value from at all. Same alias-merge
+# shape as api/routers/health.py::LOGICAL_METRICS -- see ADR 0013.
+AVG_HR_METRIC_KEYS = ("fit.session.avg_heart_rate", "strava.session.avg_heart_rate")
+MAX_HR_METRIC_KEYS = ("fit.session.max_heart_rate", "strava.session.max_heart_rate")
+
+
+def _aliased_metric_subquery(keys: tuple[str, ...]):  # type: ignore[no-untyped-def]
+    """A correlated scalar subquery preferring the first key in `keys` that has a value for
+    this activity -- `keys` is ordered by priority, not just membership."""
+    priority = case(*[(activity_metric.c.metric_key == k, i) for i, k in enumerate(keys)])
+    return (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key.in_(keys),
+        )
+        .order_by(priority)
+        .limit(1)
+        .scalar_subquery()
+    )
+
+
+def _first_metric(metrics_by_key: dict[str, float], keys: tuple[str, ...]) -> float | None:
+    """Same alias-merge as `_aliased_metric_subquery`, for callers (get_activity) that already
+    have the full per-activity metrics dict in hand rather than issuing a new subquery."""
+    for key in keys:
+        if key in metrics_by_key:
+            return metrics_by_key[key]
+    return None
+
 
 # fit.session.workout_rpe is an unrecognized/generic field (see fit/parser.py's docstring), so
 # nothing descales it on ingest -- its stored value_num is the raw FIT uint8, Borg CR10 x10 per
@@ -99,27 +156,12 @@ def list_activities(
         .exists()
     )
     # Whole-activity avg/max heart rate isn't a fixed column on `activity` (see
-    # docs/DATA_DICTIONARY.md) -- it's a FIT session-message metric, one EAV row per activity.
-    # Correlated scalar subqueries keep this a single query, matching the existing
-    # `stream_exists` pattern immediately above, rather than an N+1 per-activity lookup.
-    avg_hr_subq = (
-        select(activity_metric.c.value_num)
-        .where(
-            activity_metric.c.activity_id == activity.c.id,
-            activity_metric.c.metric_key == "fit.session.avg_heart_rate",
-        )
-        .limit(1)
-        .scalar_subquery()
-    )
-    max_hr_subq = (
-        select(activity_metric.c.value_num)
-        .where(
-            activity_metric.c.activity_id == activity.c.id,
-            activity_metric.c.metric_key == "fit.session.max_heart_rate",
-        )
-        .limit(1)
-        .scalar_subquery()
-    )
+    # docs/DATA_DICTIONARY.md) -- it's an EAV metric, one row per activity, under one of two
+    # possible metric_key namespaces (see AVG_HR_METRIC_KEYS above). Correlated scalar
+    # subqueries keep this a single query, matching the existing `stream_exists` pattern
+    # immediately above, rather than an N+1 per-activity lookup.
+    avg_hr_subq = _aliased_metric_subquery(AVG_HR_METRIC_KEYS)
+    max_hr_subq = _aliased_metric_subquery(MAX_HR_METRIC_KEYS)
     # Same EAV pattern as avg/max heart rate above. training_load_peak's stored value_num is
     # already the real Training Load figure -- the FIT SDK profile gives it `scale: 65536`,
     # which its own decoder applies before we ever see the value (confirmed by introspecting
@@ -166,6 +208,7 @@ def list_activities(
         activity.c.sport,
         activity.c.sub_sport,
         activity.c.name,
+        activity.c.is_race,
         activity.c.duration_s,
         activity.c.moving_duration_s,
         activity.c.distance_m,
@@ -214,6 +257,7 @@ def list_activities(
             sport=r.sport,
             sub_sport=r.sub_sport,
             name=r.name,
+            is_race=r.is_race,
             duration_s=r.duration_s,
             moving_duration_s=r.moving_duration_s,
             distance_m=r.distance_m,
@@ -380,12 +424,13 @@ def get_activity(
         sport=row.sport,
         sub_sport=row.sub_sport,
         name=row.name,
+        is_race=row.is_race,
         duration_s=row.duration_s,
         distance_m=row.distance_m,
         elevation_gain_m=row.elevation_gain_m,
         calories=row.calories,
-        avg_hr_bpm=metrics_by_key.get("fit.session.avg_heart_rate"),
-        max_hr_bpm=metrics_by_key.get("fit.session.max_heart_rate"),
+        avg_hr_bpm=_first_metric(metrics_by_key, AVG_HR_METRIC_KEYS),
+        max_hr_bpm=_first_metric(metrics_by_key, MAX_HR_METRIC_KEYS),
         training_load=metrics_by_key.get("fit.session.training_load_peak"),
         workout_rpe=_workout_rpe_from_raw(metrics_by_key.get("fit.session.workout_rpe")),
         weight_kg=metrics_by_key.get("fit.user_profile.weight"),
@@ -407,6 +452,7 @@ def get_activity(
                 lap_index=lap_row.lap_index,
                 start_time_utc=to_utc(lap_row.start_time_utc),
                 duration_s=lap_row.duration_s,
+                moving_duration_s=lap_row.moving_duration_s,
                 distance_m=lap_row.distance_m,
                 avg_hr=lap_row.avg_hr,
                 max_hr=lap_row.max_hr,
@@ -457,6 +503,7 @@ def get_activity(
 
 _CONTEXT_DISTANCE_BAND_FRACTION = 0.15
 _CONTEXT_RECENT_WINDOW_DAYS = 90
+_CONTEXT_FASTEST_LIMIT = 30
 
 
 @router.get("/activities/{activity_id}/context")
@@ -503,6 +550,7 @@ def get_activity_context(
 
     percentile_rank: float | None = None
     comparable_count = 0
+    fastest: list[ActivityContextRecentOut] = []
     if (
         row.distance_m is not None
         and row.distance_m > 0
@@ -512,8 +560,13 @@ def get_activity_context(
         low = row.distance_m * (1 - _CONTEXT_DISTANCE_BAND_FRACTION)
         high = row.distance_m * (1 + _CONTEXT_DISTANCE_BAND_FRACTION)
         band_rows = conn.execute(
-            select(activity.c.id, activity.c.distance_m, effective_duration_expr.label("eff_s"))
-            .where(
+            select(
+                activity.c.id,
+                activity.c.local_date,
+                activity.c.distance_m,
+                effective_duration_expr.label("eff_s"),
+                _aliased_metric_subquery(AVG_HR_METRIC_KEYS).label("avg_hr"),
+            ).where(
                 activity.c.athlete_id == athlete_id,
                 activity.c.deleted_at.is_(None),
                 activity.c.sport == row.sport,
@@ -535,6 +588,47 @@ def get_activity_context(
         if comparable_count > 0:
             slower_or_equal = sum(1 for p in other_paces if p >= this_pace_s_per_m)
             percentile_rank = round(100 * slower_or_equal / comparable_count, 1)
+
+        # "Fastest 30 runs for the same distance": a *separate*, tighter query than the +/-15%
+        # band `percentile_rank` draws on above -- "only the runs exactly between 26.00km and
+        # 26.99km for a 26km activity, nothing else" -- the same whole-kilometre bucket as this
+        # activity's own floor(distance_m / 1000), not a percentage band. The two aren't
+        # interchangeable: at short distances +/-15% is narrower than a full km bucket (a 5K's
+        # 15% band is +/-0.75km, missing part of the [5000, 6000) bucket), so this can't be
+        # filtered out of `band_rows` in Python -- it needs its own query.
+        km_floor_m = int(row.distance_m // 1000) * 1000
+        fastest_rows = conn.execute(
+            select(
+                activity.c.id,
+                activity.c.local_date,
+                activity.c.distance_m,
+                effective_duration_expr.label("eff_s"),
+                _aliased_metric_subquery(AVG_HR_METRIC_KEYS).label("avg_hr"),
+            ).where(
+                activity.c.athlete_id == athlete_id,
+                activity.c.deleted_at.is_(None),
+                activity.c.sport == row.sport,
+                activity.c.distance_m >= km_floor_m,
+                activity.c.distance_m < km_floor_m + 1000,
+                effective_duration_expr.is_not(None),
+                effective_duration_expr > 0,
+            )
+        ).fetchall()
+
+        # This activity itself is included if it earns a spot, not filtered out the way
+        # `other_paces` above filters it for the percentile math.
+        fastest = [
+            ActivityContextRecentOut(
+                id=r.id,
+                local_date=r.local_date,
+                distance_m=r.distance_m,
+                duration_s=r.eff_s,
+                avg_hr_bpm=r.avg_hr,
+            )
+            for r in sorted(fastest_rows, key=lambda r: r.eff_s / r.distance_m)[
+                :_CONTEXT_FASTEST_LIMIT
+            ]
+        ]
 
     recent: list[ActivityContextRecentOut] = []
     if row.local_date is not None:
@@ -568,7 +662,10 @@ def get_activity_context(
         ]
 
     return ActivityContextOut(
-        percentile_rank=percentile_rank, comparable_count=comparable_count, recent=recent
+        percentile_rank=percentile_rank,
+        comparable_count=comparable_count,
+        recent=recent,
+        fastest=fastest,
     )
 
 
@@ -626,6 +723,292 @@ def get_activity_weather(
         humidity_max_pct=summary.humidity_max_pct,
         weather_code=summary.weather_code,
     )
+
+
+@router.get("/activities/{activity_id}/workout")
+def get_activity_workout(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityWorkoutOut | None:
+    """The pre-planned workout structure recorded into this activity's own FIT file (Garmin
+    Connect's "Workout" builder, downloaded to the device before the activity) -- `None` for the
+    (large majority of) activities with no such plan, never a fabricated one. See
+    fit/parser.py::_parse_workout's own docstring for how this is parsed and why it's stored
+    unexpanded (raw `repeat_until_steps_cmplt` steps, not pre-flattened repetitions)."""
+    exists = conn.execute(
+        select(activity.c.id).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+
+    workout_row = conn.execute(
+        select(activity_workout.c.name, activity_workout.c.description).where(
+            activity_workout.c.activity_id == activity_id
+        )
+    ).fetchone()
+    if workout_row is None:
+        return None
+
+    step_rows = conn.execute(
+        select(activity_workout_step)
+        .where(activity_workout_step.c.activity_id == activity_id)
+        .order_by(activity_workout_step.c.step_index)
+    ).fetchall()
+
+    return ActivityWorkoutOut(
+        name=workout_row.name,
+        description=workout_row.description,
+        steps=[
+            ActivityWorkoutStepOut(
+                step_index=s.step_index,
+                duration_type=s.duration_type,
+                duration_time_s=s.duration_time_s,
+                duration_distance_m=s.duration_distance_m,
+                target_type=s.target_type,
+                target_low_mps=s.target_low_mps,
+                target_high_mps=s.target_high_mps,
+                intensity=s.intensity,
+                repeat_from_step=s.repeat_from_step,
+                repeat_count=s.repeat_count,
+            )
+            for s in step_rows
+        ],
+    )
+
+
+@router.get("/activities/{activity_id}/sources")
+def get_activity_sources(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivitySourcesOut:
+    """Every source this activity's data actually came from, plus the merge decisions that
+    linked them together -- the "both sources inspectable" half of the Phase 8 acceptance
+    criterion (see ADR 0012). The other half, undoing a wrong merge, is
+    POST .../sources/{link_id}/split below."""
+    exists = conn.execute(
+        select(activity.c.id).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+
+    link_rows = conn.execute(
+        select(activity_source_link)
+        .where(
+            activity_source_link.c.athlete_id == athlete_id,
+            activity_source_link.c.activity_id == activity_id,
+        )
+        .order_by(activity_source_link.c.ingested_at.asc())
+    ).fetchall()
+    can_split = len(link_rows) > 1
+
+    decision_rows = conn.execute(
+        select(merge_decision)
+        .where(
+            merge_decision.c.athlete_id == athlete_id,
+            merge_decision.c.matched_activity_id == activity_id,
+            merge_decision.c.decision == "matched",
+        )
+        .order_by(merge_decision.c.decided_at.asc())
+    ).fetchall()
+
+    return ActivitySourcesOut(
+        sources=[
+            ActivitySourceOut(
+                link_id=r.id,
+                source=r.source,
+                external_id=r.external_id,
+                ingested_at=to_utc(r.ingested_at),
+                can_split=can_split,
+            )
+            for r in link_rows
+        ],
+        merge_decisions=[
+            ActivityMergeDecisionOut(
+                candidate_ref=r.candidate_ref,
+                reasons=json.loads(r.reasons),
+                decided_at=to_utc(r.decided_at),
+            )
+            for r in decision_rows
+        ],
+    )
+
+
+@router.post("/activities/{activity_id}/sources/{link_id}/split")
+def split_activity_source(
+    activity_id: str,
+    link_id: int,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> ActivitySplitOut:
+    """Undoes a wrong merge: repoints one source's `activity_source_link` row onto a brand-new
+    activity, re-derived from that source's own already-archived raw bytes -- never destructive,
+    the original activity keeps every other source it had. Rejects with 400 if `link_id` is the
+    activity's only source (nothing to split away from)."""
+    all_links = conn.execute(
+        select(activity_source_link).where(
+            activity_source_link.c.athlete_id == athlete_id,
+            activity_source_link.c.activity_id == activity_id,
+        )
+    ).fetchall()
+    if not all_links:
+        raise HTTPException(status_code=404, detail="activity not found")
+    target = next((r for r in all_links if r.id == link_id), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="source link not found on this activity")
+    if len(all_links) <= 1:
+        raise HTTPException(status_code=400, detail="cannot split the only source of an activity")
+
+    raw_row = conn.execute(
+        select(raw_object).where(raw_object.c.id == target.raw_object_id)
+    ).fetchone()
+    if raw_row is None:
+        raise HTTPException(status_code=500, detail="raw object for this source is missing")
+
+    content = read_raw_bytes(settings.raw_archive_dir, raw_row.storage_path)
+    batch = reparse_raw_object(raw_row.kind, content)
+    if batch.kind != "activity" or batch.activity is None:
+        raise HTTPException(
+            status_code=422, detail="this source's raw data can't be re-parsed into an activity"
+        )
+    parsed = batch.activity
+
+    # GPX/TCX carry no session-level totals of their own (see gpx/parser.py, tcx/parser.py) --
+    # the original ingest overlaid activities.csv's totals onto them, so a faithful split needs
+    # the same overlay, re-fetched from that row's own archived raw_object.
+    if raw_row.kind in ("strava_export_gpx", "strava_export_tcx"):
+        csv_raw = conn.execute(
+            select(raw_object)
+            .where(
+                raw_object.c.athlete_id == athlete_id,
+                raw_object.c.source == "strava_export",
+                raw_object.c.kind == "strava_export_csv_row",
+                raw_object.c.external_id == target.external_id,
+            )
+            .order_by(raw_object.c.id.desc())
+            .limit(1)
+        ).fetchone()
+        if csv_raw is not None:
+            csv_content = read_raw_bytes(settings.raw_archive_dir, csv_raw.storage_path)
+            row = dict(json.loads(csv_content))
+            parsed = _overlay_csv_totals(parsed, row)
+
+    device_id = _upsert_device(conn, athlete_id, parsed.device) if parsed.device else None
+    new_activity_id = insert_new_activity(
+        conn,
+        settings.parquet_dir,
+        athlete_id=athlete_id,
+        source=target.source,
+        device_id=device_id,
+        a=parsed,
+    )
+
+    conn.execute(
+        activity_source_link.update()
+        .where(activity_source_link.c.id == link_id)
+        .values(activity_id=new_activity_id)
+    )
+
+    touched_dates = {_local_date(parsed.start_time_utc, parsed.utc_offset_s)}
+    old_row = conn.execute(
+        select(activity.c.start_time_utc, activity.c.utc_offset_s).where(
+            activity.c.id == activity_id
+        )
+    ).fetchone()
+    if old_row is not None:
+        touched_dates.add(_local_date(old_row.start_time_utc, old_row.utc_offset_s))
+    refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
+    conn.commit()
+
+    return ActivitySplitOut(new_activity_id=new_activity_id)
+
+
+@router.patch("/activities/{activity_id}/sport")
+def override_activity_sport(
+    activity_id: str,
+    body: ActivitySportOverrideIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivitySportOverrideOut:
+    """A manual "this sport is wrong" correction -- for activities whose raw source itself
+    records the wrong sport (e.g. a hike recorded with a watch's "Run" profile still selected,
+    or a FIT file reconstructed by a third-party tool that always writes `sport=running`
+    regardless of what the activity actually was), where there's no second raw source in the
+    archive to cross-check against automatically. See sport_override.py's own docstring for why
+    this is a durable, rebuild-safe correction table rather than a one-off column mutation.
+    """
+    if not body.sport.strip():
+        raise HTTPException(status_code=422, detail="sport must not be empty")
+    try:
+        set_sport_override(
+            conn,
+            athlete_id=athlete_id,
+            activity_id=activity_id,
+            sport=body.sport,
+            sub_sport=body.sub_sport,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    conn.commit()
+    return ActivitySportOverrideOut(sport=body.sport, sub_sport=body.sub_sport)
+
+
+@router.patch("/activities/{activity_id}/race")
+def override_activity_race(
+    activity_id: str,
+    body: ActivityRaceOverrideIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityRaceOverrideOut:
+    """A manual "this is/isn't a race" correction -- for activities where Garmin's own
+    `eventTypeId` heuristic (garmin_activity_summary.py) gets it wrong, e.g. a real race the
+    athlete never flagged as one inside the Garmin Connect app itself, which is the only signal
+    that heuristic has to go on. See sport_override.py's own docstring for why this is a
+    durable, rebuild-safe correction table rather than a one-off column mutation.
+    """
+    try:
+        set_race_override(
+            conn, athlete_id=athlete_id, activity_id=activity_id, is_race=body.is_race
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    conn.commit()
+    return ActivityRaceOverrideOut(is_race=body.is_race)
+
+
+@router.patch("/activities/{activity_id}/name")
+def override_activity_name(
+    activity_id: str,
+    body: ActivityNameOverrideIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityNameOverrideOut:
+    """A manual "this title is wrong" correction -- Garmin Connect's own name for an activity is
+    not reliably a real athlete-given title (it can be just as generic a template as the
+    FIT-derived on-device default, confirmed the hard way -- see sport_override.py's own
+    docstring), so there is no safe automatic rule for replacing a boring name like "Run". Only
+    the athlete looking at one specific activity can tell. See sport_override.py's own docstring
+    for why this is a durable, rebuild-safe correction table rather than a one-off column
+    mutation.
+    """
+    if not body.name.strip():
+        raise HTTPException(status_code=422, detail="name must not be empty")
+    try:
+        set_name_override(conn, athlete_id=athlete_id, activity_id=activity_id, name=body.name)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    conn.commit()
+    return ActivityNameOverrideOut(name=body.name)
 
 
 @router.get("/activities/{activity_id}/stream")

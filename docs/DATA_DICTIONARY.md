@@ -201,7 +201,17 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
   audit. Written even for `fit_folder` alone (catches duplicate files within one source), not
   just once a second source exists. With `garmin_export`/`garmin_connect` now live, this is
   also where a `fit_folder` activity and its `garmin_export`/`garmin_connect` re-sync
-  reconcile into one activity — see `sync report counts` for a summary view.
+  reconcile into one activity — see `sync report counts` for a summary view. `GET
+  /activities/{id}/sources` (Phase 8) surfaces the `matched`-decision rows for one activity.
+- **`insight`** (Phase 8) — the rules-based insight engine's output (`insights/engine.py`), a
+  full delete-and-reinsert per athlete per refresh, not an append-only log. `kind` (`effort` |
+  `streak` | `pb` | `load` | `health`) × `window` (`30d`/`90d`/`180d`/`year`/`365d`, or
+  `current` for the streak/load/health rules that describe "right now" rather than a lookback)
+  × `subject_key` (a short deterministic string, e.g. `"distance:run"`, unique together with
+  `kind`+`window`+`athlete_id` — the refresh's actual idempotency key) identify each row;
+  `detail` is a JSON blob of rule-specific context. See
+  `docs/adr/0012-phase-8-strava-merge-insights.md` for the full dimension/window table and the
+  load/health rules' thresholds.
 
 ## Metric registry
 
@@ -275,3 +285,57 @@ HRV-SpO2-stress sections) — plus Vitest + React Testing Library, the frontend'
 test coverage. `sync rebuild`'s `garmin_export_health_json` replay gap (open since Phase 3) was
 fixed in this phase, since Fitness & Form and the health dashboard both lean heavily on that
 data. See `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md`.
+
+## strava_export, merge visibility/split, insight engine (Phase 8)
+
+`strava_export` (`adapters/strava_export.py`) registers a bounded, deliberately small set of
+new `activity_metric` keys for the CSV columns it materializes beyond the core `activity`
+fields: `strava.relative_effort`, `strava.perceived_exertion`, `strava.training_load`. GPX files
+carrying a `gpx.creator` value (the exporting tool/device) register that as an extra metric too.
+Every other `activities.csv` column not explicitly materialized is still fully preserved — just
+not promoted to a typed metric — inside the raw-archived `strava_export_csv_row` object itself
+(one per CSV row, positional `[header, value]` pairs so the CSV's own duplicate-column-name
+quirk survives verbatim). New `raw_object.kind` values: `strava_export_gz` (the literal
+gzip-compressed vendor bytes, archived before decompression), `strava_export_gpx`,
+`strava_export_tcx`, `strava_export_csv_row`, `strava_export_manual_entry` (the ~0.6% of rows
+with no backing file), `strava_export_other` (anything else, archived raw but not parsed).
+
+`GET /activities/{id}/sources` and `POST /activities/{id}/sources/{link_id}/split` are new
+`api/routers/activities.py` endpoints — see the `merge_decision` bullet above and
+`docs/adr/0012-phase-8-strava-merge-insights.md` decision 3 for the split endpoint's
+non-destructive design.
+
+`GET /api/v1/insights` (optional `kind`/`window` query filters) is a plain read against the new
+`insight` table (see the Ops section above) — no request-time computation, same rollup mandate
+as every other Phase 3+ read endpoint. `sync refresh-insights` is a manual, out-of-band trigger;
+every ingest entry point (plus `garmin_connect`'s own daily-scheduled sync, unconditionally)
+already calls the same `insights.engine.refresh_insights` automatically. The frontend gained an
+`InsightsPage` (grouped by kind, filtered to one window at a time — see ADR 0012 decision 4 for
+why `garmin_connect`'s existing daily cadence is what keeps a "last 30 days"-style window
+correct even with zero new activities). See `docs/adr/0012-phase-8-strava-merge-insights.md`.
+
+## Activity view/map/export UX pass, Strava data completeness fix
+
+Three new `strava.session.*` `activity_metric` keys, registered by `adapters/strava_export.py`'s
+CSV-totals overlay for GPX/TCX-sourced activities (which have no FIT session message to read these
+from): `strava.session.avg_heart_rate`, `strava.session.max_heart_rate`,
+`strava.session.total_descent` (from `activities.csv`'s own `Average Heart Rate`/`Max Heart
+Rate`/`Elevation Loss` columns). Source-honest naming, not `fit.session.*` — three read sites
+(`api/routers/activities.py`, `insights/engine.py`, `ActivityStatsGrid.tsx`) coalesce both key
+namespaces via the same alias-priority pattern `api/routers/health.py::LOGICAL_METRICS` already
+established, `fit.session.*` preferred when both are present. GPX/TCX streams also gained a
+per-point `speed_mps` channel (haversine-derived `distance_m` for GPX; consecutive-delta speed for
+TCX, GPX/TCX had no speed channel at all before this) — see `docs/adr/
+0013-activity-view-map-export-strava-completeness.md` decision 1.
+
+`GET /activities/{id}/context` gained a `fastest` field: the same same-sport, ±15%-distance-band
+comparison pool `percentile_rank` already drew on, re-sorted pace-ascending and capped at 30 (the
+"fastest 30 for this distance" table on the activity detail page).
+
+`sync rebuild`'s replay dispatch gained `strava_export_gpx`/`strava_export_tcx` branches and
+detects/replays a file-less manual-entry row from its own `strava_export_csv_row` raw object
+(previously silently dropped both ways — see ADR 0013 decision 2), and `insight` was added to
+`rebuild.py`'s `_REBUILDABLE_TABLES` wipe list (previously missing, causing a real FK violation
+on any rebuild against a database with existing insight rows — see ADR 0013 decision 3).
+
+See `docs/adr/0013-activity-view-map-export-strava-completeness.md`.

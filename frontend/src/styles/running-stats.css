@@ -105,6 +105,10 @@
   align-items: center;
   justify-content: center;
   position: relative;
+  /* A wouter <Link> (click -> the day/week it represents), not a bare <span> -- reset the
+     inherited anchor styling so it still reads as a plain coloured square. */
+  color: inherit;
+  text-decoration: none;
 }
 
 .running-heatmap__cell.is-empty {
@@ -208,6 +212,10 @@
 
 .running-records__table tbody tr.is-hovered {
   background: var(--color-surface-raised);
+}
+
+.running-records__row {
+  cursor: pointer;
 }
 
 .running-records__new-prs {

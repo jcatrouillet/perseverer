@@ -1,8 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { LapOut, StreamResponse } from "../api/types";
+import type { ActivityWorkoutStepOut, LapOut, StreamResponse } from "../api/types";
 import { ActivityCharts } from "./ActivityCharts";
+
+function workoutStep(overrides: Partial<ActivityWorkoutStepOut>): ActivityWorkoutStepOut {
+  return {
+    step_index: 0,
+    duration_type: null,
+    duration_time_s: null,
+    duration_distance_m: null,
+    target_type: null,
+    target_low_mps: null,
+    target_high_mps: null,
+    intensity: null,
+    repeat_from_step: null,
+    repeat_count: null,
+    ...overrides,
+  };
+}
 
 function stream(overrides: Partial<StreamResponse> = {}): StreamResponse {
   const timestamps = ["2025-06-01T08:00:00Z", "2025-06-01T08:00:10Z", "2025-06-01T08:00:20Z"];
@@ -24,6 +40,7 @@ function lap(start_time_utc: string, index: number): LapOut {
     lap_index: index,
     start_time_utc,
     duration_s: 300,
+    moving_duration_s: 300,
     distance_m: 1000,
     avg_hr: 130,
     max_hr: 145,
@@ -125,5 +142,94 @@ describe("ActivityCharts", () => {
     const { container } = render(<ActivityCharts stream={s} laps={laps} sport="running" />);
     // One real (non-zero) lap boundary across two synced panels (heart rate + elevation).
     expect(container.querySelectorAll(".recharts-reference-line")).toHaveLength(2);
+  });
+
+  it("shades each lap as a background band across every panel", () => {
+    const s = stream();
+    const laps = [lap("2025-06-01T08:00:00Z", 0), lap("2025-06-01T08:00:10Z", 1)];
+    const { container } = render(<ActivityCharts stream={s} laps={laps} sport="running" />);
+    // 3 boundaries (0, 10, maxT=20) -> 2 lap bands, but only the odd-indexed one is shaded ->
+    // 1 shaded ReferenceArea per panel, across 2 synced panels (heart rate + elevation).
+    expect(container.querySelectorAll(".recharts-reference-area")).toHaveLength(2);
+  });
+
+  it("draws a flat expected-pace reference line on the Pace panel at the activity's own average pace", () => {
+    const withSpeed = stream({
+      channels: ["speed_mps"],
+      series: { speed_mps: [3.0, 3.2, 3.1] },
+    });
+    // distanceM/durationS chosen so the average pace (5:33 /km) differs from any raw sample.
+    const { container } = render(
+      <ActivityCharts stream={withSpeed} laps={[]} sport="running" distanceM={3000} durationS={1000} />,
+    );
+    const labels = Array.from(container.querySelectorAll(".recharts-label")).map((l) => l.textContent);
+    expect(labels).toContain("Avg");
+  });
+
+  it("omits the expected-pace reference line when distance/duration aren't provided", () => {
+    const withSpeed = stream({
+      channels: ["speed_mps"],
+      series: { speed_mps: [3.0, 3.2, 3.1] },
+    });
+    const { container } = render(<ActivityCharts stream={withSpeed} laps={[]} sport="running" />);
+    const labels = Array.from(container.querySelectorAll(".recharts-label")).map((l) => l.textContent);
+    expect(labels).not.toContain("Avg");
+  });
+
+  it("highlights the hovered lap's own time range across every panel, on top of the existing lap-band shading", () => {
+    const s = stream();
+    const laps = [lap("2025-06-01T08:00:00Z", 0), lap("2025-06-01T08:00:10Z", 1)];
+    const withoutHighlight = render(
+      <ActivityCharts stream={s} laps={laps} sport="running" highlightLapIndex={null} />,
+    );
+    const baseline = withoutHighlight.container.querySelectorAll(".recharts-reference-area").length;
+    withoutHighlight.unmount();
+
+    const { container } = render(
+      <ActivityCharts stream={s} laps={laps} sport="running" highlightLapIndex={1} />,
+    );
+    // One extra ReferenceArea per synced panel (heart rate + elevation) beyond the baseline
+    // lap-band shading, which is already present regardless of hover state.
+    expect(container.querySelectorAll(".recharts-reference-area").length).toBe(baseline + 2);
+  });
+
+  it("shows the workout's target pace as a shaded step area on the Pace panel, with no on-chart text", () => {
+    const withSpeed = stream({ channels: ["speed_mps"], series: { speed_mps: [3.0, 3.2, 3.1] } });
+    const laps = [lap("2025-06-01T08:00:00Z", 0), lap("2025-06-01T08:00:10Z", 1)];
+    const workout = {
+      name: "Threshold",
+      description: null,
+      steps: [
+        workoutStep({
+          step_index: 0,
+          duration_type: "time",
+          duration_time_s: 10,
+          target_type: "speed",
+          target_low_mps: 2.439,
+          target_high_mps: 2.597,
+        }),
+      ],
+    };
+    const { container } = render(
+      <ActivityCharts stream={withSpeed} laps={laps} sport="running" workout={workout} />,
+    );
+    const pacePanel = Array.from(container.querySelectorAll(".activity-charts__panel")).find(
+      (p) => p.querySelector("h4")?.textContent?.includes("Pace") && !p.querySelector("h4")?.textContent?.includes("Grade"),
+    )!;
+    expect(pacePanel.querySelectorAll(".recharts-area").length).toBeGreaterThan(0);
+    const labels = Array.from(container.querySelectorAll(".recharts-label")).map((l) => l.textContent);
+    expect(labels).not.toContain("6:25-6:50");
+  });
+
+  it("omits the workout overlay entirely when no workout is provided", () => {
+    const withSpeed = stream({ channels: ["speed_mps"], series: { speed_mps: [3.0, 3.2, 3.1] } });
+    const laps = [lap("2025-06-01T08:00:00Z", 0), lap("2025-06-01T08:00:10Z", 1)];
+    const { container } = render(
+      <ActivityCharts stream={withSpeed} laps={laps} sport="running" workout={null} />,
+    );
+    const pacePanel = Array.from(container.querySelectorAll(".activity-charts__panel")).find(
+      (p) => p.querySelector("h4")?.textContent?.includes("Pace") && !p.querySelector("h4")?.textContent?.includes("Grade"),
+    )!;
+    expect(pacePanel.querySelectorAll(".recharts-area").length).toBe(0);
   });
 });

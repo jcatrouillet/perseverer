@@ -21,6 +21,7 @@ from sporthealth.db.schema import (
 )
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.rebuild import rebuild_database
+from sporthealth.sport_override import set_name_override, set_race_override, set_sport_override
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_run.fit"
 HEALTH_FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_health.fit"
@@ -150,6 +151,113 @@ def test_rebuild_from_archive_after_deleting_the_database(tmp_path: Path) -> Non
 
     assert replayed == 1
     assert after == before
+
+
+def test_sport_override_survives_rebuild_despite_the_activity_id_changing(
+    tmp_path: Path,
+) -> None:
+    """The whole reason activity_sport_override exists rather than a bare `UPDATE activity SET
+    sport = ...`: `sync rebuild` deletes and re-inserts every activity row with a brand-new
+    ULID, so a correction keyed by the old activity.id would silently vanish. Keyed by
+    start_time_utc instead -- this proves it actually survives the id changing underneath it."""
+    engine, import_dir = _setup(tmp_path)
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+
+    with engine.connect() as conn:
+        import_from_folder(
+            conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID, folder=import_dir
+        )
+        original_id, original_sport = conn.execute(
+            select(activity.c.id, activity.c.sport)
+        ).one()
+        set_sport_override(
+            conn,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            activity_id=original_id,
+            sport="hiking",
+            sub_sport="generic",
+        )
+        conn.commit()
+        corrected = conn.execute(select(activity.c.sport)).scalar_one()
+    assert original_sport != "hiking"  # the fixture's own raw sport, for contrast
+    assert corrected == "hiking"
+
+    with engine.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        new_id, new_sport, new_sub_sport = conn.execute(
+            select(activity.c.id, activity.c.sport, activity.c.sub_sport)
+        ).one()
+
+    assert new_id != original_id  # the id really did change
+    assert new_sport == "hiking"
+    assert new_sub_sport == "generic"
+
+
+def test_race_override_survives_rebuild_despite_the_activity_id_changing(
+    tmp_path: Path,
+) -> None:
+    """Same rebuild-survival guarantee as the sport override, for the independent is_race
+    correction -- both live on the same activity_sport_override row, keyed by start_time_utc."""
+    engine, import_dir = _setup(tmp_path)
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+
+    with engine.connect() as conn:
+        import_from_folder(
+            conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID, folder=import_dir
+        )
+        original_id, original_is_race = conn.execute(
+            select(activity.c.id, activity.c.is_race)
+        ).one()
+        set_race_override(
+            conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id=original_id, is_race=True
+        )
+        conn.commit()
+        corrected = conn.execute(select(activity.c.is_race)).scalar_one()
+    assert original_is_race is None  # never touched by ingestion itself
+    assert corrected is True
+
+    with engine.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        new_id, new_is_race = conn.execute(select(activity.c.id, activity.c.is_race)).one()
+
+    assert new_id != original_id  # the id really did change
+    assert new_is_race is True
+
+
+def test_name_override_survives_rebuild_despite_the_activity_id_changing(
+    tmp_path: Path,
+) -> None:
+    """Same rebuild-survival guarantee as the sport/race overrides, for the independent name
+    correction -- all three live on the same activity_sport_override row, keyed by
+    start_time_utc."""
+    engine, import_dir = _setup(tmp_path)
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+
+    with engine.connect() as conn:
+        import_from_folder(
+            conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID, folder=import_dir
+        )
+        original_id, original_name = conn.execute(select(activity.c.id, activity.c.name)).one()
+        set_name_override(
+            conn,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            activity_id=original_id,
+            name="Santa Clara - Race Pace Run",
+        )
+        conn.commit()
+        corrected = conn.execute(select(activity.c.name)).scalar_one()
+    assert original_name != "Santa Clara - Race Pace Run"
+    assert corrected == "Santa Clara - Race Pace Run"
+
+    with engine.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        new_id, new_name = conn.execute(select(activity.c.id, activity.c.name)).one()
+
+    assert new_id != original_id  # the id really did change
+    assert new_name == "Santa Clara - Race Pace Run"
 
 
 def test_import_recognizes_health_fit_and_daily_summary_json(tmp_path: Path) -> None:

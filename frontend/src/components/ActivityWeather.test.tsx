@@ -40,4 +40,26 @@ describe("ActivityWeather", () => {
     render(<ActivityWeather weather={weather({ weather_code: 0 })} />);
     expect(screen.getByTitle("Clear sky")).toBeInTheDocument();
   });
+
+  it("renders a visible 'Weather' heading and a large icon chip", () => {
+    const { container } = render(<ActivityWeather weather={weather()} />);
+    expect(screen.getByRole("heading", { name: "Weather" })).toBeInTheDocument();
+    expect(container.querySelector(".icon-chip--lg")).toBeInTheDocument();
+  });
+
+  it("shows a single value, not a repeated range, when min and max are the same", () => {
+    render(
+      <ActivityWeather
+        weather={weather({
+          temperature_min_c: 20.4,
+          temperature_max_c: 20.4,
+          humidity_min_pct: 50.0,
+          humidity_max_pct: 50.0,
+        })}
+      />,
+    );
+    expect(screen.getByText("20°C")).toBeInTheDocument();
+    expect(screen.getByText("50% RH")).toBeInTheDocument();
+    expect(screen.queryByText(/–/)).not.toBeInTheDocument();
+  });
 });

@@ -3,18 +3,25 @@
 // can be created from either the calendar page or the activity detail page.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiGet, apiPost } from "./client";
+import { apiGet, apiPatch, apiPost } from "./client";
 import type {
   ActivityContextOut,
   ActivityDetail,
   ActivityMapPointOut,
+  ActivityNameOverrideOut,
   ActivityRouteOut,
+  ActivitySourcesOut,
+  ActivitySplitOut,
+  ActivityRaceOverrideOut,
+  ActivitySportOverrideOut,
   ActivitySummary,
   ActivityWeatherOut,
+  ActivityWorkoutOut,
   CalendarResponse,
   FitnessDailyRollupOut,
   HealthDashboardOut,
   HealthObservationOut,
+  InsightOut,
   NoteCreate,
   NoteOut,
   Page,
@@ -205,6 +212,17 @@ export function useActivityWeather(activityId: string, enabled: boolean) {
   });
 }
 
+/** The pre-planned workout structure (Garmin Connect's "Workout" builder) recorded into some
+ * activities' own FIT files -- `null` for the (large majority of) activities with no such
+ * plan. Always enabled: cheap (one row lookup), and unlike weather there's no cheaper
+ * already-in-hand signal to gate it on. */
+export function useActivityWorkout(activityId: string) {
+  return useQuery({
+    queryKey: ["activity-workout", activityId],
+    queryFn: () => apiGet<ActivityWorkoutOut | null>(`/api/v1/activities/${activityId}/workout`),
+  });
+}
+
 /** `tier` defaults to "low" (matches the Phase 4 MCP tool's own choice, ADR 0007 decision 7) --
  * fine for a compact single overview chart, but the Milestone C multi-panel activity detail
  * view asks for "medium" explicitly since several synced panels at once can use the extra
@@ -214,6 +232,88 @@ export function useActivityStream(activityId: string, enabled: boolean, tier: st
     queryKey: ["activity-stream", activityId, tier],
     queryFn: () => apiGet<StreamResponse>(`/api/v1/activities/${activityId}/stream?tier=${tier}`),
     enabled,
+  });
+}
+
+export function useActivitySources(activityId: string) {
+  return useQuery({
+    queryKey: ["activity-sources", activityId],
+    queryFn: () => apiGet<ActivitySourcesOut>(`/api/v1/activities/${activityId}/sources`),
+  });
+}
+
+/** Repoints one source's link onto a brand-new activity (see routers/activities.py's own
+ * docstring) -- invalidates the sources panel for both the old and the newly-created activity,
+ * plus the activity list/calendar, since a split changes how many activities exist. */
+export function useSplitActivitySource(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: number) =>
+      apiPost<ActivitySplitOut>(`/api/v1/activities/${activityId}/sources/${linkId}/split`, {}),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["activity-sources", activityId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["activity-sources", result.new_activity_id],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+/** A manual "this sport is wrong" correction (see routers/activities.py's own docstring) --
+ * invalidates every view that reads an activity's sport, since it can change which section
+ * (running vs. hiking, etc.) an activity shows up under. */
+export function useSetSportOverride(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { sport: string; sub_sport?: string | null }) =>
+      apiPatch<ActivitySportOverrideOut>(`/api/v1/activities/${activityId}/sport`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-context", activityId] });
+    },
+  });
+}
+
+/** A manual "this is/isn't a race" correction (see routers/activities.py's own docstring) --
+ * for activities where garmin_activity_summary.py's eventTypeId heuristic misses a real race
+ * the athlete never flagged as one inside the Garmin Connect app itself. */
+export function useSetRaceOverride(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { is_race: boolean }) =>
+      apiPatch<ActivityRaceOverrideOut>(`/api/v1/activities/${activityId}/race`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+/** A manual "this title is wrong" correction (see routers/activities.py's own docstring) --
+ * Garmin Connect's own name isn't reliably a real athlete-given title (it can be just as
+ * generic a template as the FIT-derived default), so there's no automatic fix for this. */
+export function useSetNameOverride(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string }) =>
+      apiPatch<ActivityNameOverrideOut>(`/api/v1/activities/${activityId}/name`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+export function useInsights() {
+  return useQuery({
+    queryKey: ["insights"],
+    queryFn: () => apiGet<InsightOut[]>("/api/v1/insights"),
   });
 }
 

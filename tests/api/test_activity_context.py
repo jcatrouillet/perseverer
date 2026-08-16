@@ -5,10 +5,40 @@ endpoint itself computes), matching the manual cross-check already run against t
 archive during development.
 """
 
+import datetime as dt
+
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
+from sporthealth.db.schema import activity_metric, metric_definition
+from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from tests.api.conftest import seed_activity
+
+
+def _add_metric(engine: Engine, *, activity_id: str, metric_key: str, value: float) -> None:
+    now = dt.datetime.now(dt.UTC)
+    with engine.connect() as conn:
+        conn.execute(
+            metric_definition.insert().values(
+                metric_key=metric_key,
+                display_name=metric_key,
+                category="activity",
+                value_type="numeric",
+                first_seen_at=now,
+                first_seen_source="fit_folder",
+            )
+        )
+        conn.execute(
+            activity_metric.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id=activity_id,
+                metric_key=metric_key,
+                value_num=value,
+                source="fit_folder",
+                created_at=now,
+            )
+        )
+        conn.commit()
 
 
 def test_context_404_for_unknown_activity(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -157,6 +187,146 @@ def test_recent_window_is_90_days_up_to_the_activity_own_date_not_today(
     body = r.json()
     recent_ids = {r["id"] for r in body["recent"]}
     assert recent_ids == {"target", "within"}
+
+
+def test_fastest_rows_carry_avg_hr_bpm_via_the_same_alias_merge_as_the_activity_detail_endpoint(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="target", sport="running", distance_m=5000.0,
+            duration_s=1500.0, moving_duration_s=1500.0,
+        )
+        seed_activity(
+            conn, activity_id="strava_only", sport="running", local_date="2025-06-02",
+            distance_m=5000.0, duration_s=1400.0, moving_duration_s=1400.0,
+        )
+    _add_metric(engine, activity_id="target", metric_key="fit.session.avg_heart_rate", value=142.0)
+    # GPX/TCX-sourced Strava activity: no fit.session.* key, only the strava.session.* alias.
+    _add_metric(
+        engine, activity_id="strava_only", metric_key="strava.session.avg_heart_rate", value=138.0
+    )
+
+    r = client.get("/api/v1/activities/target/context", headers=auth_headers)
+    body = r.json()
+    by_id = {row["id"]: row["avg_hr_bpm"] for row in body["fastest"]}
+    assert by_id["target"] == 142.0
+    assert by_id["strava_only"] == 138.0
+
+
+def test_fastest_is_sorted_by_pace_ascending_and_includes_self(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """The same +/-15% distance-band pool percentile_rank draws on, re-sorted fastest-first --
+    unlike `other_paces` used for the percentile math, `fastest` includes the target itself if
+    it earns a spot."""
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="target", sport="running", distance_m=5000.0,
+            duration_s=1500.0, moving_duration_s=1500.0,  # pace 0.30 s/m
+        )
+        seed_activity(
+            conn, activity_id="faster", sport="running", local_date="2025-06-02",
+            distance_m=5000.0, duration_s=1200.0, moving_duration_s=1200.0,  # pace 0.24 s/m
+        )
+        seed_activity(
+            conn, activity_id="slower", sport="running", local_date="2025-06-03",
+            distance_m=5000.0, duration_s=1800.0, moving_duration_s=1800.0,  # pace 0.36 s/m
+        )
+
+    r = client.get("/api/v1/activities/target/context", headers=auth_headers)
+    body = r.json()
+    assert [row["id"] for row in body["fastest"]] == ["faster", "target", "slower"]
+
+
+def test_fastest_is_capped_at_30(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="target", sport="running", distance_m=5000.0,
+            duration_s=1500.0, moving_duration_s=1500.0,
+        )
+        for i in range(35):
+            seed_activity(
+                conn, activity_id=f"a{i}", sport="running", local_date=f"2025-07-{i % 28 + 1:02d}",
+                distance_m=5000.0, duration_s=1000.0 + i, moving_duration_s=1000.0 + i,
+            )
+
+    r = client.get("/api/v1/activities/target/context", headers=auth_headers)
+    body = r.json()
+    assert len(body["fastest"]) == 30
+
+
+def test_fastest_is_scoped_to_the_same_distance_band_and_sport(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="target", sport="running", distance_m=5000.0,
+            duration_s=1500.0, moving_duration_s=1500.0,
+        )
+        seed_activity(
+            conn, activity_id="out_of_band", sport="running", local_date="2025-06-02",
+            distance_m=10000.0, duration_s=2000.0, moving_duration_s=2000.0,
+        )
+        seed_activity(
+            conn, activity_id="wrong_sport", sport="cycling", local_date="2025-06-03",
+            distance_m=5000.0, duration_s=600.0, moving_duration_s=600.0,
+        )
+
+    r = client.get("/api/v1/activities/target/context", headers=auth_headers)
+    body = r.json()
+    assert [row["id"] for row in body["fastest"]] == ["target"]
+
+
+def test_fastest_is_scoped_to_the_same_whole_kilometre_bucket_not_the_wider_15pct_band(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """"only the runs exactly between 26.00km and 26.99km for a 26km activity, nothing else" --
+    narrower than the +/-15% band `percentile_rank` uses (whose ~22.3-30.2km window at this
+    distance would otherwise let e.g. a 24km or 27.02km run sneak into the fastest-30 list)."""
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="target", sport="running", distance_m=26290.0,
+            duration_s=9500.0, moving_duration_s=9500.0,
+        )
+        seed_activity(
+            conn, activity_id="in_bucket_low_edge", sport="running", local_date="2025-06-02",
+            distance_m=26000.0, duration_s=9000.0, moving_duration_s=9000.0,
+        )
+        seed_activity(
+            conn, activity_id="in_bucket_high_edge", sport="running", local_date="2025-06-03",
+            distance_m=26990.0, duration_s=9600.0, moving_duration_s=9600.0,
+        )
+        # Just below the bucket, but still comfortably within the +/-15% band -- must be excluded.
+        seed_activity(
+            conn, activity_id="just_under_bucket", sport="running", local_date="2025-06-04",
+            distance_m=25920.0, duration_s=8900.0, moving_duration_s=8900.0,
+        )
+        # Just above the bucket, again within the +/-15% band -- must be excluded.
+        seed_activity(
+            conn, activity_id="just_over_bucket", sport="running", local_date="2025-06-05",
+            distance_m=27020.0, duration_s=9700.0, moving_duration_s=9700.0,
+        )
+        # Well within the +/-15% band (24km, ~9% short of 26.29km) but a different km bucket.
+        seed_activity(
+            conn,
+            activity_id="within_15pct_but_wrong_bucket",
+            sport="running",
+            local_date="2025-06-06",
+            distance_m=24000.0,
+            duration_s=8500.0,
+            moving_duration_s=8500.0,
+        )
+
+    r = client.get("/api/v1/activities/target/context", headers=auth_headers)
+    body = r.json()
+    assert {row["id"] for row in body["fastest"]} == {
+        "target",
+        "in_bucket_low_edge",
+        "in_bucket_high_edge",
+    }
 
 
 def test_recent_is_ordered_chronologically(

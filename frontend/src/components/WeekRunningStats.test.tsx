@@ -13,6 +13,7 @@ function activity(local_date: string, overrides: Partial<ActivitySummary> = {}):
     sport: "running",
     sub_sport: null,
     name: null,
+    is_race: null,
     duration_s: 1800,
     moving_duration_s: 1800,
     distance_m: 5000,
@@ -236,6 +237,7 @@ describe("WeekRunningStats", () => {
           {
             label: "5 km",
             date: "2025-06-02", // same date as thisWeekRun's own best 5k -> a genuine all-time PR
+            activityId: "thisweekrun",
             actualDistanceM: 5000,
             durationS: 1500,
             paceMinPerKm: 5,

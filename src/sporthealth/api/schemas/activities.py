@@ -17,6 +17,7 @@ class LapOut(BaseModel):
     lap_index: int
     start_time_utc: datetime
     duration_s: float | None
+    moving_duration_s: float | None
     distance_m: float | None
     avg_hr: float | None
     max_hr: float | None
@@ -60,6 +61,11 @@ class ActivitySummary(BaseModel):
     sport: str
     sub_sport: str | None
     name: str | None
+    # True/False when Garmin Connect's own event-type classification is known for this activity
+    # (see garmin_activity_summary.py's own docstring); None when never matched against a
+    # garmin_export summarizedActivities entry, meaning genuinely unknown rather than
+    # "confirmed not a race".
+    is_race: bool | None
     duration_s: float | None
     moving_duration_s: float | None
     distance_m: float | None
@@ -104,6 +110,10 @@ class ActivityContextRecentOut(BaseModel):
     # same convention as the frontend's effectiveDurationS(), computed once here rather than
     # exposing both raw fields and making every consumer re-derive it.
     duration_s: float
+    # Only populated for `fastest` (the compact per-row readout on the activity detail page's
+    # "Fastest for this distance" table) -- `recent`'s sparkline strip has no per-point HR
+    # readout, so its rows leave this None rather than pay for a subquery nothing reads.
+    avg_hr_bpm: float | None = None
 
 
 class ActivityContextOut(BaseModel):
@@ -112,6 +122,14 @@ class ActivityContextOut(BaseModel):
     percentile_rank: float | None
     comparable_count: int
     recent: list[ActivityContextRecentOut]
+    # The fastest (by effective pace) up-to-30 same-sport activities whose distance falls in the
+    # same whole-kilometre bucket as this one (floor(distance_m / 1000) -- a 26.29km run only
+    # compares against [26000, 27000)m, not the wider +/-15% band `percentile_rank` uses).
+    # Reuses ActivityContextRecentOut's shape (id/local_date/distance_m/duration_s) rather than a
+    # new type, since it's the same "one row per comparable activity" shape. Includes this
+    # activity itself when it belongs in the top 30, unlike `recent`'s 90-day-window framing
+    # which has no such exclusion either.
+    fastest: list[ActivityContextRecentOut]
 
 
 class ActivityWeatherOut(BaseModel):
@@ -128,6 +146,33 @@ class ActivityWeatherOut(BaseModel):
     # returns) at the hour closest to the activity's own start. Icon mapping is a frontend
     # presentation concern, not modeled here.
     weather_code: int | None = None
+
+
+class ActivityWorkoutStepOut(BaseModel):
+    step_index: int
+    duration_type: str | None
+    duration_time_s: float | None
+    duration_distance_m: float | None
+    target_type: str | None
+    # Only populated for target_type == "speed" -- see ParsedWorkoutStep's own docstring
+    # (fit/types.py) for why other target types aren't extracted into a range yet.
+    target_low_mps: float | None
+    target_high_mps: float | None
+    intensity: str | None
+    # Only populated when duration_type == "repeat_until_steps_cmplt": "repeat steps
+    # [repeat_from_step..step_index-1] repeat_count times". Unexpanded, per "raw first" -- see
+    # fit/parser.py::_parse_workout's own docstring; expansion (e.g. to align with recorded
+    # laps, one per executed step) is a presentation concern done by the caller.
+    repeat_from_step: int | None
+    repeat_count: int | None
+
+
+class ActivityWorkoutOut(BaseModel):
+    # None whenever this activity has no recorded workout plan (most don't) -- not an empty
+    # ActivityWorkoutOut, so the frontend can distinguish "no plan" from "plan with 0 steps".
+    name: str | None
+    description: str | None
+    steps: list[ActivityWorkoutStepOut]
 
 
 class ActivityMapPointOut(BaseModel):
@@ -148,3 +193,64 @@ class ActivityRouteOut(BaseModel):
     # but this is the field that would shrink if real Douglas-Peucker simplification lands later,
     # so callers that only need a thumbnail shouldn't have to change).
     simplified_polyline: str | None
+
+
+class ActivitySourceOut(BaseModel):
+    """One `activity_source_link` row -- a source this activity's data actually came from,
+    inspectable per the Phase 8 acceptance criterion ("both sources inspectable"). `link_id`
+    is that row's own id, passed back into POST .../sources/{link_id}/split to undo a wrong
+    merge."""
+
+    link_id: int
+    source: str
+    external_id: str
+    ingested_at: datetime
+    # False for the one link a split can't act on -- an activity with only one source has
+    # nothing to split off (see the 400 the split endpoint returns in that case).
+    can_split: bool
+
+
+class ActivityMergeDecisionOut(BaseModel):
+    """One `merge_decision` row where a candidate matched into this activity -- the "why" a
+    source ended up linked here, for the same "both sources inspectable" acceptance criterion."""
+
+    candidate_ref: str
+    reasons: list[str]
+    decided_at: datetime
+
+
+class ActivitySourcesOut(BaseModel):
+    sources: list[ActivitySourceOut]
+    merge_decisions: list[ActivityMergeDecisionOut]
+
+
+class ActivitySplitOut(BaseModel):
+    new_activity_id: str
+
+
+class ActivitySportOverrideIn(BaseModel):
+    # Free-form, matching activity.sport's own column (no fixed enum -- "additive schema
+    # evolution": a new sport needs zero code changes, here included, same as everywhere else).
+    sport: str
+    sub_sport: str | None = None
+
+
+class ActivitySportOverrideOut(BaseModel):
+    sport: str
+    sub_sport: str | None
+
+
+class ActivityRaceOverrideIn(BaseModel):
+    is_race: bool
+
+
+class ActivityRaceOverrideOut(BaseModel):
+    is_race: bool
+
+
+class ActivityNameOverrideIn(BaseModel):
+    name: str
+
+
+class ActivityNameOverrideOut(BaseModel):
+    name: str

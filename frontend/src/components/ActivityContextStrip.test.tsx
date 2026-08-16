@@ -5,11 +5,11 @@ import type { ActivityContextOut, ActivityContextRecentOut } from "../api/types"
 import { ActivityContextStrip } from "./ActivityContextStrip";
 
 function recent(id: string, local_date: string, distance_m: number, duration_s: number): ActivityContextRecentOut {
-  return { id, local_date, distance_m, duration_s };
+  return { id, local_date, distance_m, duration_s, avg_hr_bpm: null };
 }
 
 function context(overrides: Partial<ActivityContextOut> = {}): ActivityContextOut {
-  return { percentile_rank: null, comparable_count: 0, recent: [], ...overrides };
+  return { percentile_rank: null, comparable_count: 0, recent: [], fastest: [], ...overrides };
 }
 
 describe("ActivityContextStrip", () => {

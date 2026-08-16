@@ -5,6 +5,7 @@
 // fabricating a number rather than reporting a real one. Personal records are a documented
 // approximation -- see personalRecords()'s own docstring in runningStats.ts.
 import { useState } from "react";
+import { Link, useLocation } from "wouter";
 import {
   Bar,
   BarChart,
@@ -154,6 +155,7 @@ export function RunningStats({
    * as PeriodStatsCard's compareMeta). */
   compareDistanceM?: number | null;
 }) {
+  const [, setLocation] = useLocation();
   // Which legend reference distance (if any) is currently hovered, to highlight matching cells.
   const [hoveredLegendKm, setHoveredLegendKm] = useState<number | "none" | null>(null);
   // Driven by onMouseEnter/Leave rather than a CSS :hover rule, matching the legend's own
@@ -231,6 +233,7 @@ export function RunningStats({
     activities
       .filter((a) => a.distance_m && effectiveDurationS(a))
       .map((a) => ({
+        id: a.id,
         km: Math.round((a.distance_m! / 1000) * 10) / 10,
         pace: effectiveDurationS(a)! / 60 / (a.distance_m! / 1000),
       })),
@@ -336,6 +339,7 @@ export function RunningStats({
     paceMinPerKm: number | null,
     elevationM: number,
     tooltipTitle: string,
+    href: string,
     extraClassName = "",
   ) {
     const long = isLongRun(km, heatmapScale);
@@ -343,8 +347,9 @@ export function RunningStats({
     const hoverClass =
       hoveredLegendKm == null ? "" : bucket === hoveredLegendKm ? " is-highlighted" : " is-dimmed";
     return (
-      <span
+      <Link
         key={key}
+        href={href}
         className={`running-heatmap__cell${extraClassName}${hoverClass}`}
         style={
           { "--heat-pct": `${long ? 0 : shortRunHeatPct(km, heatmapScale)}%` } as React.CSSProperties
@@ -367,7 +372,7 @@ export function RunningStats({
             <span>No run</span>
           )}
         </span>
-      </span>
+      </Link>
     );
   }
 
@@ -378,6 +383,7 @@ export function RunningStats({
       cell.paceMinPerKm,
       cell.elevationM,
       formatHeatmapDate(cell.date),
+      `/day/${cell.date}`,
       extraClassName,
     );
   }
@@ -389,6 +395,7 @@ export function RunningStats({
       week.paceMinPerKm,
       week.elevationM,
       formatWeekLabel(week.weekStart),
+      `/calendar/week/${week.weekStart}`,
     );
   }
 
@@ -560,9 +567,16 @@ export function RunningStats({
                   border: "1px solid var(--color-border)",
                 }}
               />
-              <Scatter data={scatterData} isAnimationActive={false}>
-                {scatterData.map((entry, i) => (
-                  <Cell key={i} fill="var(--color-pace)" fillOpacity={entry.opacity} />
+              <Scatter
+                data={scatterData}
+                isAnimationActive={false}
+                cursor="pointer"
+                onClick={(point: { payload?: { id: string } }) => {
+                  if (point.payload) setLocation(`/activities/${point.payload.id}`);
+                }}
+              >
+                {scatterData.map((entry) => (
+                  <Cell key={entry.id} fill="var(--color-pace)" fillOpacity={entry.opacity} />
                 ))}
               </Scatter>
             </ScatterChart>
@@ -744,9 +758,10 @@ export function RunningStats({
                 return (
                   <tr
                     key={r.label}
-                    className={hoveredRecordLabel === r.label ? "is-hovered" : ""}
+                    className={`running-records__row${hoveredRecordLabel === r.label ? " is-hovered" : ""}`}
                     onMouseEnter={() => setHoveredRecordLabel(r.label)}
                     onMouseLeave={() => setHoveredRecordLabel(null)}
+                    onClick={() => setLocation(`/activities/${r.activityId}`)}
                   >
                     <td>{r.label}</td>
                     <td>

@@ -13,6 +13,7 @@ function activity(overrides: Partial<ActivitySummary> = {}): ActivitySummary {
     sport: "running",
     sub_sport: null,
     name: null,
+    is_race: null,
     duration_s: 1800,
     moving_duration_s: 1800,
     distance_m: 5000,
@@ -33,6 +34,17 @@ describe("ActivityCard", () => {
   it("links to the activity detail page", () => {
     render(<ActivityCard activity={activity({ id: "abc123" })} />);
     expect(screen.getByRole("link")).toHaveAttribute("href", "/activities/abc123");
+  });
+
+  it("shows a race badge only when is_race is true", () => {
+    const { rerender } = render(<ActivityCard activity={activity({ is_race: false })} />);
+    expect(screen.queryByText("Race")).not.toBeInTheDocument();
+
+    rerender(<ActivityCard activity={activity({ is_race: null })} />);
+    expect(screen.queryByText("Race")).not.toBeInTheDocument();
+
+    rerender(<ActivityCard activity={activity({ is_race: true })} />);
+    expect(screen.getByText("Race")).toBeInTheDocument();
   });
 
   it("shows the sport, distance, duration and pace for a plain run", () => {

@@ -146,6 +146,39 @@ def test_list_and_detail_surface_hr_load_and_descaled_rpe(
     assert detail["weight_kg"] == 80.1
 
 
+def test_strava_session_hr_alias_is_read_when_fit_key_absent(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # GPX/TCX-sourced Strava activities have no fit.session.* metric at all -- avg/max HR must
+    # still surface via the strava.session.* alias (ADR 0013), in both list and detail.
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    _add_metric(engine, activity_id="a1", metric_key="strava.session.avg_heart_rate", value=130.0)
+    _add_metric(engine, activity_id="a1", metric_key="strava.session.max_heart_rate", value=160.0)
+
+    r = client.get("/api/v1/activities", headers=auth_headers)
+    item = r.json()["items"][0]
+    assert item["avg_hr_bpm"] == 130.0
+    assert item["max_hr_bpm"] == 160.0
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    detail = r.json()
+    assert detail["avg_hr_bpm"] == 130.0
+    assert detail["max_hr_bpm"] == 160.0
+
+
+def test_fit_session_hr_is_preferred_over_strava_alias_when_both_present(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    _add_metric(engine, activity_id="a1", metric_key="fit.session.avg_heart_rate", value=142.0)
+    _add_metric(engine, activity_id="a1", metric_key="strava.session.avg_heart_rate", value=999.0)
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.json()["avg_hr_bpm"] == 142.0
+
+
 def test_list_activities_omits_hr_load_rpe_when_absent(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:

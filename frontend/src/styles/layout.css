@@ -381,49 +381,51 @@ select {
   height: 14px;
 }
 
-/* "Activities by type" -- a ranked list with a proportional bar, since the real counts span
-   two orders of magnitude and a grid of equal tiles hides that entirely. */
+/* "Activities by type" -- a pie (proportions are the point), toggleable between activity count
+   and total time (see PeriodStatsCard.tsx's own comment: the two can rank sports differently).
+   No legend/list beside it -- hovering a slice answers "which sport, how much" directly via the
+   Tooltip, and a legend for a dozen-plus sports would dwarf the pie itself. */
 
-.type-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.type-breakdown__header {
   display: flex;
-  flex-direction: column;
-}
-
-.type-list__row {
-  display: grid;
-  grid-template-columns: minmax(120px, max-content) 1fr auto;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--color-border);
 }
 
-.type-list__row:last-child {
-  border-bottom: 0;
+.type-breakdown__header h3 {
+  margin: 0;
 }
 
-.type-list__bar {
-  height: 5px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--color-text-faint) 22%, transparent);
+.type-breakdown__toggle {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
-.type-list__bar i {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  background: var(--tone);
+.type-breakdown__toggle button {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
-.type-list__count {
+.type-breakdown__toggle button + button {
+  border-left: 1px solid var(--color-border);
+}
+
+.type-breakdown__toggle button.is-active {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text-faint) 12%, transparent);
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  min-width: 3ch;
-  text-align: right;
+}
+
+.type-breakdown {
+  display: flex;
+  justify-content: center;
 }
 
 table {

@@ -20,7 +20,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sporthealth import __version__
 from sporthealth.api.mcp_server import build_mcp_asgi_app, mcp_lifespan
-from sporthealth.api.routers import activities, auth, calendar, fitness, health, notes, sleep
+from sporthealth.api.routers import (
+    activities,
+    auth,
+    calendar,
+    fitness,
+    health,
+    insights,
+    notes,
+    sleep,
+)
 from sporthealth.config import get_settings
 
 mcp_asgi_app = build_mcp_asgi_app()
@@ -32,7 +41,10 @@ if _settings.cors_origins_list:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_settings.cors_origins_list,
-        allow_methods=["GET", "POST"],
+        # PATCH added for the manual activity-correction endpoints (sport/race overrides,
+        # ADR 0012/this session) -- missing originally, which silently broke both from any real
+        # browser tab (curl bypasses CORS preflight entirely, which is why this went unnoticed).
+        allow_methods=["GET", "POST", "PATCH"],
         # Authorization added in Phase 5 for JWT bearer-token login (ADR 0008) -- X-API-Key
         # and Content-Type predate it (ADR 0006 decision 8).
         allow_headers=["X-API-Key", "Authorization", "Content-Type"],
@@ -45,6 +57,7 @@ app.include_router(health.router, prefix="/api/v1")
 app.include_router(sleep.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(fitness.router, prefix="/api/v1")
+app.include_router(insights.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")
 
 

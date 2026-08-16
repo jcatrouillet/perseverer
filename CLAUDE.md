@@ -6,9 +6,10 @@ Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing revers
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
 the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
 
-**Current phase: 7 (map explorer, recaps, PWA/offline shell — see
-`docs/adr/0011-phase-7-map-recaps-pwa.md`; image export was scoped in but dropped after
-verification showed the chosen library hangs on this app's Recharts-heavy pages, and PWA
+**Current phase: 8 (strava_export importer, merge visibility/split, rules-based insight engine —
+see `docs/adr/0012-phase-8-strava-merge-insights.md`). Phase 7 (map explorer, recaps, PWA/offline
+shell — see `docs/adr/0011-phase-7-map-recaps-pwa.md`; image export was scoped in but dropped
+after verification showed the chosen library hangs on this app's Recharts-heavy pages, and PWA
 service-worker registration itself still needs verification on a real device, not just the
 build/manifest checks done so far). Phase 6.1 (frontend design overhaul — theming, Recharts,
 colour/icon system, calendar date-navigator, rich activity cards, multi-panel activity detail,
@@ -109,7 +110,7 @@ because you don't recognize it — stop, that's the bug.
   LOGICAL_METRICS`, verified field-by-field against the real database, not assumed from parser
   docstrings). See `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md`.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
-  `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Three exist now:
+  `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Four exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash
     idempotent. The universal offline importer/test harness for every other adapter. Also
     recognizes two narrow Garmin Connect-shaped health JSON filename patterns
@@ -127,6 +128,14 @@ because you don't recognize it — stop, that's the bug.
   - `garmin_connect` (`adapters/garmin_connect.py`) — the primary, incremental, unattended
     sync path, and the adapter most likely to break. See the safety rules below before
     touching this file.
+  - `strava_export` (`adapters/strava_export.py`, Phase 8) — historical backfill from Strava's
+    "export your data" archive, zero network calls. `.fit`/`.fit.gz` files go through the same
+    `ingest_dispatch.ingest_fit_bytes` as every other source (often literally the same Garmin
+    FIT bytes Strava received via auto-upload); `.gpx`/`.gpx.gz`/`.tcx.gz` go through new
+    `gpx/parser.py`/`tcx/parser.py` (bare geometry + whatever sensor extensions the file
+    carries), with `activities.csv`'s own totals/sport classification overlaid afterward since
+    GPX/TCX carry far less than FIT. See `docs/adr/0012-phase-8-strava-merge-insights.md` for
+    the real archive shape this was built against (not assumed from docs).
   Every `.fit` file, from any adapter (except `garmin_connect`, which only ever downloads
   activity FIT files), goes through `ingest_dispatch.ingest_fit_bytes` — archives once, tries
   the shared activity parser (`fit/parser.py`), falls back to the shared health parser
@@ -135,6 +144,27 @@ because you don't recognize it — stop, that's the bug.
   When a vendor breaks — and Garmin already has, twice, as of this writing — the fix is
   confined to one adapter file. If fixing a vendor break means touching the schema, the design
   is wrong; stop and say so.
+- **Merge engine + visibility (`merge/engine.py`, Phase 1; UI Phase 8)**: `is_same_activity()`
+  is source-agnostic by design — comparing only start time / sport family / duration — and
+  already runs on every ingest via `fit_folder.py::_find_merge_match`, so cross-source
+  deduplication needed zero new matching code when `strava_export` arrived; every decision is
+  logged to `merge_decision` with human-readable reasons. `GET /activities/{id}/sources` and
+  `POST .../sources/{link_id}/split` (`api/routers/activities.py`) make merges inspectable and
+  reversible — split re-parses that one source's already-archived raw bytes via `reparse.py`
+  and `adapters/fit_folder.py::insert_new_activity`, without deleting anything or re-running
+  merge-matching (which could just re-merge it right back). See ADR 0012.
+- **Insight engine (`insights/`, Phase 8)**: rules-based, deterministic, no LLM involved (that's
+  Phase 9's narrative layer, not this). Pure rule modules (`rules_efforts.py`,
+  `rules_streaks.py`, `rules_pb.py`, `rules_load.py`, `rules_health.py`) take already-assembled
+  plain-Python inputs and return `Insight` objects with no DB access of their own;
+  `insights/engine.py::refresh_insights` does the one DB-touching assembly step and a full
+  delete-and-reinsert into the `insight` table per athlete per run — same precedent as
+  `fitness_daily_rollup`'s full recompute. Wired into every ingest entry point's touched-dates
+  block, plus unconditionally into `garmin_connect.py`'s own daily-scheduled sync (no separate
+  APScheduler job — that function already runs once/day regardless of new data, which is
+  exactly what a "last 30 days"-style window needs). `GET /api/v1/insights` is a plain read,
+  same rollup-mandate discipline as everything else. See `docs/adr/0012-phase-8-strava-merge-
+  insights.md` for the exact windows/dimensions and the deliberately-adjustable thresholds.
 - **`garmin_connect` safety rules, non-negotiable**: it never constructs a credentialed client
   automatically — `authenticate()` only loads the token store (`data/garmin_tokens/`), and if
   that fails, raises `GarminAuthRequired` rather than falling back to credentials. The *only*

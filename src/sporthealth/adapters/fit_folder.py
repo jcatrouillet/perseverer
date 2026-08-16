@@ -25,6 +25,8 @@ from sporthealth.db.schema import (
     activity_metric,
     activity_source_link,
     activity_stream,
+    activity_workout,
+    activity_workout_step,
     ingest_run,
     lap,
     merge_decision,
@@ -37,10 +39,11 @@ from sporthealth.db.schema import (
     split as split_table,
 )
 from sporthealth.fit.parser import parse_fit
-from sporthealth.fit.types import CanonicalBatch, ParsedDevice
+from sporthealth.fit.types import CanonicalActivity, CanonicalBatch, ParsedDevice
 from sporthealth.fitness import refresh_fitness_rollup
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import parse_daily_summary_json, parse_hydration_json
+from sporthealth.insights.engine import refresh_insights
 from sporthealth.merge.engine import ActivityCandidate, is_same_activity
 from sporthealth.metrics.registry import get_or_register_metric
 from sporthealth.rollups import refresh_daily_and_period_rollups
@@ -211,6 +214,176 @@ def _find_merge_match(
     return None
 
 
+def insert_new_activity(
+    conn: Connection,
+    parquet_dir: Path,
+    *,
+    athlete_id: str,
+    source: str,
+    device_id: int | None,
+    a: CanonicalActivity,
+) -> str:
+    """Inserts a brand-new `activity` row (plus its metrics/laps/splits/route/stream) from a
+    parsed `CanonicalActivity` -- unconditionally, with no merge-matching. Extracted out of
+    `ingest_canonical_batch`'s own "no match found" branch so the exact same insert logic is
+    reusable from the sources-split endpoint (`routers/activities.py`), which deliberately
+    bypasses merge-matching when reconstructing an activity a human has just said was wrongly
+    merged -- re-running `_find_merge_match` there could just merge it right back.
+    """
+    now = datetime.now(UTC)
+    activity_id = str(ULID())
+    conn.execute(
+        activity.insert().values(
+            id=activity_id,
+            athlete_id=athlete_id,
+            start_time_utc=a.start_time_utc,
+            utc_offset_s=a.utc_offset_s,
+            tz_name=None,
+            # Offset-adjusted, not a raw UTC date -- an evening activity in a non-UTC
+            # timezone can otherwise land on the wrong calendar day relative to what the
+            # athlete (and Garmin Connect/any third-party platform) considers "today",
+            # breaking week/month reconciliation. start_time_utc itself stays untouched
+            # (still the raw, naive-UTC instant); only this derived column is adjusted.
+            # See ADR 0009 decision 8. NB: health_observation/sleep_session's local_date is
+            # still plain UTC-date (no reliable per-record offset for every health FIT
+            # message type has been verified yet) -- a known, documented inconsistency.
+            local_date=_local_date(a.start_time_utc, a.utc_offset_s),
+            sport=a.sport,
+            sub_sport=a.sub_sport,
+            name=a.name,
+            description=None,
+            duration_s=a.duration_s,
+            moving_duration_s=a.moving_duration_s,
+            distance_m=a.distance_m,
+            elevation_gain_m=a.elevation_gain_m,
+            calories=a.calories,
+            device_id=device_id,
+            primary_source=source,
+            created_at=now,
+            updated_at=now,
+            deleted_at=None,
+        )
+    )
+
+    seen_metric_keys: set[str] = set()
+    for m in a.extra_metrics:
+        if m.key in seen_metric_keys:
+            continue
+        seen_metric_keys.add(m.key)
+        # `ingest_canonical_batch`'s caller already registers every extra_metric key into
+        # metric_definition regardless of merge outcome (see below) -- but this function is
+        # also called directly by the sources-split endpoint, standalone, so it can't rely on
+        # that having already happened for this specific key. get_or_register_metric is
+        # idempotent, so this is a no-op in the normal (already-registered) case.
+        get_or_register_metric(conn, metric_key=m.key, source=source, category="activity")
+        conn.execute(
+            activity_metric.insert().values(
+                athlete_id=athlete_id,
+                activity_id=activity_id,
+                metric_key=m.key,
+                value_num=m.value_num,
+                value_text=m.value_text,
+                unit=m.unit,
+                source=source,
+                created_at=now,
+            )
+        )
+
+    for lap_row in a.laps:
+        conn.execute(
+            lap.insert().values(
+                athlete_id=athlete_id,
+                activity_id=activity_id,
+                lap_index=lap_row.lap_index,
+                start_time_utc=lap_row.start_time_utc,
+                duration_s=lap_row.duration_s,
+                moving_duration_s=lap_row.moving_duration_s,
+                distance_m=lap_row.distance_m,
+                avg_hr=lap_row.avg_hr,
+                max_hr=lap_row.max_hr,
+                avg_speed_mps=lap_row.avg_speed_mps,
+            )
+        )
+
+    for split_row in a.splits:
+        conn.execute(
+            split_table.insert().values(
+                athlete_id=athlete_id,
+                activity_id=activity_id,
+                split_index=split_row.split_index,
+                split_type=split_row.split_type,
+                start_time_utc=split_row.start_time_utc,
+                end_time_utc=split_row.end_time_utc,
+                duration_s=split_row.duration_s,
+                distance_m=split_row.distance_m,
+            )
+        )
+
+    if a.workout is not None:
+        conn.execute(
+            activity_workout.insert().values(
+                activity_id=activity_id,
+                athlete_id=athlete_id,
+                name=a.workout.name,
+                description=a.workout.description,
+            )
+        )
+        for step in a.workout.steps:
+            conn.execute(
+                activity_workout_step.insert().values(
+                    athlete_id=athlete_id,
+                    activity_id=activity_id,
+                    step_index=step.step_index,
+                    duration_type=step.duration_type,
+                    duration_time_s=step.duration_time_s,
+                    duration_distance_m=step.duration_distance_m,
+                    target_type=step.target_type,
+                    target_low_mps=step.target_low_mps,
+                    target_high_mps=step.target_high_mps,
+                    intensity=step.intensity,
+                    repeat_from_step=step.repeat_from_step,
+                    repeat_count=step.repeat_count,
+                )
+            )
+
+    if a.route_start:
+        encoded = polyline_codec.encode(a.route_points) if a.route_points else None
+        bbox = a.route_bbox
+        conn.execute(
+            route_geom.insert().values(
+                activity_id=activity_id,
+                athlete_id=athlete_id,
+                encoded_polyline=encoded,
+                simplified_polyline=encoded,
+                min_lat=bbox[0] if bbox else None,
+                min_lng=bbox[1] if bbox else None,
+                max_lat=bbox[2] if bbox else None,
+                max_lng=bbox[3] if bbox else None,
+                start_lat=a.route_start[0],
+                start_lng=a.route_start[1],
+                end_lat=a.route_end[0] if a.route_end else None,
+                end_lng=a.route_end[1] if a.route_end else None,
+            )
+        )
+
+    if a.stream:
+        rel_path, n_samples, channels = write_activity_stream(
+            parquet_dir, athlete_id, activity_id, a.stream
+        )
+        conn.execute(
+            activity_stream.insert().values(
+                activity_id=activity_id,
+                athlete_id=athlete_id,
+                parquet_path=rel_path,
+                n_samples=n_samples,
+                channels=json.dumps(channels),
+                sample_rate_hint=None,
+            )
+        )
+
+    return activity_id
+
+
 def ingest_canonical_batch(
     conn: Connection,
     parquet_dir: Path,
@@ -264,121 +437,9 @@ def ingest_canonical_batch(
     if matched_id is not None:
         activity_id = matched_id
     else:
-        activity_id = str(ULID())
-        conn.execute(
-            activity.insert().values(
-                id=activity_id,
-                athlete_id=athlete_id,
-                start_time_utc=a.start_time_utc,
-                utc_offset_s=a.utc_offset_s,
-                tz_name=None,
-                # Offset-adjusted, not a raw UTC date -- an evening activity in a non-UTC
-                # timezone can otherwise land on the wrong calendar day relative to what the
-                # athlete (and Garmin Connect/any third-party platform) considers "today",
-                # breaking week/month reconciliation. start_time_utc itself stays untouched
-                # (still the raw, naive-UTC instant); only this derived column is adjusted.
-                # See ADR 0009 decision 8. NB: health_observation/sleep_session's local_date is
-                # still plain UTC-date (no reliable per-record offset for every health FIT
-                # message type has been verified yet) -- a known, documented inconsistency.
-                local_date=_local_date(a.start_time_utc, a.utc_offset_s),
-                sport=a.sport,
-                sub_sport=a.sub_sport,
-                name=a.name,
-                description=None,
-                duration_s=a.duration_s,
-                moving_duration_s=a.moving_duration_s,
-                distance_m=a.distance_m,
-                elevation_gain_m=a.elevation_gain_m,
-                calories=a.calories,
-                device_id=device_id,
-                primary_source=source,
-                created_at=now,
-                updated_at=now,
-                deleted_at=None,
-            )
+        activity_id = insert_new_activity(
+            conn, parquet_dir, athlete_id=athlete_id, source=source, device_id=device_id, a=a
         )
-
-        seen_metric_keys: set[str] = set()
-        for m in a.extra_metrics:
-            if m.key in seen_metric_keys:
-                continue
-            seen_metric_keys.add(m.key)
-            conn.execute(
-                activity_metric.insert().values(
-                    athlete_id=athlete_id,
-                    activity_id=activity_id,
-                    metric_key=m.key,
-                    value_num=m.value_num,
-                    value_text=m.value_text,
-                    unit=m.unit,
-                    source=source,
-                    created_at=now,
-                )
-            )
-
-        for lap_row in a.laps:
-            conn.execute(
-                lap.insert().values(
-                    athlete_id=athlete_id,
-                    activity_id=activity_id,
-                    lap_index=lap_row.lap_index,
-                    start_time_utc=lap_row.start_time_utc,
-                    duration_s=lap_row.duration_s,
-                    distance_m=lap_row.distance_m,
-                    avg_hr=lap_row.avg_hr,
-                    max_hr=lap_row.max_hr,
-                    avg_speed_mps=lap_row.avg_speed_mps,
-                )
-            )
-
-        for split_row in a.splits:
-            conn.execute(
-                split_table.insert().values(
-                    athlete_id=athlete_id,
-                    activity_id=activity_id,
-                    split_index=split_row.split_index,
-                    split_type=split_row.split_type,
-                    start_time_utc=split_row.start_time_utc,
-                    end_time_utc=split_row.end_time_utc,
-                    duration_s=split_row.duration_s,
-                    distance_m=split_row.distance_m,
-                )
-            )
-
-        if a.route_start:
-            encoded = polyline_codec.encode(a.route_points) if a.route_points else None
-            bbox = a.route_bbox
-            conn.execute(
-                route_geom.insert().values(
-                    activity_id=activity_id,
-                    athlete_id=athlete_id,
-                    encoded_polyline=encoded,
-                    simplified_polyline=encoded,
-                    min_lat=bbox[0] if bbox else None,
-                    min_lng=bbox[1] if bbox else None,
-                    max_lat=bbox[2] if bbox else None,
-                    max_lng=bbox[3] if bbox else None,
-                    start_lat=a.route_start[0],
-                    start_lng=a.route_start[1],
-                    end_lat=a.route_end[0] if a.route_end else None,
-                    end_lng=a.route_end[1] if a.route_end else None,
-                )
-            )
-
-        if a.stream:
-            rel_path, n_samples, channels = write_activity_stream(
-                parquet_dir, athlete_id, activity_id, a.stream
-            )
-            conn.execute(
-                activity_stream.insert().values(
-                    activity_id=activity_id,
-                    athlete_id=athlete_id,
-                    parquet_path=rel_path,
-                    n_samples=n_samples,
-                    channels=json.dumps(channels),
-                    sample_rate_hint=None,
-                )
-            )
 
     conn.execute(
         activity_source_link.insert().values(
@@ -483,6 +544,7 @@ def import_from_folder(
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
     if touched_dates:
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
+        refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(

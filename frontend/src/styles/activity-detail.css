@@ -1,6 +1,43 @@
 /* ActivityDetailPage (Milestone C): the multi-panel stream charts, stats grid, time-in-zone
    chart, and laps table. */
 
+/* Consistent breathing room between every h3-titled stat section (Heart rate, Respiration,
+   Elevation, etc.) -- h3's own base rule (layout.css) only sets a bottom margin, so two
+   adjacent sections' stat-grids would otherwise touch directly. */
+.activity-stats h3 {
+  margin-top: var(--space-5);
+}
+
+.activity-stats h3:first-child {
+  margin-top: 0;
+}
+
+/* The route map (afterHeartRate slot) sits between the Heart rate and next stat sections but
+   isn't itself an h3-titled block, so it needs its own explicit spacing on both sides. */
+.activity-stats .activity-route {
+  margin: var(--space-5) 0;
+}
+
+/* "Fastest for this distance" as a narrow side column next to the whole stats grid (Distance &
+   time through Hydration), not a full-width section below it -- the column's own height is
+   whatever its row count needs, which may run longer or shorter than the stats grid beside it;
+   it isn't clipped or scroll-boxed to match. */
+.activity-detail__layout {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  margin-top: var(--space-5);
+}
+
+.activity-detail__main-col {
+  flex: 3 1 480px;
+  min-width: 0;
+}
+
+.activity-detail__fastest-col {
+  flex: 0 0 200px;
+}
+
 .activity-detail__header {
   display: flex;
   align-items: center;
@@ -11,6 +48,64 @@
 .activity-detail__title {
   display: flex;
   flex-direction: column;
+}
+
+.activity-detail__race-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: var(--space-2);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  vertical-align: middle;
+  color: var(--color-load);
+  background: color-mix(in srgb, var(--color-load) 16%, transparent);
+}
+
+.activity-detail__race-badge .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.activity-detail__correction-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: 2px;
+}
+
+.activity-detail__correction-row .activity-detail__sport-fix-btn {
+  margin-top: 0;
+}
+
+.activity-detail__sport-fix-btn {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.activity-detail__sport-fix-btn:hover {
+  color: var(--color-text);
+}
+
+.activity-detail__sport-fix {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.activity-detail__sport-fix-error {
+  color: var(--color-danger);
 }
 
 .activity-detail__sport {
@@ -24,36 +119,67 @@
 }
 
 .activity-detail__weather {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
   margin: 0 0 var(--space-4);
 }
 
-.activity-detail__weather .icon-chip {
-  width: 1.75rem;
-  height: 1.75rem;
+.activity-detail__weather-heading {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.activity-detail__weather-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.activity-detail__weather-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.activity-detail__weather-readout > span:first-child {
+  color: var(--color-text);
+  text-transform: capitalize;
 }
 
 /* One full-width panel per row, stacked -- side-by-side panels made it hard to read a single
    moment across channels (the whole point of the shared syncId cursor) since each panel was
    only a fraction of the page's width. */
+/* Compact stacked layout, closer to a multi-channel training-log view: small headers, tight
+   gaps between panels, and only the bottom panel showing its own time axis (see
+   ActivityCharts.tsx's `hide={!isLastPanel}` -- every panel already shares one x-axis via
+   Recharts' `syncId`, so repeating the same tick row under each one was pure vertical padding). */
 .activity-charts {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 2px;
 }
 
 .activity-charts__panel h4 {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
+  gap: var(--space-1);
+  font-size: 11px;
   color: var(--color-text-muted);
   font-weight: 600;
-  margin: 0 0 var(--space-2);
+  margin: 0;
+}
+
+.activity-charts__panel h4 .icon-chip {
+  width: 18px;
+  height: 18px;
+}
+
+.activity-charts__panel h4 .icon {
+  width: 11px;
+  height: 11px;
 }
 
 .time-in-zone__bar-row {
@@ -98,6 +224,20 @@
   text-align: left;
 }
 
+.intervals-table tbody tr {
+  cursor: default;
+}
+
+.intervals-table tbody tr.intervals-table__row--hovered {
+  background: color-mix(in srgb, var(--color-load) 16%, transparent);
+}
+
+/* Follows .activity-detail__layout (the stats + fastest-table row, ending in Hydration), which
+   isn't itself a .card so the usual .card + .card sibling margin doesn't fire here. */
+.activity-context {
+  margin-top: var(--space-5);
+}
+
 .activity-context__headline {
   margin: 0 0 var(--space-2);
   font-size: var(--font-size-sm);
@@ -119,4 +259,151 @@
 .activity-context__tooltip-date,
 .activity-context__tooltip-distance {
   color: var(--color-text-muted);
+}
+
+.activity-fastest__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-fastest__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.activity-fastest__row:hover {
+  background: color-mix(in srgb, var(--color-text-faint) 8%, transparent);
+  text-decoration: none;
+}
+
+.activity-fastest__row--current {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-pace) 16%, transparent);
+}
+
+.activity-fastest__pace {
+  flex: none;
+  min-width: 8ch;
+  color: var(--color-pace);
+  font-weight: 600;
+}
+
+.activity-fastest__hr {
+  flex: none;
+  min-width: 6ch;
+  color: var(--color-text-muted);
+}
+
+.activity-fastest__date {
+  flex: none;
+  margin-left: auto;
+  color: var(--color-text-muted);
+}
+
+.activity-sources__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.activity-sources__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.activity-sources__meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.activity-sources__split-btn {
+  margin-left: auto;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.activity-sources__split-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.activity-sources__confirm {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.activity-sources__decisions {
+  margin-top: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* The pre-planned workout structure (WorkoutPlan.tsx) -- a compact nested Warmup/5x[...]/
+   Cooldown list, groups laid out as a row-wrapping set of small blocks rather than one long
+   vertical list, so a 5-8 group workout doesn't dominate the page. */
+.activity-workout-plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.activity-workout-plan h2 {
+  margin: 0;
+}
+
+.activity-workout-plan__group {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.activity-workout-plan__group:last-child {
+  border-bottom: none;
+}
+
+.activity-workout-plan__group h4 {
+  margin: 0;
+  flex: 0 0 auto;
+  min-width: 5ch;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.activity-workout-plan__group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
 }

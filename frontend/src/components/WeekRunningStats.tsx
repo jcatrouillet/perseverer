@@ -15,6 +15,7 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
+import { useLocation } from "wouter";
 
 import type { ActivitySummary } from "../api/types";
 import { Icon } from "./Icon";
@@ -71,6 +72,7 @@ export function WeekRunningStats({
    * docstring. Optional so the component still works without it. */
   allTimeRecords?: PersonalRecord[];
 }) {
+  const [, setLocation] = useLocation();
   // A handful of real activities in this athlete's archive are tagged sport=running by the
   // device/export but are actually hikes (real GPS tracks, ~3.4 km/h average speed, mountain
   // altitude -- confirmed, not corrupted data) -- see isPlausibleRunPace's own comment. Excluded
@@ -292,7 +294,14 @@ export function WeekRunningStats({
                   border: "1px solid var(--color-border)",
                 }}
               />
-              <Scatter data={scatterPoints} isAnimationActive={false}>
+              <Scatter
+                data={scatterPoints}
+                isAnimationActive={false}
+                cursor="pointer"
+                onClick={(point: { payload?: { id: string } }) => {
+                  if (point.payload) setLocation(`/activities/${point.payload.id}`);
+                }}
+              >
                 {scatterPoints.map((p) => (
                   <Cell
                     key={p.id}

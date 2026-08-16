@@ -93,6 +93,7 @@ class TestParseSummarizedActivitiesJson:
                 garmin_activity_id=22587785816,
                 name="Sands Cave Hike",
                 activity_type="hiking",
+                event_type_id=None,
                 begin_timestamp_utc=dt.datetime.fromtimestamp(
                     1776370997000 / 1000, tz=dt.UTC
                 ).replace(tzinfo=None),
@@ -133,12 +134,18 @@ class TestParseSummarizedActivitiesJson:
 
 
 def _entry(
-    *, activity_type: str | None, name: str | None, begin: dt.datetime, garmin_id: int = 1
+    *,
+    activity_type: str | None,
+    name: str | None,
+    begin: dt.datetime,
+    garmin_id: int = 1,
+    event_type_id: int | None = None,
 ) -> GarminActivitySummaryEntry:
     return GarminActivitySummaryEntry(
         garmin_activity_id=garmin_id,
         name=name,
         activity_type=activity_type,
+        event_type_id=event_type_id,
         begin_timestamp_utc=begin,
     )
 
@@ -176,7 +183,9 @@ class TestCorrectActivitiesFromSummary:
         assert row is not None
         assert (row.sport, row.sub_sport, row.name) == ("hiking", "generic", "Sands Cave Hike")
 
-    def test_never_overwrites_an_existing_name(self, tmp_path: Path) -> None:
+    def test_overwrites_an_existing_name_with_garmins_own(self, tmp_path: Path) -> None:
+        """Per explicit athlete directive: always trust Garmin Connect's own name, whatever it
+        is, over whatever is currently stored (however it got there)."""
         engine = _engine(tmp_path)
         start = dt.datetime(2026, 4, 16, 21, 23, 17)
         with engine.connect() as conn:
@@ -190,7 +199,7 @@ class TestCorrectActivitiesFromSummary:
             conn.commit()
             row = conn.execute(select(activity.c.name)).fetchone()
         assert row is not None
-        assert row.name == "My Own Title"
+        assert row.name == "Sands Cave Hike"
 
     def test_does_not_touch_a_correctly_classified_activity(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
@@ -273,3 +282,83 @@ class TestCorrectActivitiesFromSummary:
             result = _correct(conn, [entry])
         assert result.corrected == 0
         assert result.unmatched_entries == 0
+
+    def test_sets_is_race_and_overwrites_a_generic_name_for_a_confirmed_race(
+        self, tmp_path: Path
+    ) -> None:
+        """eventTypeId 1, confirmed against real named races in this athlete's own export."""
+        engine = _engine(tmp_path)
+        start = dt.datetime(2026, 5, 10, 8, 0, 0)
+        with engine.connect() as conn:
+            _add_activity(
+                conn, activity_id="a1", start_time_utc=start, sport="running", name="Run"
+            )
+
+        entry = _entry(
+            activity_type="running",
+            name="Bay to Breakers",
+            begin=start,
+            event_type_id=1,
+        )
+        with engine.connect() as conn:
+            result = _correct(conn, [entry])
+            conn.commit()
+            row = conn.execute(select(activity.c.name, activity.c.is_race)).fetchone()
+
+        assert result.corrected == 1
+        assert row is not None
+        assert row.name == "Bay to Breakers"
+        assert row.is_race is True
+
+    def test_sets_is_race_false_for_the_uncategorized_default_event_type(
+        self, tmp_path: Path
+    ) -> None:
+        engine = _engine(tmp_path)
+        start = dt.datetime(2026, 5, 10, 8, 0, 0)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1", start_time_utc=start, sport="running")
+
+        entry = _entry(activity_type="running", name=None, begin=start, event_type_id=9)
+        with engine.connect() as conn:
+            _correct(conn, [entry])
+            conn.commit()
+            row = conn.execute(select(activity.c.is_race)).fetchone()
+
+        assert row is not None
+        assert row.is_race is False
+
+    def test_leaves_is_race_null_when_event_type_id_is_absent(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        start = dt.datetime(2026, 5, 10, 8, 0, 0)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1", start_time_utc=start, sport="running")
+
+        entry = _entry(activity_type="running", name="x", begin=start, event_type_id=None)
+        with engine.connect() as conn:
+            _correct(conn, [entry])
+            conn.commit()
+            row = conn.execute(select(activity.c.is_race)).fetchone()
+
+        assert row is not None
+        assert row.is_race is None
+
+    def test_overwrites_a_name_for_a_non_race_activity_too(self, tmp_path: Path) -> None:
+        """The name overwrite isn't gated on is_race -- it's unconditional per athlete
+        directive, for races and non-races alike."""
+        engine = _engine(tmp_path)
+        start = dt.datetime(2026, 5, 10, 8, 0, 0)
+        with engine.connect() as conn:
+            _add_activity(
+                conn, activity_id="a1", start_time_utc=start, sport="running", name="My Own Title"
+            )
+
+        entry = _entry(
+            activity_type="running", name="Garmin's Name", begin=start, event_type_id=9
+        )
+        with engine.connect() as conn:
+            _correct(conn, [entry])
+            conn.commit()
+            row = conn.execute(select(activity.c.name)).fetchone()
+
+        assert row is not None
+        assert row.name == "Garmin's Name"

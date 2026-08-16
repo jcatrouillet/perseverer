@@ -7,18 +7,31 @@
 }
 
 .activity-card {
-  display: block;
-  color: inherit;
-  text-decoration: none;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: var(--space-3) var(--space-4);
 }
 
-.activity-card:hover {
-  border-color: var(--color-accent);
+/* The header/stats section is the actual link to the activity; the day view's animated route
+   map (a sibling, see ActivityCard.tsx) is deliberately outside it -- an interactive Leaflet
+   map inside an <a> is a click-handling hazard, not just a style choice. */
+.activity-card__link {
+  display: block;
+  color: inherit;
   text-decoration: none;
+}
+
+.activity-card:has(.activity-card__link:hover) {
+  border-color: var(--color-accent);
+}
+
+.activity-card__link:hover {
+  text-decoration: none;
+}
+
+.day-view-route {
+  margin-top: var(--space-3);
 }
 
 .activity-card__header {
@@ -37,6 +50,26 @@
 .activity-card__sport {
   font-weight: 600;
   text-transform: capitalize;
+}
+
+.activity-card__race-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: var(--space-2);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-transform: none;
+  vertical-align: middle;
+  color: var(--color-load);
+  background: color-mix(in srgb, var(--color-load) 16%, transparent);
+}
+
+.activity-card__race-badge .icon {
+  width: 11px;
+  height: 11px;
 }
 
 .activity-card__name {

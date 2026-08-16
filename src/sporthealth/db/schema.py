@@ -124,6 +124,13 @@ activity = Table(
     Column("sport", String, nullable=False),
     Column("sub_sport", String, nullable=True),
     Column("name", String, nullable=True),
+    # True/False when Garmin Connect's own eventTypeId is known for this activity (via
+    # garmin_activity_summary.py's summarizedActivities correction -- eventTypeId 1 confirmed
+    # against real named races in this athlete's own export, e.g. "Bay to Breakers", "Golden
+    # Gate Half Marathon"); NULL when no such correction has ever matched this activity (no
+    # garmin_export archive, or nothing at this timestamp), meaning genuinely unknown rather
+    # than "confirmed not a race".
+    Column("is_race", Boolean, nullable=True),
     Column("description", Text, nullable=True),
     Column("duration_s", Float, nullable=True),
     Column("moving_duration_s", Float, nullable=True),
@@ -137,6 +144,44 @@ activity = Table(
     Column("deleted_at", DateTime(), nullable=True),
     Index("ix_activity_athlete_start", "athlete_id", "start_time_utc"),
     Index("ix_activity_athlete_local_date", "athlete_id", "local_date"),
+)
+
+# An athlete's own after-the-fact correction -- originally just "this sport is wrong" (see
+# sporthealth/sport_override.py), broadened to also carry independent optional `is_race` and
+# `name` corrections. `is_race`: the automatic eventTypeId-based heuristic
+# (garmin_activity_summary.py::GARMIN_RACE_EVENT_TYPE_ID) only reflects whether the athlete
+# flagged the activity as a race *inside Garmin Connect itself*, so a genuine race the athlete
+# forgot to flag there has no other signal to derive it from. `name`: Garmin Connect's own name
+# is *not* reliably a real custom title -- confirmed the hard way (see set_sport_override's own
+# history): it can equally be a location+activity-type auto-template with zero more information
+# than the FIT on-device default ("Santa Clara Other" for hundreds of unrelated activities), so
+# there's no safe automatic rule for "trust Garmin's name here" -- only the athlete looking at
+# one specific activity can tell a real title ("Santa Clara - Race Pace Run") from a boring
+# template. `sport`/`sub_sport`, `is_race`, and `name` are independently nullable -- a row may
+# carry any subset of these corrections, and only the columns actually supplied by a given
+# correction call are touched, per column, on every apply. Deliberately *not* one of
+# rebuild.py's `_REBUILDABLE_TABLES`. `activity.id` itself is a fresh ULID minted on every `sync
+# rebuild` (the row is deleted and re-inserted from the raw archive), so it can't be this
+# table's key -- `start_time_utc` is the one value a rebuild reliably reproduces identically for
+# the same physical activity, since it comes straight out of the archived FIT/GPX/TCX bytes.
+# Applied as a read-time correction by `apply_sport_overrides`, called at the end of every `sync
+# rebuild` (and immediately, once, when a correction is first set) -- never the raw archive
+# itself, so "raw first" holds: this table, not a mutated FIT byte, is the durable record of the
+# correction.
+activity_sport_override = Table(
+    "activity_sport_override",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("start_time_utc", DateTime(), nullable=False),
+    Column("sport", String, nullable=True),
+    Column("sub_sport", String, nullable=True),
+    Column("is_race", Boolean, nullable=True),
+    Column("name", String, nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id", "start_time_utc", name="uq_activity_sport_override_identity"
+    ),
 )
 
 activity_source_link = Table(
@@ -202,6 +247,10 @@ lap = Table(
     Column("lap_index", Integer, nullable=False),
     Column("start_time_utc", DateTime(), nullable=False),
     Column("duration_s", Float, nullable=True),
+    # FIT's own `total_timer_time` -- excludes a device pause within the lap, the same way
+    # activity.moving_duration_s excludes it for the whole activity. See ParsedLap's own
+    # docstring for the real-data confirmation of why duration_s alone isn't enough.
+    Column("moving_duration_s", Float, nullable=True),
     Column("distance_m", Float, nullable=True),
     Column("avg_hr", Float, nullable=True),
     Column("max_hr", Float, nullable=True),
@@ -242,6 +291,47 @@ route_geom = Table(
     Column("end_lat", Float, nullable=True),
     Column("end_lng", Float, nullable=True),
     Index("ix_route_geom_athlete_bbox", "athlete_id", "min_lat", "min_lng", "max_lat", "max_lng"),
+)
+
+# The pre-planned workout structure downloaded to the device before the activity (Garmin
+# Connect's own "Workout" builder), recorded verbatim into the FIT file's own workout_mesgs/
+# workout_step_mesgs -- see fit/parser.py::_parse_workout's own docstring for the real-data
+# confirmation and the "rows[0]-only" bug this fixes. One-to-one with `activity` (an activity
+# either has a recorded plan or doesn't), so keyed directly on activity_id like route_geom.
+activity_workout = Table(
+    "activity_workout",
+    metadata,
+    Column("activity_id", String(26), ForeignKey("activity.id"), primary_key=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("name", String, nullable=True),
+    Column("description", Text, nullable=True),
+)
+
+# One row per planned step, in FIT's own message_index order -- unexpanded (a
+# "repeat_until_steps_cmplt" step is itself a row describing "repeat steps
+# [repeat_from_step..step_index-1] repeat_count times", not pre-flattened into repeated rows).
+# Callers that want the executed sequence (e.g. to align with recorded laps) expand this
+# themselves, per "raw first" -- see fit/parser.py::ParsedWorkoutStep's own docstring.
+activity_workout_step = Table(
+    "activity_workout_step",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("activity_id", String(26), ForeignKey("activity.id"), nullable=False),
+    Column("step_index", Integer, nullable=False),
+    Column("duration_type", String, nullable=True),
+    Column("duration_time_s", Float, nullable=True),
+    Column("duration_distance_m", Float, nullable=True),
+    Column("target_type", String, nullable=True),
+    # Only populated for target_type == "speed" -- see ParsedWorkoutStep's own docstring.
+    Column("target_low_mps", Float, nullable=True),
+    Column("target_high_mps", Float, nullable=True),
+    Column("intensity", String, nullable=True),
+    Column("repeat_from_step", Integer, nullable=True),
+    Column("repeat_count", Integer, nullable=True),
+    UniqueConstraint(
+        "athlete_id", "activity_id", "step_index", name="uq_activity_workout_step_identity"
+    ),
 )
 
 # --- Health (schema created now; population starts Phase 2) --------------------
@@ -442,6 +532,39 @@ fitness_daily_rollup = Table(
     Column("tsb", Float, nullable=False),
     Column("refreshed_at", DateTime(), nullable=False),
     UniqueConstraint("athlete_id", "local_date", name="uq_fitness_daily_rollup_identity"),
+)
+
+# --- Insights (Phase 8): a rules-based, deterministic derived table -- see
+# src/sporthealth/insights/ and docs/adr/0012-phase-8-strava-merge-insights.md. Full
+# delete-and-reinsert per athlete per refresh (same justified precedent as fitness_daily_rollup's
+# full CTL/ATL/TSB recompute above: cheap at this data volume, avoids stale rows lingering).
+# Refreshed both on ingest (like every other rollup here) and once daily by the worker's own
+# APScheduler job, since a window like "last 30 days" shifts every day even with zero new
+# ingests -- the one rollup in this codebase that isn't purely ingest-triggered.
+
+insight = Table(
+    "insight",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("kind", String, nullable=False),  # effort | streak | pb | load | health
+    Column("window", String, nullable=False),  # e.g. "30d", "90d", "180d", "year", "365d"
+    # A short deterministic string each rule builds identifying what this row is about within
+    # its (kind, window) -- e.g. "distance:high:run", "streak:current" -- what makes a refresh a
+    # clean delete-and-reinsert rather than an ever-growing table of one-off historical rows.
+    Column("subject_key", String, nullable=False),
+    Column("metric_key", String, nullable=True),
+    Column("sport_family", String, nullable=True),
+    Column("activity_id", String(26), ForeignKey("activity.id"), nullable=True),
+    Column("local_date", String, nullable=True),
+    Column("title", String, nullable=False),
+    Column("detail", Text, nullable=False),  # JSON
+    Column("value_num", Float, nullable=True),
+    Column("computed_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id", "kind", "window", "subject_key", name="uq_insight_identity"
+    ),
+    Index("ix_insight_athlete_kind_window", "athlete_id", "kind", "window"),
 )
 
 # --- Notes (Phase 3): the write path CLAUDE.md's mission statement calls for -- one

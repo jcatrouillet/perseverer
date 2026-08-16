@@ -77,6 +77,12 @@ export function sportStyle(sport: string): MetricStyle {
   return SPORT_STYLES[sport] ?? { tone: "neutral", icon: "calendar" };
 }
 
+/** The known sport catalog, for a picker (e.g. the manual sport-correction control) that should
+ * only offer sports this app actually has an icon/tone for -- picking one outside this list
+ * would still work (sport is a free-form string everywhere else), it just wouldn't render with
+ * a real icon anywhere until someone adds it here. */
+export const KNOWN_SPORTS: readonly string[] = Object.keys(SPORT_STYLES);
+
 /** Keyed by the `logical_metric` values GET /health/dashboard returns (see
  * api/routers/health.py::LOGICAL_METRICS), not by raw vendor metric_key. */
 const HEALTH_METRIC_STYLES: Record<string, MetricStyle> = {

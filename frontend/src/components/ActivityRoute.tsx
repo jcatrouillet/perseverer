@@ -8,16 +8,27 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { StreamResponse } from "../api/types";
-import { formatClockDuration, isPaceSport } from "../runningStats";
+import { downloadBlob, renderRoutePosterBlob } from "../routeExport";
+import {
+  buildPauseCompressor,
+  detectPauseGaps,
+  formatClockDuration,
+  formatPaceMinPerKm,
+  isPaceSport,
+} from "../runningStats";
 import { computeKmSplits } from "../splits";
 import { ActivityRouteMap, type RoutePoint } from "./ActivityRouteMap";
 import { Icon } from "./Icon";
 import { SplitsTable } from "./SplitsTable";
 import "../styles/activity-route.css";
 
-const ANIMATION_DURATION_MS = 15000;
+const POSTER_SIZE = 900;
 
-interface RouteData {
+// Also reused by DayViewActivityRoute.tsx's auto-play-once map, so a route plays back at the
+// same pace whether it's this page's manual player or the day view's automatic one.
+export const ANIMATION_DURATION_MS = 15000;
+
+export interface RouteData {
   points: RoutePoint[];
   distanceM: (number | null)[];
   elapsedS: number[];
@@ -26,7 +37,10 @@ interface RouteData {
 
 const EMPTY_ROUTE: RouteData = { points: [], distanceM: [], elapsedS: [], altitudeM: undefined };
 
-function buildRouteData(stream: StreamResponse): RouteData {
+/** Reduces a raw stream response down to the parallel lat/lon/distance/elapsed-time arrays the
+ * route map and splits table need -- shared with DayViewActivityRoute.tsx's compact auto-play
+ * map, so both read the exact same per-point data the activity detail page's own route uses. */
+export function buildRouteData(stream: StreamResponse): RouteData {
   const lat = stream.series.lat;
   const lon = stream.series.lon;
   if (lat == null || lon == null || stream.timestamps.length === 0) return EMPTY_ROUTE;
@@ -34,6 +48,12 @@ function buildRouteData(stream: StreamResponse): RouteData {
   const distanceSeries = stream.series.distance_m;
   const altitudeSeries = stream.series.altitude_m;
   const startMs = new Date(stream.timestamps[0]!).getTime();
+  const rawElapsedAll = stream.timestamps.map((t) => (new Date(t).getTime() - startMs) / 1000);
+  // A device pause shows up as a big gap between two consecutive recorded samples -- compressed
+  // out for the same reason and the same way ActivityCharts.tsx does it: a straight line/split
+  // drawn across dead time nothing was recorded for otherwise shows a wildly wrong per-km pace
+  // for whichever km happened to contain the pause (confirmed against a real paused activity).
+  const compress = buildPauseCompressor(rawElapsedAll, detectPauseGaps(rawElapsedAll));
 
   const points: RoutePoint[] = [];
   const distanceM: (number | null)[] = [];
@@ -46,7 +66,7 @@ function buildRouteData(stream: StreamResponse): RouteData {
     if (la == null || lo == null) continue;
     points.push({ lat: la, lon: lo });
     distanceM.push(distanceSeries?.[i] ?? null);
-    elapsedS.push((new Date(stream.timestamps[i]!).getTime() - startMs) / 1000);
+    elapsedS.push(compress(rawElapsedAll[i]!));
     altitudeM.push(altitudeSeries?.[i] ?? null);
   }
 
@@ -64,6 +84,26 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
   const [hoveredKm, setHoveredKm] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // null = not exporting; 0..1 = gif.js's own encoding progress. Frame generation itself is
+  // fast (plain canvas draws); encoding is the part worth showing progress for.
+  const [gifProgress, setGifProgress] = useState<number | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!isFullscreen) return undefined;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    // Matches the map's own overlay covering the page -- without this, the page underneath
+    // stays scrollable behind it, which reads as broken rather than "still there".
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreen]);
 
   useEffect(() => {
     if (!playing) return undefined;
@@ -98,17 +138,83 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
   const currentElapsedS = route.elapsedS[currentIndex] ?? 0;
   const currentDistanceM = route.distanceM[currentIndex];
 
+  // The activity's own totals, for the poster export's stats block -- last recorded point's
+  // cumulative distance/elapsed time, same "effective end of activity" reading the rest of the
+  // UI uses, not a re-derivation.
+  const totalDistanceM = [...route.distanceM].reverse().find((d) => d != null) ?? null;
+  const totalDurationS = route.elapsedS[route.elapsedS.length - 1] ?? null;
+
+  const exportPoster = async () => {
+    if (totalDistanceM == null || totalDurationS == null || totalDurationS <= 0) return;
+    const distanceKm = totalDistanceM / 1000;
+    const paceLabel = paceSport
+      ? `${formatPaceMinPerKm(totalDurationS, totalDistanceM)} /km`
+      : `${(distanceKm / (totalDurationS / 3600)).toFixed(1)} km/h`;
+    const blob = await renderRoutePosterBlob(
+      POSTER_SIZE,
+      POSTER_SIZE,
+      route.points,
+      route.distanceM,
+      route.elapsedS,
+      {
+        distanceLabel: `${distanceKm.toFixed(2)} km`,
+        durationLabel: formatClockDuration(totalDurationS),
+        paceLabel,
+      },
+    );
+    if (blob) downloadBlob(blob, "route.png");
+  };
+
+  const exportGif = async () => {
+    if (totalDistanceM == null || totalDurationS == null || totalDurationS <= 0) return;
+    const distanceKm = totalDistanceM / 1000;
+    const paceLabel = paceSport
+      ? `${formatPaceMinPerKm(totalDurationS, totalDistanceM)} /km`
+      : `${(distanceKm / (totalDurationS / 3600)).toFixed(1)} km/h`;
+    setGifProgress(0);
+    try {
+      // Dynamically imported: gif.js pulls in its own Web Worker asset and is only ever needed
+      // once a user actually asks for a GIF, not on every activity-detail page load.
+      const { renderRouteGif } = await import("../routeGif");
+      const blob = await renderRouteGif(
+        route.points,
+        route.distanceM,
+        route.elapsedS,
+        {
+          distanceLabel: `${distanceKm.toFixed(2)} km`,
+          durationLabel: formatClockDuration(totalDurationS),
+          paceLabel,
+        },
+        setGifProgress,
+      );
+      downloadBlob(blob, "route.gif");
+    } finally {
+      setGifProgress(null);
+    }
+  };
+
   return (
     <section className="card activity-route">
       <h2>Route</h2>
       <div className="activity-route__layout">
-        <div className="activity-route__map-col">
+        <div
+          className={`activity-route__map-col${isFullscreen ? " activity-route__map-col--fullscreen" : ""}`}
+        >
+          <button
+            type="button"
+            className="button activity-route__fullscreen-btn"
+            onClick={() => setIsFullscreen((f) => !f)}
+            aria-label={isFullscreen ? "Exit fullscreen map" : "View map fullscreen"}
+          >
+            <Icon name={isFullscreen ? "collapse" : "expand"} />
+          </button>
           <ActivityRouteMap
             points={route.points}
             distanceM={route.distanceM}
             elapsedS={route.elapsedS}
             highlightRange={highlightRange}
             markerIndex={currentIndex}
+            resizeSignal={isFullscreen}
           />
           <div className="activity-route__player">
             <button
@@ -135,6 +241,16 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
               {formatClockDuration(currentElapsedS)}
               {currentDistanceM != null && ` · ${(currentDistanceM / 1000).toFixed(2)} km`}
             </span>
+          </div>
+          <div className="activity-route__export-row">
+            <button type="button" className="button" onClick={exportPoster}>
+              <Icon name="download" />
+              Export image
+            </button>
+            <button type="button" className="button" onClick={exportGif} disabled={gifProgress != null}>
+              <Icon name="download" />
+              {gifProgress != null ? `Encoding… ${Math.round(gifProgress * 100)}%` : "Export GIF"}
+            </button>
           </div>
         </div>
         <div className="activity-route__splits-col">

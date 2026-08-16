@@ -8,18 +8,26 @@ from pathlib import Path
 from sqlalchemy import Connection, delete, select
 
 from sporthealth.adapters.garmin_export import report_kind_from_filename
+from sporthealth.adapters.strava_export import (
+    csv_row_from_raw_json,
+    ingest_geometry_content,
+    ingest_manual_entry_content,
+)
 from sporthealth.archive import read_raw_bytes, restore_raw_object_table
 from sporthealth.db.schema import (
     activity,
     activity_metric,
     activity_source_link,
     activity_stream,
+    activity_workout,
+    activity_workout_step,
     day_rollup,
     fitness_daily_rollup,
     health_metric_daily_rollup,
     health_metric_period_rollup,
     health_observation,
     health_stream,
+    insight,
     lap,
     merge_decision,
     period_rollup,
@@ -35,6 +43,7 @@ from sporthealth.db.schema import (
     split as split_table,
 )
 from sporthealth.fitness import refresh_fitness_rollup
+from sporthealth.gpx.parser import parse_gpx
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import (
     parse_daily_summary_json,
@@ -42,15 +51,25 @@ from sporthealth.health.json_parser import (
     parse_hydration_json,
 )
 from sporthealth.ingest_dispatch import ingest_fit_bytes
+from sporthealth.insights.engine import refresh_insights
 from sporthealth.rollups import refresh_daily_and_period_rollups
+from sporthealth.sport_override import apply_sport_overrides
+from sporthealth.tcx.parser import parse_tcx
 
 # Wiped and rebuilt from raw_object. Never includes raw_object itself, and never includes
 # metric_definition (a catalog, not per-athlete data — see EXEMPT_FROM_ATHLETE_SCOPING).
 # Children before parents so foreign keys are respected regardless of pragma state.
 _REBUILDABLE_TABLES = (
     merge_decision,
+    # insight.activity_id is nullable but still FK-constrained -- must be cleared before
+    # `activity` itself is deleted below. Missing here until now (Phase 8 added `insight`
+    # after this table list was last written), which FK-crashed `sync rebuild` for any
+    # athlete with insight rows already computed. See ADR 0013.
+    insight,
     activity_metric,
     activity_stream,
+    activity_workout_step,
+    activity_workout,
     lap,
     split_table,
     route_geom,
@@ -101,6 +120,11 @@ def rebuild_database(
 
     replayed = 0
     touched_dates: set[str] = set()
+    # strava_export_csv_row raw objects are always archived before the strava_export_gpx/tcx/
+    # manual_entry object for the same Activity ID (see adapters/strava_export.py::
+    # import_strava_export), so by the time a geometry/manual-entry row is reached below its
+    # CSV row is already in this dict -- replay never needs to re-read activities.csv from disk.
+    csv_rows_by_activity_id: dict[str, dict[str, str]] = {}
     for row in rows:
         content = read_raw_bytes(archive_root, row.storage_path)
 
@@ -153,16 +177,71 @@ def rebuild_database(
                 batch=parse_garmin_export_json(content, report_kind=report_kind),
             )
             touched_dates |= health_result.affected_local_dates
+        elif row.kind == "strava_export_csv_row":
+            # Remembered for the strava_export_gpx/tcx rows below, which need the same
+            # overlay data `_overlay_csv_totals` used at original import time.
+            #
+            # Also: a manual-entry row (no backing file, ~0.6% of a real archive) has *no*
+            # raw_object of its own distinct from this one. `_ingest_manual_entry` archives the
+            # exact same `raw_row_json` bytes under kind="strava_export_manual_entry", but
+            # `archive_raw_bytes` is idempotent purely on (athlete_id, sha256) -- not kind --
+            # so that call always collides with this row's own id and never creates a second,
+            # differently-kinded raw_object (confirmed against the real archive: zero
+            # strava_export_manual_entry rows exist despite manual-entry activities being
+            # present). This *is* the only raw_object such an activity has, so replay must
+            # ingest it right here rather than in a separate kind branch. See ADR 0013.
+            csv_row = csv_row_from_raw_json(content)
+            if row.external_id:
+                csv_rows_by_activity_id[row.external_id] = csv_row
+            if not csv_row.get("Filename"):
+                _created, dates = ingest_manual_entry_content(
+                    conn,
+                    content,
+                    row=csv_row,
+                    athlete_id=athlete_id,
+                    activity_id=row.external_id or "",
+                    raw_id=row.id,
+                )
+                touched_dates |= dates
+            continue
+        elif row.kind in ("strava_export_gpx", "strava_export_tcx"):
+            # Previously silently dropped here (fell into the catch-all `else: continue`
+            # below) -- a real violation of "raw first, must be able to re-derive the entire
+            # database from the archive" for every GPX/TCX-sourced Strava activity. See ADR
+            # 0013.
+            batch = parse_gpx(content) if row.kind == "strava_export_gpx" else parse_tcx(content)
+            csv_row = csv_rows_by_activity_id.get(row.external_id or "", {})
+            _created, dates = ingest_geometry_content(
+                conn,
+                parquet_dir,
+                content,
+                batch=batch,
+                row=csv_row,
+                athlete_id=athlete_id,
+                activity_id=row.external_id or "",
+                raw_id=row.id,
+            )
+            touched_dates |= dates
         else:
-            # Forward-compatible: other kinds (garmin_export_json/csv/other, etc.) are
-            # simply skipped on rebuild, not dropped — their bytes remain archived.
+            # Forward-compatible: other kinds (garmin_export_json/csv/strava_export_gz/
+            # strava_export_other, etc.) are simply skipped on rebuild, not dropped -- their
+            # bytes remain archived. strava_export_gz specifically: its decompressed content
+            # already has its own separate raw_object (fit/gpx/tcx/other kind) that IS
+            # replayed above/via ingest_fit_bytes, so nothing is actually lost.
             continue
         conn.commit()
         replayed += 1
 
+    # Re-applies any athlete-recorded sport corrections (see sport_override.py's own docstring
+    # for why this can't just be a mutated `activity.sport` value the replay above writes once
+    # and forgets -- the replay just wiped it back to whatever the raw bytes say). Before the
+    # rollup/insight refresh below so those see the corrected sport, not the raw one.
+    apply_sport_overrides(conn, athlete_id=athlete_id)
+
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
     if touched_dates:
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
+        refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 
     return replayed

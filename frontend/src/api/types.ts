@@ -19,6 +19,7 @@ export interface LapOut {
   lap_index: number;
   start_time_utc: string;
   duration_s: number | null;
+  moving_duration_s: number | null;
   distance_m: number | null;
   avg_hr: number | null;
   max_hr: number | null;
@@ -62,6 +63,7 @@ export interface ActivitySummary {
   sport: string;
   sub_sport: string | null;
   name: string | null;
+  is_race: boolean | null;
   duration_s: number | null;
   moving_duration_s: number | null;
   distance_m: number | null;
@@ -90,12 +92,14 @@ export interface ActivityContextRecentOut {
   local_date: string | null;
   distance_m: number;
   duration_s: number;
+  avg_hr_bpm: number | null;
 }
 
 export interface ActivityContextOut {
   percentile_rank: number | null;
   comparable_count: number;
   recent: ActivityContextRecentOut[];
+  fastest: ActivityContextRecentOut[];
 }
 
 export interface ActivityMapPointOut {
@@ -120,6 +124,74 @@ export interface ActivityWeatherOut {
   humidity_min_pct: number | null;
   humidity_max_pct: number | null;
   weather_code: number | null;
+}
+
+export interface ActivitySourceOut {
+  link_id: number;
+  source: string;
+  external_id: string;
+  ingested_at: string;
+  can_split: boolean;
+}
+
+export interface ActivityMergeDecisionOut {
+  candidate_ref: string;
+  reasons: string[];
+  decided_at: string;
+}
+
+export interface ActivitySourcesOut {
+  sources: ActivitySourceOut[];
+  merge_decisions: ActivityMergeDecisionOut[];
+}
+
+export interface ActivitySplitOut {
+  new_activity_id: string;
+}
+
+export interface ActivitySportOverrideOut {
+  sport: string;
+  sub_sport: string | null;
+}
+
+export interface ActivityRaceOverrideOut {
+  is_race: boolean;
+}
+
+export interface ActivityNameOverrideOut {
+  name: string;
+}
+
+export interface ActivityWorkoutStepOut {
+  step_index: number;
+  duration_type: string | null;
+  duration_time_s: number | null;
+  duration_distance_m: number | null;
+  target_type: string | null;
+  target_low_mps: number | null;
+  target_high_mps: number | null;
+  intensity: string | null;
+  repeat_from_step: number | null;
+  repeat_count: number | null;
+}
+
+export interface ActivityWorkoutOut {
+  name: string | null;
+  description: string | null;
+  steps: ActivityWorkoutStepOut[];
+}
+
+export interface InsightOut {
+  kind: string;
+  window: string;
+  title: string;
+  detail: Record<string, unknown>;
+  value_num: number | null;
+  metric_key: string | null;
+  sport_family: string | null;
+  activity_id: string | null;
+  local_date: string | null;
+  computed_at: string;
 }
 
 export interface StreamResponse {

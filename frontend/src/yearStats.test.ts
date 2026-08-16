@@ -30,6 +30,7 @@ function activity(
     sport: "running",
     sub_sport: null,
     name: null,
+    is_race: null,
     duration_s: 1800,
     moving_duration_s: 1800,
     distance_m,
@@ -183,9 +184,9 @@ describe("activityTypeCounts", () => {
       activity("2025-01-04", 1000, { sport: "training" }),
     ]);
     expect(counts).toEqual([
-      { sport: "running", count: 2 },
-      { sport: "cycling", count: 1 },
-      { sport: "training", count: 1 },
+      { sport: "running", count: 2, durationS: 3600 },
+      { sport: "cycling", count: 1, durationS: 1800 },
+      { sport: "training", count: 1, durationS: 1800 },
     ]);
   });
 
@@ -196,8 +197,25 @@ describe("activityTypeCounts", () => {
       activity("2025-01-03", 1000, { sport: "training", sub_sport: "strength_training" }),
     ]);
     expect(counts).toEqual([
-      { sport: "yoga", count: 2 },
-      { sport: "strength_training", count: 1 },
+      { sport: "yoga", count: 2, durationS: 3600 },
+      { sport: "strength_training", count: 1, durationS: 1800 },
+    ]);
+  });
+
+  it("sums effective (moving-preferred) duration per sport, skipping activities with neither", () => {
+    const counts = activityTypeCounts([
+      activity("2025-01-01", 1000, { sport: "running", duration_s: 1000, moving_duration_s: 900 }),
+      activity("2025-01-02", 1000, { sport: "running", duration_s: 500, moving_duration_s: null }),
+      activity("2025-01-03", null, {
+        sport: "training",
+        sub_sport: "yoga",
+        duration_s: null,
+        moving_duration_s: null,
+      }),
+    ]);
+    expect(counts).toEqual([
+      { sport: "running", count: 2, durationS: 1400 }, // 900 (moving-preferred) + 500 (fallback)
+      { sport: "yoga", count: 1, durationS: 0 },
     ]);
   });
 });

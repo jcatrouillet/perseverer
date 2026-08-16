@@ -5,54 +5,28 @@
 // no Power section, an indoor ride has no Elevation section, and a device without a footpod
 // has no Running Dynamics section. Nothing here is estimated or backfilled.
 import type { ActivityDetail } from "../api/types";
-import { metricValue } from "../activityMetrics";
+import { metricValue, metricValueAliased } from "../activityMetrics";
 import { effectiveDurationS, formatDurationHM, formatPaceMinPerKm, isPaceSport } from "../runningStats";
 import { StatTile } from "./StatTile";
 
-export function ActivityStatsGrid({
+/** Distance & time, Heart rate, and the `afterHeartRate` slot (the route map) -- the part of the
+ * stats grid ActivityDetailPage renders full-width, above the narrower two-column row that holds
+ * the remaining sections. Split out from the rest so the route map's width doesn't get squeezed
+ * by a side column that has nothing to do with it (the "fastest for this distance" table only
+ * makes sense alongside stat tiles, not alongside the map). */
+export function ActivityStatsGridPrimary({
   activity,
   afterHeartRate,
 }: {
   activity: ActivityDetail;
-  /** Rendered immediately after the Heart rate section (before Respiration/Training effect/etc.)
-   * -- a slot rather than this component reaching out to fetch/render the route map itself,
-   * since ActivityStatsGrid's whole job is "one categorized read of `activity.metrics`", not
-   * knowing about the separate high-tier stream fetch the route map needs. */
+  /** Rendered immediately after the Heart rate section -- a slot rather than this component
+   * reaching out to fetch/render the route map itself, since ActivityStatsGrid's whole job is
+   * "one categorized read of `activity.metrics`", not knowing about the separate high-tier
+   * stream fetch the route map needs. */
   afterHeartRate?: React.ReactNode;
 }) {
-  const metrics = activity.metrics;
   const durationS = effectiveDurationS(activity);
   const paceSport = isPaceSport(activity.sport);
-
-  const totalDescent = metricValue(metrics, "fit.session.total_descent");
-  const aerobicEffect = metricValue(metrics, "fit.session.total_training_effect");
-  const anaerobicEffect = metricValue(metrics, "fit.session.total_anaerobic_training_effect");
-  const avgPower = metricValue(metrics, "fit.session.avg_power");
-  const maxPower = metricValue(metrics, "fit.session.max_power");
-  const normalizedPower = metricValue(metrics, "fit.session.normalized_power");
-  // FIT's avg_running_cadence is a single-foot rate; Garmin Connect's own "avg cadence" for a
-  // run is that figure doubled (confirmed against real data: session values of ~75-88
-  // correspond to the conventional 150-176 spm runners actually see displayed).
-  const avgRunningCadenceRaw = metricValue(metrics, "fit.session.avg_running_cadence");
-  const avgVerticalOscillation = metricValue(metrics, "fit.session.avg_vertical_oscillation");
-  const avgStanceTime = metricValue(metrics, "fit.session.avg_stance_time");
-  const avgStepLengthMm = metricValue(metrics, "fit.session.avg_step_length");
-  const avgVerticalRatio = metricValue(metrics, "fit.session.avg_vertical_ratio");
-  const avgTemp = metricValue(metrics, "fit.session.avg_temperature");
-  const minTemp = metricValue(metrics, "fit.session.min_temperature");
-  const maxTemp = metricValue(metrics, "fit.session.max_temperature");
-  const avgRespiration = metricValue(metrics, "fit.session.enhanced_avg_respiration_rate");
-  const maxRespiration = metricValue(metrics, "fit.session.enhanced_max_respiration_rate");
-  const minRespiration = metricValue(metrics, "fit.session.enhanced_min_respiration_rate");
-
-  const hasTrainingEffect = aerobicEffect != null || anaerobicEffect != null || activity.training_load != null || activity.workout_rpe != null;
-  const hasRunningDynamics =
-    avgRunningCadenceRaw != null || avgVerticalOscillation != null || avgStanceTime != null || avgStepLengthMm != null;
-  const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
-  const hasTemperature = avgTemp != null;
-  const hasPower = avgPower != null || maxPower != null || normalizedPower != null;
-  const hasRespiration = avgRespiration != null || maxRespiration != null;
-  const hasHydration = activity.estimated_sweat_loss_ml != null;
 
   return (
     <div className="activity-stats">
@@ -112,7 +86,47 @@ export function ActivityStatsGrid({
       )}
 
       {afterHeartRate}
+    </div>
+  );
+}
 
+/** Respiration through Hydration -- the part of the stats grid that shares a row with the
+ * "fastest for this distance" side column on ActivityDetailPage. */
+export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDetail }) {
+  const metrics = activity.metrics;
+
+  const totalDescent = metricValueAliased(metrics, ["fit.session.total_descent", "strava.session.total_descent"]);
+  const aerobicEffect = metricValue(metrics, "fit.session.total_training_effect");
+  const anaerobicEffect = metricValue(metrics, "fit.session.total_anaerobic_training_effect");
+  const avgPower = metricValue(metrics, "fit.session.avg_power");
+  const maxPower = metricValue(metrics, "fit.session.max_power");
+  const normalizedPower = metricValue(metrics, "fit.session.normalized_power");
+  // FIT's avg_running_cadence is a single-foot rate; Garmin Connect's own "avg cadence" for a
+  // run is that figure doubled (confirmed against real data: session values of ~75-88
+  // correspond to the conventional 150-176 spm runners actually see displayed).
+  const avgRunningCadenceRaw = metricValue(metrics, "fit.session.avg_running_cadence");
+  const avgVerticalOscillation = metricValue(metrics, "fit.session.avg_vertical_oscillation");
+  const avgStanceTime = metricValue(metrics, "fit.session.avg_stance_time");
+  const avgStepLengthMm = metricValue(metrics, "fit.session.avg_step_length");
+  const avgVerticalRatio = metricValue(metrics, "fit.session.avg_vertical_ratio");
+  const avgTemp = metricValue(metrics, "fit.session.avg_temperature");
+  const minTemp = metricValue(metrics, "fit.session.min_temperature");
+  const maxTemp = metricValue(metrics, "fit.session.max_temperature");
+  const avgRespiration = metricValue(metrics, "fit.session.enhanced_avg_respiration_rate");
+  const maxRespiration = metricValue(metrics, "fit.session.enhanced_max_respiration_rate");
+  const minRespiration = metricValue(metrics, "fit.session.enhanced_min_respiration_rate");
+
+  const hasTrainingEffect = aerobicEffect != null || anaerobicEffect != null || activity.training_load != null || activity.workout_rpe != null;
+  const hasRunningDynamics =
+    avgRunningCadenceRaw != null || avgVerticalOscillation != null || avgStanceTime != null || avgStepLengthMm != null;
+  const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
+  const hasTemperature = avgTemp != null;
+  const hasPower = avgPower != null || maxPower != null || normalizedPower != null;
+  const hasRespiration = avgRespiration != null || maxRespiration != null;
+  const hasHydration = activity.estimated_sweat_loss_ml != null;
+
+  return (
+    <div className="activity-stats">
       {hasRespiration && (
         <>
           <h3>Respiration</h3>
@@ -249,5 +263,22 @@ export function ActivityStatsGrid({
         </>
       )}
     </div>
+  );
+}
+
+/** The full grid in one call, Primary followed by Secondary -- for callers that don't need the
+ * two-part split (e.g. existing tests exercising the whole grid at once). */
+export function ActivityStatsGrid({
+  activity,
+  afterHeartRate,
+}: {
+  activity: ActivityDetail;
+  afterHeartRate?: React.ReactNode;
+}) {
+  return (
+    <>
+      <ActivityStatsGridPrimary activity={activity} afterHeartRate={afterHeartRate} />
+      <ActivityStatsGridSecondary activity={activity} />
+    </>
   );
 }

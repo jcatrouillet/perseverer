@@ -144,6 +144,11 @@ export function maxHeartRateBpm(activities: ActivitySummary[]): number | null {
 export interface ActivityTypeCount {
   sport: string;
   count: number;
+  /** Summed effective duration (moving-preferred, see effectiveDurationS) across every activity
+   * of this sport -- the "time" half of the count-vs-time toggle on the activities-by-type
+   * chart. Activities with no duration at all don't contribute, same as everywhere else this
+   * project sums durations. */
+  durationS: number;
 }
 
 // FIT's "training" sport is a generic container for indoor cardio/strength/mindfulness work --
@@ -164,11 +169,16 @@ export function displaySport(activity: ActivitySummary): string {
 /** Descending by count, ties broken alphabetically for a stable, deterministic order. */
 export function activityTypeCounts(activities: ActivitySummary[]): ActivityTypeCount[] {
   const counts = new Map<string, number>();
+  const durations = new Map<string, number>();
   for (const a of activities) {
     const sport = displaySport(a);
     counts.set(sport, (counts.get(sport) ?? 0) + 1);
+    const durationS = effectiveDurationS(a);
+    if (durationS != null) {
+      durations.set(sport, (durations.get(sport) ?? 0) + durationS);
+    }
   }
   return Array.from(counts.entries())
-    .map(([sport, count]) => ({ sport, count }))
+    .map(([sport, count]) => ({ sport, count, durationS: durations.get(sport) ?? 0 }))
     .sort((a, b) => b.count - a.count || a.sport.localeCompare(b.sport));
 }

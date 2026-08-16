@@ -37,6 +37,7 @@ export function ActivityCard({
   activity,
   iconSize = "default",
   encodedPolyline,
+  animatedRoute,
 }: {
   activity: ActivitySummary;
   /** "large" is used by the day view, where one card per activity (rather than a long list of
@@ -46,75 +47,90 @@ export function ActivityCard({
   /** This activity's route, if it has one -- the caller (ActivityListPage/DayViewPage) batch-
    * fetches routes for a whole page of cards via `useActivityRoutes()` and passes each one down,
    * rather than every card fetching its own (an N-cards-per-page N+1 problem). Undefined for a
-   * GPS-less activity (e.g. strength training) or while the batch fetch hasn't resolved yet. */
+   * GPS-less activity (e.g. strength training) or while the batch fetch hasn't resolved yet.
+   * Ignored when `animatedRoute` is also provided. */
   encodedPolyline?: string;
+  /** The day view's auto-playing route map (DayViewActivityRoute), rendered in place of the
+   * static polyline thumbnail. Deliberately rendered as a *sibling* of the header/stats `<Link>`
+   * below, not nested inside it -- unlike the static thumbnail (all interaction explicitly
+   * disabled, exactly so it can sit inside a link), this map is fully interactive
+   * (zoom/drag/playback), and an interactive widget inside an `<a>` is a real click-handling
+   * hazard, not just a style nit. */
+  animatedRoute?: React.ReactNode;
 }) {
   const sport = displaySport(activity);
   const style = sportStyle(sport);
   const durationS = effectiveDurationS(activity);
 
   return (
-    <Link href={`/activities/${activity.id}`} className="activity-card">
-      <div className="activity-card__header">
-        <span
-          className={`icon-chip tone-${style.tone}${iconSize === "large" ? " icon-chip--lg" : ""}`}
-        >
-          <Icon name={style.icon} />
-        </span>
-        <div className="activity-card__title">
-          <span className="activity-card__sport">{sport.replace(/_/g, " ")}</span>
-          {activity.name && <span className="activity-card__name">{activity.name}</span>}
+    <div className="activity-card">
+      <Link href={`/activities/${activity.id}`} className="activity-card__link">
+        <div className="activity-card__header">
+          <span
+            className={`icon-chip tone-${style.tone}${iconSize === "large" ? " icon-chip--lg" : ""}`}
+          >
+            <Icon name={style.icon} />
+          </span>
+          <div className="activity-card__title">
+            <span className="activity-card__sport">
+              {sport.replace(/_/g, " ")}
+              {activity.is_race && (
+                <span className="activity-card__race-badge" title="Marked as a race in Garmin Connect">
+                  <Icon name="trophy" /> Race
+                </span>
+              )}
+            </span>
+            {activity.name && <span className="activity-card__name">{activity.name}</span>}
+          </div>
+          <span className="activity-card__time">{localTimeLabel(activity)}</span>
         </div>
-        <span className="activity-card__time">{localTimeLabel(activity)}</span>
-      </div>
 
-      <div className="activity-card__stats">
-        {activity.distance_m != null && (
-          <MetricChip
-            label={`${(activity.distance_m / 1000).toFixed(2)} km`}
-            icon="route"
-            tone="pace"
-          />
-        )}
-        {durationS != null && (
-          <MetricChip label={formatDurationHM(durationS)} icon="clock" tone="cadence" />
-        )}
-        {/* Distance > 0, not just non-null: a strength-training session logged with an exact
-            0m distance is real data, but a "0.0 km/h" pace chip on it would read as a broken
-            measurement rather than "this activity has no meaningful distance". */}
-        {activity.distance_m != null && activity.distance_m > 0 && durationS != null && durationS > 0 && (
-          <MetricChip
-            label={paceOrSpeedLabel(sport, durationS, activity.distance_m)}
-            icon="gauge"
-            tone="pace"
-          />
-        )}
-        {activity.avg_hr_bpm != null && (
-          <MetricChip label={`${Math.round(activity.avg_hr_bpm)} bpm`} icon="heart" tone="hr" />
-        )}
-        {activity.training_load != null && (
-          <MetricChip
-            label={`Load ${Math.round(activity.training_load)}`}
-            icon="bolt"
-            tone="load"
-          />
-        )}
-        {activity.workout_rpe != null && (
-          <MetricChip
-            label={`RPE ${activity.workout_rpe.toFixed(1)}`}
-            icon="flame"
-            tone="load"
-          />
-        )}
-      </div>
+        <div className="activity-card__stats">
+          {activity.distance_m != null && (
+            <MetricChip
+              label={`${(activity.distance_m / 1000).toFixed(2)} km`}
+              icon="route"
+              tone="pace"
+            />
+          )}
+          {durationS != null && (
+            <MetricChip label={formatDurationHM(durationS)} icon="clock" tone="cadence" />
+          )}
+          {/* Distance > 0, not just non-null: a strength-training session logged with an exact
+              0m distance is real data, but a "0.0 km/h" pace chip on it would read as a broken
+              measurement rather than "this activity has no meaningful distance". */}
+          {activity.distance_m != null && activity.distance_m > 0 && durationS != null && durationS > 0 && (
+            <MetricChip
+              label={paceOrSpeedLabel(sport, durationS, activity.distance_m)}
+              icon="gauge"
+              tone="pace"
+            />
+          )}
+          {activity.avg_hr_bpm != null && (
+            <MetricChip label={`${Math.round(activity.avg_hr_bpm)} bpm`} icon="heart" tone="hr" />
+          )}
+          {activity.training_load != null && (
+            <MetricChip
+              label={`Load ${Math.round(activity.training_load)}`}
+              icon="bolt"
+              tone="load"
+            />
+          )}
+          {activity.workout_rpe != null && (
+            <MetricChip
+              label={`RPE ${activity.workout_rpe.toFixed(1)}`}
+              icon="flame"
+              tone="load"
+            />
+          )}
+        </div>
 
-      {encodedPolyline && (
-        <ActivityMap
-          encodedPolyline={encodedPolyline}
-          color={toneColor(style.tone)}
-          size={iconSize === "large" ? "large" : "thumbnail"}
-        />
-      )}
-    </Link>
+        {!animatedRoute && encodedPolyline && (
+          <ActivityMap encodedPolyline={encodedPolyline} color={toneColor(style.tone)} />
+        )}
+      </Link>
+
+      {animatedRoute}
+    </div>
   );
 }

@@ -23,16 +23,26 @@ export function ActivityWeather({ weather }: { weather: ActivityWeatherOut }) {
   const info = weatherCodeInfo(code);
 
   return (
-    <p className="activity-detail__weather">
-      <span className="icon-chip tone-load" title={info.label}>
-        <Icon name={info.icon} />
-      </span>
-      <span>
-        {Math.round(tMin)}–{Math.round(tMax)}°C
-      </span>
-      <span>
-        {Math.round(hMin)}–{Math.round(hMax)}% RH
-      </span>
-    </p>
+    <div className="activity-detail__weather">
+      <h3 className="activity-detail__weather-heading">Weather</h3>
+      <p className="activity-detail__weather-row">
+        <span className="icon-chip icon-chip--lg tone-load" title={info.label}>
+          <Icon name={info.icon} />
+        </span>
+        <span className="activity-detail__weather-readout">
+          <span>{info.label}</span>
+          <span>
+            {Math.round(tMin) === Math.round(tMax)
+              ? `${Math.round(tMin)}°C`
+              : `${Math.round(tMin)}–${Math.round(tMax)}°C`}
+          </span>
+          <span>
+            {Math.round(hMin) === Math.round(hMax)
+              ? `${Math.round(hMin)}% RH`
+              : `${Math.round(hMin)}–${Math.round(hMax)}% RH`}
+          </span>
+        </span>
+      </p>
+    </div>
   );
 }

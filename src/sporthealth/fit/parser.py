@@ -41,6 +41,8 @@ from sporthealth.fit.types import (
     ParsedLap,
     ParsedMetric,
     ParsedSplit,
+    ParsedWorkout,
+    ParsedWorkoutStep,
     StreamPoint,
 )
 
@@ -103,6 +105,11 @@ def _to_float(value: Any) -> float | None:
         f = float(value)
         return None if math.isnan(f) else f
     return None
+
+
+def _to_int(value: Any) -> int | None:
+    f = _to_float(value)
+    return None if f is None else int(f)
 
 
 def _message_short_name(message_type: str) -> str:
@@ -182,6 +189,113 @@ def _time_in_zone_metrics(row: dict[Any, Any]) -> list[ParsedMetric]:
                 )
             )
     return metrics
+
+
+_WORKOUT_STEP_CORE_FIELDS = frozenset(
+    {
+        "message_index",
+        "duration_type",
+        "duration_time",
+        "duration_distance",
+        "duration_value",
+        "target_type",
+        "target_value",
+        "secondary_target_value",
+        "custom_target_speed_low",
+        "custom_target_speed_high",
+        "custom_target_value_low",
+        "custom_target_value_high",
+        "target_speed_zone",
+        "intensity",
+        "duration_step",
+        "repeat_steps",
+    }
+)
+
+
+def _parse_workout_step(row: dict[Any, Any]) -> ParsedWorkoutStep:
+    duration_type = row.get("duration_type")
+    target_type = row.get("target_type")
+    # `custom_target_speed_low/high` is the SDK's own descaled m/s field, populated alongside
+    # the raw `custom_target_value_low/high` scaled int whenever target_type == "speed" --
+    # confirmed against a real structured-workout FIT file (5x1km threshold session). Other
+    # target types (heart_rate, cadence, power, open) aren't extracted into a range here since
+    # nothing consumes them yet -- the raw row is still fully cataloged via the generic-metrics
+    # fallback below, so no field is lost, just not modeled as a pace range.
+    target_low = _to_float(row.get("custom_target_speed_low")) if target_type == "speed" else None
+    target_high = _to_float(row.get("custom_target_speed_high")) if target_type == "speed" else None
+    return ParsedWorkoutStep(
+        step_index=_to_int(row.get("message_index")) or 0,
+        duration_type=duration_type,
+        duration_time_s=_to_float(row.get("duration_time")),
+        duration_distance_m=_to_float(row.get("duration_distance")),
+        target_type=target_type,
+        target_low_mps=target_low,
+        target_high_mps=target_high,
+        intensity=row.get("intensity"),
+        # Only meaningful when duration_type == "repeat_until_steps_cmplt": "repeat steps
+        # [duration_step..this step's index - 1] repeat_steps times" (FIT's own semantics,
+        # confirmed against real data -- a step with duration_step=1, repeat_steps=5 at
+        # message_index 3 means "repeat steps 1-2, five times"). `.get()`, not bracket access --
+        # a malformed/partial repeat step must not crash the whole parse.
+        repeat_from_step=(
+            _to_int(row.get("duration_step"))
+            if duration_type == "repeat_until_steps_cmplt"
+            else None
+        ),
+        repeat_count=(
+            _to_int(row.get("repeat_steps"))
+            if duration_type == "repeat_until_steps_cmplt"
+            else None
+        ),
+    )
+
+
+def _parse_workout(
+    workout_row: dict[Any, Any] | None, step_rows: list[dict[Any, Any]]
+) -> tuple[ParsedWorkout | None, list[ParsedMetric]]:
+    """`workout_mesgs`/`workout_step_mesgs` carry a pre-planned workout structure downloaded to
+    the device before the activity (Garmin Connect's own "Workout" builder) -- confirmed real:
+    a warmup, a 5x-repeated [1km interval, 75s recovery] block, and a cooldown, each with a
+    target pace range, on a genuine structured-workout FIT file. Both message types used to fall
+    through `parse_fit`'s generic "unrecognized message type" handling, which only catalogs
+    `rows[0]` for a low-row-count type -- silently dropping every step but the first. Modeled
+    explicitly here instead; any field on a step row not in `_WORKOUT_STEP_CORE_FIELDS` still
+    becomes a generic metric (per-step, keyed by step index) so nothing is lost either way."""
+    if workout_row is None and not step_rows:
+        return None, []
+
+    # `wkt_name` decodes as a list of string fragments on real files (only the first is the
+    # actual name; the rest are empty/garbage) -- `_generic_metrics_from_row` skips list-valued
+    # fields entirely, so this needs its own handling rather than falling through to it.
+    name = None
+    if workout_row is not None:
+        wkt_name = workout_row.get("wkt_name")
+        if isinstance(wkt_name, list) and wkt_name and isinstance(wkt_name[0], str):
+            name = wkt_name[0] or None
+        elif isinstance(wkt_name, str):
+            name = wkt_name or None
+
+    extra_metrics: list[ParsedMetric] = []
+    if workout_row is not None:
+        extra_metrics += _generic_metrics_from_row(
+            "workout_mesgs", workout_row, frozenset({"wkt_name"})
+        )
+
+    steps = []
+    for row in sorted(step_rows, key=lambda r: r.get("message_index") or 0):
+        steps.append(_parse_workout_step(row))
+        step_index = int(row.get("message_index") or 0)
+        extra_metrics += _generic_metrics_from_row(
+            f"workout_step_{step_index}_mesgs", row, _WORKOUT_STEP_CORE_FIELDS
+        )
+
+    description = workout_row.get("wkt_description") if workout_row else None
+    if isinstance(description, list):
+        description = description[0] if description and isinstance(description[0], str) else None
+
+    workout = ParsedWorkout(name=name, description=description or None, steps=steps)
+    return workout, extra_metrics
 
 
 def _parse_device(file_id_row: dict[Any, Any] | None) -> ParsedDevice | None:
@@ -369,6 +483,12 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
     if session_zone_row is not None:
         extra_metrics += _time_in_zone_metrics(session_zone_row)
 
+    workout, workout_metrics = _parse_workout(
+        messages.get("workout_mesgs", [None])[0] if messages.get("workout_mesgs") else None,
+        messages.get("workout_step_mesgs", []),
+    )
+    extra_metrics += workout_metrics
+
     laps = []
     for i, row in enumerate(messages.get("lap_mesgs", [])):
         lap_start = row.get("start_time")
@@ -379,6 +499,7 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
                 lap_index=i,
                 start_time_utc=lap_start,
                 duration_s=_to_float(row.get("total_elapsed_time")),
+                moving_duration_s=_to_float(row.get("total_timer_time")),
                 distance_m=_to_float(row.get("total_distance")),
                 avg_hr=_to_float(row.get("avg_heart_rate")),
                 max_hr=_to_float(row.get("max_heart_rate")),
@@ -425,6 +546,11 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
         "split_mesgs",
         "record_mesgs",
         "time_in_zone_mesgs",
+        # workout_step_mesgs is inherently multi-row (one row per step) even for a short
+        # workout -- the generic "rows[0] only" fallback below would silently drop every step
+        # but the first, which is exactly the bug _parse_workout above exists to avoid.
+        "workout_mesgs",
+        "workout_step_mesgs",
     }
     unrecognized_types = []
     for message_type, rows in messages.items():
@@ -454,6 +580,7 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
         device=device,
         laps=laps,
         splits=splits,
+        workout=workout,
         stream=stream_points,
         route_points=route_points,
         route_start=route_start,
