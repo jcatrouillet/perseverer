@@ -614,6 +614,27 @@ export function newAllTimePrs(
   return periodRecords.filter((r) => allTimeDateByLabel.get(r.label) === r.date);
 }
 
+export interface BestVdot {
+  value: number;
+  date: string;
+}
+
+/** The best (highest) VDOT among `activities` that have one -- see performance.py's own
+ * docstring for how it's computed and why a raw per-day VDOT trend would be misleading (an easy
+ * day scores low purely from intensity, not fitness). A period's *best* value reads the way a
+ * "fastest split"/PB stat already does elsewhere on this page: the strongest performance you
+ * actually produced in this window, not a trend line that dips on rest days. */
+export function bestVdot(activities: ActivitySummary[]): BestVdot | null {
+  let best: BestVdot | null = null;
+  for (const a of activities) {
+    if (a.vdot == null) continue;
+    if (best == null || a.vdot > best.value) {
+      best = { value: a.vdot, date: a.local_date ?? a.start_time_utc.slice(0, 10) };
+    }
+  }
+  return best;
+}
+
 export interface WeeklyDistancePoint {
   weekStart: string;
   km: number;

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ActivitySummary } from "./api/types";
 import {
   amPmCounts,
+  bestVdot,
   buildPauseCompressor,
   DAILY_HEATMAP_SCALE,
   dailyStats,
@@ -60,6 +61,7 @@ function activity(
     training_load: null,
     workout_rpe: null,
     weight_kg: null,
+    vdot: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,
@@ -168,6 +170,24 @@ describe("rejectSpeedOutliers", () => {
   it("passes null values through untouched", () => {
     const values = [2.5, null, 2.5, 2.5, 2.5, 2.5];
     expect(rejectSpeedOutliers(values)).toEqual(values);
+  });
+
+  // Real values from a reported real activity: a literal 0.0 m/s glitch one second into the
+  // run, sandwiched inside a smooth 1.6->3.0 m/s acceleration from a stop. Two-part regression:
+  // this glitch alone survives the filter (the noisy still-ramping index-0 neighbor inflates the
+  // local median/MAD enough to make 0.0 look plausible) -- which is exactly why
+  // ActivityCharts.tsx nulls the stream's very first sample before calling this, the same way it
+  // already nulled a post-pause resume sample. Once that neighbor is excluded (mirroring what the
+  // caller now does), the same glitch is correctly caught.
+  const rampUpWithGlitch = [1.624, 0.0, 1.353, 1.959, 2.473, 2.725, 2.921, 3.014, 3.014, 3.014];
+
+  it("a start-of-run glitch survives when the noisy first sample is still in play", () => {
+    expect(rejectSpeedOutliers(rampUpWithGlitch)[1]).toBe(0.0);
+  });
+
+  it("the same glitch is caught once the first sample is excluded first", () => {
+    const withFirstSampleNulled = [null, ...rampUpWithGlitch.slice(1)];
+    expect(rejectSpeedOutliers(withFirstSampleNulled)[1]).toBeNull();
   });
 });
 
@@ -490,6 +510,30 @@ describe("amPmCounts", () => {
       activity("2025-06-02", 5000, { start_time_utc: "2025-06-02T20:00:00Z", utc_offset_s: -25200 }),
     ];
     expect(amPmCounts(activities)).toEqual({ am: 1, pm: 1 });
+  });
+});
+
+describe("bestVdot", () => {
+  it("returns the highest vdot among activities that have one", () => {
+    const activities = [
+      activity("2025-05-01", 5000, { vdot: 38.3 }),
+      activity("2025-05-15", 5000, { vdot: 41.0 }),
+      activity("2025-05-20", 5000, { vdot: 35.1 }),
+    ];
+    expect(bestVdot(activities)).toEqual({ value: 41.0, date: "2025-05-15" });
+  });
+
+  it("ignores activities with no vdot", () => {
+    const activities = [
+      activity("2025-05-01", 5000, { vdot: null }),
+      activity("2025-05-15", 5000, { vdot: 27.6 }),
+    ];
+    expect(bestVdot(activities)).toEqual({ value: 27.6, date: "2025-05-15" });
+  });
+
+  it("returns null when nothing in the period has a vdot", () => {
+    expect(bestVdot([activity("2025-05-01", 5000, { vdot: null })])).toBeNull();
+    expect(bestVdot([])).toBeNull();
   });
 });
 

@@ -59,6 +59,7 @@ from sporthealth.fitness import refresh_fitness_rollup
 from sporthealth.gpx.parser import parse_gpx
 from sporthealth.ingest_dispatch import ingest_fit_bytes
 from sporthealth.insights.engine import refresh_insights
+from sporthealth.performance import refresh_vdot
 from sporthealth.rollups import refresh_daily_and_period_rollups
 from sporthealth.tcx.parser import parse_tcx
 
@@ -308,6 +309,7 @@ def import_strava_export(
     if touched_dates:
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
         refresh_insights(conn, athlete_id=athlete_id)
+        refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(

@@ -24,6 +24,7 @@ function activity(local_date: string, overrides: Partial<ActivitySummary> = {}):
     training_load: null,
     workout_rpe: null,
     weight_kg: 80,
+    vdot: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,

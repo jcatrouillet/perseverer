@@ -84,6 +84,10 @@ class ActivitySummary(BaseModel):
     # (calories / weight_kg, a standard gross-MET approximation) without a second per-activity
     # fetch -- not itself a metric anyone reads directly.
     weight_kg: float | None
+    # Daniels-Gilbert running performance index, GAP-adjusted when a distance/altitude stream is
+    # available -- see performance.py's own docstring. Null for non-running activities, or a
+    # running activity too short/anomalous for the underlying aerobic model (see vdot.py).
+    vdot: float | None
     primary_source: str
     stream_available: bool
 

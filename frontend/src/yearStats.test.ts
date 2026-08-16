@@ -41,6 +41,7 @@ function activity(
     training_load: null,
     workout_rpe: null,
     weight_kg: null,
+    vdot: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,

@@ -281,16 +281,19 @@ export function ActivityCharts({
       : null;
 
   // The very first sample recorded right after a device pause is a resume artifact (GPS
-  // reacquisition / stride restart -- the same category as the very first sample of the whole
-  // activity), not a real momentary pace, so it's nulled outright rather than left to
-  // rejectSpeedOutliers below: its own neighbors are often *also* still-ramping-up samples,
-  // which can fool a neighbor-agreement check into treating it as normal (confirmed against a
-  // real paused lap: three post-resume samples in a row all read as a slow, mutually-consistent
-  // cluster). Isolated single-point glitches elsewhere are nulled out here too, before pace
-  // conversion -- see rejectSpeedOutliers' own docstring. Feeds both the Pace/Speed panel (via
-  // `series.speed_mps` below) and GAP (via `paceSeries`), so neither shows a glitch the other
-  // doesn't.
+  // reacquisition / stride restart) -- the very first sample of the whole activity (index 0) is
+  // the same category, since a run always starts from a dead stop, and is nulled here too, not
+  // just described as analogous. Neither is a real momentary pace, so both are nulled outright
+  // rather than left to rejectSpeedOutliers below: their own neighbors are often *also* still-
+  // ramping-up samples, which can fool a neighbor-agreement check into treating them as normal
+  // (confirmed against real data: a literal mid-ramp 0.0 m/s reading one second into a run,
+  // surrounded by a smooth 1.6->3.0 m/s acceleration, wasn't flagged as an outlier until its
+  // noisy index-0 neighbor was excluded from the local-median calculation first). Isolated
+  // single-point glitches elsewhere are nulled out here too, before pace conversion -- see
+  // rejectSpeedOutliers' own docstring. Feeds both the Pace/Speed panel (via `series.speed_mps`
+  // below) and GAP (via `paceSeries`), so neither shows a glitch the other doesn't.
   const postPauseIndices = new Set(pauseDetection.gaps.map((g) => g.postGapIndex));
+  if ((stream.series.speed_mps?.length ?? 0) > 0) postPauseIndices.add(0);
   const speedWithPausesMarked = stream.series.speed_mps?.map((v, i) =>
     postPauseIndices.has(i) ? null : v,
   );

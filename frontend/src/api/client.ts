@@ -95,6 +95,10 @@ export function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
 }
 
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, { method: "PUT", body: JSON.stringify(body) });
+}
+
 // Login has no stored credential yet, so it bypasses `request` entirely.
 export async function login(payload: LoginRequest): Promise<LoginResponse> {
   const response = await fetch(`${getBaseUrl()}/api/v1/auth/login`, {

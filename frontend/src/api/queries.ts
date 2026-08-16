@@ -3,7 +3,7 @@
 // can be created from either the calendar page or the activity detail page.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiGet, apiPatch, apiPost } from "./client";
+import { apiGet, apiPatch, apiPost, apiPut } from "./client";
 import type {
   ActivityContextOut,
   ActivityDetail,
@@ -21,6 +21,8 @@ import type {
   FitnessDailyRollupOut,
   HealthDashboardOut,
   HealthObservationOut,
+  HrZoneConfigIn,
+  HrZoneConfigOut,
   InsightOut,
   NoteCreate,
   NoteOut,
@@ -346,6 +348,26 @@ export function useCreateNote() {
         queryKey: ["notes", note.entity_type, note.entity_id],
       });
       void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+/** An athlete's own configured HR training zones (see hr_zones.py's own docstring for the
+ * blended-formula rationale) -- independent of any single activity, so this isn't scoped to an
+ * activity id the way the sport/race/name corrections above are. */
+export function useHrZoneConfig() {
+  return useQuery({
+    queryKey: ["hr-zone-config"],
+    queryFn: () => apiGet<HrZoneConfigOut>("/api/v1/settings/hr-zones"),
+  });
+}
+
+export function useSetHrZoneConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: HrZoneConfigIn) => apiPut<HrZoneConfigOut>("/api/v1/settings/hr-zones", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["hr-zone-config"] });
     },
   });
 }

@@ -13,6 +13,7 @@ import {
   useActivityStream,
   useActivityWeather,
   useActivityWorkout,
+  useHrZoneConfig,
   useSetNameOverride,
   useSetRaceOverride,
   useSetSportOverride,
@@ -30,7 +31,6 @@ import { ActivityWeather } from "../components/ActivityWeather";
 import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
-import { WorkoutPlan } from "../components/WorkoutPlan";
 import { sportStyle } from "../metricStyle";
 import {
   effectiveDurationS,
@@ -39,9 +39,27 @@ import {
   isPaceSport,
   localTimeLabel,
 } from "../runningStats";
-import { expandWorkoutSteps, formatStepDurationLabel, targetPaceRangeLabel } from "../workoutSteps";
+import {
+  expandWorkoutSteps,
+  formatStepDurationLabel,
+  labelForIntensity,
+  targetPaceRangeLabel,
+} from "../workoutSteps";
 import { displaySport } from "../yearStats";
 import "../styles/activity-detail.css";
+
+// The literal device-generated default `activity.name` for a sport, confirmed as the single
+// overwhelmingly dominant value in the real archive (e.g. "Run" on 628 of this athlete's running
+// activities, "Walk" on 201 walks) -- not a fuzzy "looks generic" guess. Sports with no single
+// dominant default (cycling, training, rowing, ...) are deliberately absent, so displayName below
+// always just uses activity.name for those.
+const GENERIC_DEFAULT_NAME_BY_SPORT: Record<string, string> = {
+  running: "Run",
+  walking: "Walk",
+  hiking: "Hike",
+  alpine_skiing: "Ski",
+  snowshoeing: "Snowshoe",
+};
 
 export function ActivityDetailPage({ id }: { id: string }) {
   // Hovering an Intervals-table row highlights that same lap's time range across every
@@ -58,6 +76,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const context = useActivityContext(id);
   const weather = useActivityWeather(id, activity.data?.route?.start_lat != null);
   const workout = useActivityWorkout(id);
+  const hrZoneConfig = useHrZoneConfig();
   const sources = useActivitySources(id);
   const split = useSplitActivitySource(id);
   const sportOverride = useSetSportOverride(id);
@@ -77,16 +96,45 @@ export function ActivityDetailPage({ id }: { id: string }) {
   // (cataloged) with no actual seconds recorded, which extractHrZones already treats as "nothing
   // to show" for the chart itself, but the section wrapper needs to know that too.
   const hrZones = extractHrZones(a.metrics);
+  // All four boundaries or none -- see hr_zones.py::compute_hr_zone_boundaries, which only ever
+  // derives them together from the athlete's three reference values.
+  const configuredZoneBoundaries: [number, number, number, number] | null =
+    hrZoneConfig.data?.zone1_high_bpm != null &&
+    hrZoneConfig.data.zone2_high_bpm != null &&
+    hrZoneConfig.data.zone3_high_bpm != null &&
+    hrZoneConfig.data.zone4_high_bpm != null
+      ? [
+          hrZoneConfig.data.zone1_high_bpm,
+          hrZoneConfig.data.zone2_high_bpm,
+          hrZoneConfig.data.zone3_high_bpm,
+          hrZoneConfig.data.zone4_high_bpm,
+        ]
+      : null;
+  const heartRateStream = stream.data?.series.heart_rate ?? null;
+  const hasComputableStreamZones =
+    configuredZoneBoundaries != null &&
+    heartRateStream != null &&
+    heartRateStream.some((v) => v != null);
   const showTimeInZone =
     (sport === "running" || sport === "cycling") &&
-    hrZones != null &&
-    hrZones.some((z) => z.seconds > 0);
+    ((hrZones != null && hrZones.some((z) => z.seconds > 0)) || hasComputableStreamZones);
   // The Intervals table's "Expected" columns only make sense when this activity actually has a
-  // pre-planned workout (see WorkoutPlan's own gating) -- skipped entirely, not just blank,
-  // when there isn't one, same as the chart's own workout overlay.
+  // pre-planned workout -- skipped entirely, not just blank, when there isn't one, same as the
+  // chart's own workout overlay.
   const expandedWorkoutSteps =
     workout.data != null && paceSport ? expandWorkoutSteps(workout.data.steps) : [];
   const showExpectedColumns = expandedWorkoutSteps.length > 0;
+  // Garmin's structured Workout Builder name (e.g. "W11 Sat - Easy Shakeout") is a deliberately
+  // athlete/plan-given title, and reads far more usefully at the top of the page than the FIT
+  // session's own generic device default -- confirmed against the real archive: the single
+  // dominant (by far) activity.name value for these sports is exactly this bare word (e.g. "Run"
+  // 628 times for running, "Walk" 201 times for walking). Only used as a fallback when
+  // activity.name is still that generic default (or empty) -- once the athlete corrects the name
+  // via "Not the right title? Fix it" below, activity.name is no longer that literal default, so
+  // the correction always wins over the workout's own name from here on.
+  const genericDefaultName = GENERIC_DEFAULT_NAME_BY_SPORT[sport];
+  const displayName =
+    a.name == null || a.name === genericDefaultName ? (workout.data?.name ?? a.name) : a.name;
 
   return (
     <main>
@@ -99,7 +147,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
         <div className="activity-detail__title">
           <h1 className="activity-detail__sport">
             {sport.replace(/_/g, " ")}
-            {a.name ? ` — ${a.name}` : ""}
+            {displayName ? ` — ${displayName}` : ""}
             {a.is_race && (
               <span className="activity-detail__race-badge" title="Marked as a race in Garmin Connect">
                 <Icon name="trophy" /> Race
@@ -164,12 +212,15 @@ export function ActivityDetailPage({ id }: { id: string }) {
 
       {context.data && <ActivityContextStrip context={context.data} sport={sport} currentActivityId={id} />}
 
-      {workout.data && <WorkoutPlan workout={workout.data} sport={sport} />}
-
       {showTimeInZone && (
         <section className="card">
           <h2>Time in zones</h2>
-          <TimeInZoneChart metrics={a.metrics} />
+          <TimeInZoneChart
+            metrics={a.metrics}
+            heartRateStream={heartRateStream}
+            timestamps={stream.data?.timestamps}
+            configuredZoneBoundaries={configuredZoneBoundaries}
+          />
         </section>
       )}
 
@@ -180,8 +231,15 @@ export function ActivityDetailPage({ id }: { id: string }) {
             <thead>
               <tr>
                 <th>#</th>
+                {showExpectedColumns && <th>Interval</th>}
                 <th>Duration</th>
-                {showExpectedColumns && <th>Exp. duration or distance</th>}
+                {showExpectedColumns && (
+                  <th>
+                    Exp. duration
+                    <br />
+                    or distance
+                  </th>
+                )}
                 <th>Distance</th>
                 <th>{paceSport ? "Pace" : "Speed"}</th>
                 {showExpectedColumns && <th>Expected pace</th>}
@@ -211,6 +269,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
                   ? (formatStepDurationLabel(expectedStep) ?? "—")
                   : "—";
                 const expectedPace = expectedStep ? (targetPaceRangeLabel(expectedStep, sport) ?? "—") : "—";
+                const intervalName = expectedStep ? labelForIntensity(expectedStep.intensity) : "—";
                 return (
                   <tr
                     key={lap.lap_index}
@@ -219,6 +278,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
                     onMouseLeave={() => setHoveredLapIndex(null)}
                   >
                     <td>{lap.lap_index + 1}</td>
+                    {showExpectedColumns && <td>{intervalName}</td>}
                     <td>
                       {effectiveLapDuration != null ? formatClockDuration(effectiveLapDuration) : "—"}
                     </td>

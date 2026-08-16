@@ -116,7 +116,12 @@ export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDet
   const maxRespiration = metricValue(metrics, "fit.session.enhanced_max_respiration_rate");
   const minRespiration = metricValue(metrics, "fit.session.enhanced_min_respiration_rate");
 
-  const hasTrainingEffect = aerobicEffect != null || anaerobicEffect != null || activity.training_load != null || activity.workout_rpe != null;
+  const hasTrainingEffect =
+    aerobicEffect != null ||
+    anaerobicEffect != null ||
+    activity.training_load != null ||
+    activity.workout_rpe != null ||
+    activity.vdot != null;
   const hasRunningDynamics =
     avgRunningCadenceRaw != null || avgVerticalOscillation != null || avgStanceTime != null || avgStepLengthMm != null;
   const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
@@ -159,6 +164,9 @@ export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDet
             )}
             {activity.workout_rpe != null && (
               <StatTile label="Perceived effort" value={activity.workout_rpe.toFixed(1)} unit="RPE" icon="flame" tone="load" />
+            )}
+            {activity.vdot != null && (
+              <StatTile label="VDOT" value={activity.vdot.toFixed(1)} icon="trend" tone="pace" />
             )}
           </div>
         </>

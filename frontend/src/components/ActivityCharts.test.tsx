@@ -154,9 +154,12 @@ describe("ActivityCharts", () => {
   });
 
   it("draws a flat expected-pace reference line on the Pace panel at the activity's own average pace", () => {
+    // 5 points, not 3 -- the stream's very first sample is deliberately nulled as a start-of-run
+    // artifact (see ActivityCharts.tsx), so a too-short fixture would lose a disproportionate
+    // share of its data to that and stop exercising the (unrelated) reference-line feature.
     const withSpeed = stream({
       channels: ["speed_mps"],
-      series: { speed_mps: [3.0, 3.2, 3.1] },
+      series: { speed_mps: [3.0, 3.0, 3.2, 3.1, 3.0] },
     });
     // distanceM/durationS chosen so the average pace (5:33 /km) differs from any raw sample.
     const { container } = render(

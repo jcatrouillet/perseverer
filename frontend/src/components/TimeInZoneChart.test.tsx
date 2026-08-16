@@ -49,4 +49,31 @@ describe("TimeInZoneChart", () => {
     const { container } = render(<TimeInZoneChart metrics={allZero} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("uses the configured boundaries against the raw stream instead of device zones, when given both", () => {
+    const timestamps = [
+      "2026-01-01T00:00:00Z",
+      "2026-01-01T00:00:10Z",
+      "2026-01-01T00:00:20Z",
+    ];
+    render(
+      <TimeInZoneChart
+        metrics={realShape}
+        heartRateStream={[110, 150, 150]}
+        timestamps={timestamps}
+        configuredZoneBoundaries={[120, 140, 155, 170]}
+      />,
+    );
+    // The configured-boundary path produces Z1-Z5 (1-indexed), not the device path's Z0 label.
+    expect(screen.queryByText("Z0")).not.toBeInTheDocument();
+    expect(screen.getByText("Z1")).toBeInTheDocument();
+    expect(screen.getByText("< 120")).toBeInTheDocument();
+  });
+
+  it("falls back to device-reported zones when the stream/boundaries aren't available", () => {
+    render(
+      <TimeInZoneChart metrics={realShape} heartRateStream={null} timestamps={null} configuredZoneBoundaries={null} />,
+    );
+    expect(screen.getByText("Z0")).toBeInTheDocument();
+  });
 });

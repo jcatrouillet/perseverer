@@ -193,6 +193,30 @@ def test_list_activities_omits_hr_load_rpe_when_absent(
     assert item["workout_rpe"] is None
 
 
+def test_list_and_detail_surface_vdot(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    _add_metric(engine, activity_id="a1", metric_key="sporthealth.performance.vdot", value=41.2)
+
+    r = client.get("/api/v1/activities", headers=auth_headers)
+    assert r.json()["items"][0]["vdot"] == 41.2
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.json()["vdot"] == 41.2
+
+
+def test_list_activities_omits_vdot_when_absent(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+
+    r = client.get("/api/v1/activities", headers=auth_headers)
+    assert r.json()["items"][0]["vdot"] is None
+
+
 def test_get_activity_detail_404_for_unknown_id(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:

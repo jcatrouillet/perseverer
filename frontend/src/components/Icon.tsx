@@ -46,6 +46,7 @@ export type IconName =
   | "grid"
   | "list"
   | "map"
+  | "settings"
   // Route playback
   | "play"
   | "pause"
@@ -186,6 +187,10 @@ export function IconSprite() {
         <symbol viewBox="0 0 24 24" id="i-map">
           <path d="M9 4.4 3.6 6.2v13.4L9 17.8l6 1.8 5.4-1.8V4.4L14.4 6.2 9 4.4Z" />
           <path d="M9 4.4v13.4M15 6.2v13.4" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-settings">
+          <circle cx="12" cy="12" r="3.2" />
+          <path d="M12 3.4v2.4M12 18.2v2.4M20.6 12h-2.4M5.8 12H3.4M17.8 6.2l-1.7 1.7M7.9 16.1l-1.7 1.7M17.8 17.8l-1.7-1.7M7.9 7.9 6.2 6.2" />
         </symbol>
         <symbol viewBox="0 0 24 24" id="i-play">
           <path d="M6.5 4.2v15.6l13.2-7.8L6.5 4.2Z" />

@@ -42,7 +42,9 @@ from sporthealth.db.schema import athlete as athlete_table
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.garmin_activity_summary import backfill_activity_corrections
 from sporthealth.insights.engine import refresh_insights
+from sporthealth.performance import refresh_vdot
 from sporthealth.rebuild import rebuild_database
+from sporthealth.worker.main import run_daily_sync
 
 app = typer.Typer(help="sporthealth sync CLI")
 import_app = typer.Typer(help="One-shot imports from a source")
@@ -186,6 +188,18 @@ def import_garmin_connect_cmd(
         for e in summary.errors:
             typer.echo(f"  {e}", err=True)
         raise typer.Exit(code=1)
+
+
+@app.command("daily-sync")
+def daily_sync_cmd() -> None:
+    """One shot of the exact same work the `worker` container's daily APScheduler job does
+    (garmin_connect incremental sync + staleness check/webhook) -- see worker/main.py's own
+    `run_daily_sync`. Exists so a platform that can't run the `worker` container (e.g. Windows,
+    where Podman is known to corrupt this project's SQLite WAL file -- see CLAUDE.md) can still
+    get the daily sync via a plain OS scheduler (Windows Task Scheduler, cron) invoking this
+    command once a day instead.
+    """
+    run_daily_sync()
 
 
 @auth_app.command("login")
@@ -394,6 +408,24 @@ def backfill_lap_moving_duration_cmd() -> None:
         )
         conn.commit()
     typer.echo(f"backfilled moving_duration_s for {count} laps")
+
+
+@app.command("backfill-vdot")
+def backfill_vdot_cmd() -> None:
+    """Backfills sporthealth.performance.vdot for already-ingested running activities -- no full
+    `sync rebuild` needed. Unlike backfill-workouts/backfill-lap-moving-duration above, this
+    doesn't even need to re-parse raw bytes: `refresh_vdot` reads only what's already in the
+    database (activity.distance_m/moving_duration_s) and each activity's already-written Parquet
+    stream, so this is a light, fast pass -- new ingests already compute this automatically going
+    forward (see performance.py's own docstring); this command is for backfilling activities
+    ingested before VDOT existed.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        count = refresh_vdot(conn, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+    typer.echo(f"backfilled VDOT for {count} activities")
 
 
 if __name__ == "__main__":

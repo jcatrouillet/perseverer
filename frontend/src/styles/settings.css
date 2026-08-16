@@ -1,0 +1,45 @@
+.settings-hr-zones__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+.settings-hr-zones__form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.settings-hr-zones__form input {
+  width: 9ch;
+}
+
+.settings-hr-zones__error {
+  color: var(--color-danger);
+  font-size: 13px;
+}
+
+.settings-hr-zones__saved {
+  color: var(--color-success);
+  font-size: 13px;
+}
+
+.settings-hr-zones__preview {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.settings-hr-zones__preview th,
+.settings-hr-zones__preview td {
+  text-align: left;
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+}
+
+.settings-hr-zones__preview th {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}

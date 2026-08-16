@@ -58,6 +58,7 @@ from sporthealth.db.schema import (
 )
 from sporthealth.db.schema import device as device_table
 from sporthealth.db.schema import split as split_table
+from sporthealth.performance import VDOT_METRIC_KEY
 from sporthealth.reparse import reparse_raw_object
 from sporthealth.rollups import refresh_daily_and_period_rollups
 from sporthealth.sport_override import set_name_override, set_race_override, set_sport_override
@@ -187,6 +188,17 @@ def list_activities(
         .limit(1)
         .scalar_subquery()
     )
+    # Same EAV pattern as training_load_peak above -- see performance.py's own docstring for how
+    # this value is computed and kept fresh.
+    vdot_subq = (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key == VDOT_METRIC_KEY,
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
     # fit.user_profile.weight -- the athlete's recorded body weight at the time of this specific
     # activity (a generic per-session field, present on ~99% of the real archive). Exposed so the
     # frontend can derive MET-minutes without a second per-activity fetch (see ActivitySummary's
@@ -221,6 +233,7 @@ def list_activities(
         training_load_subq.label("training_load"),
         workout_rpe_subq.label("workout_rpe_raw"),
         weight_subq.label("weight_kg"),
+        vdot_subq.label("vdot"),
     ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
 
     if start_date is not None:
@@ -268,6 +281,7 @@ def list_activities(
             training_load=r.training_load,
             workout_rpe=_workout_rpe_from_raw(r.workout_rpe_raw),
             weight_kg=r.weight_kg,
+            vdot=r.vdot,
             primary_source=r.primary_source,
             stream_available=bool(r.stream_available),
         )
@@ -434,6 +448,7 @@ def get_activity(
         training_load=metrics_by_key.get("fit.session.training_load_peak"),
         workout_rpe=_workout_rpe_from_raw(metrics_by_key.get("fit.session.workout_rpe")),
         weight_kg=metrics_by_key.get("fit.user_profile.weight"),
+        vdot=metrics_by_key.get(VDOT_METRIC_KEY),
         primary_source=row.primary_source,
         stream_available=stream_row is not None,
         moving_duration_s=row.moving_duration_s,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ActivityMetricOut } from "./api/types";
-import { extractHrZones, hrZoneRangeLabel, metricValue } from "./activityMetrics";
+import { computeHrZonesFromStream, extractHrZones, hrZoneRangeLabel, metricValue } from "./activityMetrics";
 
 function metric(metric_key: string, value_num: number | null): ActivityMetricOut {
   return { metric_key, value_num, value_text: null, unit: null, source: "test" };
@@ -84,5 +84,62 @@ describe("hrZoneRangeLabel", () => {
     expect(hrZoneRangeLabel({ index: 6, seconds: 1, lowBoundary: 177, highBoundary: null })).toBe(
       "177+",
     );
+  });
+});
+
+describe("computeHrZonesFromStream", () => {
+  // Boundaries: Z1 <120, Z2 120-140, Z3 140-155, Z4 155-170, Z5 170+.
+  const boundaries: [number, number, number, number] = [120, 140, 155, 170];
+
+  function ts(startIso: string, offsetsS: number[]): string[] {
+    const start = new Date(startIso).getTime();
+    return offsetsS.map((s) => new Date(start + s * 1000).toISOString());
+  }
+
+  it("attributes each sample's own interval (up to the next sample) to its own zone", () => {
+    // 0-10s @110 (Z1), 10-20s @130 (Z2), 20-30s @160 (Z4), last sample contributes nothing.
+    const hr = [110, 130, 160, 160];
+    const timestamps = ts("2026-01-01T00:00:00Z", [0, 10, 20, 30]);
+    const zones = computeHrZonesFromStream(hr, timestamps, boundaries);
+    expect(zones).not.toBeNull();
+    expect(zones!.find((z) => z.index === 1)!.seconds).toBe(10);
+    expect(zones!.find((z) => z.index === 2)!.seconds).toBe(10);
+    expect(zones!.find((z) => z.index === 4)!.seconds).toBe(10);
+  });
+
+  it("always returns all 5 zones, zero-filled for ones never reached", () => {
+    const hr = [110, 110];
+    const timestamps = ts("2026-01-01T00:00:00Z", [0, 10]);
+    const zones = computeHrZonesFromStream(hr, timestamps, boundaries);
+    expect(zones).toHaveLength(5);
+    expect(zones!.map((z) => z.index)).toEqual([1, 2, 3, 4, 5]);
+    expect(zones!.find((z) => z.index === 3)!.seconds).toBe(0);
+  });
+
+  it("gives zone 1 an open bottom and zone 5 an open top, matching the configured boundaries", () => {
+    const hr = [110, 175, 175];
+    const timestamps = ts("2026-01-01T00:00:00Z", [0, 10, 20]);
+    const zones = computeHrZonesFromStream(hr, timestamps, boundaries)!;
+    expect(zones[0]).toMatchObject({ lowBoundary: null, highBoundary: 120 });
+    expect(zones[4]).toMatchObject({ lowBoundary: 170, highBoundary: null });
+  });
+
+  it("skips a null HR sample's own interval without crashing", () => {
+    const hr = [110, null, 130];
+    const timestamps = ts("2026-01-01T00:00:00Z", [0, 10, 20]);
+    const zones = computeHrZonesFromStream(hr, timestamps, boundaries);
+    expect(zones).not.toBeNull();
+    expect(zones!.find((z) => z.index === 1)!.seconds).toBe(10);
+    const total = zones!.reduce((sum, z) => sum + z.seconds, 0);
+    expect(total).toBe(10); // only the first interval counted -- the null sample's is skipped
+  });
+
+  it("returns null when the stream has no usable HR data at all", () => {
+    expect(computeHrZonesFromStream([null, null], ts("2026-01-01T00:00:00Z", [0, 10]), boundaries)).toBeNull();
+  });
+
+  it("returns null for empty or mismatched-length arrays", () => {
+    expect(computeHrZonesFromStream([], [], boundaries)).toBeNull();
+    expect(computeHrZonesFromStream([110], [], boundaries)).toBeNull();
   });
 });

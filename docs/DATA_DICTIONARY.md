@@ -339,3 +339,59 @@ detects/replays a file-less manual-entry row from its own `strava_export_csv_row
 on any rebuild against a database with existing insight rows — see ADR 0013 decision 3).
 
 See `docs/adr/0013-activity-view-map-export-strava-completeness.md`.
+
+## Running performance index (VDOT)
+
+New `activity_metric` key `sporthealth.performance.vdot` (`source="sporthealth"`, distinguishing
+it from anything a vendor reported) — a Daniels-Gilbert VDOT score computed for every
+`sport == "running"` activity from its `distance_m`/`moving_duration_s`, GAP-adjusted (grade-
+adjusted pace) when the activity's Parquet stream has `distance_m`+`altitude_m` channels
+(`vdot.py`'s `compute_gap_factor`, a distance-weighted variant of the same Minetti energy-cost
+model `frontend/src/gap.ts` already used for the per-activity GAP chart — deliberately weighted by
+distance rather than time so a recorded device pause can't corrupt the average). Null (no row
+written) for non-running activities or a running activity whose duration is short enough that the
+underlying %VO2max curve would exceed 100% — the model's own domain limit, not an arbitrary cutoff
+(see `vdot.py`'s docstring).
+
+`performance.py::refresh_vdot` is a full delete-and-reinsert per athlete per run, same precedent as
+`fitness.py::refresh_fitness_rollup`/`insights/engine.py::refresh_insights` (both called alongside
+it at every ingest entry point) — this is what keeps VDOT correct after a sport correction moves an
+activity into or out of "running", without needing to track which activities changed.
+`garmin_connect.py`'s daily-scheduled sync gates the call on `touched_dates` (unlike
+fitness/insights' unconditional calls there): VDOT has no rolling-window dependency on "today", so
+a rest day with zero new activities has nothing to recompute and skips the Parquet reads.
+
+Exposed as `vdot` on both `GET /activities` (list) and `GET /activities/{id}` (detail) — same
+single-key EAV subquery pattern as `training_load`. Frontend: a "VDOT" stat tile in
+`ActivityStatsGrid.tsx`'s Training effect section (per-run value), and a "Best VDOT" stat tile in
+`RunningStats.tsx` (`runningStats.ts::bestVdot`, the highest value among the activities already
+fetched for that page's period) — deliberately the *best* value in the period, not a raw per-day
+trend: an easy/recovery run's VDOT reads low purely from intensity, not fitness, so a day-to-day
+chart would look like fitness constantly craters on easy days and spikes on hard ones.
+
+## Live daily wellness sync via garmin_connect
+
+Until this change, `garmin_connect.py`'s daily-scheduled sync only ever downloaded **activity**
+FIT files — every `garmin.daily_summary.*` metric (resting/max HR, steps, calories, floors, SpO2,
+stress) came exclusively from a one-off manual `sync import garmin-export` (GDPR archive) backfill
+or a `daily_summary_*.json` file dropped into a watched `fit_folder`, never from continuous
+automatic syncing. Confirmed as a real, ongoing gap against the live database, not a display bug:
+every `garmin.daily_summary.*`/`garmin.export.UDSFile.*` observation stopped dead on the date of
+the athlete's last manual export, while activity syncing kept working fine.
+
+Fixed by teaching `GarminConnectAdapter.fetch_and_ingest_daily_wellness` to call `Garmin.get_stats
+(cdate)` once per calendar day in the same rolling window already used for activities (verified
+against the installed `garminconnect` package: this returns the exact same JSON shape
+`parse_daily_summary_json` already parses for `fit_folder`'s own `daily_summary_*.json` files, so
+no new parser was needed). Archived under a new raw_object kind, `garmin_connect_daily_summary_
+json` (added to `rebuild.py`'s replay dispatch alongside the pre-existing `daily_summary_json`
+branch — same parser, different provenance). Re-fetches the whole rolling window every run rather
+than tracking "new" days, matching `fitness.py`'s own full-recompute precedent: `ingest_health_
+batch` already upserts idempotently, so a day with current data is a cheap no-op and a day that
+failed on a previous run self-heals on the next one. Same safety contract as the activity loop:
+a 429 aborts the run immediately via `GarminRateLimitAborted`, no retry.
+
+**Not covered**: HRV (`hrv.last_night_average`) comes from a FIT-only path (`health/fit_parser.py`,
+monitoring FIT messages) with no JSON equivalent parsed anywhere in this codebase — `get_hrv_data()`
+returns a different, currently-unparsed shape, deliberately out of scope here. It still requires a
+monitoring-FIT source (i.e. a manual export) as before.

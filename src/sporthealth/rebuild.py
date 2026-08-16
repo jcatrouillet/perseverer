@@ -52,6 +52,7 @@ from sporthealth.health.json_parser import (
 )
 from sporthealth.ingest_dispatch import ingest_fit_bytes
 from sporthealth.insights.engine import refresh_insights
+from sporthealth.performance import refresh_vdot
 from sporthealth.rollups import refresh_daily_and_period_rollups
 from sporthealth.sport_override import apply_sport_overrides
 from sporthealth.tcx.parser import parse_tcx
@@ -144,7 +145,10 @@ def rebuild_database(
                 external_id_hint=row.external_id,
             )
             touched_dates |= dispatch_result.affected_local_dates()
-        elif row.kind == "daily_summary_json":
+        elif row.kind in ("daily_summary_json", "garmin_connect_daily_summary_json"):
+            # Same JSON shape, two provenances: fit_folder picks up a dropped
+            # daily_summary_*.json file, garmin_connect.py fetches the identical shape live via
+            # get_stats() -- both reuse parse_daily_summary_json, no separate branch needed.
             health_result = ingest_health_batch(
                 conn,
                 parquet_dir,
@@ -242,6 +246,7 @@ def rebuild_database(
     if touched_dates:
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
         refresh_insights(conn, athlete_id=athlete_id)
+        refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
 
     return replayed

@@ -68,7 +68,10 @@ export interface WorkoutDisplayGroup {
   steps: ActivityWorkoutStepOut[];
 }
 
-function labelForIntensity(intensity: string | null): string {
+/** "Warmup" / "Active" / "Recovery" / "Cooldown" / "Rest" -- a step's own planned intensity,
+ * capitalized. Exported for the Intervals table's own "Interval" column (per-lap), not just
+ * `groupWorkoutStepsForDisplay`'s grouped panel. */
+export function labelForIntensity(intensity: string | null): string {
   if (!intensity) return "Step";
   return intensity.charAt(0).toUpperCase() + intensity.slice(1);
 }

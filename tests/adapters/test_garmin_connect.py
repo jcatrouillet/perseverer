@@ -22,7 +22,14 @@ from sporthealth.adapters.garmin_connect import (
     sync_garmin_connect,
 )
 from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity_source_link, athlete, day_rollup, metadata, raw_object
+from sporthealth.db.schema import (
+    activity_source_link,
+    athlete,
+    day_rollup,
+    health_observation,
+    metadata,
+    raw_object,
+)
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_run.fit"
@@ -41,11 +48,16 @@ class FakeGarminClient:
         fit_bytes_by_id: dict[str, bytes],
         raise_on_login: Exception | None = None,
         raise_on_download_for: set[str] | None = None,
+        stats_by_date: dict[str, dict[str, Any]] | None = None,
+        raise_on_stats_for: set[str] | None = None,
     ) -> None:
         self.activities = activities
         self.fit_bytes_by_id = fit_bytes_by_id
         self._raise_on_login = raise_on_login
         self._raise_on_download_for = raise_on_download_for or set()
+        self.stats_by_date = stats_by_date or {}
+        self._raise_on_stats_for = raise_on_stats_for or set()
+        self.stats_calls: list[str] = []
 
     def login(self, tokenstore: str | None = None) -> tuple[None, None]:
         if self._raise_on_login:
@@ -59,6 +71,16 @@ class FakeGarminClient:
         if activity_id in self._raise_on_download_for:
             raise GarminConnectTooManyRequestsError("429")
         return self.fit_bytes_by_id[activity_id]
+
+    def get_stats(self, cdate: str) -> dict[str, Any]:
+        self.stats_calls.append(cdate)
+        if cdate in self._raise_on_stats_for:
+            raise GarminConnectTooManyRequestsError("429")
+        # A bare {"calendarDate": ...} is a minimal-but-valid daily-summary payload (matches
+        # real get_stats()/parse_daily_summary_json shape) -- an empty/no-op ingest for any date
+        # a test doesn't explicitly configure, so existing activity-focused tests that exercise
+        # the full sync_garmin_connect() entrypoint don't need to know about wellness data at all.
+        return self.stats_by_date.get(cdate, {"calendarDate": cdate})
 
 
 def _seed_athlete(engine: Engine) -> None:
@@ -222,10 +244,13 @@ def test_sync_garmin_connect_full_orchestration_with_fake_client(tmp_path: Path)
     assert summary.errors == []
     assert summary.items_seen == 1
     assert summary.items_new == 1
-    assert kinds == {"garmin_connect_json", "fit_activity"}
-    # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation.
-    assert len(rollup_rows) == 1
-    assert rollup_rows[0].activity_count == 1
+    assert kinds == {"garmin_connect_json", "fit_activity", "garmin_connect_daily_summary_json"}
+    # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation --
+    # the daily-wellness loop now touches every date in the rolling window too (11 dates at
+    # rolling_window_days=10), so more than one day_rollup row exists; the one for the activity's
+    # own date (wherever the fixture's embedded date lands) is what actually matters here.
+    activity_rollup_rows = [r for r in rollup_rows if r.activity_count == 1]
+    assert len(activity_rollup_rows) == 1
 
 
 def test_full_sync_with_injected_fake_client_archives_and_ingests(tmp_path: Path) -> None:
@@ -283,3 +308,114 @@ def test_idempotent_resync_is_a_noop(tmp_path: Path) -> None:
     assert first.created
     assert not second.created
     assert first.activity_id == second.activity_id
+
+
+def test_daily_wellness_is_fetched_archived_and_ingested(tmp_path: Path) -> None:
+    """The full sync_garmin_connect() entrypoint, zero activities, one day's real wellness
+    payload -- proves get_stats() -> archive -> parse_daily_summary_json -> ingest_health_batch
+    end to end, reusing the exact parser fit_folder.py already uses for this JSON shape."""
+    today = dt.datetime.now(dt.UTC).date().isoformat()
+
+    def factory() -> FakeGarminClient:
+        return FakeGarminClient(
+            activities=[],
+            fit_bytes_by_id={},
+            stats_by_date={today: {"calendarDate": today, "restingHeartRate": 47}},
+        )
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+
+    with engine.connect() as conn:
+        summary = sync_garmin_connect(
+            conn,
+            tmp_path / "archive",
+            tmp_path / "parquet",
+            tmp_path / "tokens",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            rolling_window_days=0,  # just today -- one get_stats() call
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=factory,
+        )
+        kinds = set(
+            conn.execute(
+                select(raw_object.c.kind).where(raw_object.c.source == "garmin_connect")
+            ).scalars()
+        )
+        resting_hr = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_summary.restingHeartRate",
+                health_observation.c.local_date == today,
+            )
+        ).scalar_one()
+
+    assert summary.errors == []
+    assert kinds == {"garmin_connect_daily_summary_json"}
+    assert resting_hr == 47
+
+
+def test_wellness_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
+    today = dt.datetime.now(dt.UTC).date().isoformat()
+
+    def factory() -> FakeGarminClient:
+        return FakeGarminClient(
+            activities=[], fit_bytes_by_id={}, raise_on_stats_for={today}
+        )
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+
+    with engine.connect() as conn:
+        summary = sync_garmin_connect(
+            conn,
+            tmp_path / "archive",
+            tmp_path / "parquet",
+            tmp_path / "tokens",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            rolling_window_days=0,
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=factory,
+        )
+        archived = conn.execute(
+            select(raw_object.c.id).where(raw_object.c.source == "garmin_connect")
+        ).fetchall()
+
+    assert summary.errors  # the 429 is recorded, not silently swallowed
+    assert archived == []  # nothing archived -- the run stopped before any wellness fetch landed
+
+
+def test_wellness_alone_triggers_the_rollup_refresh_chain(tmp_path: Path) -> None:
+    """Zero new activities, one day of wellness data -- touched_dates from wellness alone must
+    still drive refresh_daily_and_period_rollups (ADR 0006 decision 3), the same as an
+    activity-touched date would."""
+    today = dt.datetime.now(dt.UTC).date().isoformat()
+
+    def factory() -> FakeGarminClient:
+        return FakeGarminClient(
+            activities=[],
+            fit_bytes_by_id={},
+            stats_by_date={today: {"calendarDate": today, "totalSteps": 5000}},
+        )
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+
+    with engine.connect() as conn:
+        sync_garmin_connect(
+            conn,
+            tmp_path / "archive",
+            tmp_path / "parquet",
+            tmp_path / "tokens",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            rolling_window_days=0,
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=factory,
+        )
+        rollup_row = conn.execute(
+            select(day_rollup).where(day_rollup.c.local_date == today)
+        ).fetchone()
+
+    assert rollup_row is not None

@@ -74,6 +74,10 @@ export interface ActivitySummary {
   training_load: number | null;
   workout_rpe: number | null;
   weight_kg: number | null;
+  /** Daniels-Gilbert running performance index (VDOT), GAP-adjusted when a distance/altitude
+   * stream is available -- see performance.py. Null for non-running activities or a running
+   * activity too short/anomalous for the underlying aerobic model. */
+  vdot: number | null;
   primary_source: string;
   stream_available: boolean;
 }
@@ -160,6 +164,24 @@ export interface ActivityRaceOverrideOut {
 
 export interface ActivityNameOverrideOut {
   name: string;
+}
+
+export interface HrZoneConfigOut {
+  max_hr_bpm: number | null;
+  threshold_hr_bpm: number | null;
+  resting_hr_bpm: number | null;
+  // Derived from the three fields above (see hr_zones.py::compute_hr_zone_boundaries) -- null
+  // unless all three are set.
+  zone1_high_bpm: number | null;
+  zone2_high_bpm: number | null;
+  zone3_high_bpm: number | null;
+  zone4_high_bpm: number | null;
+}
+
+export interface HrZoneConfigIn {
+  max_hr_bpm: number | null;
+  threshold_hr_bpm: number | null;
+  resting_hr_bpm: number | null;
 }
 
 export interface ActivityWorkoutStepOut {

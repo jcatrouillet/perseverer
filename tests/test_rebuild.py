@@ -14,9 +14,12 @@ from sqlalchemy import Engine, select
 
 from sporthealth.adapters.garmin_export import import_garmin_export
 from sporthealth.adapters.strava_export import import_strava_export
+from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import activity, athlete, health_observation, metadata
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from sporthealth.health.ingest import ingest_health_batch
+from sporthealth.health.json_parser import parse_daily_summary_json
 from sporthealth.rebuild import rebuild_database
 
 SLEEP_DATA_RECORDS = [
@@ -96,6 +99,56 @@ def test_rebuild_replays_garmin_export_health_json(tmp_path: Path) -> None:
 
     assert replayed == 1
     assert set(after) == set(before)
+
+
+def test_rebuild_replays_garmin_connect_daily_summary_json(tmp_path: Path) -> None:
+    """The live-fetched wellness JSON garmin_connect.py now archives (same shape as
+    fit_folder's own daily_summary_json, different provenance) must survive a rebuild the same
+    way -- reuses parse_daily_summary_json, no new parser."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps({"calendarDate": "2026-08-05", "restingHeartRate": 46}).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            kind="garmin_connect_daily_summary_json",
+            content=content,
+            locator="daily-summary/2026-08-05",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            batch=parse_daily_summary_json(content),
+        )
+        conn.commit()
+        before = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_summary.restingHeartRate"
+            )
+        ).scalar_one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        after = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_summary.restingHeartRate"
+            )
+        ).scalar_one()
+
+    assert replayed == 1
+    assert after == before == 46.0
 
 
 _STRAVA_GPX_BODY = b"""<?xml version="1.0" encoding="UTF-8"?>

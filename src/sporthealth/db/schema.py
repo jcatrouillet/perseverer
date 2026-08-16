@@ -62,6 +62,24 @@ athlete = Table(
     Column("api_key_created_at", DateTime(), nullable=True),
 )
 
+# An athlete's own configured HR training zones -- independent of the per-activity, device-
+# reported zones a watch bakes into its own FIT time_in_zone_mesgs (see fit/parser.py::
+# _time_in_zone_metrics). One row per athlete (upsert, not a growing history): three reference
+# points, not the four zone boundaries directly -- the boundaries are *derived* from these (see
+# hr_zones.py::compute_hr_zone_boundaries), a blended model the athlete chose over a %max-HR-only
+# or %threshold-only scheme (lower zones relative to heart rate reserve/Karvonen, upper zones
+# relative to lactate threshold). All-null means "not configured yet"; the frontend falls back
+# to the device-reported zones for that athlete until all three are set.
+athlete_hr_zone_config = Table(
+    "athlete_hr_zone_config",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("max_hr_bpm", Float, nullable=True),
+    Column("threshold_hr_bpm", Float, nullable=True),
+    Column("resting_hr_bpm", Float, nullable=True),
+    Column("updated_at", DateTime(), nullable=False),
+)
+
 # --- Bronze: immutable raw archive --------------------------------------------
 
 raw_object = Table(

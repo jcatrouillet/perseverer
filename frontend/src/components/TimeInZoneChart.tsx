@@ -3,7 +3,7 @@
 // other, which a bar chart's own axis labelling doesn't give a clean way to do at this small a
 // size -- ChartLegend/StatTile already established that a hand-built HTML row is fine for this
 // kind of small, structured readout (see the running heatmap's own legend for precedent).
-import { extractHrZones, hrZoneRangeLabel } from "../activityMetrics";
+import { computeHrZonesFromStream, extractHrZones, hrZoneRangeLabel } from "../activityMetrics";
 import type { ActivityMetricOut } from "../api/types";
 import { formatDurationHM } from "../runningStats";
 
@@ -12,8 +12,26 @@ import { formatDurationHM } from "../runningStats";
 // zones. A device with more or fewer zones just cycles/truncates this list.
 const ZONE_TONES = ["cadence", "elevation", "pace", "load", "power", "hr", "hr"] as const;
 
-export function TimeInZoneChart({ metrics }: { metrics: ActivityMetricOut[] }) {
-  const zones = extractHrZones(metrics);
+export function TimeInZoneChart({
+  metrics,
+  heartRateStream,
+  timestamps,
+  configuredZoneBoundaries,
+}: {
+  metrics: ActivityMetricOut[];
+  /** The activity's own per-second HR stream + timestamps, and the athlete's own configured
+   * zone boundaries (Settings tab) -- when both are present, zones are computed from these
+   * instead of the device-reported `metrics`, so the chart reflects the zones the athlete
+   * actually asked for. Omitted (e.g. by existing callers/tests that don't pass them) falls
+   * back to the device-reported zones unchanged. */
+  heartRateStream?: (number | null)[] | null;
+  timestamps?: string[] | null;
+  configuredZoneBoundaries?: [number, number, number, number] | null;
+}) {
+  const zones =
+    configuredZoneBoundaries != null && heartRateStream != null && timestamps != null
+      ? computeHrZonesFromStream(heartRateStream, timestamps, configuredZoneBoundaries)
+      : extractHrZones(metrics);
   if (!zones || zones.every((z) => z.seconds === 0)) return null;
 
   // Widths are relative to the activity's total time-in-zone, not the single largest zone --

@@ -77,3 +77,52 @@ export function hrZoneRangeLabel(zone: HrZone): string {
   }
   return "—";
 }
+
+/** Computes time-in-zone directly from an activity's own per-second HR stream against the
+ * athlete's *own configured* zone boundaries (see hr_zones.py::compute_hr_zone_boundaries) --
+ * used instead of `extractHrZones` (which reads the device's own baked-in zone breakdown)
+ * whenever the athlete has set their zones, so "Time in zones" reflects the zones they actually
+ * asked for rather than whatever was configured on the watch at recording time. Same `HrZone[]`
+ * shape as `extractHrZones` so the chart's own rendering doesn't need to know which source it
+ * came from -- only the zone numbering differs (Z1-Z5 here, vs. the device's own Z0-Z6 "time
+ * below zone 1"/"in zone N and above" convention).
+ *
+ * Each recorded sample's own time is attributed to whichever zone its own HR reading falls in,
+ * from the interval up to (not including) the *next* recorded sample -- the same "reading at the
+ * start of the interval decides the interval's zone" convention a device's own zone tracking
+ * uses. The final sample contributes no interval (there's no next timestamp to bound it).
+ */
+export function computeHrZonesFromStream(
+  heartRate: (number | null)[],
+  timestamps: string[],
+  boundaries: [number, number, number, number],
+): HrZone[] | null {
+  if (heartRate.length === 0 || heartRate.length !== timestamps.length) return null;
+
+  const secondsByZone = new Map<number, number>();
+  for (let i = 0; i < heartRate.length - 1; i++) {
+    const hr = heartRate[i];
+    if (hr == null) continue;
+    const dt = (new Date(timestamps[i + 1]!).getTime() - new Date(timestamps[i]!).getTime()) / 1000;
+    if (dt <= 0) continue;
+    let zone = 1;
+    while (zone <= 4 && hr >= boundaries[zone - 1]) zone += 1;
+    secondsByZone.set(zone, (secondsByZone.get(zone) ?? 0) + dt);
+  }
+
+  if (secondsByZone.size === 0) return null;
+
+  // Always all 5 zones (unlike extractHrZones' device data, this scheme's zone count is fixed,
+  // not read off a variable-length device report) -- a zone the athlete never reached during
+  // this activity shows as a real "0m / 0%" row, not a missing one.
+  const zones: HrZone[] = [];
+  for (let zone = 1; zone <= 5; zone++) {
+    zones.push({
+      index: zone,
+      seconds: secondsByZone.get(zone) ?? 0,
+      lowBoundary: zone === 1 ? null : boundaries[zone - 2]!,
+      highBoundary: zone === 5 ? null : boundaries[zone - 1]!,
+    });
+  }
+  return zones;
+}

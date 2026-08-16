@@ -28,6 +28,7 @@ function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
     training_load: null,
     workout_rpe: null,
     weight_kg: null,
+    vdot: null,
     primary_source: "test",
     stream_available: false,
     device: null,
@@ -45,6 +46,13 @@ describe("ActivityStatsGrid", () => {
     render(<ActivityStatsGrid activity={activity()} />);
     expect(screen.getByText("Distance & time")).toBeInTheDocument();
     expect(screen.getByText("5.00")).toBeInTheDocument();
+  });
+
+  it("shows a VDOT tile under Training effect when present", () => {
+    render(<ActivityStatsGrid activity={activity({ vdot: 41.2 })} />);
+    expect(screen.getByText("Training effect")).toBeInTheDocument();
+    expect(screen.getByText("VDOT")).toBeInTheDocument();
+    expect(screen.getByText("41.2")).toBeInTheDocument();
   });
 
   it("omits sections with no backing data", () => {

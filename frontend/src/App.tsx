@@ -15,6 +15,7 @@ import { FitnessPage } from "./pages/FitnessPage";
 import { HealthPage } from "./pages/HealthPage";
 import { InsightsPage } from "./pages/InsightsPage";
 import { MapExplorerPage } from "./pages/MapExplorerPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 function Today() {
   const today = new Date();
@@ -70,6 +71,9 @@ export function App() {
           <NavLink href="/insights" icon="bolt">
             Insights
           </NavLink>
+          <NavLink href="/settings" icon="settings">
+            Settings
+          </NavLink>
         </div>
         <ThemeToggle />
       </nav>
@@ -83,6 +87,7 @@ export function App() {
           <Route path="/health" component={HealthPage} />
           <Route path="/map" component={MapExplorerPage} />
           <Route path="/insights" component={InsightsPage} />
+          <Route path="/settings" component={SettingsPage} />
           <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>
           <Route path="/calendar/week/:date">
             {(params) => <WeekView date={params.date ?? isoDate(new Date())} />}

@@ -29,6 +29,7 @@ function activity(id: string, local_date: string, overrides: Partial<ActivitySum
     training_load: null,
     workout_rpe: null,
     weight_kg: null,
+    vdot: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,
@@ -64,5 +65,32 @@ describe("RunningStats click-through", () => {
     const cells = container.querySelectorAll(".running-heatmap__strip .running-heatmap__cell");
     const hrefs = Array.from(cells).map((c) => c.getAttribute("href"));
     expect(hrefs).toContain("/day/2025-06-15");
+  });
+});
+
+describe("RunningStats best VDOT tile", () => {
+  it("shows the period's best VDOT when at least one activity has one", () => {
+    render(
+      <RunningStats
+        activities={[activity("a1", "2025-06-15", { vdot: 41.2 })]}
+        startDate="2025-06-01"
+        endDate="2025-06-30"
+        periodLabel="June 2025"
+      />,
+    );
+    expect(screen.getByText("Best VDOT")).toBeInTheDocument();
+    expect(screen.getByText("41.2")).toBeInTheDocument();
+  });
+
+  it("omits the tile when no activity in the period has a VDOT", () => {
+    render(
+      <RunningStats
+        activities={[activity("a1", "2025-06-15")]}
+        startDate="2025-06-01"
+        endDate="2025-06-30"
+        periodLabel="June 2025"
+      />,
+    );
+    expect(screen.queryByText("Best VDOT")).not.toBeInTheDocument();
   });
 });

@@ -31,6 +31,7 @@ import { isoDate, mondayOf, monthName, parseIsoDate } from "../dateUtils";
 import type { DistanceBucket, PersonalRecord } from "../runningStats";
 import {
   amPmCounts,
+  bestVdot,
   DAILY_HEATMAP_SCALE,
   dailyStats,
   distanceByDay,
@@ -197,6 +198,7 @@ export function RunningStats({
   const leastOften = weekdays.reduce((min, d) => (d.count < min.count ? d : min));
   const { am, pm } = amPmCounts(activities);
   const records = personalRecords(activities);
+  const bestVdotThisPeriod = bestVdot(activities);
   const newPrsThisPeriod = newAllTimePrs(records, allTimeRecords ?? []);
   const newPrLabels = new Set(newPrsThisPeriod.map((r) => r.label));
   const compareMeta =
@@ -435,6 +437,15 @@ export function RunningStats({
           tone="load"
           hero
         />
+        {bestVdotThisPeriod && (
+          <StatTile
+            label="Best VDOT"
+            value={bestVdotThisPeriod.value.toFixed(1)}
+            meta={bestVdotThisPeriod.date}
+            icon="trend"
+            tone="pace"
+          />
+        )}
         <StatTile
           label="Average run length"
           value={(totalDistanceM / 1000 / activities.length).toFixed(1)}

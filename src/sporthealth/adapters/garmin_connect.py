@@ -47,7 +47,10 @@ from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.schema import ingest_run
 from sporthealth.fit.parser import parse_fit
 from sporthealth.fitness import refresh_fitness_rollup
+from sporthealth.health.ingest import HealthIngestResult, ingest_health_batch
+from sporthealth.health.json_parser import parse_daily_summary_json
 from sporthealth.insights.engine import refresh_insights
+from sporthealth.performance import refresh_vdot
 from sporthealth.rollups import refresh_daily_and_period_rollups
 
 SOURCE_NAME = "garmin_connect"
@@ -201,6 +204,46 @@ class GarminConnectAdapter:
             external_id_hint=activity_id,
         )
 
+    def fetch_and_ingest_daily_wellness(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        local_date: str,
+    ) -> HealthIngestResult:
+        """One calendar day's daily-summary JSON (`get_stats` -- steps, resting/max HR, calories,
+        floors, SpO2, stress) -- the exact same JSON shape `fit_folder.py` already parses via
+        `parse_daily_summary_json` for a `daily_summary_*.json` file dropped in a watched folder,
+        just fetched live instead of from a file. No new parser needed."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            stats = self._client.get_stats(local_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching wellness for {local_date}"
+            ) from e
+
+        content = json.dumps(stats).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_daily_summary_json",
+            content=content,
+            locator=f"daily-summary/{local_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_summary_json(content),
+        )
+
 
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
@@ -277,6 +320,32 @@ def sync_garmin_connect(
                 conn.rollback()
                 summary.errors.append({"activity": activity_id, "error": str(e)})
                 break  # no retry loop — stop this run entirely, let the next scheduled run continue
+
+        # Daily wellness (steps, resting/max HR, calories, floors, SpO2, stress) -- the whole
+        # rolling window every run, not just "new" days: ingest_health_batch already upserts
+        # idempotently (same call fit_folder.py makes for this identical JSON shape), so a day
+        # that already has current data is a cheap no-op, and a day that failed to ingest on a
+        # previous run self-heals here without needing separate staleness tracking.
+        wellness_date = since.date()
+        today = datetime.now(UTC).date()
+        while wellness_date <= today:
+            try:
+                health_result = adapter.fetch_and_ingest_daily_wellness(
+                    conn,
+                    archive_root,
+                    parquet_dir,
+                    athlete_id=athlete_id,
+                    local_date=wellness_date.isoformat(),
+                )
+                conn.commit()
+                touched_dates |= health_result.affected_local_dates
+            except GarminRateLimitAborted as e:
+                conn.rollback()
+                summary.errors.append(
+                    {"wellness_date": wellness_date.isoformat(), "error": str(e)}
+                )
+                break  # no retry loop — same contract as the activity loop above
+            wellness_date += timedelta(days=1)
     except (GarminAuthRequired, GarminRateLimitAborted) as e:
         summary.errors.append({"error": str(e)})
 
@@ -290,6 +359,11 @@ def sync_garmin_connect(
     # this codebase's only naturally-daily trigger point -- no separate scheduled job needed.
     refresh_fitness_rollup(conn, athlete_id=athlete_id)
     refresh_insights(conn, athlete_id=athlete_id)
+    # Unlike fitness/insights above, VDOT has no rolling-window dependency on "today" -- it's a
+    # pure per-activity value, so a rest day with zero new activities has nothing to recompute.
+    # Gated on touched_dates to keep the daily cron cheap (no Parquet reads) on those days.
+    if touched_dates:
+        refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(
