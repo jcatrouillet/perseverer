@@ -40,7 +40,13 @@ def _pace_s_per_m(a: InsightActivity) -> float | None:
 
 
 def _start_hour(a: InsightActivity) -> float | None:
-    return a.start_time_utc.hour + a.start_time_utc.minute / 60
+    # Local time-of-day, not raw UTC -- comparing bare UTC hours across activities logged in
+    # different local timezones (or a source's bogus midnight-UTC placeholder timestamp for an
+    # incomplete manual entry) produces a nonsense "earliest start" winner. Confirmed against
+    # real data: a genuine early-morning marathon start lost to a "training" entry timestamped
+    # 00:01 UTC purely because the comparison never converted to local time at all.
+    local = a.start_time_utc + timedelta(seconds=a.utc_offset_s)
+    return local.hour + local.minute / 60
 
 
 @dataclass(frozen=True)
@@ -79,6 +85,11 @@ _DIMENSIONS: tuple[_Dimension, ...] = (
         "temperature_low", "Coldest conditions", "low", lambda a: a.temperature_min_c, False, "c"
     ),
 )
+
+# Public alias -- rules_activity.py reuses these dimension definitions (with find_extreme,
+# already public) to check whether an activity is the true all-time extreme, not just the
+# winner within one of the five fixed windows above.
+DIMENSIONS = _DIMENSIONS
 
 
 def window_start_date(window: str, days: int | None, as_of: date) -> date:

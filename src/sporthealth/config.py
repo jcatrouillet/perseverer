@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     jwt_secret: str | None = None
     jwt_expiry_days: int = 30
 
+    # --- Eufy Life body-composition sync (adapters/eufy.py) ---
+    # All optional and unset by default -- sync_eufy() skips with a log line, not an error, when
+    # unconfigured. Deliberately plain env-var credentials, not a token-store-only model like
+    # garmin_connect's: no evidence Eufy's API shares Garmin's SSO lockout fragility, and this is
+    # exactly how the sibling eufy-health-sync project already runs safely, daily, unattended.
+    eufy_email: str | None = None
+    eufy_password: str | None = None
+    eufy_device_id: str | None = None
+    eufy_customer_id: str | None = None
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "sporthealth.db"

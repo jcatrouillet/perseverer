@@ -29,6 +29,11 @@ class InsightActivity:
     elevation_loss_m: float | None
     temperature_min_c: float | None
     temperature_max_c: float | None
+    # Defaults to 0 (UTC) rather than being required -- only rules_efforts.py's start-time-of-day
+    # dimensions need it (see its own _start_hour docstring for why: comparing raw UTC hours
+    # across activities logged in different local timezones, or with a bogus midnight-UTC
+    # placeholder timestamp, produces a nonsense "earliest start" winner).
+    utc_offset_s: int = 0
 
 
 @dataclass(frozen=True)

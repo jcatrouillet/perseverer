@@ -44,6 +44,7 @@ from sporthealth.db.schema import (
 )
 from sporthealth.fitness import refresh_fitness_rollup
 from sporthealth.gpx.parser import parse_gpx
+from sporthealth.health.eufy_parser import parse_eufy_scale_reading
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import (
     parse_daily_summary_json,
@@ -164,6 +165,15 @@ def rebuild_database(
                 athlete_id=athlete_id,
                 source=row.source,
                 batch=parse_hydration_json(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind == "eufy_scale_reading_json":
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_eufy_scale_reading(content),
             )
             touched_dates |= health_result.affected_local_dates
         elif row.kind == "garmin_export_health_json":

@@ -18,6 +18,7 @@ from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.engine import make_engine
 from sporthealth.db.schema import activity, athlete, health_observation, metadata
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from sporthealth.health.eufy_parser import parse_eufy_scale_reading
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import parse_daily_summary_json
 from sporthealth.rebuild import rebuild_database
@@ -149,6 +150,67 @@ def test_rebuild_replays_garmin_connect_daily_summary_json(tmp_path: Path) -> No
 
     assert replayed == 1
     assert after == before == 46.0
+
+
+def test_rebuild_replays_eufy_scale_reading_json(tmp_path: Path) -> None:
+    """A eufy_scale_reading_json raw object (see adapters/eufy.py) must survive a rebuild the
+    same way every other health JSON kind does -- reuses parse_eufy_scale_reading."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps(
+        {
+            "id": "record-1",
+            "device_id": "dev",
+            "user_id": "user",
+            "customer_id": "cust",
+            "group_id": "",
+            "create_time": 1717200000,
+            "scale_data": {"weight": 772, "bmi": 23.1},
+            "status": 0,
+        }
+    ).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="eufy",
+            kind="eufy_scale_reading_json",
+            content=content,
+            locator="reading/record-1",
+            external_id="record-1",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="eufy",
+            batch=parse_eufy_scale_reading(content),
+        )
+        conn.commit()
+        before = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "eufy.scale.weight"
+            )
+        ).scalar_one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        after = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "eufy.scale.weight"
+            )
+        ).scalar_one()
+
+    assert replayed == 1
+    assert after == before == 77.2
 
 
 _STRAVA_GPX_BODY = b"""<?xml version="1.0" encoding="UTF-8"?>

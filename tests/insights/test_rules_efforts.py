@@ -22,10 +22,12 @@ def _activity(
     temperature_min_c: float | None = None,
     temperature_max_c: float | None = None,
     hour: int = 8,
+    utc_offset_s: int = 0,
 ) -> InsightActivity:
     return InsightActivity(
         id=id_,
         start_time_utc=dt.datetime.fromisoformat(local_date + f"T{hour:02d}:00:00"),
+        utc_offset_s=utc_offset_s,
         local_date=local_date,
         sport=sport,
         sport_family=sport_family,
@@ -111,6 +113,20 @@ def test_non_sport_scoped_dimension_ignores_sport_family() -> None:
     assert len(earliest) == 1  # not split by sport family
     assert earliest[0].activity_id == "morning"
     assert latest[0].activity_id == "evening"
+
+
+def test_start_hour_dimensions_compare_local_time_not_raw_utc() -> None:
+    # Real-data regression: a run stored at 05:00 UTC but UTC-7 (so actually 22:00 local, a late
+    # evening run) must NOT win "earliest start" against a genuine 06:00-local morning run just
+    # because its raw UTC hour happens to be smaller. Comparing raw UTC hours (the pre-fix
+    # behaviour) let exactly this kind of activity masquerade as the day's earliest.
+    activities = [
+        _activity("late_local_small_utc_hour", "2026-08-10", hour=5, utc_offset_s=-7 * 3600),
+        _activity("genuinely_early_local", "2026-08-11", hour=6, utc_offset_s=0),
+    ]
+    insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
+    earliest = next(i for i in insights if i.window == "30d" and i.subject_key == "start_earliest")
+    assert earliest.activity_id == "genuinely_early_local"
 
 
 def test_no_data_for_a_dimension_produces_no_insight() -> None:

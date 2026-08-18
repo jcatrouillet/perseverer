@@ -9,6 +9,7 @@ import { extractHrZones } from "../activityMetrics";
 import {
   useActivity,
   useActivityContext,
+  useActivityInsights,
   useActivitySources,
   useActivityStream,
   useActivityWeather,
@@ -22,6 +23,7 @@ import {
 import { ActivityCharts } from "../components/ActivityCharts";
 import { ActivityContextStrip } from "../components/ActivityContextStrip";
 import { ActivityFastestTable } from "../components/ActivityFastestTable";
+import { ActivityInsightsPanel } from "../components/ActivityInsightsPanel";
 import { ActivityNameCorrection } from "../components/ActivityNameCorrection";
 import { ActivityRoute } from "../components/ActivityRoute";
 import { ActivitySourcesPanel } from "../components/ActivitySourcesPanel";
@@ -37,6 +39,7 @@ import {
   formatClockDuration,
   formatPaceMinPerKm,
   isPaceSport,
+  isRunningSport,
   localTimeLabel,
 } from "../runningStats";
 import {
@@ -45,21 +48,8 @@ import {
   labelForIntensity,
   targetPaceRangeLabel,
 } from "../workoutSteps";
-import { displaySport } from "../yearStats";
+import { displayActivityName, displaySport } from "../yearStats";
 import "../styles/activity-detail.css";
-
-// The literal device-generated default `activity.name` for a sport, confirmed as the single
-// overwhelmingly dominant value in the real archive (e.g. "Run" on 628 of this athlete's running
-// activities, "Walk" on 201 walks) -- not a fuzzy "looks generic" guess. Sports with no single
-// dominant default (cycling, training, rowing, ...) are deliberately absent, so displayName below
-// always just uses activity.name for those.
-const GENERIC_DEFAULT_NAME_BY_SPORT: Record<string, string> = {
-  running: "Run",
-  walking: "Walk",
-  hiking: "Hike",
-  alpine_skiing: "Ski",
-  snowshoeing: "Snowshoe",
-};
 
 export function ActivityDetailPage({ id }: { id: string }) {
   // Hovering an Intervals-table row highlights that same lap's time range across every
@@ -74,6 +64,10 @@ export function ActivityDetailPage({ id }: { id: string }) {
   // than bumping the shared `stream` query's tier.
   const routeStream = useActivityStream(id, activity.data?.stream_available ?? false, "high");
   const context = useActivityContext(id);
+  const runInsights = useActivityInsights(
+    id,
+    activity.data != null && isRunningSport(activity.data.sport),
+  );
   const weather = useActivityWeather(id, activity.data?.route?.start_lat != null);
   const workout = useActivityWorkout(id);
   const hrZoneConfig = useHrZoneConfig();
@@ -124,17 +118,10 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const expandedWorkoutSteps =
     workout.data != null && paceSport ? expandWorkoutSteps(workout.data.steps) : [];
   const showExpectedColumns = expandedWorkoutSteps.length > 0;
-  // Garmin's structured Workout Builder name (e.g. "W11 Sat - Easy Shakeout") is a deliberately
-  // athlete/plan-given title, and reads far more usefully at the top of the page than the FIT
-  // session's own generic device default -- confirmed against the real archive: the single
-  // dominant (by far) activity.name value for these sports is exactly this bare word (e.g. "Run"
-  // 628 times for running, "Walk" 201 times for walking). Only used as a fallback when
-  // activity.name is still that generic default (or empty) -- once the athlete corrects the name
-  // via "Not the right title? Fix it" below, activity.name is no longer that literal default, so
-  // the correction always wins over the workout's own name from here on.
-  const genericDefaultName = GENERIC_DEFAULT_NAME_BY_SPORT[sport];
-  const displayName =
-    a.name == null || a.name === genericDefaultName ? (workout.data?.name ?? a.name) : a.name;
+  // Shared with ActivityCard (yearStats.ts::displayActivityName) so the list/day-view cards and
+  // this page's own header always agree on when to show the FIT session's own name vs. fall back
+  // to Garmin's structured Workout Builder name (a.workout_name) vs. show nothing at all.
+  const displayName = displayActivityName(a);
 
   return (
     <main>
@@ -194,10 +181,22 @@ export function ActivityDetailPage({ id }: { id: string }) {
       </p>
       {weather.data && <ActivityWeather weather={weather.data} />}
 
-      <ActivityStatsGridPrimary
-        activity={a}
-        afterHeartRate={routeStream.data && <ActivityRoute stream={routeStream.data} sport={sport} />}
-      />
+      {/* Insights sit beside Distance & time / Heart rate only -- not beside the map, which is
+          why the map is rendered as its own full-width block below this row rather than passed
+          in as ActivityStatsGridPrimary's afterHeartRate slot (that would put it inside the same
+          flex row as the insights column, stretching the side column down the map's height too). */}
+      <div className="activity-detail__layout">
+        <div className="activity-detail__main-col">
+          <ActivityStatsGridPrimary activity={a} />
+        </div>
+        {runInsights.data && runInsights.data.length > 0 && (
+          <div className="activity-detail__insights-col">
+            <ActivityInsightsPanel insights={runInsights.data} />
+          </div>
+        )}
+      </div>
+
+      {routeStream.data && <ActivityRoute stream={routeStream.data} sport={sport} />}
 
       <div className="activity-detail__layout">
         <div className="activity-detail__main-col">

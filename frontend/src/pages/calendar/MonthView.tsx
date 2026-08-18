@@ -18,7 +18,14 @@ import { NotesPanel } from "../../components/NotesPanel";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { monthGridWeeks, monthName, monthRange, parseIsoDate } from "../../dateUtils";
-import { CORE_METRICS, HRV_SPO2_STRESS_METRICS } from "../HealthPage";
+import {
+  BODY_COMPOSITION_ENERGY_METRICS,
+  BODY_COMPOSITION_INDEX_METRICS,
+  BODY_COMPOSITION_MASS_METRICS,
+  BODY_COMPOSITION_PERCENT_METRICS,
+  CORE_METRICS,
+  HRV_SPO2_STRESS_METRICS,
+} from "../HealthPage";
 import { personalRecords } from "../../runningStats";
 import { busiestWeekStart } from "../../yearStats";
 import "../../styles/calendar.css";
@@ -126,6 +133,18 @@ export function MonthView({ year, month }: { year: number; month: number }) {
 
             <h3>HRV / SpO2 / Stress — over {periodLabel}</h3>
             <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />
+
+            <h3>Weight &amp; muscle mass — over {periodLabel}</h3>
+            <HealthTrendChart metrics={health.data.metrics} keys={BODY_COMPOSITION_MASS_METRICS} />
+
+            <h3>Body composition % — over {periodLabel}</h3>
+            <HealthTrendChart metrics={health.data.metrics} keys={BODY_COMPOSITION_PERCENT_METRICS} />
+
+            <h3>BMI, bone mass, visceral fat &amp; metabolic age — over {periodLabel}</h3>
+            <HealthTrendChart metrics={health.data.metrics} keys={BODY_COMPOSITION_INDEX_METRICS} />
+
+            <h3>BMR — over {periodLabel}</h3>
+            <HealthTrendChart metrics={health.data.metrics} keys={BODY_COMPOSITION_ENERGY_METRICS} />
           </>
         )}
       </section>

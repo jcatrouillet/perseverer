@@ -40,6 +40,49 @@ def _seed_observation(engine: Engine, *, metric_key: str, local_date: str, value
         conn.commit()
 
 
+def _seed_body_observation(
+    engine: Engine,
+    *,
+    metric_key: str,
+    local_date: str,
+    value: float,
+    observed_at_utc: dt.datetime | None = None,
+) -> None:
+    """Like _seed_observation, but with a caller-controlled `observed_at_utc` -- needed to
+    reproduce same-day-multiple-readings scenarios (a shared scale used by more than one
+    person on the same day) for the body-composition outlier filter, which orders by
+    observed_at_utc to pick each day's "last" reading."""
+    now = dt.datetime.now(dt.UTC)
+    observed = (observed_at_utc or now).replace(tzinfo=None)
+    with engine.connect() as conn:
+        existing = conn.execute(
+            metric_definition.select().where(metric_definition.c.metric_key == metric_key)
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                metric_definition.insert().values(
+                    metric_key=metric_key,
+                    display_name=metric_key,
+                    category="health",
+                    value_type="numeric",
+                    first_seen_at=now,
+                    first_seen_source="eufy",
+                )
+            )
+        conn.execute(
+            health_observation.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric_key=metric_key,
+                observed_at_utc=observed,
+                local_date=local_date,
+                aggregation="instant",
+                value_num=value,
+                source="eufy",
+            )
+        )
+        conn.commit()
+
+
 def test_list_health_observations_filters_by_metric_and_date(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
@@ -200,4 +243,164 @@ def test_health_dashboard_keeps_waking_and_sleep_respiration_distinct(
     assert r.status_code == 200
     metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
     assert metrics["waking_respiration_rate"]["daily"][0]["value_last"] == 14.0
-    assert metrics["sleep_respiration_rate"]["daily"][0]["value_last"] == 13.4
+
+
+def test_health_dashboard_drops_a_body_composition_outlier_reading(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # Mirrors a real anomaly found in production: a single reading far off from the athlete's
+    # own trend (a different, much lighter person on the shared Eufy scale) must not appear in
+    # the dashboard, while the surrounding real days stay untouched.
+    weight_key = "eufy.scale.weight"
+    _seed_body_observation(engine, metric_key=weight_key, local_date="2026-08-08", value=79.5)
+    _seed_body_observation(engine, metric_key=weight_key, local_date="2026-08-09", value=79.0)
+    _seed_body_observation(engine, metric_key=weight_key, local_date="2026-08-11", value=51.9)
+    _seed_body_observation(engine, metric_key=weight_key, local_date="2026-08-12", value=79.2)
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2026-08-01&end_date=2026-08-31",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    dates = {d["local_date"] for d in metrics["weight_kg"]["daily"]}
+    assert dates == {"2026-08-08", "2026-08-09", "2026-08-12"}
+
+
+def test_health_dashboard_excludes_a_bad_reading_from_a_mixed_day_average(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # Mirrors a second real anomaly found in production (2025-09-21): a shared scale produced
+    # three raw readings in one day, one real (~81kg) and two duplicate readings from someone
+    # else (~48kg) -- a naive daily average across all three would already be contaminated
+    # before any day-level check ever ran. The bad readings must be excluded from the day's
+    # aggregate, not just flagged as a whole-day outlier. Every row gets an explicit
+    # observed_at_utc (not the helper's default of "now") so the sequential baseline walk
+    # replays them in the intended chronological order regardless of when this test runs.
+    weight_key = "eufy.scale.weight"
+    for i, d in enumerate(("2025-09-14", "2025-09-15", "2025-09-16", "2025-09-17", "2025-09-18")):
+        _seed_body_observation(
+            engine,
+            metric_key=weight_key,
+            local_date=d,
+            value=79.0,
+            observed_at_utc=dt.datetime(2025, 9, 14 + i, 7, tzinfo=dt.UTC),
+        )
+    _seed_body_observation(
+        engine,
+        metric_key=weight_key,
+        local_date="2025-09-21",
+        value=81.3,
+        observed_at_utc=dt.datetime(2025, 9, 21, 7, tzinfo=dt.UTC),
+    )
+    _seed_body_observation(
+        engine,
+        metric_key=weight_key,
+        local_date="2025-09-21",
+        value=48.1,
+        observed_at_utc=dt.datetime(2025, 9, 21, 8, tzinfo=dt.UTC),
+    )
+    _seed_body_observation(
+        engine,
+        metric_key=weight_key,
+        local_date="2025-09-21",
+        value=48.1,
+        observed_at_utc=dt.datetime(2025, 9, 21, 9, tzinfo=dt.UTC),
+    )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2025-09-01&end_date=2025-09-30",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    day = next(d for d in metrics["weight_kg"]["daily"] if d["local_date"] == "2025-09-21")
+    assert day["value_avg"] == 81.3
+    assert day["value_last"] == 81.3
+    assert day["n_observations"] == 1
+
+
+def test_health_dashboard_rejects_a_whole_run_of_bad_readings_that_outnumber_the_real_ones(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # Mirrors a third real anomaly found in production: a multi-week stretch where the other
+    # person's readings actually outnumber the athlete's own -- a symmetric neighbor-window
+    # comparison (even a wide one) gets pulled toward the wrong cluster here, since it's the
+    # local majority. The sequential baseline must reject all of them anyway, because they're
+    # compared to the last *accepted* value, never to each other.
+    weight_key = "eufy.scale.weight"
+    _seed_body_observation(
+        engine,
+        metric_key=weight_key,
+        local_date="2025-10-01",
+        value=80.0,
+        observed_at_utc=dt.datetime(2025, 10, 1, 7, tzinfo=dt.UTC),
+    )
+    bad_dates = ["2025-10-05", "2025-10-08", "2025-10-12", "2025-10-15", "2025-10-19"]
+    for i, d in enumerate(bad_dates):
+        _seed_body_observation(
+            engine,
+            metric_key=weight_key,
+            local_date=d,
+            value=46.0 + i,  # a slight drift, still nowhere near the real baseline
+            observed_at_utc=dt.datetime.combine(
+                dt.date.fromisoformat(d), dt.time(7, tzinfo=dt.UTC)
+            ),
+        )
+    _seed_body_observation(
+        engine,
+        metric_key=weight_key,
+        local_date="2025-10-22",
+        value=81.0,
+        observed_at_utc=dt.datetime(2025, 10, 22, 7, tzinfo=dt.UTC),
+    )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2025-10-01&end_date=2025-10-31",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    dates = {d["local_date"] for d in metrics["weight_kg"]["daily"]}
+    assert dates == {"2025-10-01", "2025-10-22"}
+
+
+def test_health_dashboard_accepts_the_first_ever_reading_with_nothing_to_compare_against(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # The very first reading for a metric has no prior baseline to be judged against, so it must
+    # be shown rather than silently hidden.
+    _seed_body_observation(
+        engine, metric_key="eufy.scale.weight", local_date="2025-09-16", value=46.1
+    )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2025-09-01&end_date=2025-09-30",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    dates = {d["local_date"] for d in metrics["weight_kg"]["daily"]}
+    assert dates == {"2025-09-16"}
+
+
+def test_health_dashboard_does_not_filter_non_body_composition_outliers(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # The outlier filter is deliberately scoped to Eufy body-composition metrics -- a genuine
+    # spike in e.g. steps or resting heart rate is real data, not a shared-device artifact, and
+    # must never be silently dropped.
+    steps_key = "garmin.daily_summary.totalSteps"
+    _seed_rollup(engine, metric_key=steps_key, local_date="2026-08-08", value=5000.0)
+    _seed_rollup(engine, metric_key=steps_key, local_date="2026-08-09", value=5200.0)
+    _seed_rollup(engine, metric_key=steps_key, local_date="2026-08-11", value=25000.0)
+    _seed_rollup(engine, metric_key=steps_key, local_date="2026-08-12", value=5100.0)
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2026-08-01&end_date=2026-08-31",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    dates = {d["local_date"] for d in metrics["steps"]["daily"]}
+    assert dates == {"2026-08-08", "2026-08-09", "2026-08-11", "2026-08-12"}

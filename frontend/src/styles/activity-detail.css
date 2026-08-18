@@ -12,12 +12,6 @@
   margin-top: 0;
 }
 
-/* The route map (afterHeartRate slot) sits between the Heart rate and next stat sections but
-   isn't itself an h3-titled block, so it needs its own explicit spacing on both sides. */
-.activity-stats .activity-route {
-  margin: var(--space-5) 0;
-}
-
 /* "Fastest for this distance" as a narrow side column next to the whole stats grid (Distance &
    time through Hydration), not a full-width section below it -- the column's own height is
    whatever its row count needs, which may run longer or shorter than the stats grid beside it;
@@ -36,6 +30,39 @@
 
 .activity-detail__fastest-col {
   flex: 0 0 200px;
+}
+
+/* "Run insights" beside Distance & time / Heart rate only -- the map is rendered as its own
+   full-width block right after this row (ActivityDetailPage.tsx), not inside it, so this column
+   never stretches down beside the map. Wider than .activity-detail__fastest-col above: insight
+   titles are full phrases ("Longest run by time in the last 12 months"), not a short pace/HR/
+   date triple, and need the extra room to stay on one line rather than wrap and read as if the
+   text were larger. */
+.activity-detail__insights-col {
+  flex: 0 0 320px;
+}
+
+/* The route map used to be nested inside .activity-stats (afterHeartRate slot); now it's a
+   sibling `.card` right after the Distance & time / Heart rate + insights row, so it needs its
+   own top margin the same size that row already gets below it -- `.card + .card` doesn't apply
+   here since its previous sibling is a plain layout div, not a card. */
+.activity-detail__layout + .activity-route {
+  margin-top: var(--space-5);
+}
+
+/* Compact list rows, as dense as the fastest-runs list beside it so a dozen insights can stack
+   without each one needing its own boxed card. */
+.activity-insights__list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-insights__row {
+  padding: 1px var(--space-2);
+  font-size: var(--font-size-sm);
 }
 
 .activity-detail__header {
@@ -122,11 +149,15 @@
   margin: 0 0 var(--space-4);
 }
 
+/* Matches the plain `h2` size every other section title on this page uses (Notes, Intervals,
+   Time in zones, ...) -- this heading is an `h3` for outline-nesting reasons, not because
+   weather is a lesser section, so it needs its own explicit override rather than falling
+   through to the smaller default h3 size. */
 .activity-detail__weather-heading {
-  margin: 0 0 var(--space-1);
-  font-size: var(--font-size-sm);
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-lg);
   font-weight: 600;
-  color: var(--color-text-muted);
+  color: var(--color-text);
 }
 
 .activity-detail__weather-row {

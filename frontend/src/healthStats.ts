@@ -48,6 +48,10 @@ export function latestObservation(
 
 export interface MergedTrendPoint {
   local_date: string;
+  /** Epoch ms (UTC midnight of local_date) -- lets the chart plot on a true time scale rather
+   * than evenly-spaced categories, so a week-long gap between two Eufy readings actually reads
+   * as a gap instead of looking identical to two consecutive days. */
+  ts: number;
   [logicalMetric: string]: string | number | null;
 }
 
@@ -65,10 +69,15 @@ export function mergeTrendSeries(
     for (const day of metric.daily) {
       const value = day.value_avg ?? day.value_last;
       if (value == null) continue;
-      const point = byDate.get(day.local_date) ?? { local_date: day.local_date };
+      const point =
+        byDate.get(day.local_date) ??
+        ({
+          local_date: day.local_date,
+          ts: new Date(`${day.local_date}T00:00:00Z`).getTime(),
+        } as MergedTrendPoint);
       point[key] = value;
       byDate.set(day.local_date, point);
     }
   }
-  return Array.from(byDate.values()).sort((a, b) => a.local_date.localeCompare(b.local_date));
+  return Array.from(byDate.values()).sort((a, b) => a.ts - b.ts);
 }

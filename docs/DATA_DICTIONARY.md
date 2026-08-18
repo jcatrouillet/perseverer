@@ -395,3 +395,100 @@ a 429 aborts the run immediately via `GarminRateLimitAborted`, no retry.
 monitoring FIT messages) with no JSON equivalent parsed anywhere in this codebase — `get_hrv_data()`
 returns a different, currently-unparsed shape, deliberately out of scope here. It still requires a
 monitoring-FIT source (i.e. a manual export) as before.
+
+## Eufy Life body-composition sync
+
+Garmin has no body-composition data in this project at all (only a per-activity
+`fit.user_profile.weight` used solely for MET-minute math) — a genuine gap, not an oversight, since
+Garmin's own `weight_scale` FIT message was never parsed. Body composition (weight, body fat,
+muscle/bone mass, water %, BMR, visceral fat, metabolic age, protein ratio, BMI) instead comes from
+a Eufy smart scale, via `adapters/eufy.py::sync_eufy` and `health/eufy_parser.py::
+parse_eufy_scale_reading`, ported from the sibling `eufy-health-sync` project's own working
+login/fetch logic (`POST /v1/user/v2/email/login`, `GET /v1/device/last_device_data`).
+
+Confirmed live against the real API (not assumed): the endpoint's `limit` query param is silently
+ignored — every call returns the account's **entire** reading history in one response (539 records,
+2020-11-12 onward, for the account this was verified against). There is accordingly no separate
+backfill-vs-incremental mode; every run (scheduled or `sync import eufy`) re-fetches and
+re-processes full history, relying on `archive_raw_bytes`' content-addressing and `ingest_health_
+batch`'s idempotent upsert to make a repeat run of already-seen readings a cheap no-op — same
+"full recompute, self-healing" precedent as `fitness.py`/the live wellness sync above.
+
+Each record's `scale_data` sub-object carries ~24 fields; the sibling project's own extraction only
+uses 9 of them. `parse_eufy_scale_reading` generically flattens **every** scalar `scale_data` field
+into an `eufy.scale.<field>` observation (`aggregation="instant"` — a weigh-in is a point-in-time
+reading, not a pre-aggregated daily summary, unlike Garmin's JSON parsers), matching this project's
+"never drop an unknown field" mandate rather than the sibling script's narrower list. Remaining
+outer-record scalar fields (excluding `id`/`device_id`/`user_id`/`customer_id`/`group_id`, which are
+identifiers, not health facts) become `eufy.reading.<field>` observations; `product_code` is kept as
+`value_text`.
+
+Unit handling is deliberately conservative: only `weight` has a confirmed conversion (raw hectograms
+÷ 10 → kg, the same factor the sibling project already uses in production, independently
+cross-validated here against two other fields in the same real sample — `muscle_mass`/`weight` ≈
+`muscle`%, `bone_mass`/`weight` ≈ `bone`%). `body_fat`/`muscle`/`bone`/`water`/`protein_ratio` get
+`unit="%"` (already 0–100-shaped, safely inferable). Every other field (`bmi`, `bmr`, `muscle_mass`,
+`bone_mass`, `visceral_fat`, `body_age`, `impedance`, etc.) is stored exactly as reported, unit
+`None` — e.g. `fat_free_weight`/`body_fat_mass` read identically in the live probe, which doesn't
+cleanly resolve either interpretation, so neither is guessed at.
+
+Credentials (`SPORTHEALTH_EUFY_EMAIL`/`_PASSWORD`/`_DEVICE_ID`/`_CUSTOMER_ID`, all optional) are
+deliberately **not** held to `garmin_connect.py`'s stricter token-store-only/never-auto-login model:
+there's no evidence Eufy's API shares Garmin's SSO 429-lockout fragility, and the sibling project's
+own plain-env-var pattern has run this exact login flow safely, daily, unattended, for months.
+`sync_eufy()` just skips (logs, doesn't raise) when any credential is unset. `worker/main.py`'s
+`run_daily_sync()` calls it in its own `try`/`except`, separate from the Garmin sync and staleness
+check, so a Eufy-side failure (bad credentials, an API change) never blocks either of those.
+
+`GET /health/dashboard`'s `LOGICAL_METRICS` promotes ten of the raw `eufy.scale.*` fields to
+human-meaningful dashboard names (`weight_kg`, `bmi`, `body_fat_pct`, `muscle_mass_kg`,
+`bone_mass_kg`, `water_pct`, `bmr_kcal`, `visceral_fat`, `metabolic_age`, `protein_ratio_pct`) —
+each a single-alias entry, since Eufy is the only source for any of them. The remaining ~14 raw
+fields (`impedance`, `mode`, `head_size`, etc.) are still fully stored/queryable via
+`GET /health/observations`, just not promoted to the dashboard — the same "catalog broadly, surface
+a curated subset" split Garmin's own much larger raw field set already uses. Surfaced in the
+frontend everywhere Garmin's own `CORE_METRICS`/`HRV_SPO2_STRESS_METRICS` groups already appear.
+`HealthPage.tsx` exports the ten metrics grouped into four sets by comparable real-world magnitude
+-- `BODY_COMPOSITION_MASS_METRICS` (weight, muscle mass), `_PERCENT_METRICS` (body fat, water,
+protein ratio), `_INDEX_METRICS` (BMI, bone mass, visceral fat, metabolic age), and
+`_ENERGY_METRICS` (BMR alone) -- each its own `HealthTrendChart` in `YearView`/`MonthView`/
+`AllTimeView`, rather than one shared-axis chart or a plain average tile: BMR's ~1500 vs. bone
+mass's ~3 would otherwise flatten the small-magnitude series to a near-zero line. Plus a dedicated
+"Weight" trend chart in `WeekWellnessCharts.tsx` and weight/body-fat tiles in `DayViewPage.tsx`
+(both of which maintain their own independent hardcoded metric lists rather than importing the
+shared export).
+
+Raw archive kind: `eufy_scale_reading_json` (`source="eufy"`, one raw object per reading, external
+ID = the Eufy-assigned record ID) — added to `rebuild.py`'s replay dispatch alongside every other
+health JSON kind, reusing `parse_eufy_scale_reading` with no separate parser needed.
+
+**Outlier filtering.** A Eufy smart scale shared with other people produces readings that are real,
+correctly-parsed values with no way to distinguish them from the athlete's own at ingest time (same
+device, same `user_id` in Eufy's own raw JSON). Confirmed against real anomalies of increasing
+severity: an isolated 51.9kg reading amid ~79kg days; a single day with three raw readings (one
+real ~81.3kg, two duplicates from someone else ~48.1kg) whose naive daily average would already be
+wrong before any day-level check ran; and a multi-week stretch (2025-09 through 2025-11) where the
+other person's ~45-48kg readings actually **outnumbered** the athlete's own ~80kg ones locally --
+which defeats any filter that compares a reading to its nearby peers, however wide the window, since
+the "wrong" cluster is the local majority there, not a minority.
+
+`api/routers/health.py::_body_composition_daily` filters at the display layer only (the raw archive
+and `health_observation` rows stay untouched) using a **sequential baseline anchored to the last
+accepted reading**, not a symmetric neighbor comparison: it walks a metric's entire history in
+chronological order, accepting a reading only if it's within 15% of the last value that was itself
+accepted, and updating the baseline only on acceptance. A whole run of bad readings gets rejected
+together, however many of them cluster near each other or how long the run is, because they're
+never compared to each other -- only to the last trusted value. The very first-ever reading for a
+metric has nothing to compare against and is always accepted. This bypasses
+`health_metric_daily_rollup` (the generic precomputed rollup every other logical metric reads)
+entirely for these ten metrics, reading straight from `health_observation` instead, since the
+rollup's own naive per-day average is exactly what gets contaminated by a bad same-day reading.
+
+**Chart time axis.** `HealthTrendChart.tsx` plots on a true numeric time scale (`XAxis
+type="number" scale="time"`, keyed on `MergedTrendPoint.ts` -- epoch ms from `local_date`,
+computed in `healthStats.ts::mergeTrendSeries`) rather than Recharts' default evenly-spaced
+category axis. Body composition readings are sparse and irregular (days or weeks apart), so a
+category axis -- which spaces every plotted point evenly by index regardless of the actual gap --
+would make a month-long silence between two readings look identical to two consecutive days. Every
+chart built on `HealthTrendChart` (HRV/SpO2/Stress, respiration, body composition) inherits this,
+though only the sparse body-composition charts make the difference visible.

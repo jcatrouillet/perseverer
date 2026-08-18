@@ -32,6 +32,9 @@ export function WeekWellnessCharts({
   const stress = metrics.find((m) => m.logical_metric === "stress_average");
   const wakingResp = metrics.find((m) => m.logical_metric === "waking_respiration_rate");
   const sleepResp = metrics.find((m) => m.logical_metric === "sleep_respiration_rate");
+  // Body composition (Eufy) is read irregularly, not daily like the rest of this section --
+  // still worth a chart when a weigh-in landed this week.
+  const weight = metrics.find((m) => m.logical_metric === "weight_kg");
 
   const sleepData = eachDate(weekStart, weekEnd).map((d) => {
     const session = sleepSessions.find((s) => s.local_date === d);
@@ -45,8 +48,9 @@ export function WeekWellnessCharts({
   const hasStress = hasDailyData(stress);
   const hasSleepData = sleepData.some((p) => p.hours != null);
   const hasRespiration = hasDailyData(wakingResp) || hasDailyData(sleepResp);
+  const hasWeight = hasDailyData(weight);
 
-  if (!hasRestingHr && !hasStress && !hasSleepData && !hasRespiration) return null;
+  if (!hasRestingHr && !hasStress && !hasSleepData && !hasRespiration && !hasWeight) return null;
 
   return (
     <section className="card">
@@ -96,6 +100,13 @@ export function WeekWellnessCharts({
         <>
           <h3>Respiration (sleep vs waking)</h3>
           <HealthTrendChart metrics={metrics} keys={["sleep_respiration_rate", "waking_respiration_rate"]} />
+        </>
+      )}
+
+      {hasWeight && (
+        <>
+          <h3>Weight</h3>
+          <HealthTrendChart metrics={metrics} keys={["weight_kg"]} />
         </>
       )}
     </section>

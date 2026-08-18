@@ -25,6 +25,7 @@ function activity(overrides: Partial<ActivitySummary> = {}): ActivitySummary {
     workout_rpe: null,
     weight_kg: null,
     vdot: null,
+    workout_name: null,
     primary_source: "test",
     stream_available: false,
     ...overrides,

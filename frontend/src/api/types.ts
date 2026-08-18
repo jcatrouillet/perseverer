@@ -78,6 +78,11 @@ export interface ActivitySummary {
    * stream is available -- see performance.py. Null for non-running activities or a running
    * activity too short/anomalous for the underlying aerobic model. */
   vdot: number | null;
+  /** Garmin Connect's own structured "Workout Builder" name (e.g. "W11 Tue - 4x2km Threshold"),
+   * when this activity followed a pre-planned workout -- see yearStats.ts::displayActivityName
+   * for why the frontend falls back to this. Null for the (large majority of) activities with
+   * no such plan. */
+  workout_name: string | null;
   primary_source: string;
   stream_available: boolean;
 }

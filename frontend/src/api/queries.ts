@@ -203,6 +203,18 @@ export function useActivityContext(activityId: string) {
   });
 }
 
+/** Point-in-time insights for one activity (GET /activities/{id}/insights) -- always bounded to
+ * that activity's own past, never anything after it. `enabled` should be gated on the activity's
+ * sport (see ActivityDetailPage.tsx's `isRunningSport` check) rather than always-on like
+ * `useActivityContext` above, since this panel is deliberately running-specific. */
+export function useActivityInsights(activityId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["activity-insights", activityId],
+    queryFn: () => apiGet<InsightOut[]>(`/api/v1/activities/${activityId}/insights`),
+    enabled,
+  });
+}
+
 /** `enabled` should be false when the activity has no GPS start point (checked from its own
  * `route` field, already in hand from `useActivity`) -- no point issuing a request the backend
  * will just answer `available: false` for. */

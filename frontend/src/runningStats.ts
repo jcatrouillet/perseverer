@@ -46,6 +46,22 @@ export function isPaceSport(sport: string): boolean {
   return PACE_SPORTS.has(sport);
 }
 
+// Mirrors the backend's merge/engine.py::sport_family "run" bucket exactly -- duplicated rather
+// than shared cross-language, same precedent as personalRecords/rules_pb.py (ADR 0012). Used to
+// gate the per-activity "run insights" panel, which is deliberately running-specific (see
+// ActivityDetailPage.tsx) even though the backend endpoint itself is sport-agnostic.
+const RUNNING_SPORTS = new Set([
+  "running",
+  "trail_running",
+  "treadmill_running",
+  "track_running",
+  "street_running",
+]);
+
+export function isRunningSport(sport: string): boolean {
+  return RUNNING_SPORTS.has(sport);
+}
+
 /** A stream's raw `speed_mps` sample converted to whatever unit `sport` reads naturally in.
  * Below 0.3 m/s (slower than a ~55min/km walk) is treated as stationary, not a real pace --
  * without this floor, a runner paused at a light produces a momentary "pace" of several
@@ -660,6 +676,47 @@ export function weeklyDistanceSeries(
   while (cursor <= last) {
     const iso = isoDate(cursor);
     points.push({ weekStart: iso, km: Math.round((byWeek.get(iso) ?? 0) / 100) / 10 });
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+  return points;
+}
+
+export interface WeeklyBestVdotPoint {
+  weekStart: string;
+  vdot: number | null;
+  activityId: string | null;
+}
+
+/** One bucket per Monday-starting ISO week from `startDate` through `endDate`, each holding the
+ * *best* (highest) VDOT among that week's activities -- the week-over-time counterpart to
+ * `weeklyDistanceSeries` above, same "best effort, not a trend line" reasoning as `bestVdot`.
+ * `vdot`/`activityId` are both null for a week with no VDOT-eligible run, not 0 -- an empty week
+ * has no performance to report, not a zero one. */
+export function weeklyBestVdotSeries(
+  activities: ActivitySummary[],
+  startDate: string,
+  endDate: string,
+): WeeklyBestVdotPoint[] {
+  const byWeek = new Map<string, { vdot: number; activityId: string }>();
+  for (const a of activities) {
+    if (!a.local_date || a.vdot == null) continue;
+    const monday = isoDate(mondayOf(parseIsoDate(a.local_date)));
+    const current = byWeek.get(monday);
+    if (current == null || a.vdot > current.vdot) {
+      byWeek.set(monday, { vdot: a.vdot, activityId: a.id });
+    }
+  }
+  const points: WeeklyBestVdotPoint[] = [];
+  const cursor = mondayOf(parseIsoDate(startDate));
+  const last = parseIsoDate(endDate);
+  while (cursor <= last) {
+    const iso = isoDate(cursor);
+    const entry = byWeek.get(iso);
+    points.push({
+      weekStart: iso,
+      vdot: entry ? Math.round(entry.vdot * 10) / 10 : null,
+      activityId: entry?.activityId ?? null,
+    });
     cursor.setUTCDate(cursor.getUTCDate() + 7);
   }
   return points;

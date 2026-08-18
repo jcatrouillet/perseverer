@@ -67,6 +67,21 @@ LOGICAL_METRICS: dict[str, list[str]] = {
     # merged, since a caller (the week view's wellness charts) wants to show both at once.
     "waking_respiration_rate": ["garmin.daily_summary.avgWakingRespirationValue"],
     "sleep_respiration_rate": ["garmin.export.sleepData.averageRespiration"],
+    # Body composition -- Eufy smart scale is the only source (see adapters/eufy.py), so each
+    # of these is a single-alias entry, not a merge. The curated, human-meaningful subset of
+    # the ~24 raw eufy.scale.* fields that get promoted to the dashboard; the rest are still
+    # fully stored/queryable via GET /health/observations, matching the same "catalog broadly,
+    # surface a curated subset" split already used for Garmin's own larger raw field set.
+    "weight_kg": ["eufy.scale.weight"],
+    "bmi": ["eufy.scale.bmi"],
+    "body_fat_pct": ["eufy.scale.body_fat"],
+    "muscle_mass_kg": ["eufy.scale.muscle_mass"],
+    "bone_mass_kg": ["eufy.scale.bone_mass"],
+    "water_pct": ["eufy.scale.water"],
+    "bmr_kcal": ["eufy.scale.bmr"],
+    "visceral_fat": ["eufy.scale.visceral_fat"],
+    "metabolic_age": ["eufy.scale.body_age"],
+    "protein_ratio_pct": ["eufy.scale.protein_ratio"],
 }
 
 
@@ -107,8 +122,126 @@ def list_health_observations(
     return Page(items=items, total=total, limit=limit, offset=offset)
 
 
+# Body composition logical metrics come from a Eufy smart scale that's sometimes shared with
+# other people -- a reading from a different, much lighter/heavier person lands as a real,
+# correctly-parsed value with no way to tell it apart from the athlete's own at ingest time
+# (same device, same user_id in Eufy's own raw JSON). Confirmed against real anomalies of
+# increasing severity: an isolated 51.9kg reading amid ~79kg days; a day (2025-09-21) with
+# *three* raw readings, one real (~81.3kg) and two duplicates from someone else (~48.1kg), whose
+# naive daily average would already be contaminated before any day-level check ran; and a whole
+# multi-week stretch (2025-09 through 2025-11) where the other person's ~45-48kg readings actually
+# outnumber the athlete's own ~80kg ones locally -- which defeats any filter that compares a
+# reading to its nearby peers (a wider window doesn't help: the "wrong" cluster is the local
+# majority there, not a minority). Filtered here, at the display layer, using a *sequential*
+# baseline instead (see _body_composition_daily): the raw archive and health_observation rows
+# stay untouched (raw-first), only what the dashboard/charts render is affected. Each of these
+# logical metrics has exactly one alias (Eufy is the sole source), so filtering reads straight
+# from health_observation instead of health_metric_daily_rollup. See docs/DATA_DICTIONARY.md's
+# Eufy section.
+_OUTLIER_FILTERED_METRICS = frozenset(
+    {
+        "weight_kg",
+        "bmi",
+        "body_fat_pct",
+        "muscle_mass_kg",
+        "bone_mass_kg",
+        "water_pct",
+        "bmr_kcal",
+        "visceral_fat",
+        "metabolic_age",
+        "protein_ratio_pct",
+    }
+)
+
+
+def _body_composition_daily(
+    conn: Connection,
+    *,
+    athlete_id: str,
+    metric_key: str,
+    start_date: date,
+    end_date: date,
+    max_relative_deviation: float = 0.15,
+) -> HealthDashboardMetricOut | None:
+    """Rebuilds the daily aggregate for one Eufy body-composition metric directly from raw
+    `health_observation` rows, walking the *entire* history in chronological order and rejecting
+    a reading if it deviates more than `max_relative_deviation` from the last *accepted* reading
+    -- not from its nearby peers. A symmetric neighbor-window comparison (tried first, see git
+    history) breaks down on real data: a shared scale can go through a multi-week stretch where
+    someone else's readings actually outnumber the athlete's own within any reasonably-sized
+    window, so a plain local median gets pulled toward the wrong cluster. Anchoring to the last
+    accepted value instead means a whole run of bad readings gets rejected together, however many
+    of them there are or how tightly they cluster near each other, since they're never compared
+    to each other -- only to the last value that was itself accepted. The very first-ever reading
+    for a metric has nothing to compare against and is always accepted.
+    """
+    rows = conn.execute(
+        select(
+            health_observation.c.local_date,
+            health_observation.c.observed_at_utc,
+            health_observation.c.value_num,
+        )
+        .where(
+            health_observation.c.athlete_id == athlete_id,
+            health_observation.c.metric_key == metric_key,
+            health_observation.c.value_num.is_not(None),
+        )
+        .order_by(health_observation.c.observed_at_utc)
+    ).fetchall()
+
+    baseline: float | None = None
+    by_date: dict[str, list[float]] = {}
+    last_by_date: dict[str, tuple[object, float]] = {}
+    last_accepted_date: str | None = None
+    for row in rows:
+        value = row.value_num
+        accepted = (
+            baseline is None
+            or baseline == 0
+            or abs(value - baseline) / abs(baseline) <= max_relative_deviation
+        )
+        if not accepted:
+            continue
+        baseline = value
+        last_accepted_date = row.local_date
+
+        row_date = date.fromisoformat(row.local_date)
+        if not (start_date <= row_date <= end_date):
+            continue
+        by_date.setdefault(row.local_date, []).append(value)
+        current_last = last_by_date.get(row.local_date)
+        if current_last is None or row.observed_at_utc > current_last[0]:
+            last_by_date[row.local_date] = (row.observed_at_utc, value)
+
+    daily = [
+        HealthDashboardDayOut(
+            local_date=local_date,
+            value_sum=sum(values),
+            value_avg=sum(values) / len(values),
+            value_min=min(values),
+            value_max=max(values),
+            value_last=last_by_date[local_date][1],
+            n_observations=len(values),
+            source_metric_key=metric_key,
+        )
+        for local_date, values in sorted(by_date.items())
+    ]
+
+    if not daily and last_accepted_date is None:
+        return None
+
+    return HealthDashboardMetricOut(
+        logical_metric="", last_observed=last_accepted_date, daily=daily
+    )
+
+
 def _merge_logical_metric(
-    conn: Connection, *, athlete_id: str, aliases: list[str], start_date: date, end_date: date
+    conn: Connection,
+    *,
+    athlete_id: str,
+    aliases: list[str],
+    start_date: date,
+    end_date: date,
 ) -> HealthDashboardMetricOut | None:
     rows = conn.execute(
         select(health_metric_daily_rollup).where(
@@ -166,9 +299,22 @@ def get_health_dashboard(
 ) -> HealthDashboardOut:
     metrics = []
     for logical_metric, aliases in LOGICAL_METRICS.items():
-        merged = _merge_logical_metric(
-            conn, athlete_id=athlete_id, aliases=aliases, start_date=start_date, end_date=end_date
-        )
+        if logical_metric in _OUTLIER_FILTERED_METRICS:
+            merged = _body_composition_daily(
+                conn,
+                athlete_id=athlete_id,
+                metric_key=aliases[0],
+                start_date=start_date,
+                end_date=end_date,
+            )
+        else:
+            merged = _merge_logical_metric(
+                conn,
+                athlete_id=athlete_id,
+                aliases=aliases,
+                start_date=start_date,
+                end_date=end_date,
+            )
         if merged is not None:
             metrics.append(merged.model_copy(update={"logical_metric": logical_metric}))
     return HealthDashboardOut(metrics=metrics)

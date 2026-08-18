@@ -12,7 +12,14 @@ import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../../dateUtils";
-import { CORE_METRICS, HRV_SPO2_STRESS_METRICS } from "../HealthPage";
+import {
+  BODY_COMPOSITION_ENERGY_METRICS,
+  BODY_COMPOSITION_INDEX_METRICS,
+  BODY_COMPOSITION_MASS_METRICS,
+  BODY_COMPOSITION_PERCENT_METRICS,
+  CORE_METRICS,
+  HRV_SPO2_STRESS_METRICS,
+} from "../HealthPage";
 import { busiestYear } from "../../yearStats";
 import "../../styles/calendar.css";
 
@@ -76,6 +83,34 @@ export function AllTimeView() {
 
             <h3>HRV / SpO2 / Stress — over all time</h3>
             <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />
+
+            <h3>Weight &amp; muscle mass — over all time</h3>
+            <HealthTrendChart
+              metrics={health.data.metrics}
+              keys={BODY_COMPOSITION_MASS_METRICS}
+              tickGranularity="month"
+            />
+
+            <h3>Body composition % — over all time</h3>
+            <HealthTrendChart
+              metrics={health.data.metrics}
+              keys={BODY_COMPOSITION_PERCENT_METRICS}
+              tickGranularity="month"
+            />
+
+            <h3>BMI, bone mass, visceral fat &amp; metabolic age — over all time</h3>
+            <HealthTrendChart
+              metrics={health.data.metrics}
+              keys={BODY_COMPOSITION_INDEX_METRICS}
+              tickGranularity="month"
+            />
+
+            <h3>BMR — over all time</h3>
+            <HealthTrendChart
+              metrics={health.data.metrics}
+              keys={BODY_COMPOSITION_ENERGY_METRICS}
+              tickGranularity="month"
+            />
           </>
         )}
       </section>

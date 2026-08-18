@@ -1,15 +1,37 @@
-// One inline SVG sprite for the whole app. Deliberately hand-rolled rather than pulling an
-// icon package: ~3kB of markup against 50kB+ for a dependency, and this project's standing
-// posture is one considered dependency per phase (Recharts was Phase 6.1's -- see ADR 0010).
+// One inline SVG sprite for most of the app: metrics/nav/playback/weather glyphs are
+// hand-rolled (stroke-only, ~3kB) rather than pulling a dependency for simple geometric shapes.
+// Sport icons are the exception -- hand-authoring a recognizable running/cycling/hiking/yoga/
+// climbing figure by trial and error (across several rounds of user feedback -- "ugly", "not
+// good enough", "coat hanger") repeatedly failed, so those ten are Phosphor Icons
+// (@phosphor-icons/react, MIT) `weight="fill"` pictograms instead: professionally drawn,
+// exactly the bold-filled-silhouette style the user pointed at with reference images. This is
+// this project's one considered dependency for Phase 6.1's icon system (see ADR 0010) --
+// deliberately narrow (10 named imports, tree-shaken) rather than a wholesale replacement of
+// the hand-rolled sprite, since the metric/nav/weather glyphs never had a legibility problem.
 //
-// Every glyph is stroke-only on a 24x24 grid and paints with `currentColor`, which is what
-// makes the colour system work: a single glyph inherits whichever metric hue its context sets,
-// so there is never a second copy of an icon in another colour. Size comes from CSS
-// (`.icon` in layout.css), never from a width/height attribute.
+// Every hand-rolled glyph is stroke-only on a 24x24 grid and paints with `currentColor`, which
+// is what makes the colour system work: a single glyph inherits whichever metric hue its
+// context sets, so there is never a second copy of an icon in another colour. Size comes from
+// CSS (`.icon` in layout.css), never from a width/height attribute. Phosphor icons plug into
+// the exact same sizing/colour contract (see `SPORT_ICONS` below and `.icon--filled` in
+// layout.css) so no calling code needs to know which rendering path a given `IconName` uses.
 //
 // The sprite renders once, above the router, in main.tsx -- a <use> can only resolve a symbol
 // that's actually in the document, and mounting it outside <AuthGate> means the login screen
 // gets icons too.
+import {
+  Barbell,
+  FlowerLotus,
+  Mountains,
+  PersonSimpleBike,
+  PersonSimpleHike,
+  PersonSimpleRun,
+  PersonSimpleSki,
+  PersonSimpleWalk,
+  Racquet,
+  Waves as WavesIcon,
+} from "@phosphor-icons/react";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 
 export type IconName =
   // Metrics
@@ -135,46 +157,6 @@ export function IconSprite() {
           <path d="M12 3.2s6.2 7 6.2 11.3a6.2 6.2 0 1 1-12.4 0C5.8 10.2 12 3.2 12 3.2Z" />
         </symbol>
 
-        <symbol viewBox="0 0 24 24" id="i-run">
-          <circle cx="14.6" cy="4.5" r="2" />
-          <path d="M9.1 20.8 11.8 16l-2.5-2.7.9-4.7-3.6 2-1.5 3.6M12.2 16.1l3.5 1.4 1.6 3.3M11.9 8.6l3.5 2 3-.6" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-walk">
-          <circle cx="12.9" cy="4.5" r="2" />
-          <path d="M9.4 20.9 11.7 15.4l-1.7-3.3.7-3.5-3 1.7-1 2.9M11.9 15.6l2.7 1.4 1.3 3.9" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-hike">
-          <circle cx="13.2" cy="4.4" r="1.9" />
-          <path d="M8.4 20.8 10.9 15.3l-1.9-3.1.9-3.7-3.5 1.9-1.3 3.1M11.1 15.5l3.3 1.6 1.5 3.7M19.2 4.2v16.6M19.2 7.4l-2.4 1.1" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-bike">
-          <circle cx="5.7" cy="16.4" r="3.6" />
-          <circle cx="18.3" cy="16.4" r="3.6" />
-          <path d="M5.7 16.4 9.8 8.3h4.4M9.9 8.3h3.1l3.4 8.1M14.6 5.4h2.7" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-dumbbell">
-          <path d="M3.6 9.4v5.2M6.8 7.3v9.4M17.2 7.3v9.4M20.4 9.4v5.2M6.8 12h10.4" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-yoga">
-          <circle cx="12" cy="4.7" r="2" />
-          <path d="M12 8.2v4.6M12 12.8c-3.1 0-5.6 1.6-5.6 3.5 0 1.2 1.3 2 2.9 2h5.4c1.6 0 2.9-.8 2.9-2 0-1.9-2.5-3.5-5.6-3.5ZM12 10.1 8.1 12.6M12 10.1l3.9 2.5" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-climb">
-          <circle cx="14.1" cy="4.4" r="1.9" />
-          <path d="M6.2 20.6 9.9 17l-.7-4.4 3.1-2.5 2.7 2.8 3.5.8M9.2 10.1 5.6 11.4M14.9 14.1l1.5 6.5" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-snow">
-          <path d="M12 2.8v18.4M4.2 7.4l15.6 9M19.8 7.4l-15.6 9" />
-          <path d="M9.5 4.7 12 2.8l2.5 1.9M9.5 19.3 12 21.2l2.5-1.9M4.6 10.4l-.4-3 3-.3M19.4 13.6l.4 3-3 .3M19.4 10.4l.4-3-3-.3M4.6 13.6l-.4 3 3 .3" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-racket">
-          <ellipse cx="10.2" cy="9.2" rx="5.2" ry="6" transform="rotate(-32 10.2 9.2)" />
-          <path d="M13.6 13.8 19.6 20.4M7.1 6.1l6.4 6.3M12.6 5.5 8.1 11.9" />
-        </symbol>
-        <symbol viewBox="0 0 24 24" id="i-waves">
-          <path d="M2.4 8.4c2.4-2.2 4.8-2.2 7.2 0s4.8 2.2 7.2 0 4.8-2.2 4.8 0M2.4 14c2.4-2.2 4.8-2.2 7.2 0s4.8 2.2 7.2 0 4.8-2.2 4.8 0M2.4 19.6c2.4-2.2 4.8-2.2 7.2 0s4.8 2.2 7.2 0 4.8-2.2 4.8 0" />
-        </symbol>
-
         <symbol viewBox="0 0 24 24" id="i-grid">
           <rect x="3.4" y="3.4" width="7.2" height="7.2" rx="1.8" />
           <rect x="13.4" y="3.4" width="7.2" height="7.2" rx="1.8" />
@@ -236,9 +218,46 @@ export function IconSprite() {
 /** Sized by CSS via `.icon` (and whatever the calling context overrides), coloured by
  * `currentColor`. Decorative by default -- the adjacent text label is what a screen reader
  * should read, so the glyph stays `aria-hidden`. */
-export function Icon({ name, className }: { name: IconName; className?: string }) {
+const SPORT_ICONS: Partial<Record<IconName, PhosphorIcon>> = {
+  run: PersonSimpleRun,
+  walk: PersonSimpleWalk,
+  hike: PersonSimpleHike,
+  bike: PersonSimpleBike,
+  dumbbell: Barbell,
+  yoga: FlowerLotus,
+  climb: Mountains,
+  snow: PersonSimpleSki,
+  racket: Racquet,
+  waves: WavesIcon,
+};
+
+export function Icon({
+  name,
+  className,
+  size,
+}: {
+  name: IconName;
+  className?: string;
+  /** Explicit pixel size, overriding the default 1em-from-CSS sizing -- for contexts like a
+      Recharts label that place the icon as a *nested* SVG (an <svg> inside Recharts' own
+      <svg>). A nested SVG establishes its own viewport from its width/height *attributes*, not
+      CSS -- a `style` override alone (which works fine for a top-level, DOM-child <svg>) left
+      it unsized and invisible here, so this is forwarded as real width/height attributes. */
+  size?: number;
+}) {
+  const Sport = SPORT_ICONS[name];
+  if (Sport) {
+    const classes = className ? `icon icon--filled ${className}` : "icon icon--filled";
+    return <Sport className={classes} weight="fill" size={size} aria-hidden="true" focusable="false" />;
+  }
   return (
-    <svg className={className ? `icon ${className}` : "icon"} aria-hidden="true" focusable="false">
+    <svg
+      className={className ? `icon ${className}` : "icon"}
+      width={size}
+      height={size}
+      aria-hidden="true"
+      focusable="false"
+    >
       <use href={`#i-${name}`} />
     </svg>
   );

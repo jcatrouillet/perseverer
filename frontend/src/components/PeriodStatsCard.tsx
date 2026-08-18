@@ -5,6 +5,7 @@
 // rather than this component knowing about years or months at all.
 import { useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import type { PieLabelRenderProps } from "recharts";
 
 import type { ActivitySummary } from "../api/types";
 import { sportStyle, toneColor } from "../metricStyle";
@@ -16,6 +17,7 @@ import {
   weekdayLabel,
   weekdayStats,
 } from "../runningStats";
+import { Icon } from "./Icon";
 import { StatTile } from "./StatTile";
 import {
   activityTypeCounts,
@@ -31,6 +33,35 @@ import {
 function sumOrNull(values: (number | null)[]): number | null {
   const present = values.filter((v): v is number => v != null);
   return present.length > 0 ? present.reduce((a, b) => a + b, 0) : null;
+}
+
+const PIE_SLICE_ICON_SIZE = 14;
+const RADIAN = Math.PI / 180;
+
+// Recharts' own label renders text/lines; a sport icon needs its own placement math -- centered
+// on each slice's mid-angle, at the midpoint of the ring's thickness. Skipped below a share
+// threshold since a sliver too thin to read a shape on is better left blank than crowded.
+function renderTypeSliceIcon(props: PieLabelRenderProps) {
+  const { cx, cy, midAngle, innerRadius, outerRadius, percent, payload } = props;
+  if (cx == null || cy == null || midAngle == null || innerRadius == null || outerRadius == null) {
+    return null;
+  }
+  if ((percent ?? 0) < 0.06) return null;
+  const inner = Number(innerRadius);
+  const outer = Number(outerRadius);
+  const radius = inner + (outer - inner) / 2;
+  const x = Number(cx) + radius * Math.cos(-midAngle * RADIAN);
+  const y = Number(cy) + radius * Math.sin(-midAngle * RADIAN);
+  const sport = (payload as { sport: string }).sport;
+  return (
+    <g transform={`translate(${x - PIE_SLICE_ICON_SIZE / 2}, ${y - PIE_SLICE_ICON_SIZE / 2})`}>
+      <Icon
+        name={sportStyle(sport).icon}
+        size={PIE_SLICE_ICON_SIZE}
+        className="type-breakdown__slice-icon"
+      />
+    </g>
+  );
 }
 
 export function PeriodStatsCard({
@@ -238,6 +269,8 @@ export function PeriodStatsCard({
                   outerRadius={104}
                   paddingAngle={typeCounts.length > 1 ? 2 : 0}
                   isAnimationActive={false}
+                  label={renderTypeSliceIcon}
+                  labelLine={false}
                 >
                   {typeCounts.map((t) => (
                     <Cell key={t.sport} fill={toneColor(sportStyle(t.sport).tone)} />

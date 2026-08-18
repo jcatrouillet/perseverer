@@ -85,7 +85,10 @@ def _aliased_metric_subquery(keys: tuple[str, ...]):  # type: ignore[no-untyped-
     )
 
 
-def _load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightActivity]:
+def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightActivity]:
+    """Public (not `_`-prefixed) since api/routers/activities.py's per-activity insight endpoint
+    reuses this same loader at request time -- the athlete-wide `refresh_insights` below is no
+    longer this function's only caller."""
     avg_hr_subq = _aliased_metric_subquery(_AVG_HR_METRIC_KEYS)
     max_hr_subq = _aliased_metric_subquery(_MAX_HR_METRIC_KEYS)
     elevation_loss_subq = _aliased_metric_subquery(_ELEVATION_LOSS_METRIC_KEYS)
@@ -97,6 +100,7 @@ def _load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightA
         select(
             activity.c.id,
             activity.c.start_time_utc,
+            activity.c.utc_offset_s,
             activity.c.local_date,
             activity.c.sport,
             activity.c.name,
@@ -128,6 +132,7 @@ def _load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightA
             InsightActivity(
                 id=r.id,
                 start_time_utc=r.start_time_utc,
+                utc_offset_s=r.utc_offset_s,
                 local_date=r.local_date,
                 sport=r.sport,
                 sport_family=family,
@@ -217,7 +222,7 @@ def refresh_insights(conn: Connection, *, athlete_id: str, as_of: date | None = 
     """
     today = as_of or datetime.now(UTC).date()
 
-    activities = _load_insight_activities(conn, athlete_id)
+    activities = load_insight_activities(conn, athlete_id)
     fitness_days = _load_fitness_days(conn, athlete_id)
     resting_hr = _load_resting_hr_series(conn, athlete_id)
     sleep_score = _load_sleep_score_series(conn, athlete_id)

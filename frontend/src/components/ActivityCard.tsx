@@ -20,7 +20,7 @@ import {
   isPaceSport,
   localTimeLabel,
 } from "../runningStats";
-import { displaySport } from "../yearStats";
+import { displayActivityName, displaySport } from "../yearStats";
 import { ActivityMap } from "./ActivityMap";
 import { Icon } from "./Icon";
 import { MetricChip } from "./StatTile";
@@ -61,6 +61,7 @@ export function ActivityCard({
   const sport = displaySport(activity);
   const style = sportStyle(sport);
   const durationS = effectiveDurationS(activity);
+  const displayName = displayActivityName(activity);
 
   return (
     <div className="activity-card">
@@ -80,7 +81,7 @@ export function ActivityCard({
                 </span>
               )}
             </span>
-            {activity.name && <span className="activity-card__name">{activity.name}</span>}
+            {displayName && <span className="activity-card__name">{displayName}</span>}
           </div>
           <span className="activity-card__time">{localTimeLabel(activity)}</span>
         </div>

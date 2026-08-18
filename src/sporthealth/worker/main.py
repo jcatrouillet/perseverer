@@ -10,6 +10,7 @@ import logging
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from sporthealth.adapters.eufy import sync_eufy
 from sporthealth.adapters.garmin_connect import RateLimitSettings, sync_garmin_connect
 from sporthealth.config import get_settings
 from sporthealth.db.engine import make_engine
@@ -42,6 +43,29 @@ def run_daily_sync() -> None:
             summary.items_new,
             len(summary.errors),
         )
+
+        # Separately try/excepted -- a Eufy failure (e.g. bad credentials, API change) must
+        # never block the Garmin sync or the staleness check that follows.
+        try:
+            logger.info("starting scheduled eufy sync")
+            eufy_summary = sync_eufy(
+                conn,
+                settings.raw_archive_dir,
+                settings.parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                email=settings.eufy_email,
+                password=settings.eufy_password,
+                device_id=settings.eufy_device_id,
+                customer_id=settings.eufy_customer_id,
+            )
+            logger.info(
+                "eufy sync finished: seen=%d new=%d errors=%d",
+                eufy_summary.items_seen,
+                eufy_summary.items_new,
+                len(eufy_summary.errors),
+            )
+        except Exception:
+            logger.exception("eufy sync failed unexpectedly")
 
         alerts = check_staleness(
             conn,

@@ -88,6 +88,12 @@ class ActivitySummary(BaseModel):
     # available -- see performance.py's own docstring. Null for non-running activities, or a
     # running activity too short/anomalous for the underlying aerobic model (see vdot.py).
     vdot: float | None
+    # Garmin Connect's own structured "Workout Builder" name (e.g. "W11 Tue - 4x2km Threshold"),
+    # from activity_workout.name -- the FIT file's own activity.name is usually just the generic
+    # device default ("Running") when a pre-planned workout was followed, so the frontend falls
+    # back to this before showing no title at all (see yearStats.ts::displayActivityName). None
+    # for the (large majority of) activities with no such plan.
+    workout_name: str | None
     primary_source: str
     stream_available: bool
 

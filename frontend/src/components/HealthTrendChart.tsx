@@ -20,12 +20,39 @@ function seriesColor(logicalMetric: string): string {
   return toneColor(healthMetricStyle(logicalMetric).tone);
 }
 
+const SHORT_MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function formatAxisTick(ts: number, tickGranularity: "day" | "month"): string {
+  const d = new Date(ts);
+  if (tickGranularity === "month") {
+    return `${SHORT_MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  }
+  return d.toISOString().slice(5, 10);
+}
+
 export function HealthTrendChart({
   metrics,
   keys,
+  // Day-of-month ticks ("08-15") are meaningless once the visible range spans years (the
+  // all-time body-composition charts) -- the caller opts into "Jan 2024"-style ticks instead.
+  tickGranularity = "day",
 }: {
   metrics: HealthDashboardMetricOut[];
   keys: string[];
+  tickGranularity?: "day" | "month";
 }) {
   const data = mergeTrendSeries(metrics, keys);
   // A logical metric can exist in `metrics` (it has data *somewhere* in history) yet contribute
@@ -44,11 +71,18 @@ export function HealthTrendChart({
       <ResponsiveContainer width="100%" height={160}>
         <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+          {/* A numeric time scale, not the default category axis -- a category axis spaces every
+              point evenly regardless of the actual gap between them, which makes a week-long gap
+              between two sparse Eufy readings (weight, body composition) look identical to two
+              consecutive days. This makes the x-axis reflect real elapsed time instead. */}
           <XAxis
-            dataKey="local_date"
+            dataKey="ts"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
             stroke="var(--color-text-muted)"
             fontSize={11}
-            tickFormatter={(iso: string) => iso.slice(5)}
+            tickFormatter={(ts: number) => formatAxisTick(ts, tickGranularity)}
           />
           {/* Recharts' own default domain is [0, "auto"], which forces every line down into a
               sliver at the top of the chart for a metric whose real range never goes near zero
@@ -62,6 +96,18 @@ export function HealthTrendChart({
               background: "var(--color-surface-raised)",
               border: "1px solid var(--color-border)",
             }}
+            labelFormatter={(ts) =>
+              typeof ts === "number" ? new Date(ts).toISOString().slice(0, 10) : ts
+            }
+            formatter={(value, name) => [
+              typeof value === "number" ? value.toFixed(1) : value,
+              String(name).replace(/_/g, " "),
+            ]}
+            // Recharts' own default tooltip order follows internal render/stacking state, not
+            // the `keys` array order -- explicitly sorting by value (highest first) instead
+            // keeps it predictable regardless of that, and reads naturally for series like
+            // weight vs. muscle mass where one is always larger than the other.
+            itemSorter={(item) => -(typeof item.value === "number" ? item.value : 0)}
           />
           {present.map((key) => (
             <Line

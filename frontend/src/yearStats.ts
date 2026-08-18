@@ -166,6 +166,38 @@ export function displaySport(activity: ActivitySummary): string {
   return activity.sport;
 }
 
+// The literal device-generated default `activity.name` for a sport, confirmed as the single
+// overwhelmingly dominant value in the real archive (e.g. "Run" on 628 of this athlete's running
+// activities, "Walk" on 201 walks) -- not a fuzzy "looks generic" guess. Sports with no single
+// dominant default (cycling, training, rowing, ...) are deliberately absent, so displayActivityName
+// below always just uses activity.name for those. Shared by every place that shows an activity's
+// own title (ActivityCard, ActivityDetailPage) so a plain device default like "Run" never gets
+// shown as if it were a real chosen title.
+export const GENERIC_DEFAULT_NAME_BY_SPORT: Record<string, string> = {
+  running: "Run",
+  walking: "Walk",
+  hiking: "Hike",
+  alpine_skiing: "Ski",
+  snowshoeing: "Snowshoe",
+};
+
+/** `activity.name`, unless it's still the sport's own generic device default -- in which case
+ * the sport label alone already says "Run"/"Walk"/etc., so repeating it as a "title" would be
+ * noise, not information. Falls back to Garmin Connect's own structured "Workout Builder" name
+ * (`workout_name`, e.g. "W11 Tue - 4x2km Threshold") when one exists -- confirmed against a real
+ * activity where the FIT file's own name was just the generic "Running" device default but a
+ * pre-planned workout name was still real, useful information the generic-default suppression
+ * above would otherwise have thrown away entirely. Matches ActivityDetailPage's own title logic
+ * exactly, so the two never drift out of sync. */
+export function displayActivityName(activity: ActivitySummary): string | null {
+  const sport = displaySport(activity);
+  const genericDefaultName = GENERIC_DEFAULT_NAME_BY_SPORT[sport];
+  if (activity.name == null || activity.name === genericDefaultName) {
+    return activity.workout_name ?? null;
+  }
+  return activity.name;
+}
+
 /** Descending by count, ties broken alphabetically for a stable, deterministic order. */
 export function activityTypeCounts(activities: ActivitySummary[]): ActivityTypeCount[] {
   const counts = new Map<string, number>();

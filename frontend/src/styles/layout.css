@@ -230,6 +230,15 @@ select {
   stroke-linejoin: round;
 }
 
+/* Phosphor sport pictograms (Icon.tsx::SPORT_ICONS) are solid-filled, not stroke skeletons --
+   override the hand-rolled sprite's fill:none/stroke:currentColor defaults above, which would
+   otherwise cascade onto Phosphor's own fill="currentColor" root <svg> attribute and render the
+   icon invisible (same bug class hit twice already while hand-authoring the old sprite). */
+.icon.icon--filled {
+  fill: currentColor;
+  stroke: none;
+}
+
 /* Tone = "which metric is this". One utility class binds --tone to a colour theme.css already
    ships; every tinted surface below is a color-mix() off that single variable -- so no new hex
    value enters the codebase, both themes keep working with no extra rules, and a new tone means
@@ -426,6 +435,12 @@ select {
 .type-breakdown {
   display: flex;
   justify-content: center;
+}
+
+.type-breakdown__slice-icon {
+  color: #fff;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.35));
 }
 
 table {

@@ -103,6 +103,22 @@ const HEALTH_METRIC_STYLES: Record<string, MetricStyle> = {
   // have from each other, per this file's own governing rule.
   sleep_respiration_rate: { tone: "cadence", icon: "pulse" },
   waking_respiration_rate: { tone: "power", icon: "pulse" },
+  // Body composition (Eufy smart scale -- see adapters/eufy.py). No dedicated scale/body glyph
+  // exists in the sprite, so these reuse the closest existing icon rather than adding one just
+  // for this section. Tones are chosen so every metric that can appear *together* on one of
+  // HealthPage's grouped body-composition trend charts (BODY_COMPOSITION_MASS/PERCENT/INDEX_
+  // METRICS) gets a distinct tone from its chart-mates -- same rule as HRV/SpO2/Stress and the
+  // two respiration metrics above.
+  weight_kg: { tone: "power", icon: "gauge" },
+  muscle_mass_kg: { tone: "pace", icon: "dumbbell" },
+  body_fat_pct: { tone: "load", icon: "flame" },
+  water_pct: { tone: "elevation", icon: "droplet" },
+  protein_ratio_pct: { tone: "power", icon: "dumbbell" },
+  bmi: { tone: "cadence", icon: "trend" },
+  bone_mass_kg: { tone: "elevation", icon: "mountain" },
+  visceral_fat: { tone: "load", icon: "gauge" },
+  metabolic_age: { tone: "power", icon: "clock" },
+  bmr_kcal: { tone: "load", icon: "flame" },
 };
 
 export function healthMetricStyle(logicalMetric: string): MetricStyle {

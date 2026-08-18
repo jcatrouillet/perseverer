@@ -98,6 +98,14 @@ export function DayViewPage({ date }: { date: string }) {
     health.data?.metrics.find((m) => m.logical_metric === "stress_average"),
     date,
   );
+  const weight = valueForDate(
+    health.data?.metrics.find((m) => m.logical_metric === "weight_kg"),
+    date,
+  );
+  const bodyFat = valueForDate(
+    health.data?.metrics.find((m) => m.logical_metric === "body_fat_pct"),
+    date,
+  );
 
   const items = observations.data?.items ?? [];
   const readiness = latestObservation(items, READINESS_KEY);
@@ -114,6 +122,8 @@ export function DayViewPage({ date }: { date: string }) {
   const restingHrStyle = healthMetricStyle("resting_heart_rate");
   const hrvStyle = healthMetricStyle("hrv_nightly_average");
   const stressStyle = healthMetricStyle("stress_average");
+  const weightStyle = healthMetricStyle("weight_kg");
+  const bodyFatStyle = healthMetricStyle("body_fat_pct");
 
   const hasHealthTile =
     steps != null ||
@@ -123,7 +133,9 @@ export function DayViewPage({ date }: { date: string }) {
     sleepToday != null ||
     readiness != null ||
     trainingStatus != null ||
-    bodyBattery != null;
+    bodyBattery != null ||
+    weight != null ||
+    bodyFat != null;
 
   return (
     <main>
@@ -283,6 +295,24 @@ export function DayViewPage({ date }: { date: string }) {
                 meta={bodyBatteryRange}
                 icon="battery"
                 tone="cadence"
+              />
+            )}
+            {weight != null && (
+              <StatTile
+                label="Weight"
+                value={weight.toFixed(1)}
+                unit="kg"
+                icon={weightStyle.icon}
+                tone={weightStyle.tone}
+              />
+            )}
+            {bodyFat != null && (
+              <StatTile
+                label="Body fat"
+                value={bodyFat.toFixed(1)}
+                unit="%"
+                icon={bodyFatStyle.icon}
+                tone={bodyFatStyle.tone}
               />
             )}
           </div>

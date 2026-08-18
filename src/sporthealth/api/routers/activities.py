@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 import duckdb
@@ -40,6 +40,7 @@ from sporthealth.api.schemas.activities import (
     SplitOut,
 )
 from sporthealth.api.schemas.common import Page, to_utc
+from sporthealth.api.schemas.insights import InsightOut
 from sporthealth.api.schemas.streams import StreamResponse
 from sporthealth.archive import read_raw_bytes
 from sporthealth.config import Settings, get_settings
@@ -58,6 +59,8 @@ from sporthealth.db.schema import (
 )
 from sporthealth.db.schema import device as device_table
 from sporthealth.db.schema import split as split_table
+from sporthealth.insights.engine import load_insight_activities
+from sporthealth.insights.rules_activity import compute_activity_insights
 from sporthealth.performance import VDOT_METRIC_KEY
 from sporthealth.reparse import reparse_raw_object
 from sporthealth.rollups import refresh_daily_and_period_rollups
@@ -212,6 +215,15 @@ def list_activities(
         .limit(1)
         .scalar_subquery()
     )
+    # activity_workout is a separate one-row-per-activity table (not activity_metric's EAV
+    # pattern), but the same correlated-scalar-subquery approach avoids an N+1 per-card fetch for
+    # list/day views -- see ActivitySummary.workout_name's own docstring for why this exists.
+    workout_name_subq = (
+        select(activity_workout.c.name)
+        .where(activity_workout.c.activity_id == activity.c.id)
+        .limit(1)
+        .scalar_subquery()
+    )
     query = select(
         activity.c.id,
         activity.c.start_time_utc,
@@ -234,6 +246,7 @@ def list_activities(
         workout_rpe_subq.label("workout_rpe_raw"),
         weight_subq.label("weight_kg"),
         vdot_subq.label("vdot"),
+        workout_name_subq.label("workout_name"),
     ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
 
     if start_date is not None:
@@ -282,6 +295,7 @@ def list_activities(
             workout_rpe=_workout_rpe_from_raw(r.workout_rpe_raw),
             weight_kg=r.weight_kg,
             vdot=r.vdot,
+            workout_name=r.workout_name,
             primary_source=r.primary_source,
             stream_available=bool(r.stream_available),
         )
@@ -423,6 +437,9 @@ def get_activity(
     metrics = conn.execute(
         select(activity_metric).where(activity_metric.c.activity_id == activity_id)
     ).fetchall()
+    workout_name_row = conn.execute(
+        select(activity_workout.c.name).where(activity_workout.c.activity_id == activity_id)
+    ).fetchone()
     metrics_by_key = {m.metric_key: m.value_num for m in metrics}
 
     estimated_sweat_loss_ml = None
@@ -449,6 +466,7 @@ def get_activity(
         workout_rpe=_workout_rpe_from_raw(metrics_by_key.get("fit.session.workout_rpe")),
         weight_kg=metrics_by_key.get("fit.user_profile.weight"),
         vdot=metrics_by_key.get(VDOT_METRIC_KEY),
+        workout_name=workout_name_row.name if workout_name_row is not None else None,
         primary_source=row.primary_source,
         stream_available=stream_row is not None,
         moving_duration_s=row.moving_duration_s,
@@ -682,6 +700,53 @@ def get_activity_context(
         recent=recent,
         fastest=fastest,
     )
+
+
+@router.get("/activities/{activity_id}/insights")
+def get_activity_insights(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> list[InsightOut]:
+    """Point-in-time insights for this one activity -- e.g. "your fastest 10 km to date" or a
+    "current streak" -- computed fresh at request time, not read from the athlete-wide `insight`
+    table (unlike GET /insights). Always bounded to activities at-or-before this one's own
+    `local_date`, never anything that happened later: browsing an old run must never leak
+    knowledge of runs that hadn't happened yet. See insights/rules_activity.py.
+    """
+    row = conn.execute(
+        select(activity.c.local_date).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+    if row.local_date is None:
+        return []
+
+    as_of = date.fromisoformat(row.local_date)
+    all_activities = load_insight_activities(conn, athlete_id)
+    bounded = [a for a in all_activities if a.local_date <= row.local_date]
+    insights = compute_activity_insights(activity_id, bounded, as_of)
+
+    computed_at = datetime.now(UTC)
+    return [
+        InsightOut(
+            kind=i.kind,
+            window=i.window,
+            title=i.title,
+            detail=i.detail,
+            value_num=i.value_num,
+            metric_key=i.metric_key,
+            sport_family=i.sport_family,
+            activity_id=i.activity_id,
+            local_date=i.local_date,
+            computed_at=computed_at,
+        )
+        for i in insights
+    ]
 
 
 @router.get("/activities/{activity_id}/weather")

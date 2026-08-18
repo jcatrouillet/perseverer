@@ -131,10 +131,10 @@ export function drawRoutePoster(
   const projected = projectPoints(points, width, height, POSTER_PADDING);
   drawRouteTrace(ctx, points, projected, distanceM, elapsedS);
 
-  ctx.font = "600 22px system-ui, sans-serif";
+  ctx.font = "600 32px system-ui, sans-serif";
   ctx.textBaseline = "alphabetic";
   const lines = [stats.distanceLabel, stats.durationLabel, stats.paceLabel];
-  const lineHeight = 28;
+  const lineHeight = 40;
   lines.forEach((line, i) => {
     drawOutlinedText(
       ctx,

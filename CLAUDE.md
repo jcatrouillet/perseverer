@@ -110,7 +110,7 @@ because you don't recognize it — stop, that's the bug.
   LOGICAL_METRICS`, verified field-by-field against the real database, not assumed from parser
   docstrings). See `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md`.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
-  `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Four exist now:
+  `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash
     idempotent. The universal offline importer/test harness for every other adapter. Also
     recognizes two narrow Garmin Connect-shaped health JSON filename patterns
@@ -136,6 +136,21 @@ because you don't recognize it — stop, that's the bug.
     carries), with `activities.csv`'s own totals/sport classification overlaid afterward since
     GPX/TCX carry far less than FIT. See `docs/adr/0012-phase-8-strava-merge-insights.md` for
     the real archive shape this was built against (not assumed from docs).
+  - `eufy` (`adapters/eufy.py`) — body composition (weight, body fat, muscle/bone mass, water %,
+    BMR, visceral fat, metabolic age, protein ratio, BMI) from a Eufy smart scale, via the same
+    Eufy Life app API a sibling `eufy-health-sync` project already uses in production, ported
+    directly rather than reimplemented. Garmin has no body-composition data in this project at
+    all, so this is the sole source. Unlike `garmin_connect`, deliberately NOT built around a
+    persisted token-store/never-auto-login model — no evidence Eufy's API shares Garmin's SSO
+    lockout fragility, and the sibling project's own plain-env-var, fresh-login-per-run pattern
+    has run safely, daily, unattended for months. The one `last_device_data` endpoint always
+    returns the athlete's *entire* reading history in one call (the `limit` param is silently
+    ignored, confirmed live) — no separate backfill-vs-incremental mode; every run reprocesses
+    full history, relying on content-addressed archiving and idempotent upsert to make repeat
+    runs of unchanged readings cheap no-ops. `health/eufy_parser.py` flattens *every* scalar
+    `scale_data` field into `eufy.scale.<field>` (not just the 9 fields the sibling project's
+    own extraction uses) — see `docs/DATA_DICTIONARY.md` for the full field list and unit
+    handling.
   Every `.fit` file, from any adapter (except `garmin_connect`, which only ever downloads
   activity FIT files), goes through `ingest_dispatch.ingest_fit_bytes` — archives once, tries
   the shared activity parser (`fit/parser.py`), falls back to the shared health parser
@@ -208,6 +223,7 @@ uv run alembic revision --autogenerate -m "..."   # after changing db/schema.py
 uv run sync import fit-folder <path>     # one-shot import of every .fit (+ daily_summary/hydration .json) in <path>
 uv run sync import garmin-export <path>  # backfill from a Garmin export archive (dir or .zip)
 uv run sync import garmin-connect        # on-demand incremental sync (--days to override window)
+uv run sync import eufy                  # body-composition sync (always full history, see adapters/eufy.py)
 uv run sync watch fit-folder <path>      # continuously poll <path> (--interval seconds, default 30)
 uv run sync auth login                   # interactive Garmin login (MFA prompt) — run this yourself
 uv run sync auth status                  # token store presence + age

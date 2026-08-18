@@ -27,6 +27,7 @@ if sys.stderr.encoding is not None and sys.stderr.encoding.lower() != "utf-8":
 from garminconnect import Garmin
 from sqlalchemy import func, select
 
+from sporthealth.adapters.eufy import sync_eufy
 from sporthealth.adapters.fit_folder import import_from_folder
 from sporthealth.adapters.garmin_connect import RateLimitSettings, sync_garmin_connect
 from sporthealth.adapters.garmin_export import import_garmin_export
@@ -182,6 +183,31 @@ def import_garmin_connect_cmd(
                 request_interval_s=settings.garmin_request_interval_s,
                 max_requests_per_hour=settings.garmin_max_requests_per_hour,
             ),
+        )
+    typer.echo(f"seen={summary.items_seen} new={summary.items_new} errors={len(summary.errors)}")
+    if summary.errors:
+        for e in summary.errors:
+            typer.echo(f"  {e}", err=True)
+        raise typer.Exit(code=1)
+
+
+@import_app.command("eufy")
+def import_eufy_cmd() -> None:
+    """On-demand run of the Eufy body-composition sync. The API always returns the full
+    reading history in one call, so there's no separate backfill-vs-incremental mode -- this
+    is the same call the daily scheduler makes."""
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        summary = sync_eufy(
+            conn,
+            settings.raw_archive_dir,
+            settings.parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            email=settings.eufy_email,
+            password=settings.eufy_password,
+            device_id=settings.eufy_device_id,
+            customer_id=settings.eufy_customer_id,
         )
     typer.echo(f"seen={summary.items_seen} new={summary.items_new} errors={len(summary.errors)}")
     if summary.errors:

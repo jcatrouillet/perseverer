@@ -20,6 +20,36 @@ export const CORE_METRICS = [
   "vo2max",
 ];
 export const HRV_SPO2_STRESS_METRICS = ["hrv_nightly_average", "spo2_average", "stress_average"];
+// Eufy smart scale is the only source for these (see adapters/eufy.py) -- exported so the
+// calendar rollup views (YearView/MonthView/AllTimeView) and the week/day views can reuse the
+// exact same list rather than each maintaining their own copy.
+export const BODY_COMPOSITION_METRICS = [
+  "weight_kg",
+  "bmi",
+  "body_fat_pct",
+  "muscle_mass_kg",
+  "bone_mass_kg",
+  "water_pct",
+  "bmr_kcal",
+  "visceral_fat",
+  "metabolic_age",
+  "protein_ratio_pct",
+];
+// The summary calendar views (YearView/MonthView/AllTimeView) trend body composition rather
+// than averaging it -- but the ten metrics above span wildly different magnitudes (BMR ~1500
+// vs bone mass ~3), so one shared-axis line chart would flatten the small ones to near zero.
+// Grouped instead by comparable real-world scale (see docs/DATA_DICTIONARY.md's Eufy section
+// for the actual figures this was checked against), the same way HRV/SpO2/Stress already share
+// one chart because their ranges are already close.
+export const BODY_COMPOSITION_MASS_METRICS = ["weight_kg", "muscle_mass_kg"];
+export const BODY_COMPOSITION_PERCENT_METRICS = ["body_fat_pct", "water_pct", "protein_ratio_pct"];
+export const BODY_COMPOSITION_INDEX_METRICS = [
+  "bmi",
+  "bone_mass_kg",
+  "visceral_fat",
+  "metabolic_age",
+];
+export const BODY_COMPOSITION_ENERGY_METRICS = ["bmr_kcal"];
 
 function defaultRange(): { start: string; end: string } {
   const end = new Date();
@@ -110,6 +140,11 @@ export function HealthPage() {
             title="HRV / SpO2 / Stress"
             metrics={dashboard.data.metrics}
             keys={HRV_SPO2_STRESS_METRICS}
+          />
+          <MetricSection
+            title="Body composition"
+            metrics={dashboard.data.metrics}
+            keys={BODY_COMPOSITION_METRICS}
           />
         </>
       )}

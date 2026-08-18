@@ -30,6 +30,7 @@ import {
   type PersonalRecord,
   weekdayIndex,
   weekdayLabel,
+  weeklyBestVdotSeries,
   weeklyDistanceSeries,
 } from "../runningStats";
 import { MetricChip, StatTile } from "./StatTile";
@@ -125,6 +126,7 @@ export function WeekRunningStats({
   const totalMets = metsDays.reduce((sum, [, mets]) => sum + mets, 0);
 
   const weeklySeries = weeklyDistanceSeries(plausibleRuns, rangeStart, rangeEnd);
+  const vdotWeeklySeries = weeklyBestVdotSeries(plausibleRuns, rangeStart, rangeEnd);
 
   const scatterPoints = plausibleRuns
     .filter((a) => a.distance_m != null && a.distance_m > 0 && effectiveDurationS(a) != null)
@@ -250,6 +252,46 @@ export function WeekRunningStats({
               />
               <Bar dataKey="km" isAnimationActive={false}>
                 {weeklySeries.map((p) => (
+                  <Cell
+                    key={p.weekStart}
+                    fill={p.weekStart === weekStart ? "var(--color-pace)" : "var(--color-text-faint)"}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div>
+          <h3>Weekly best VDOT</h3>
+          <ResponsiveContainer width="100%" height={140}>
+            <BarChart data={vdotWeeklySeries}>
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="weekStart"
+                stroke="var(--color-text-muted)"
+                fontSize={11}
+                tickFormatter={formatWeekTick}
+                interval={Math.max(0, Math.ceil(vdotWeeklySeries.length / 8) - 1)}
+              />
+              <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} domain={["dataMin - 2", "dataMax + 2"]} />
+              <Tooltip
+                labelFormatter={(v) => `Week of ${formatWeekTick(String(v))}`}
+                formatter={(value) => [value == null ? "No run" : `${value} VDOT`, "Best VDOT"]}
+                contentStyle={{
+                  background: "var(--color-surface-raised)",
+                  border: "1px solid var(--color-border)",
+                }}
+              />
+              <Bar
+                dataKey="vdot"
+                isAnimationActive={false}
+                cursor="pointer"
+                onClick={(point: { payload?: { activityId: string | null } }) => {
+                  if (point.payload?.activityId) setLocation(`/activities/${point.payload.activityId}`);
+                }}
+              >
+                {vdotWeeklySeries.map((p) => (
                   <Cell
                     key={p.weekStart}
                     fill={p.weekStart === weekStart ? "var(--color-pace)" : "var(--color-text-faint)"}
