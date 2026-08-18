@@ -114,7 +114,44 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
   `DI-Connect-Wellness`/`Metrics`/`Aggregator` JSON (`report_kind` mechanically derived from the
   filename — `sleepData`, `UDSFile`, `HydrationLogFile`, `TrainingReadinessDTO`,
   `EnduranceScore`, and ~20 more, all through one generic parser rather than bespoke code per
-  kind — see ADR 0005 decisions 3-4). `nap` is a single `aggregation="interval"` row per nap
+  kind — see ADR 0005 decisions 3-4). `garmin.daily_sleep.<field>` is the fourth family:
+  scalar fields flattened from `garmin_connect.py`'s own live `get_sleep_data()` fetch (added
+  after this adapter turned out to never fetch sleep at all — only `fit_folder`/`garmin_export`
+  ever produced `sleep_session` rows, both from monitoring FIT files bundled in an export
+  archive, which is why real sleep data silently stopped the moment the last export backfill's
+  own data ran out even though the daily incremental sync kept succeeding). Same
+  `sleepData`-vs-`daily_sleep` split as `garmin.export.*`/`garmin.daily_summary.*` above:
+  historical backfill and live sync are genuinely different Garmin API responses with
+  different field names for the same reading (e.g. `averageRespiration` vs
+  `averageRespirationValue`), aliased together at the `LOGICAL_METRICS` layer
+  (`api/routers/health.py`), not reconciled at ingest time. A comprehensive audit ("does every
+  metric bulk import produces also flow through the live incremental sync?") found and closed
+  the same never-fetched-live gap for five more families, each following the identical
+  `garmin.export.<report_kind>.*`-vs-`garmin.daily_*.*` split as sleep above — different Garmin
+  API responses for the same underlying reading, aliased at the `LOGICAL_METRICS` layer rather
+  than reconciled at ingest time: `garmin.daily_hrv.<field>` (`get_hrv_data`, weekly/last-night
+  HRV average and status); `garmin.daily_training_readiness.<field>` (`get_training_readiness`
+  — a JSON *array* of intraday recalculations, newest first; only `data[0]`, the current
+  reading, is kept); `garmin.daily_vo2max.<field>` / `garmin.daily_heat_altitude.<field>` /
+  `garmin.daily_training_status.<field>` (all three from one `get_training_status` call, which
+  nests exactly the data behind three separate GDPR-export report kinds —
+  `MetricsMaxMetData`/`MetricsHeatAltitudeAcclimation`/`TrainingHistory` — under
+  `mostRecentVO2Max.generic`/`mostRecentVO2Max.heatAltitudeAcclimation`/
+  `mostRecentTrainingStatus.latestTrainingStatusData`, the last keyed by device ID with the
+  first device's data taken since this athlete has only ever had one recording device); and
+  `garmin.daily_race_predictions.<field>` (`get_race_predictions`, the one exception to every
+  other live fetch's one-request-per-day shape — it accepts a date range and returns one record
+  per day in a *single* request per sync run). `garmin.hydration.<field>` gained a second
+  provenance the same way `garmin.daily_summary.*` already had two (`daily_summary_json` vs
+  `garmin_connect_daily_summary_json`): `get_hydration_data`'s live JSON shape matches the
+  *existing* `parse_hydration_json` exactly, so no new parser was needed, just a new
+  `garmin_connect_daily_hydration_json` raw-object kind. Two GDPR-export report kinds were
+  deliberately left export-only, not wired to a live fetch: `healthStatusData` (only
+  `createTimestampUTC`/`updateTimestampUTC`/`outliersCount`, the last almost always `0` — Garmin
+  internal data-quality metadata with no real athlete-facing value) and `AbnormalHrEvents` (only
+  2 real events across ~4 years of this athlete's data — too rare to justify a dedicated fetch).
+  `nap` is a single
+  `aggregation="interval"` row per nap
   (`interval_start`/`interval_end`, `value_text` = feedback) rather than a dedicated table
   (ADR 0004 decision 4). `local_date` here (and on `sleep_session` below) is still the raw UTC
   calendar date of the observation's timestamp, unlike `activity.local_date` (offset-adjusted as
@@ -124,13 +161,21 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
   `stress_level`, `respiration_rate`, `spo2`, `hrv`. Unlike `activity_stream`, a month's file is
   built up incrementally across many daily source files via `write_health_stream`'s
   merge-by-timestamp (decision 10) — re-ingesting a day is idempotent, not a duplicate.
-- **`sleep_session`** — one row per night, `start_time_utc`/`end_time_utc` derived from
-  `sleep_level_mesgs`' stage-change timestamps (not from Garmin's own sleep-duration field,
-  which can differ slightly by excluding brief wake periods — see decision 3).
-  `total_sleep_s`/`sleep_score` come from the session span and
-  `sleep_assessment_mesgs.overall_sleep_score` respectively.
-- **`sleep_stage`** — consecutive `sleep_level_mesgs` rows paired into `light | deep | rem |
-  awake` intervals against `sleep_session`.
+- **`sleep_session`** — one row per night. From a FIT file (`fit_folder`/`garmin_export`),
+  `start_time_utc`/`end_time_utc` are derived from `sleep_level_mesgs`' stage-change timestamps
+  (not from Garmin's own sleep-duration field, which can differ slightly by excluding brief wake
+  periods — see decision 3), and `sleep_score` comes from
+  `sleep_assessment_mesgs.overall_sleep_score`. From `garmin_connect`'s own live
+  `get_sleep_data()` fetch (`health/json_parser.py::parse_daily_sleep_json`), start/end come
+  from `dailySleepDTO`'s own epoch-ms `sleepStart/EndTimestampGMT`, and `sleep_score` from
+  `sleepScores.overall.value` — a different response shape, not a second implementation of the
+  same one. `total_sleep_s` comes from the session span for FIT, from `sleepTimeSeconds` (or the
+  span, as a fallback) for the live fetch.
+- **`sleep_stage`** — consecutive stage-change rows paired into `light | deep | rem | awake`
+  intervals against `sleep_session`: `sleep_level_mesgs` rows for FIT-sourced sessions,
+  `sleepLevels[].activityLevel` (0/1/2/3, confirmed by summing each value's own segment
+  durations against `dailySleepDTO`'s deep/light/rem/awakeSleepSeconds totals) for
+  `garmin_connect`'s live fetch.
 
 Daily steps/distance/calories are deliberately **not** reconstructed from `monitoring_mesgs`'
 compressed cycle fields — `daily_summary_*.json` already has Garmin's own server-computed

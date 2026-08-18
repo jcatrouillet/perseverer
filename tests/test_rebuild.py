@@ -16,11 +16,19 @@ from sporthealth.adapters.garmin_export import import_garmin_export
 from sporthealth.adapters.strava_export import import_strava_export
 from sporthealth.archive import archive_raw_bytes
 from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, athlete, health_observation, metadata
+from sporthealth.db.schema import activity, athlete, health_observation, metadata, sleep_session
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.health.eufy_parser import parse_eufy_scale_reading
 from sporthealth.health.ingest import ingest_health_batch
-from sporthealth.health.json_parser import parse_daily_summary_json
+from sporthealth.health.json_parser import (
+    parse_daily_hrv_json,
+    parse_daily_race_predictions_json,
+    parse_daily_sleep_json,
+    parse_daily_summary_json,
+    parse_daily_training_readiness_json,
+    parse_daily_training_status_json,
+    parse_hydration_json,
+)
 from sporthealth.rebuild import rebuild_database
 
 SLEEP_DATA_RECORDS = [
@@ -150,6 +158,352 @@ def test_rebuild_replays_garmin_connect_daily_summary_json(tmp_path: Path) -> No
 
     assert replayed == 1
     assert after == before == 46.0
+
+
+def test_rebuild_replays_garmin_connect_daily_sleep_json(tmp_path: Path) -> None:
+    """This raw object kind was missing from rebuild.py entirely until now -- exactly the same
+    class of bug the garmin_export_health_json test above already caught for a different kind
+    (see docs/adr/0009-...): a `sync rebuild` would have silently dropped every sleep_session
+    row garmin_connect.py's live sleep fetch ever produced."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps(
+        {
+            "dailySleepDTO": {
+                "calendarDate": "2026-08-05",
+                "sleepStartTimestampGMT": 1000,
+                "sleepEndTimestampGMT": 1000 + 8 * 3600 * 1000,
+                "sleepTimeSeconds": 8 * 3600,
+                "sleepScores": {"overall": {"value": 80}},
+            },
+            "sleepLevels": [],
+        }
+    ).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            kind="garmin_connect_daily_sleep_json",
+            content=content,
+            locator="daily-sleep/2026-08-05",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            batch=parse_daily_sleep_json(content),
+        )
+        conn.commit()
+        before = conn.execute(
+            select(sleep_session.c.total_sleep_s, sleep_session.c.sleep_score).where(
+                sleep_session.c.source == "garmin_connect",
+                sleep_session.c.local_date == "2026-08-05",
+            )
+        ).one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        after = conn.execute(
+            select(sleep_session.c.total_sleep_s, sleep_session.c.sleep_score).where(
+                sleep_session.c.source == "garmin_connect",
+                sleep_session.c.local_date == "2026-08-05",
+            )
+        ).one()
+
+    assert replayed == 1
+    assert after == before == (8 * 3600, 80.0)
+
+
+def test_rebuild_replays_garmin_connect_daily_hrv_json(tmp_path: Path) -> None:
+    """Same class of bug as the daily-sleep test above -- this raw object kind was missing from
+    rebuild.py entirely until now, which would have silently dropped every
+    garmin.daily_hrv.* observation garmin_connect.py's live HRV fetch ever produced."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps(
+        {
+            "hrvSummary": {
+                "calendarDate": "2026-08-05",
+                "weeklyAvg": 41,
+                "lastNightAvg": 37,
+                "status": "BALANCED",
+            }
+        }
+    ).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            kind="garmin_connect_daily_hrv_json",
+            content=content,
+            locator="daily-hrv/2026-08-05",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            batch=parse_daily_hrv_json(content),
+        )
+        conn.commit()
+        before = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_hrv.lastNightAvg",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        after = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_hrv.lastNightAvg",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    assert replayed == 1
+    assert after == before == 37.0
+
+
+def test_rebuild_replays_garmin_connect_daily_training_readiness_json(tmp_path: Path) -> None:
+    """Same class of bug as the daily-sleep/HRV tests above -- this raw object kind was missing
+    from rebuild.py entirely until now, which would have silently dropped every
+    garmin.daily_training_readiness.* observation garmin_connect.py's live readiness fetch ever
+    produced."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps(
+        [{"calendarDate": "2026-08-05", "timestamp": "2026-08-05T08:00:00.0", "score": 62}]
+    ).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            kind="garmin_connect_daily_training_readiness_json",
+            content=content,
+            locator="daily-training-readiness/2026-08-05",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            batch=parse_daily_training_readiness_json(content),
+        )
+        conn.commit()
+        before = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_training_readiness.score",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        after = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_training_readiness.score",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    assert replayed == 1
+    assert after == before == 62.0
+
+
+def test_rebuild_replays_garmin_connect_daily_training_status_json(tmp_path: Path) -> None:
+    """Same class of bug -- this raw object kind was missing from rebuild.py entirely until
+    now, which would have silently dropped every garmin.daily_vo2max.*/
+    garmin.daily_heat_altitude.*/garmin.daily_training_status.* observation garmin_connect.py's
+    live training-status fetch ever produced."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps(
+        {
+            "mostRecentVO2Max": {
+                "generic": {"calendarDate": "2026-08-05", "vo2MaxValue": 48.0},
+            },
+        }
+    ).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            kind="garmin_connect_daily_training_status_json",
+            content=content,
+            locator="daily-training-status/2026-08-05",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            batch=parse_daily_training_status_json(content),
+        )
+        conn.commit()
+        before = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_vo2max.vo2MaxValue",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        after = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_vo2max.vo2MaxValue",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    assert replayed == 1
+    assert after == before == 48.0
+
+
+def test_rebuild_replays_garmin_connect_daily_hydration_json(tmp_path: Path) -> None:
+    """This provenance of hydration_json was missing from rebuild.py's dispatch until now --
+    the fit_folder-sourced `hydration_json` kind was already handled, but the live
+    garmin_connect-sourced kind was not, which would have silently dropped every
+    garmin.hydration.* observation the live sync's own hydration fetch ever produced."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps(
+        {"calendarDate": "2026-08-05", "valueInML": 1500.0, "goalInML": 2000.0}
+    ).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            kind="garmin_connect_daily_hydration_json",
+            content=content,
+            locator="daily-hydration/2026-08-05",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            batch=parse_hydration_json(content),
+        )
+        conn.commit()
+        before = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.hydration.valueInML",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        after = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.hydration.valueInML",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    assert replayed == 1
+    assert after == before == 1500.0
+
+
+def test_rebuild_replays_garmin_connect_race_predictions_json(tmp_path: Path) -> None:
+    """This raw object kind was missing from rebuild.py entirely until now, which would have
+    silently dropped every garmin.daily_race_predictions.* observation garmin_connect.py's live
+    race-predictions fetch ever produced."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps([{"calendarDate": "2026-08-05", "time5K": 1320}]).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            kind="garmin_connect_race_predictions_json",
+            content=content,
+            locator="race-predictions/2026-08-01_2026-08-05",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            batch=parse_daily_race_predictions_json(content),
+        )
+        conn.commit()
+        before = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_race_predictions.time5K",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        after = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_race_predictions.time5K",
+                health_observation.c.local_date == "2026-08-05",
+            )
+        ).scalar_one()
+
+    assert replayed == 1
+    assert after == before == 1320.0
 
 
 def test_rebuild_replays_eufy_scale_reading_json(tmp_path: Path) -> None:

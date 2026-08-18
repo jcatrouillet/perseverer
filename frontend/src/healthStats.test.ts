@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { HealthDashboardMetricOut, HealthObservationOut } from "./api/types";
-import { latestObservation, mergeTrendSeries, valueForDate, weightedAverage } from "./healthStats";
+import type { HealthDashboardMetricOut, HealthObservationOut, SleepSessionOut } from "./api/types";
+import {
+  latestObservation,
+  mergeTrendSeries,
+  monthlyAverageSleepHours,
+  valueForDate,
+  weeklyAverageSleepHours,
+  weightedAverage,
+} from "./healthStats";
 
 function observation(
   metric_key: string,
@@ -143,5 +150,86 @@ describe("mergeTrendSeries", () => {
   it("skips logical metrics not present in the metrics array", () => {
     const merged = mergeTrendSeries([], ["hrv_nightly_average"]);
     expect(merged).toEqual([]);
+  });
+});
+
+function sleepSession(local_date: string, total_sleep_s: number | null): SleepSessionOut {
+  return {
+    local_date,
+    start_time_utc: `${local_date}T22:00:00Z`,
+    end_time_utc: `${local_date}T06:00:00Z`,
+    total_sleep_s,
+    sleep_score: null,
+    source: "test",
+    stages: [],
+  };
+}
+
+describe("weeklyAverageSleepHours", () => {
+  it("averages sessions within the same Monday-starting ISO week", () => {
+    // 2025-06-02 is a Monday; both nights fall in that same week.
+    const points = weeklyAverageSleepHours(
+      [sleepSession("2025-06-02", 7 * 3600), sleepSession("2025-06-04", 8 * 3600)],
+      "2025-06-02",
+      "2025-06-08",
+    );
+    expect(points).toEqual([{ weekStart: "2025-06-02", avgHours: 7.5 }]);
+  });
+
+  it("pads every week in range with null, not zero, when a week has no sessions", () => {
+    const points = weeklyAverageSleepHours(
+      [sleepSession("2025-06-02", 7 * 3600)],
+      "2025-06-02",
+      "2025-06-15",
+    );
+    expect(points).toEqual([
+      { weekStart: "2025-06-02", avgHours: 7 },
+      { weekStart: "2025-06-09", avgHours: null },
+    ]);
+  });
+
+  it("ignores sessions with a null total_sleep_s", () => {
+    const points = weeklyAverageSleepHours(
+      [sleepSession("2025-06-02", null), sleepSession("2025-06-03", 6 * 3600)],
+      "2025-06-02",
+      "2025-06-08",
+    );
+    expect(points).toEqual([{ weekStart: "2025-06-02", avgHours: 6 }]);
+  });
+});
+
+describe("monthlyAverageSleepHours", () => {
+  it("averages sessions within the same calendar month", () => {
+    const points = monthlyAverageSleepHours(
+      [sleepSession("2025-06-01", 7 * 3600), sleepSession("2025-06-15", 9 * 3600)],
+      "2025-06-01",
+      "2025-06-30",
+    );
+    expect(points).toEqual([{ month: "2025-06", avgHours: 8 }]);
+  });
+
+  it("pads every month in range with null, not zero, when a month has no sessions", () => {
+    const points = monthlyAverageSleepHours(
+      [sleepSession("2025-06-01", 7 * 3600)],
+      "2025-06-01",
+      "2025-08-01",
+    );
+    expect(points).toEqual([
+      { month: "2025-06", avgHours: 7 },
+      { month: "2025-07", avgHours: null },
+      { month: "2025-08", avgHours: null },
+    ]);
+  });
+
+  it("buckets across a year boundary correctly", () => {
+    const points = monthlyAverageSleepHours(
+      [sleepSession("2024-12-15", 6 * 3600), sleepSession("2025-01-15", 8 * 3600)],
+      "2024-12-01",
+      "2025-01-31",
+    );
+    expect(points).toEqual([
+      { month: "2024-12", avgHours: 6 },
+      { month: "2025-01", avgHours: 8 },
+    ]);
   });
 });

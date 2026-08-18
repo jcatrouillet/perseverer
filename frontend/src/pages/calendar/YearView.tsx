@@ -6,6 +6,7 @@ import {
   useCalendarMonths,
   useFitness,
   useHealthDashboard,
+  useSleep,
 } from "../../api/queries";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
@@ -13,7 +14,9 @@ import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
+import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { monthName, yearRange } from "../../dateUtils";
+import { weeklyAverageSleepHours } from "../../healthStats";
 import {
   BODY_COMPOSITION_ENERGY_METRICS,
   BODY_COMPOSITION_INDEX_METRICS,
@@ -26,6 +29,14 @@ import { personalRecords } from "../../runningStats";
 import { busiestMonth } from "../../yearStats";
 import "../../styles/calendar.css";
 
+function formatWeekTick(iso: string): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function YearView({ year }: { year: number }) {
   const { start, end } = yearRange(year);
   const priorYear = yearRange(year - 1);
@@ -36,6 +47,7 @@ export function YearView({ year }: { year: number }) {
   const priorYearMonths = useCalendarMonths(priorYear.start, priorYear.end);
   const fitness = useFitness(start, end);
   const health = useHealthDashboard(start, end);
+  const sleep = useSleep(start, end);
   const allActivities = useActivities({ startDate: start, endDate: end, limit: 500 });
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
   // Unbounded, all-history fetch (distinct from `runs`' period-scoped one) so RunningStats can
@@ -43,6 +55,7 @@ export function YearView({ year }: { year: number }) {
   // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
   const allTimeRunning = useAllActivities({ sport: "running" });
   const byMonth = new Map(months.data?.periods.map((p) => [p.period_start.slice(5, 7), p]));
+  const weeklySleep = weeklyAverageSleepHours(sleep.data ?? [], start, end);
 
   const all = allActivities.data?.items ?? [];
   const busiest = busiestMonth(all);
@@ -109,6 +122,14 @@ export function YearView({ year }: { year: number }) {
           <>
             <h3>Core daily summary — average over {year}</h3>
             <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+
+            <h3>Average weekly sleep — over {year}</h3>
+            <SleepDurationChart
+              data={weeklySleep.map((p) => ({ x: p.weekStart, hours: p.avgHours }))}
+              tickFormatter={formatWeekTick}
+              tooltipLabelFormatter={(x) => `Week of ${formatWeekTick(x)}`}
+              interval={Math.max(0, Math.ceil(weeklySleep.length / 8) - 1)}
+            />
 
             <h3>HRV / SpO2 / Stress — over {year}</h3>
             <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />

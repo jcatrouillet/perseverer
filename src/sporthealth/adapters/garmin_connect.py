@@ -48,7 +48,15 @@ from sporthealth.db.schema import ingest_run
 from sporthealth.fit.parser import parse_fit
 from sporthealth.fitness import refresh_fitness_rollup
 from sporthealth.health.ingest import HealthIngestResult, ingest_health_batch
-from sporthealth.health.json_parser import parse_daily_summary_json
+from sporthealth.health.json_parser import (
+    parse_daily_hrv_json,
+    parse_daily_race_predictions_json,
+    parse_daily_sleep_json,
+    parse_daily_summary_json,
+    parse_daily_training_readiness_json,
+    parse_daily_training_status_json,
+    parse_hydration_json,
+)
 from sporthealth.insights.engine import refresh_insights
 from sporthealth.performance import refresh_vdot
 from sporthealth.rollups import refresh_daily_and_period_rollups
@@ -244,6 +252,255 @@ class GarminConnectAdapter:
             batch=parse_daily_summary_json(content),
         )
 
+    def fetch_and_ingest_daily_sleep(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        local_date: str,
+    ) -> HealthIngestResult:
+        """One calendar day's sleep (`get_sleep_data` -- total/stage durations, sleep score,
+        overnight respiration/SpO2/HR/stress) -- previously never fetched by this adapter at
+        all, which is why sleep silently stopped the moment the last garmin_export backfill's
+        own data ran out even though the daily sync itself kept succeeding (only fit_folder and
+        garmin_export ever produced sleep_session rows, both from monitoring FIT files, not this
+        adapter). See health/json_parser.py::parse_daily_sleep_json for the response shape."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            sleep_data = self._client.get_sleep_data(local_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching sleep for {local_date}"
+            ) from e
+
+        content = json.dumps(sleep_data).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_daily_sleep_json",
+            content=content,
+            locator=f"daily-sleep/{local_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_sleep_json(content),
+        )
+
+    def fetch_and_ingest_daily_hrv(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        local_date: str,
+    ) -> HealthIngestResult:
+        """One calendar day's HRV summary (`get_hrv_data` -- weekly/last-night average, status)
+        -- same story as fetch_and_ingest_daily_sleep above: this adapter never fetched HRV at
+        all, so it silently stopped the moment the last garmin_export backfill's own data ran
+        out even though the daily sync itself kept succeeding. See
+        health/json_parser.py::parse_daily_hrv_json for the response shape."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            hrv_data = self._client.get_hrv_data(local_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching HRV for {local_date}"
+            ) from e
+
+        content = json.dumps(hrv_data).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_daily_hrv_json",
+            content=content,
+            locator=f"daily-hrv/{local_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_hrv_json(content),
+        )
+
+    def fetch_and_ingest_daily_training_readiness(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        local_date: str,
+    ) -> HealthIngestResult:
+        """One calendar day's training readiness (`get_training_readiness` -- score, level,
+        the HRV/sleep/stress/ACWR factors behind it) -- another metric this adapter never
+        fetched at all, same story as sleep/HRV above (only garmin_export's own
+        TrainingReadinessDTO report ever produced this, and that stopped the moment the last
+        backfill ran out). See health/json_parser.py::parse_daily_training_readiness_json."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            readiness = self._client.get_training_readiness(local_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching training readiness for {local_date}"
+            ) from e
+
+        content = json.dumps(readiness).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_daily_training_readiness_json",
+            content=content,
+            locator=f"daily-training-readiness/{local_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_training_readiness_json(content),
+        )
+
+    def fetch_and_ingest_daily_training_status(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        local_date: str,
+    ) -> HealthIngestResult:
+        """One calendar day's training status (`get_training_status` -- VO2max, heat/altitude
+        acclimation, and training status/fitness trend, all in one response). Covers *three*
+        GDPR-export report kinds this adapter never fetched live (MetricsMaxMetData,
+        MetricsHeatAltitudeAcclimation, TrainingHistory) -- see
+        health/json_parser.py::parse_daily_training_status_json for exactly how they map."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            status = self._client.get_training_status(local_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching training status for {local_date}"
+            ) from e
+
+        content = json.dumps(status).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_daily_training_status_json",
+            content=content,
+            locator=f"daily-training-status/{local_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_training_status_json(content),
+        )
+
+    def fetch_and_ingest_daily_hydration(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        local_date: str,
+    ) -> HealthIngestResult:
+        """One calendar day's hydration (`get_hydration_data` -- same daily-aggregate JSON
+        shape fit_folder.py's own `parse_hydration_json` already parses for a dropped
+        `hydration_*.json` file, just fetched live instead of from a file -- no new parser
+        needed, same reuse as fetch_and_ingest_daily_wellness's daily-summary shape). Never
+        fetched by this adapter before now."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            hydration = self._client.get_hydration_data(local_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching hydration for {local_date}"
+            ) from e
+
+        content = json.dumps(hydration).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_daily_hydration_json",
+            content=content,
+            locator=f"daily-hydration/{local_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_hydration_json(content),
+        )
+
+    def fetch_and_ingest_race_predictions(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        since: datetime,
+        until: datetime,
+    ) -> HealthIngestResult:
+        """Race-time predictions (`get_race_predictions`, `_type="daily"`) for the whole
+        rolling window in *one* request -- unlike every other daily fetch in this adapter, this
+        endpoint itself accepts a date range, so there's no reason to call it once per day. See
+        health/json_parser.py::parse_daily_race_predictions_json."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        start_date = since.date().isoformat()
+        end_date = until.date().isoformat()
+        try:
+            predictions = self._client.get_race_predictions(
+                startdate=start_date, enddate=end_date, _type="daily"
+            )
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted("429 from Garmin while fetching race predictions") from e
+
+        content = json.dumps(predictions).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_race_predictions_json",
+            content=content,
+            locator=f"race-predictions/{start_date}_{end_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_race_predictions_json(content),
+        )
+
 
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
@@ -346,6 +603,128 @@ def sync_garmin_connect(
                 )
                 break  # no retry loop — same contract as the activity loop above
             wellness_date += timedelta(days=1)
+
+        # Sleep -- same whole-rolling-window, idempotent-upsert, self-healing contract as daily
+        # wellness above (a night already ingested is a cheap no-op; a night whose fetch failed
+        # on a previous run just gets retried here on the next one).
+        sleep_date = since.date()
+        while sleep_date <= today:
+            try:
+                sleep_result = adapter.fetch_and_ingest_daily_sleep(
+                    conn,
+                    archive_root,
+                    parquet_dir,
+                    athlete_id=athlete_id,
+                    local_date=sleep_date.isoformat(),
+                )
+                conn.commit()
+                touched_dates |= sleep_result.affected_local_dates
+            except GarminRateLimitAborted as e:
+                conn.rollback()
+                summary.errors.append({"sleep_date": sleep_date.isoformat(), "error": str(e)})
+                break  # no retry loop — same contract as the loops above
+            sleep_date += timedelta(days=1)
+
+        # HRV -- same whole-rolling-window, idempotent-upsert, self-healing contract as sleep
+        # and daily wellness above.
+        hrv_date = since.date()
+        while hrv_date <= today:
+            try:
+                hrv_result = adapter.fetch_and_ingest_daily_hrv(
+                    conn,
+                    archive_root,
+                    parquet_dir,
+                    athlete_id=athlete_id,
+                    local_date=hrv_date.isoformat(),
+                )
+                conn.commit()
+                touched_dates |= hrv_result.affected_local_dates
+            except GarminRateLimitAborted as e:
+                conn.rollback()
+                summary.errors.append({"hrv_date": hrv_date.isoformat(), "error": str(e)})
+                break  # no retry loop — same contract as the loops above
+            hrv_date += timedelta(days=1)
+
+        # Training readiness -- same whole-rolling-window, idempotent-upsert, self-healing
+        # contract as sleep/HRV/wellness above.
+        readiness_date = since.date()
+        while readiness_date <= today:
+            try:
+                readiness_result = adapter.fetch_and_ingest_daily_training_readiness(
+                    conn,
+                    archive_root,
+                    parquet_dir,
+                    athlete_id=athlete_id,
+                    local_date=readiness_date.isoformat(),
+                )
+                conn.commit()
+                touched_dates |= readiness_result.affected_local_dates
+            except GarminRateLimitAborted as e:
+                conn.rollback()
+                summary.errors.append(
+                    {"readiness_date": readiness_date.isoformat(), "error": str(e)}
+                )
+                break  # no retry loop — same contract as the loops above
+            readiness_date += timedelta(days=1)
+
+        # Training status (VO2max, heat/altitude acclimation, fitness trend) -- same contract.
+        training_status_date = since.date()
+        while training_status_date <= today:
+            try:
+                status_result = adapter.fetch_and_ingest_daily_training_status(
+                    conn,
+                    archive_root,
+                    parquet_dir,
+                    athlete_id=athlete_id,
+                    local_date=training_status_date.isoformat(),
+                )
+                conn.commit()
+                touched_dates |= status_result.affected_local_dates
+            except GarminRateLimitAborted as e:
+                conn.rollback()
+                summary.errors.append(
+                    {"training_status_date": training_status_date.isoformat(), "error": str(e)}
+                )
+                break  # no retry loop — same contract as the loops above
+            training_status_date += timedelta(days=1)
+
+        # Hydration -- same contract.
+        hydration_date = since.date()
+        while hydration_date <= today:
+            try:
+                hydration_result = adapter.fetch_and_ingest_daily_hydration(
+                    conn,
+                    archive_root,
+                    parquet_dir,
+                    athlete_id=athlete_id,
+                    local_date=hydration_date.isoformat(),
+                )
+                conn.commit()
+                touched_dates |= hydration_result.affected_local_dates
+            except GarminRateLimitAborted as e:
+                conn.rollback()
+                summary.errors.append(
+                    {"hydration_date": hydration_date.isoformat(), "error": str(e)}
+                )
+                break  # no retry loop — same contract as the loops above
+            hydration_date += timedelta(days=1)
+
+        # Race predictions -- one range request for the whole window, not a per-day loop (see
+        # fetch_and_ingest_race_predictions's own docstring for why this endpoint is different).
+        try:
+            race_result = adapter.fetch_and_ingest_race_predictions(
+                conn,
+                archive_root,
+                parquet_dir,
+                athlete_id=athlete_id,
+                since=since,
+                until=started_at,
+            )
+            conn.commit()
+            touched_dates |= race_result.affected_local_dates
+        except GarminRateLimitAborted as e:
+            conn.rollback()
+            summary.errors.append({"error": f"race predictions: {e}"})
     except (GarminAuthRequired, GarminRateLimitAborted) as e:
         summary.errors.append({"error": str(e)})
 

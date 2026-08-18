@@ -35,7 +35,7 @@ function sumOrNull(values: (number | null)[]): number | null {
   return present.length > 0 ? present.reduce((a, b) => a + b, 0) : null;
 }
 
-const PIE_SLICE_ICON_SIZE = 14;
+const PIE_SLICE_ICON_SIZE = 22;
 const RADIAN = Math.PI / 180;
 
 // Recharts' own label renders text/lines; a sport icon needs its own placement math -- centered

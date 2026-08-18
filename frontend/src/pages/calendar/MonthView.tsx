@@ -9,6 +9,7 @@ import {
   useCalendarWeeks,
   useFitness,
   useHealthDashboard,
+  useSleep,
 } from "../../api/queries";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
@@ -17,7 +18,8 @@ import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { NotesPanel } from "../../components/NotesPanel";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
-import { monthGridWeeks, monthName, monthRange, parseIsoDate } from "../../dateUtils";
+import { SleepDurationChart } from "../../components/SleepDurationChart";
+import { eachDate, monthGridWeeks, monthName, monthRange, parseIsoDate } from "../../dateUtils";
 import {
   BODY_COMPOSITION_ENERGY_METRICS,
   BODY_COMPOSITION_INDEX_METRICS,
@@ -31,6 +33,10 @@ import { busiestWeekStart } from "../../yearStats";
 import "../../styles/calendar.css";
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function formatMonthDayTick(iso: string): string {
+  return String(parseIsoDate(iso).getUTCDate());
+}
 
 function formatBusiestWeek(monday: string): string {
   const label = new Date(`${monday}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -50,6 +56,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   const priorYearMonth = useCalendarMonths(priorYearRange.start, priorYearRange.end);
   const fitness = useFitness(start, end);
   const health = useHealthDashboard(start, end);
+  const sleep = useSleep(start, end);
   const allActivities = useActivities({ startDate: start, endDate: end, limit: 500 });
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
   // Unbounded, all-history fetch (distinct from `runs`' period-scoped one) so RunningStats can
@@ -130,6 +137,22 @@ export function MonthView({ year, month }: { year: number; month: number }) {
           <>
             <h3>Core daily summary — average over {periodLabel}</h3>
             <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+
+            <h3>Sleep duration — over {periodLabel}</h3>
+            <SleepDurationChart
+              data={eachDate(start, end).map((d) => {
+                const session = sleep.data?.find((s) => s.local_date === d);
+                return {
+                  x: d,
+                  hours:
+                    session?.total_sleep_s != null
+                      ? Math.round((session.total_sleep_s / 3600) * 10) / 10
+                      : null,
+                };
+              })}
+              tickFormatter={formatMonthDayTick}
+              interval={2}
+            />
 
             <h3>HRV / SpO2 / Stress — over {periodLabel}</h3>
             <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />

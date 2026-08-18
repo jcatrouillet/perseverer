@@ -722,6 +722,55 @@ export function weeklyBestVdotSeries(
   return points;
 }
 
+export interface VdotTrendPoint {
+  id: string;
+  /** Epoch ms (UTC midnight of local_date) -- for a numeric time x-axis, matching
+   * healthStats.ts::MergedTrendPoint's own `ts` convention. */
+  ts: number;
+  localDate: string;
+  vdot: number;
+  isRace: boolean;
+  /** This run's own VDOT was the highest of any run in its Monday-starting ISO week -- the
+   * same "best effort, not a trend line" concept weeklyBestVdotSeries already buckets down to
+   * one point per week, kept here at the individual-run level instead so every run stays
+   * visible and the performance frontier can be traced as a line through just these points. */
+  isWeeklyBest: boolean;
+  durationS: number | null;
+}
+
+/** One point per VDOT-eligible running activity -- the scatter data behind the Insights "Pace
+ * trends" chart (a run's own VDOT plotted over time, with the weekly-best-effort runs and race
+ * runs called out from the rest, per the same reasoning as bestVdot/weeklyBestVdotSeries
+ * above). Sorted chronologically so a caller can draw a line through the isWeeklyBest subset
+ * without re-sorting. */
+export function vdotTrendPoints(activities: ActivitySummary[]): VdotTrendPoint[] {
+  const bestIdByWeek = new Map<string, { vdot: number; id: string }>();
+  for (const a of activities) {
+    if (!a.local_date || a.vdot == null) continue;
+    const monday = isoDate(mondayOf(parseIsoDate(a.local_date)));
+    const current = bestIdByWeek.get(monday);
+    if (current == null || a.vdot > current.vdot) {
+      bestIdByWeek.set(monday, { vdot: a.vdot, id: a.id });
+    }
+  }
+  const bestIds = new Set([...bestIdByWeek.values()].map((v) => v.id));
+
+  const points: VdotTrendPoint[] = [];
+  for (const a of activities) {
+    if (!a.local_date || a.vdot == null) continue;
+    points.push({
+      id: a.id,
+      ts: parseIsoDate(a.local_date).getTime(),
+      localDate: a.local_date,
+      vdot: Math.round(a.vdot * 10) / 10,
+      isRace: a.is_race === true,
+      isWeeklyBest: bestIds.has(a.id),
+      durationS: effectiveDurationS(a),
+    });
+  }
+  return points.sort((a, b) => a.ts - b.ts);
+}
+
 // Above this, a "running"-tagged activity's own pace is implausible for actual running --
 // walking/hiking speed, not a genuinely slow run. Calibrated against the real archive, not
 // picked arbitrarily: across 635 real running activities, the slowest genuine run is 7.6

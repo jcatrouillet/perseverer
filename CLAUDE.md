@@ -127,7 +127,26 @@ because you don't recognize it — stop, that's the bug.
     raw but not parsed.
   - `garmin_connect` (`adapters/garmin_connect.py`) — the primary, incremental, unattended
     sync path, and the adapter most likely to break. See the safety rules below before
-    touching this file.
+    touching this file. Seven daily fetches per rolling-window date, each independently
+    rate-limited/429-abortable and self-healing on the next run: activities (FIT download),
+    `get_stats` (steps/HR/etc., `garmin.daily_summary.*`), `get_sleep_data`
+    (`garmin.daily_sleep.*` + a real `sleep_session`/`sleep_stage` row — added after this
+    adapter turned out to never fetch sleep at all, silently going stale the moment the last
+    `garmin_export` backfill's own data ran out even though the daily sync kept succeeding),
+    `get_hrv_data` (`garmin.daily_hrv.*`), `get_training_readiness`
+    (`garmin.daily_training_readiness.*`), `get_training_status` (one call covering three
+    export report kinds at once — `garmin.daily_vo2max.*`, `garmin.daily_heat_altitude.*`,
+    `garmin.daily_training_status.*`), and `get_hydration_data` (reuses the same
+    `parse_hydration_json` `fit_folder.py` already had, just a new `kind` string). Plus one
+    *range* fetch per run (not per-date): `get_race_predictions` covers the whole rolling
+    window in a single call (`garmin.daily_race_predictions.*`). A comprehensive metric-by-
+    metric audit (checking every `garmin.export.*` report kind against the installed
+    `garminconnect` package's live `get_*` methods) found and closed this same "never fetched
+    live" gap for all of the above — each had silently gone stale the moment the last
+    `garmin_export` backfill's data ran out, exactly like sleep above, even though the daily
+    sync kept reporting success. Two low-value report kinds (`healthStatusData` — internal
+    data-quality metadata, `outliersCount` almost always 0; `AbnormalHrEvents` — only 2 events
+    across ~4 years of real data) were deliberately left export-only rather than wired live.
   - `strava_export` (`adapters/strava_export.py`, Phase 8) — historical backfill from Strava's
     "export your data" archive, zero network calls. `.fit`/`.fit.gz` files go through the same
     `ingest_dispatch.ingest_fit_bytes` as every other source (often literally the same Garmin

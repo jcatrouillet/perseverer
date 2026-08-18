@@ -47,10 +47,16 @@ LOGICAL_METRICS: dict[str, list[str]] = {
         "garmin.export.MetricsMaxMetData.vo2MaxValue",
         "fit.max_met_data.vo2_max",
         "garmin.export.ActivityVo2Max.vo2MaxValue",
+        # garmin_connect's live get_training_status() equivalent (see
+        # health/json_parser.py::parse_daily_training_status_json) -- without this alias,
+        # VO2max would have gone stale the same way sleep/HRV did, since none of the three
+        # aliases above were ever fetched by the daily incremental sync.
+        "garmin.daily_vo2max.vo2MaxValue",
     ],
     "hrv_nightly_average": [
         "hrv.last_night_average",
         "garmin.export.TrainingReadinessDTO.hrvWeeklyAverage",
+        "garmin.daily_hrv.lastNightAvg",
     ],
     "spo2_average": [
         "garmin.daily_summary.averageSpo2",
@@ -66,7 +72,15 @@ LOGICAL_METRICS: dict[str, list[str]] = {
     # current through the latest ingested night). Kept as separate logical metrics rather than
     # merged, since a caller (the week view's wellness charts) wants to show both at once.
     "waking_respiration_rate": ["garmin.daily_summary.avgWakingRespirationValue"],
-    "sleep_respiration_rate": ["garmin.export.sleepData.averageRespiration"],
+    # garmin.export.sleepData is the historical GDPR-export shape (garmin_export backfill only);
+    # garmin.daily_sleep is the live equivalent (garmin_connect's own daily sync, see
+    # health/json_parser.py::parse_daily_sleep_json) -- same reading, different field name
+    # (`averageRespiration` vs `averageRespirationValue`) because the two are genuinely
+    # different Garmin API responses, not a naming inconsistency to paper over.
+    "sleep_respiration_rate": [
+        "garmin.export.sleepData.averageRespiration",
+        "garmin.daily_sleep.averageRespirationValue",
+    ],
     # Body composition -- Eufy smart scale is the only source (see adapters/eufy.py), so each
     # of these is a single-alias entry, not a merge. The curated, human-meaningful subset of
     # the ~24 raw eufy.scale.* fields that get promoted to the dashboard; the rest are still

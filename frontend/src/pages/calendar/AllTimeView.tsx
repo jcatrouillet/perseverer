@@ -4,14 +4,16 @@
 // than a new backend endpoint, matching the client-aggregation pattern YearView/MonthView
 // already use -- the one difference is pagination, since "all time" can exceed a single
 // request's 500-row cap in a way a single year never does yet.
-import { useAllActivities, useFitness, useHealthDashboard } from "../../api/queries";
+import { useAllActivities, useFitness, useHealthDashboard, useSleep } from "../../api/queries";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
+import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../../dateUtils";
+import { monthlyAverageSleepHours } from "../../healthStats";
 import {
   BODY_COMPOSITION_ENERGY_METRICS,
   BODY_COMPOSITION_INDEX_METRICS,
@@ -22,6 +24,26 @@ import {
 } from "../HealthPage";
 import { busiestYear } from "../../yearStats";
 import "../../styles/calendar.css";
+
+const SHORT_MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function formatMonthTick(yyyyMm: string): string {
+  const [year, month] = yyyyMm.split("-");
+  return `${SHORT_MONTH_NAMES[Number(month) - 1]} ${year}`;
+}
 
 export function AllTimeView() {
   const allActivities = useAllActivities({});
@@ -38,6 +60,16 @@ export function AllTimeView() {
 
   const fitness = useFitness(start, end);
   const health = useHealthDashboard(start, end);
+  const sleep = useSleep(start, end);
+  // Bounded to when sleep data actually starts, not the full activity history range above --
+  // this athlete's activities go back to 2016 but sleep tracking (a wearable, arriving years
+  // later) doesn't, so padding from `start` would produce years of leading empty months with
+  // nothing to show.
+  const sleepDates = (sleep.data ?? []).map((s) => s.local_date).sort();
+  const monthlySleep =
+    sleepDates.length > 0
+      ? monthlyAverageSleepHours(sleep.data ?? [], sleepDates[0]!, sleepDates[sleepDates.length - 1]!)
+      : [];
   const runs = all.filter((a) => a.sport === "running");
   const busiest = busiestYear(all);
 
@@ -80,6 +112,13 @@ export function AllTimeView() {
           <>
             <h3>Core daily summary — average over all time</h3>
             <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+
+            <h3>Average monthly sleep — over all time</h3>
+            <SleepDurationChart
+              data={monthlySleep.map((p) => ({ x: p.month, hours: p.avgHours }))}
+              tickFormatter={formatMonthTick}
+              interval={Math.max(0, Math.ceil(monthlySleep.length / 10) - 1)}
+            />
 
             <h3>HRV / SpO2 / Stress — over all time</h3>
             <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />

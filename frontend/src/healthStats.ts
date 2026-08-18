@@ -1,4 +1,5 @@
-import type { HealthDashboardMetricOut, HealthObservationOut } from "./api/types";
+import type { HealthDashboardMetricOut, HealthObservationOut, SleepSessionOut } from "./api/types";
+import { isoDate, mondayOf, parseIsoDate } from "./dateUtils";
 
 /** Weighted average across every day with data -- `sum(value_sum) / sum(n_observations)`, the
  * same "weighted, not naive average-of-averages" rule the backend's own period rollups use
@@ -80,4 +81,89 @@ export function mergeTrendSeries(
     }
   }
   return Array.from(byDate.values()).sort((a, b) => a.ts - b.ts);
+}
+
+export interface WeeklySleepPoint {
+  weekStart: string;
+  avgHours: number | null;
+}
+
+/** One bucket per Monday-starting ISO week from `startDate` through `endDate`, each holding the
+ * *average* nightly sleep duration among that week's sessions -- same "pad every week, null (not
+ * zero) for one with nothing" convention as runningStats.ts's weeklyDistanceSeries/
+ * weeklyBestVdotSeries, just averaged instead of summed since a missing night shouldn't drag a
+ * week's average toward zero the way it would drag a distance total down. */
+export function weeklyAverageSleepHours(
+  sessions: SleepSessionOut[],
+  startDate: string,
+  endDate: string,
+): WeeklySleepPoint[] {
+  const hoursByWeek = new Map<string, number[]>();
+  for (const s of sessions) {
+    if (s.total_sleep_s == null) continue;
+    const monday = isoDate(mondayOf(parseIsoDate(s.local_date)));
+    const hours = hoursByWeek.get(monday) ?? [];
+    hours.push(s.total_sleep_s / 3600);
+    hoursByWeek.set(monday, hours);
+  }
+
+  const points: WeeklySleepPoint[] = [];
+  const cursor = mondayOf(parseIsoDate(startDate));
+  const last = parseIsoDate(endDate);
+  while (cursor <= last) {
+    const weekStart = isoDate(cursor);
+    const hours = hoursByWeek.get(weekStart);
+    points.push({
+      weekStart,
+      avgHours:
+        hours && hours.length > 0
+          ? Math.round((hours.reduce((a, b) => a + b, 0) / hours.length) * 10) / 10
+          : null,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+  return points;
+}
+
+export interface MonthlySleepPoint {
+  /** "YYYY-MM" */
+  month: string;
+  avgHours: number | null;
+}
+
+/** One bucket per calendar month from `startDate` through `endDate` (both "YYYY-MM-DD"), each
+ * holding the average nightly sleep duration among that month's sessions -- the monthly
+ * counterpart to weeklyAverageSleepHours above, for the all-time view's much longer span. */
+export function monthlyAverageSleepHours(
+  sessions: SleepSessionOut[],
+  startDate: string,
+  endDate: string,
+): MonthlySleepPoint[] {
+  const hoursByMonth = new Map<string, number[]>();
+  for (const s of sessions) {
+    if (s.total_sleep_s == null) continue;
+    const month = s.local_date.slice(0, 7);
+    const hours = hoursByMonth.get(month) ?? [];
+    hours.push(s.total_sleep_s / 3600);
+    hoursByMonth.set(month, hours);
+  }
+
+  const points: MonthlySleepPoint[] = [];
+  const cursor = new Date(
+    Date.UTC(Number(startDate.slice(0, 4)), Number(startDate.slice(5, 7)) - 1, 1),
+  );
+  const last = new Date(Date.UTC(Number(endDate.slice(0, 4)), Number(endDate.slice(5, 7)) - 1, 1));
+  while (cursor <= last) {
+    const month = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}`;
+    const hours = hoursByMonth.get(month);
+    points.push({
+      month,
+      avgHours:
+        hours && hours.length > 0
+          ? Math.round((hours.reduce((a, b) => a + b, 0) / hours.length) * 10) / 10
+          : null,
+    });
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return points;
 }

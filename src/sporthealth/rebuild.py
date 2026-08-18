@@ -47,7 +47,12 @@ from sporthealth.gpx.parser import parse_gpx
 from sporthealth.health.eufy_parser import parse_eufy_scale_reading
 from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import (
+    parse_daily_hrv_json,
+    parse_daily_race_predictions_json,
+    parse_daily_sleep_json,
     parse_daily_summary_json,
+    parse_daily_training_readiness_json,
+    parse_daily_training_status_json,
     parse_garmin_export_json,
     parse_hydration_json,
 )
@@ -158,13 +163,60 @@ def rebuild_database(
                 batch=parse_daily_summary_json(content),
             )
             touched_dates |= health_result.affected_local_dates
-        elif row.kind == "hydration_json":
+        elif row.kind == "garmin_connect_daily_sleep_json":
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_daily_sleep_json(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind == "garmin_connect_daily_hrv_json":
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_daily_hrv_json(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind in ("hydration_json", "garmin_connect_daily_hydration_json"):
+            # Same JSON shape, two provenances -- see the daily_summary_json branch above for
+            # the identical reasoning.
             health_result = ingest_health_batch(
                 conn,
                 parquet_dir,
                 athlete_id=athlete_id,
                 source=row.source,
                 batch=parse_hydration_json(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind == "garmin_connect_daily_training_readiness_json":
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_daily_training_readiness_json(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind == "garmin_connect_daily_training_status_json":
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_daily_training_status_json(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind == "garmin_connect_race_predictions_json":
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_daily_race_predictions_json(content),
             )
             touched_dates |= health_result.affected_local_dates
         elif row.kind == "eufy_scale_reading_json":

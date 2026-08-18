@@ -31,6 +31,7 @@ import {
   scatterPointOpacities,
   shortRunHeatPct,
   streamSpeedValue,
+  vdotTrendPoints,
   weekdayIndex,
   weekdayStats,
   weeklyDistanceSeries,
@@ -670,5 +671,48 @@ describe("weeklyDistanceSeries", () => {
     const activities = [activity("2025-06-02", 5000)];
     const series = weeklyDistanceSeries(activities, "2025-06-02", "2025-06-15");
     expect(series.map((p) => p.km)).toEqual([5, 0]);
+  });
+});
+
+describe("vdotTrendPoints", () => {
+  it("skips activities with no VDOT", () => {
+    const activities = [
+      activity("2025-06-02", 5000, { vdot: null }),
+      activity("2025-06-03", 5000, { vdot: 40 }),
+    ];
+    expect(vdotTrendPoints(activities).map((p) => p.localDate)).toEqual(["2025-06-03"]);
+  });
+
+  it("flags the single highest-VDOT run in each Monday-starting week as isWeeklyBest", () => {
+    const activities = [
+      activity("2025-06-02", 5000, { vdot: 35 }), // week of 2025-06-02 (Mon)
+      activity("2025-06-04", 5000, { vdot: 42 }), // same week, higher VDOT
+      activity("2025-06-09", 5000, { vdot: 30 }), // next week, alone
+    ];
+    const points = vdotTrendPoints(activities);
+    const byDate = new Map(points.map((p) => [p.localDate, p.isWeeklyBest]));
+    expect(byDate.get("2025-06-02")).toBe(false);
+    expect(byDate.get("2025-06-04")).toBe(true);
+    expect(byDate.get("2025-06-09")).toBe(true);
+  });
+
+  it("flags is_race from the activity, independent of isWeeklyBest", () => {
+    const activities = [activity("2025-06-02", 5000, { vdot: 35, is_race: true })];
+    const points = vdotTrendPoints(activities);
+    expect(points[0]!.isRace).toBe(true);
+  });
+
+  it("sorts points chronologically regardless of input order", () => {
+    const activities = [
+      activity("2025-06-09", 5000, { vdot: 30 }),
+      activity("2025-06-02", 5000, { vdot: 35 }),
+    ];
+    const points = vdotTrendPoints(activities);
+    expect(points.map((p) => p.localDate)).toEqual(["2025-06-02", "2025-06-09"]);
+  });
+
+  it("rounds vdot to one decimal place", () => {
+    const activities = [activity("2025-06-02", 5000, { vdot: 35.449 })];
+    expect(vdotTrendPoints(activities)[0]!.vdot).toBe(35.4);
   });
 });

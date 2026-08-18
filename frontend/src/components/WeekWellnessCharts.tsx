@@ -3,11 +3,10 @@
 // respiration reuse HealthTrendChart (the same component MonthView's own Health card already
 // uses) rather than a second implementation; sleep duration comes from GET /sleep, a different
 // endpoint HealthTrendChart doesn't read, so it gets its own small bar chart here.
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-
 import type { HealthDashboardMetricOut, SleepSessionOut } from "../api/types";
 import { eachDate } from "../dateUtils";
 import { HealthTrendChart } from "./HealthTrendChart";
+import { SleepDurationChart } from "./SleepDurationChart";
 
 function formatDayTick(iso: string): string {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
@@ -73,26 +72,10 @@ export function WeekWellnessCharts({
       {hasSleepData && (
         <>
           <h3>Sleep duration</h3>
-          <ResponsiveContainer width="100%" height={140}>
-            <BarChart data={sleepData}>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="local_date"
-                tickFormatter={formatDayTick}
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-              />
-              <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} unit="h" />
-              <Tooltip
-                formatter={(value) => [`${value} h`, "Sleep"]}
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <Bar dataKey="hours" fill="var(--color-cadence)" isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+          <SleepDurationChart
+            data={sleepData.map((p) => ({ x: p.local_date, hours: p.hours }))}
+            tickFormatter={formatDayTick}
+          />
         </>
       )}
 
