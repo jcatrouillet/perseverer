@@ -97,3 +97,14 @@ def test_leading_whitespace_before_xml_declaration_is_tolerated() -> None:
     assert batch.kind == "activity"
     assert batch.activity is not None
     assert len(batch.activity.stream) == 2
+
+
+def test_utc_offset_is_derived_from_the_first_trackpoints_coordinates() -> None:
+    # TCX carries no local-time field of its own either -- every <Time> is UTC -- so the offset
+    # has to come from where the activity actually happened. This fixture's coordinates are the
+    # San Jose, CA area (Pacific time); in June that's PDT, UTC-7.
+    batch = parse_tcx(_TCX_WITH_LAP)
+    assert batch.activity is not None
+    a = batch.activity
+    assert a.tz_name == "America/Los_Angeles"
+    assert a.utc_offset_s == -7 * 3600

@@ -13,9 +13,20 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
   through `DateTime(timezone=True)` (a value written as aware UTC comes back naive on read),
   so declaring `timezone=True` would advertise a guarantee the backend can't keep. See
   `docs/adr/0002-phase-1-schema-and-ingestion.md` decision 10. `activity.utc_offset_s` carries
-  the local UTC offset in seconds separately, so "what time was it there" stays recoverable;
-  `tz_name` (IANA zone name) is reserved but not yet populated — FIT files don't carry it
-  directly, and deriving it from GPS coordinates is a deferred enhancement.
+  the local UTC offset in seconds separately, so "what time was it there" stays recoverable.
+  FIT files carry their own `local_timestamp` field (`fit/parser.py::_derive_utc_offset_s`
+  diffs it against `timestamp`) — occasionally corrupt on real devices (confirmed: 14 real
+  indoor-cycling activities with no GPS fix came back with an offset off by roughly a billion
+  seconds), so an implausible result (`abs(offset) > 16h`) falls back to 0 rather than silently
+  shifting `local_date` by decades. GPX/TCX carry no local-time field at all — every timestamp
+  is UTC Zulu — so their offset is derived from the activity's own first recorded GPS point via
+  `timezonefinder` + `zoneinfo` (`timezone_lookup.py`), which also resolves the true IANA
+  `tz_name` (correctly handling DST for that specific date); this only produced a byte-for-byte
+  UTC-as-local assumption before, silently shifting some activities onto the wrong calendar day
+  for any non-UTC athlete (confirmed against a real Strava activity: recorded 00:03 UTC,
+  actually 2022-08-25 local in `America/Los_Angeles`, previously stored as 2022-08-26).
+  `tz_name` on FIT-sourced activities is still unpopulated — FIT doesn't carry a zone name
+  directly, only the numeric offset.
 - Every `metric_definition` row records `first_seen_at` and `first_seen_source` — provenance
   isn't just per-value, it's per-metric-existing-at-all.
 - Position (lat/lon) is stored as decimal degrees, converted from FIT's native semicircle

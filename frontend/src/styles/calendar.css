@@ -1,5 +1,15 @@
 /* Year/Month/Week calendar view styles. Imported once from each calendar page. */
 
+.calendar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.calendar-header h1 {
+  margin: 0;
+}
+
 .month-tile-grid {
   margin-top: var(--space-4);
 }

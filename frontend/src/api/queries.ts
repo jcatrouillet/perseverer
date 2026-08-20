@@ -3,10 +3,11 @@
 // can be created from either the calendar page or the activity detail page.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiGet, apiPatch, apiPost, apiPut } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 import type {
   ActivityContextOut,
   ActivityDetail,
+  ActivityLocationOut,
   ActivityMapPointOut,
   ActivityNameOverrideOut,
   ActivityRouteOut,
@@ -19,6 +20,8 @@ import type {
   ActivityWorkoutOut,
   CalendarResponse,
   FitnessDailyRollupOut,
+  GoalOut,
+  GoalProgressOut,
   HealthDashboardOut,
   HealthObservationOut,
   HrZoneConfigIn,
@@ -134,6 +137,20 @@ export function useActivities(filters: ActivityFilters) {
  * an "all time" view can span a decade-plus of history, well past what's fine for a single
  * year/month view's one-shot fetch. Returns a flat array (not a Page<>), since every caller
  * just wants the full list to aggregate over client-side. */
+/** Distinct years with at least one activity -- powers DateNavigator's year strip. Deliberately
+ * NOT `useAllActivities({})`: that pages through every activity summary in the whole history
+ * just to read `local_date`'s year off each one, which became the single slowest thing on every
+ * calendar page (DateNavigator renders on all of them) once activity count reached the
+ * thousands. `staleTime: Infinity` because this only changes when a brand-new year's first
+ * activity is ingested -- not worth refetching on every navigation. */
+export function useActivityYears() {
+  return useQuery({
+    queryKey: ["activity-years"],
+    queryFn: () => apiGet<number[]>("/api/v1/activities/years"),
+    staleTime: Infinity,
+  });
+}
+
 export function useAllActivities(filters: Omit<ActivityFilters, "limit" | "offset">) {
   return useQuery({
     queryKey: ["all-activities", filters],
@@ -223,6 +240,28 @@ export function useActivityWeather(activityId: string, enabled: boolean) {
     queryKey: ["activity-weather", activityId],
     queryFn: () => apiGet<ActivityWeatherOut>(`/api/v1/activities/${activityId}/weather`),
     enabled,
+  });
+}
+
+/** City/town or national park name for the activity's GPS start point -- same gating rationale
+ * as useActivityWeather above (only worth asking once route.start_lat is already known to
+ * exist). On a cache miss the backend answers `available: false` immediately and kicks off the
+ * real Nominatim lookup as a background task rather than blocking the response on it (the
+ * project's own 1-req/s throttle for that vendor made the first-ever view of *any* activity
+ * noticeably slow before this) -- so a `false` result here briefly polls to pick up the
+ * now-cached value once that background fetch lands, capped at a few attempts rather than
+ * forever, for the rare activity whose location genuinely never resolves. Once available, it's
+ * cached indefinitely (staleTime: Infinity) -- a completed activity's location never changes. */
+export function useActivityLocation(activityId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["activity-location", activityId],
+    queryFn: () => apiGet<ActivityLocationOut>(`/api/v1/activities/${activityId}/location`),
+    enabled,
+    staleTime: Infinity,
+    refetchInterval: (query) => {
+      if (query.state.data?.available) return false;
+      return query.state.dataUpdateCount < 5 ? 2000 : false;
+    },
   });
 }
 
@@ -380,6 +419,50 @@ export function useSetHrZoneConfig() {
     mutationFn: (body: HrZoneConfigIn) => apiPut<HrZoneConfigOut>("/api/v1/settings/hr-zones", body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["hr-zone-config"] });
+    },
+  });
+}
+
+/** A distance goal for a whole calendar year or month, plus its progress line -- `periodStart`
+ * is "YYYY" for period_type "year", "YYYY-MM" for "month" (see goals.py::period_bounds).
+ * `available: false` in the response means no goal is set for this period yet, not an error. */
+export function useGoalProgress(periodType: "year" | "month", periodStart: string) {
+  return useQuery({
+    queryKey: ["goal-progress", periodType, periodStart],
+    queryFn: () =>
+      apiGet<GoalProgressOut>(
+        `/api/v1/goals${buildQuery({ period_type: periodType, period_start: periodStart })}`,
+      ),
+  });
+}
+
+export interface SetGoalInput {
+  period_type: "year" | "month";
+  period_start: string;
+  sport: string | null;
+  target_distance_m: number;
+}
+
+export function useSetGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SetGoalInput) => apiPut<GoalOut>("/api/v1/goals", body),
+    onSuccess: (_goal, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["goal-progress", variables.period_type, variables.period_start],
+      });
+    },
+  });
+}
+
+export function useDeleteGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (goal: GoalOut) => apiDelete<void>(`/api/v1/goals/${goal.id}`),
+    onSuccess: (_void, goal) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["goal-progress", goal.period_type, goal.period_start],
+      });
     },
   });
 }

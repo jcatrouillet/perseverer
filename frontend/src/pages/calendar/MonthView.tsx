@@ -13,6 +13,7 @@ import {
 } from "../../api/queries";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
+import { GoalButton } from "../../components/GoalButton";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { NotesPanel } from "../../components/NotesPanel";
@@ -96,7 +97,14 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   return (
     <main>
       <DateNavigator year={year} month={month} />
-      <h1>{periodLabel}</h1>
+      <div className="calendar-header">
+        <h1>{periodLabel}</h1>
+        <GoalButton
+          periodType="month"
+          periodStart={`${year}-${String(month).padStart(2, "0")}`}
+          periodLabel={periodLabel}
+        />
+      </div>
       {calendar.isLoading && <p>Loading…</p>}
       {calendar.isError && <p role="alert">Could not load the month.</p>}
 

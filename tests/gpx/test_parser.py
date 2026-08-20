@@ -118,3 +118,25 @@ def test_leading_whitespace_before_xml_declaration_is_tolerated() -> None:
     assert batch.kind == "activity"
     assert batch.activity is not None
     assert len(batch.activity.stream) == 2
+
+
+def test_utc_offset_is_derived_from_the_first_trackpoints_coordinates() -> None:
+    # GPX carries no local-time field of its own -- every <time> is UTC -- so the offset has to
+    # come from where the activity actually happened. _BARE_GPX's coordinates are Bryce Canyon,
+    # Utah (Mountain time); in April that's MDT, UTC-6.
+    batch = parse_gpx(_BARE_GPX)
+    assert batch.activity is not None
+    a = batch.activity
+    assert a.tz_name == "America/Denver"
+    assert a.utc_offset_s == -6 * 3600
+
+
+def test_utc_offset_derivation_uses_a_real_recorded_point_not_a_fixed_default() -> None:
+    # _EXTENDED_GPX's coordinates are the San Jose, CA area (Pacific time); confirms a
+    # *different* real GPS point resolves to a genuinely different zone/offset, not some
+    # hardcoded stand-in value shared by every fixture.
+    batch = parse_gpx(_EXTENDED_GPX)
+    assert batch.activity is not None
+    a = batch.activity
+    assert a.tz_name == "America/Los_Angeles"
+    assert a.utc_offset_s == -7 * 3600

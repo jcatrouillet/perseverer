@@ -25,6 +25,7 @@ from sporthealth.api.routers import (
     auth,
     calendar,
     fitness,
+    goals,
     health,
     insights,
     notes,
@@ -61,6 +62,7 @@ app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(fitness.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")
+app.include_router(goals.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 
 

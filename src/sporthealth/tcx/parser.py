@@ -32,6 +32,7 @@ from sporthealth.fit.types import (
     ParsedLap,
     StreamPoint,
 )
+from sporthealth.timezone_lookup import offset_from_coordinates
 
 _LatLon = tuple[float, float]
 _BBox = tuple[float, float, float, float]
@@ -227,10 +228,18 @@ def parse_tcx(content: bytes) -> CanonicalBatch:
     start_time = stream[0].timestamp_utc
     duration_s = (stream[-1].timestamp_utc - start_time).total_seconds()
     route_start, route_end, route_bbox = _route_endpoints(route_points)
+    # TCX carries no local-time field of its own either -- every <Time> is UTC -- same fix as
+    # gpx/parser.py, see timezone_lookup.py.
+    utc_offset_s, tz_name = (
+        offset_from_coordinates(route_points[0][0], route_points[0][1], start_time)
+        if route_points
+        else (0, None)
+    )
 
     activity = CanonicalActivity(
         start_time_utc=start_time,
-        utc_offset_s=0,
+        utc_offset_s=utc_offset_s,
+        tz_name=tz_name,
         sport=(sport_attr or "unknown").lower(),
         sub_sport=None,
         name=None,

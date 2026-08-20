@@ -10,6 +10,7 @@ import {
   useActivity,
   useActivityContext,
   useActivityInsights,
+  useActivityLocation,
   useActivitySources,
   useActivityStream,
   useActivityWeather,
@@ -69,6 +70,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
     activity.data != null && isRunningSport(activity.data.sport),
   );
   const weather = useActivityWeather(id, activity.data?.route?.start_lat != null);
+  const location = useActivityLocation(id, activity.data?.route?.start_lat != null);
   const workout = useActivityWorkout(id);
   const hrZoneConfig = useHrZoneConfig();
   const sources = useActivitySources(id);
@@ -177,6 +179,9 @@ export function ActivityDetailPage({ id }: { id: string }) {
       </div>
       <p className="activity-detail__meta">
         {a.local_date ?? a.start_time_utc.slice(0, 10)} · {localTimeLabel(a)}
+        {location.data?.available && location.data.location_name && (
+          <> · {location.data.location_name}</>
+        )}
         {a.device && a.device.manufacturer && ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
       </p>
       {weather.data && <ActivityWeather weather={weather.data} />}

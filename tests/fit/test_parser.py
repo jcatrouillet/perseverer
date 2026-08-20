@@ -6,11 +6,18 @@ validate this parser during development — those carry real health/location dat
 never committed. Cross-checked against fitdecode, an independent parser, for basic sanity.
 """
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import fitdecode
 
-from sporthealth.fit.parser import _parse_workout, _time_in_zone_metrics, parse_fit
+from sporthealth.fit.parser import (
+    FIT_EPOCH,
+    _derive_utc_offset_s,
+    _parse_workout,
+    _time_in_zone_metrics,
+    parse_fit,
+)
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_run.fit"
 
@@ -29,6 +36,24 @@ def test_parses_synthetic_activity() -> None:
     assert a.device is not None
     assert a.device.serial_number == "999888777"
     assert a.utc_offset_s == -28800  # baked into local_timestamp in the fixture
+
+
+def test_derive_utc_offset_s_plausible_value_is_kept() -> None:
+    ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
+    utc_seconds = (ts - FIT_EPOCH).total_seconds()
+    # -8h local (PST): local_timestamp is FIT-epoch-relative seconds at the local wall clock.
+    local_ts = utc_seconds - 8 * 3600
+    offset = _derive_utc_offset_s({"timestamp": ts, "local_timestamp": local_ts})
+    assert offset == -8 * 3600
+
+
+def test_derive_utc_offset_s_implausible_value_falls_back_to_zero() -> None:
+    # A real device quirk seen in 14 real indoor-cycling activities (no GPS fix): local_timestamp
+    # comes back corrupt, producing an offset nowhere near a real timezone (~1.1 billion seconds
+    # off) -- must not silently corrupt local_date by decades.
+    ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
+    offset = _derive_utc_offset_s({"timestamp": ts, "local_timestamp": -1_102_564_764})
+    assert offset == 0
 
 
 def test_stream_channels_extracted() -> None:

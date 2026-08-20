@@ -7,16 +7,17 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 import duckdb
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Connection, case, func, select
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import Connection, Engine, case, func, select
 
 from sporthealth.adapters.fit_folder import _local_date, _upsert_device, insert_new_activity
 from sporthealth.adapters.strava_export import _overlay_csv_totals
-from sporthealth.api.dependencies import get_conn, get_duckdb, require_api_key
+from sporthealth.api.dependencies import get_conn, get_duckdb, get_engine, require_api_key
 from sporthealth.api.schemas.activities import (
     ActivityContextOut,
     ActivityContextRecentOut,
     ActivityDetail,
+    ActivityLocationOut,
     ActivityMapPointOut,
     ActivityMergeDecisionOut,
     ActivityMetricOut,
@@ -59,6 +60,7 @@ from sporthealth.db.schema import (
 )
 from sporthealth.db.schema import device as device_table
 from sporthealth.db.schema import split as split_table
+from sporthealth.geocoding import get_or_fetch_activity_location, read_cached_location
 from sporthealth.insights.engine import load_insight_activities
 from sporthealth.insights.rules_activity import compute_activity_insights
 from sporthealth.performance import VDOT_METRIC_KEY
@@ -302,6 +304,30 @@ def list_activities(
         for r in rows
     ]
     return Page(items=items, total=total, limit=limit, offset=offset)
+
+
+# Registered before /activities/{activity_id} -- FastAPI matches routes in registration order,
+# and /activities/years would otherwise be swallowed by {activity_id} (with activity_id="years").
+@router.get("/activities/years")
+def list_activity_years(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> list[int]:
+    """Distinct years with at least one activity, descending -- powers DateNavigator's year
+    strip. A dedicated cheap aggregate instead of paginating through every activity summary
+    just to read `local_date`'s year off each one (which is what this replaced -- with activity
+    count now in the thousands, that full-history fetch had become the single slowest thing on
+    every calendar page navigation, since DateNavigator renders on every one of them)."""
+    rows = conn.execute(
+        select(func.substr(activity.c.local_date, 1, 4))
+        .where(
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+            activity.c.local_date.is_not(None),
+        )
+        .distinct()
+    ).scalars().all()
+    return sorted({int(y) for y in rows if y}, reverse=True)
 
 
 # Registered before /activities/{activity_id} -- FastAPI matches routes in registration order,
@@ -803,6 +829,65 @@ def get_activity_weather(
         humidity_max_pct=summary.humidity_max_pct,
         weather_code=summary.weather_code,
     )
+
+
+@router.get("/activities/{activity_id}/location")
+def get_activity_location(
+    activity_id: str,
+    background_tasks: BackgroundTasks,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    engine: Engine = Depends(get_engine),
+    settings: Settings = Depends(get_settings),
+) -> ActivityLocationOut:
+    """City/town or national park name for this activity's own GPS start point, reverse-
+    geocoded via Nominatim (see geocoding.py's own docstring for the raw-first/cache-forever
+    design). `available=False` -- never a fabricated name -- whenever the activity has no GPS
+    start point to query against, nothing is cached yet, or the fetch/parse came back empty.
+
+    A cache miss never blocks this response on Nominatim's own network latency or this
+    project's 1-req/s throttle (geocoding.py) -- the real fetch runs as a background task after
+    the response is already sent, so viewing an activity for the first time is never the slow
+    one; its location just appears on the next view once cached. `sync backfill-locations`
+    (cli.py) pre-warms this cache for the whole existing archive so that in practice almost
+    every activity is already cached by the time it's ever viewed. Weather (the sibling
+    endpoint just above) still fetches inline -- Open-Meteo has no comparable rate limit to
+    respect, so there was never a reason to defer it."""
+    row = conn.execute(
+        select(route_geom.c.start_lat, route_geom.c.start_lng)
+        .select_from(activity.outerjoin(route_geom, activity.c.id == route_geom.c.activity_id))
+        .where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+
+    if row.start_lat is None or row.start_lng is None:
+        return ActivityLocationOut(available=False)
+
+    cached = read_cached_location(conn, athlete_id, activity_id)
+    if cached is not None:
+        return ActivityLocationOut(available=True, location_name=cached)
+
+    lat, lon = row.start_lat, row.start_lng
+
+    def _fetch_in_background() -> None:
+        with engine.connect() as bg_conn:
+            get_or_fetch_activity_location(
+                bg_conn,
+                settings.raw_archive_dir,
+                athlete_id=athlete_id,
+                activity_id=activity_id,
+                lat=lat,
+                lon=lon,
+            )
+            bg_conn.commit()
+
+    background_tasks.add_task(_fetch_in_background)
+    return ActivityLocationOut(available=False)
 
 
 @router.get("/activities/{activity_id}/workout")

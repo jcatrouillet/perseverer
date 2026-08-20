@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 
-import { useAllActivities } from "../api/queries";
+import { useActivityYears } from "../api/queries";
 import {
   EARLIEST_PLAUSIBLE_DATE,
   isoWeekNumber,
@@ -33,12 +33,12 @@ export function DateNavigator({
   selectedWeekStart?: string;
 }) {
   const [location] = useLocation();
-  const allActivities = useAllActivities({});
+  const activityYears = useActivityYears();
   const availableYears = (() => {
     const years = new Set<number>();
-    for (const a of allActivities.data ?? []) {
-      if (a.local_date && a.local_date >= EARLIEST_PLAUSIBLE_DATE) {
-        years.add(Number(a.local_date.slice(0, 4)));
+    for (const y of activityYears.data ?? []) {
+      if (y >= Number(EARLIEST_PLAUSIBLE_DATE.slice(0, 4))) {
+        years.add(y);
       }
     }
     // The year currently being viewed always shows, even before data has loaded or if it

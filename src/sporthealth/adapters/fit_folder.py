@@ -239,7 +239,7 @@ def insert_new_activity(
             athlete_id=athlete_id,
             start_time_utc=a.start_time_utc,
             utc_offset_s=a.utc_offset_s,
-            tz_name=None,
+            tz_name=a.tz_name,
             # Offset-adjusted, not a raw UTC date -- an evening activity in a non-UTC
             # timezone can otherwise land on the wrong calendar day relative to what the
             # athlete (and Garmin Connect/any third-party platform) considers "today",

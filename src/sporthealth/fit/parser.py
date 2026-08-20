@@ -311,7 +311,18 @@ def _parse_device(file_id_row: dict[Any, Any] | None) -> ParsedDevice | None:
     )
 
 
+_MAX_PLAUSIBLE_UTC_OFFSET_S = 16 * 3600  # real-world zones span -12h..+14h; a little slack either
+# side for old/fringe zones, but nowhere near enough to hide a units/epoch bug in the field.
+
+
 def _derive_utc_offset_s(activity_row: dict[Any, Any] | None) -> int:
+    """A real device quirk (confirmed against 14 real indoor-cycling activities, all recorded
+    with no GPS fix): `local_timestamp` occasionally comes back corrupt -- off by roughly a
+    billion seconds, wildly outside any real timezone -- rather than absent, so it can't be
+    caught by the isinstance/None checks above it. Rather than let that silently corrupt
+    `local_date` by decades (as it did before this bound existed), an implausible result falls
+    back to 0, the same "nothing better available" fallback already used when the fields are
+    missing entirely."""
     if not activity_row:
         return 0
     ts = activity_row.get("timestamp")
@@ -319,7 +330,10 @@ def _derive_utc_offset_s(activity_row: dict[Any, Any] | None) -> int:
     if not isinstance(ts, datetime) or not isinstance(local_ts, int | float):
         return 0
     utc_seconds = (ts - FIT_EPOCH).total_seconds()
-    return round(float(local_ts) - utc_seconds)
+    offset_s = round(float(local_ts) - utc_seconds)
+    if abs(offset_s) > _MAX_PLAUSIBLE_UTC_OFFSET_S:
+        return 0
+    return offset_s
 
 
 _KNOWN_RECORD_FIELDS = frozenset(

@@ -135,6 +135,11 @@ export interface ActivityWeatherOut {
   weather_code: number | null;
 }
 
+export interface ActivityLocationOut {
+  available: boolean;
+  location_name: string | null;
+}
+
 export interface ActivitySourceOut {
   link_id: number;
   source: string;
@@ -374,4 +379,29 @@ export interface LoginRequest {
 export interface LoginResponse {
   access_token: string;
   expires_at: string;
+}
+
+export interface GoalOut {
+  id: number;
+  period_type: "year" | "month";
+  period_start: string;
+  sport: string | null;
+  target_distance_m: number;
+}
+
+export interface GoalProgressPoint {
+  local_date: string;
+  cumulative_distance_m: number;
+}
+
+export interface GoalProgressOut {
+  available: boolean;
+  goal: GoalOut | null;
+  period_end: string | null;
+  daily: GoalProgressPoint[];
+  target_per_day_m: number | null;
+  current_distance_m: number | null;
+  target_distance_as_of_today_m: number | null;
+  ahead_behind_m: number | null;
+  pct_complete: number | null;
 }

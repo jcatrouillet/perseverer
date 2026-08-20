@@ -1,31 +1,35 @@
 // Insights' "Pace trends" chart: every VDOT-eligible run plotted over its own date, styled
 // after the reference "SPI Pace Trends" widget the user pointed at -- a linear trend band
 // through the whole history, the weekly-best-effort runs traced as a rising frontier in gold,
-// races called out as open rings, everything else a plain grey dot. A synced duration bar
-// chart sits underneath so a glance at any point on the trend also shows how long that day's
-// run was.
+// races called out as red dots, everything else a plain grey dot. A duration bar chart sits
+// underneath, always showing the full history; a click-move-click range selection on its bars
+// (not a click-and-drag gesture -- see handleChartClick) filters the trend chart above to that
+// period and recalculates its trend line.
 import { useMemo, useState } from "react";
 import {
   Area,
   Bar,
   BarChart,
-  Brush,
   CartesianGrid,
   ComposedChart,
   Line,
+  ReferenceArea,
   ResponsiveContainer,
   Scatter,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { TooltipContentProps } from "recharts";
+import type { MouseHandlerDataParam, TooltipContentProps } from "recharts";
 import { useLocation } from "wouter";
 
 import type { ActivitySummary } from "../api/types";
-import { formatDurationHM, vdotTrendPoints, type VdotTrendPoint } from "../runningStats";
+import { formatClockDuration, formatDurationHM, vdotTrendPoints, type VdotTrendPoint } from "../runningStats";
+import { predictRaceTimeS } from "../vdot";
 import { ChartLegend } from "./ChartLegend";
 import "../styles/pace-trends.css";
+
+const FIVE_K_M = 5000;
 
 const GOLD = "var(--color-load)";
 const GREY = "var(--color-text-faint)";
@@ -40,6 +44,19 @@ function formatYearTick(ts: number): string {
 
 function formatMonthTick(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+}
+
+/** Recharts' own `MouseHandlerDataParam.activeIndex` is typed `number | TooltipIndex |
+ * undefined`, and `TooltipIndex` is `string | null` -- in practice it comes back as a numeric
+ * *string* (confirmed via a live mouse event, not assumed), not a number, so a bare
+ * `typeof === "number"` check silently rejects every real click/hover. */
+function toDataIndex(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value !== "") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 /** Ordinary least squares over {x: ts, y: vdot} -- `x` is normalized to days-since-first-point
@@ -104,6 +121,14 @@ interface BrushRange {
 export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] }) {
   const [, setLocation] = useLocation();
   const [selection, setSelection] = useState<BrushRange | null>(null);
+  // In-progress click-move-click range selection on the duration chart, tracked by index into
+  // `points`/`durationData` (same order, same length) rather than by timestamp -- Recharts
+  // hands back `activeIndex` directly on every mouse event, so there's no nearest-point-by-ts
+  // lookup to get wrong. Not a click-and-drag gesture: the first click sets the anchor and
+  // *stays* set while the mouse just moves (no button held down), previewing the range live;
+  // the second click commits it.
+  const [dragAnchorIndex, setDragAnchorIndex] = useState<number | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const points = useMemo(() => vdotTrendPoints(activities), [activities]);
 
   if (points.length === 0) return null;
@@ -116,6 +141,39 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
     : points.length - 1;
   const isZoomed = startIndex > 0 || endIndex < points.length - 1;
   const visiblePoints = isZoomed ? points.slice(startIndex, endIndex + 1) : points;
+
+  const isDragging = dragAnchorIndex != null && dragIndex != null;
+  const handleChartClick = (state: MouseHandlerDataParam) => {
+    const index = toDataIndex(state.activeIndex);
+    if (index == null) return;
+    if (dragAnchorIndex == null) {
+      // First click: start the selection and preview it at zero width until the mouse moves.
+      setDragAnchorIndex(index);
+      setDragIndex(index);
+      return;
+    }
+    // Second click: commit the previewed range (unless it's a click back on the same point,
+    // which just cancels rather than selecting a single-point range).
+    if (index !== dragAnchorIndex) {
+      setSelection({
+        startIndex: Math.min(dragAnchorIndex, index),
+        endIndex: Math.max(dragAnchorIndex, index),
+      });
+    }
+    setDragAnchorIndex(null);
+    setDragIndex(null);
+  };
+  const handleChartMouseMove = (state: MouseHandlerDataParam) => {
+    if (dragAnchorIndex == null) return;
+    const index = toDataIndex(state.activeIndex);
+    if (index == null) return;
+    setDragIndex(index);
+  };
+  // What the duration chart currently highlights: the live drag in progress, or (once
+  // released) the committed selection -- so the highlighted band never disappears until the
+  // user explicitly resets it.
+  const highlightStartIndex = isDragging ? Math.min(dragAnchorIndex, dragIndex) : isZoomed ? startIndex : null;
+  const highlightEndIndex = isDragging ? Math.max(dragAnchorIndex, dragIndex) : isZoomed ? endIndex : null;
 
   const trend = fitTrend(visiblePoints);
   const firstTs = visiblePoints[0]!.ts;
@@ -163,14 +221,31 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
   };
 
   const weeklyTrendChange = trend != null ? Math.round(trend.slope * 7 * 100) / 100 : null;
+  // "Cut N:NN from your estimated 5K finish time" -- the same VDOT/week rate above, translated
+  // into a race-time-equivalent the way Daniels' own VDOT tables are conventionally read,
+  // rather than left as a bare index number nobody has an intuition for. Computed from the
+  // trend LINE's own start/end values (not the raw noisy data points), matching what "trend"
+  // already means everywhere else in this component. Silently omitted (never a fabricated
+  // guess) when either end's VDOT isn't representable as a real 5K time -- see
+  // vdot.ts::predictRaceTimeS's own null cases.
+  const fiveKTimeDeltaS = (() => {
+    if (trend == null) return null;
+    const spanDays = (lastTs - firstTs) / MS_PER_DAY;
+    const vdotStart = trend.intercept;
+    const vdotEnd = trend.intercept + trend.slope * spanDays;
+    const timeStart = predictRaceTimeS(vdotStart, FIVE_K_M);
+    const timeEnd = predictRaceTimeS(vdotEnd, FIVE_K_M);
+    if (timeStart == null || timeEnd == null) return null;
+    return timeStart - timeEnd; // positive = got faster (time cut), negative = got slower
+  })();
 
   return (
     <section className="card pace-trends pace-trends--wide">
       <h2>Pace trends</h2>
       <p className="chart-note">
-        Every run's VDOT over time -- gold traces the best run of each week, red rings are
-        races, grey is everything else. Drag on the timeline below to zoom into a period and
-        recalculate its trend.
+        Every run's VDOT over time -- gold traces the best run of each week, red dots are
+        races, grey is everything else. Click once on the duration chart below, move the mouse,
+        and click again to zoom into that period and recalculate its trend.
       </p>
       <div className="pace-trends__selection-bar">
         <span>
@@ -181,6 +256,14 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
               {" "}
               · trend {weeklyTrendChange >= 0 ? "+" : ""}
               {weeklyTrendChange} VDOT/week
+            </>
+          )}
+          {fiveKTimeDeltaS != null && Math.abs(fiveKTimeDeltaS) >= 1 && (
+            <>
+              {" "}
+              · {fiveKTimeDeltaS >= 0 ? "Cut" : "Added"}{" "}
+              {formatClockDuration(Math.abs(fiveKTimeDeltaS))}{" "}
+              {fiveKTimeDeltaS >= 0 ? "from" : "to"} your estimated 5K finish time
             </>
           )}
         </span>
@@ -265,10 +348,7 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
           <Scatter
             name="Races"
             data={racePoints}
-            fill="none"
-            stroke={RACE}
-            strokeWidth={2}
-            shape="circle"
+            fill={RACE}
             isAnimationActive={false}
             cursor="pointer"
             onClick={goToActivity}
@@ -280,19 +360,33 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
         center
         items={[
           { label: "Best of week", color: GOLD },
-          { label: "Races (ring)", color: RACE },
+          { label: "Races", color: RACE },
           { label: "Other runs", color: GREY },
         ]}
       />
 
       <p className="chart-note">
-        Duration of each run -- always the full history. Drag the handles to select a period;
-        the trend chart above zooms to match.
+        Duration of each run -- always the full history. Click once to start a period, move the
+        mouse, click again to finish; the trend chart above zooms to match.
       </p>
       <ResponsiveContainer width="100%" height={180}>
-        <BarChart data={durationData} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+        <BarChart
+          data={durationData}
+          margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
+          onClick={handleChartClick}
+          onMouseMove={handleChartMouseMove}
+          style={{ cursor: "crosshair", userSelect: "none" }}
+        >
           <XAxis dataKey="ts" type="number" scale="time" domain={["dataMin", "dataMax"]} hide />
-          <YAxis dataKey="hours" type="number" stroke="var(--color-text-muted)" fontSize={11} width={32} unit="h" />
+          <YAxis
+            dataKey="hours"
+            type="number"
+            domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
+            stroke="var(--color-text-muted)"
+            fontSize={11}
+            width={32}
+            unit="h"
+          />
           <Tooltip
             formatter={(value) => [value == null ? "No data" : `${value} h`, "Duration"]}
             labelFormatter={() => ""}
@@ -302,22 +396,16 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
             }}
           />
           <Bar dataKey="hours" fill="var(--color-text-faint)" isAnimationActive={false} />
-          <Brush
-            dataKey="ts"
-            height={32}
-            travellerWidth={10}
-            startIndex={startIndex}
-            endIndex={endIndex}
-            tickFormatter={formatYearTick}
-            stroke="var(--color-accent)"
-            fill="var(--color-surface-raised)"
-            onChange={(range: { startIndex?: number; endIndex?: number }) =>
-              setSelection({
-                startIndex: range.startIndex ?? 0,
-                endIndex: range.endIndex ?? points.length - 1,
-              })
-            }
-          />
+          {highlightStartIndex != null && highlightEndIndex != null && (
+            <ReferenceArea
+              x1={durationData[highlightStartIndex]!.ts}
+              x2={durationData[highlightEndIndex]!.ts}
+              fill="var(--color-accent)"
+              fillOpacity={0.15}
+              stroke="var(--color-accent)"
+              strokeOpacity={0.4}
+            />
+          )}
         </BarChart>
       </ResponsiveContainer>
     </section>

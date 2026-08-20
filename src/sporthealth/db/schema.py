@@ -80,6 +80,29 @@ athlete_hr_zone_config = Table(
     Column("updated_at", DateTime(), nullable=False),
 )
 
+# A distance goal for a whole calendar year or month, one per (athlete, period_type,
+# period_start) -- not a growing history of past goals, just "what's the target for this
+# period", upserted like athlete_hr_zone_config above. `sport=NULL` means every sport combined;
+# a specific sport (e.g. "running") scopes progress to just that sport's own activities.
+# `period_start` is "YYYY" for a year goal, "YYYY-MM" for a month goal -- deliberately not a
+# real DATE column, since a year has no single calendar date of its own. Progress itself is
+# computed on read (goals.py), not stored here or in a rollup: a goal is looked up once per
+# page view (its own popup, not inline on every calendar page), and its underlying query is
+# already bounded to one year/month of activities, not the whole history.
+goal = Table(
+    "goal",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("period_type", String, nullable=False),  # "year" | "month"
+    Column("period_start", String, nullable=False),
+    Column("sport", String, nullable=True),
+    Column("target_distance_m", Float, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    UniqueConstraint("athlete_id", "period_type", "period_start", name="uq_goal_identity"),
+)
+
 # --- Bronze: immutable raw archive --------------------------------------------
 
 raw_object = Table(

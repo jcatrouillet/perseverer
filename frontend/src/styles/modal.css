@@ -1,0 +1,68 @@
+.modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  z-index: 1000;
+}
+
+/* "Big popup" per the Goals feature's own requirement -- the progress graph must never render
+   inline on the calendar page, only in here, so this gets most of the viewport rather than a
+   typical small-dialog size. */
+.modal__panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  width: min(1600px, 100%);
+  max-height: min(960px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.modal__header h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.modal__close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.modal__close:hover {
+  color: var(--color-text);
+}
+
+.modal__body {
+  padding: var(--space-5);
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  .modal__backdrop {
+    padding: var(--space-3);
+  }
+
+  .modal__panel {
+    max-height: 100%;
+  }
+}

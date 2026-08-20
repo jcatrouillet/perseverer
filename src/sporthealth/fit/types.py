@@ -102,6 +102,11 @@ class ParsedWorkout:
 class CanonicalActivity:
     start_time_utc: datetime
     utc_offset_s: int
+    # IANA zone name behind `utc_offset_s`, when known (see timezone_lookup.py) -- currently
+    # only populated by the GPX/TCX parsers (derived from the activity's own recorded GPS
+    # coordinates); FIT-sourced activities still store a bare numeric offset with no zone name,
+    # a pre-existing gap this field doesn't attempt to close.
+    tz_name: str | None = field(default=None, kw_only=True)
     sport: str
     sub_sport: str | None
     name: str | None

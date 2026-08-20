@@ -32,6 +32,7 @@ from math import asin, cos, radians, sin, sqrt
 from xml.etree import ElementTree as ET
 
 from sporthealth.fit.types import CanonicalActivity, CanonicalBatch, ParsedMetric, StreamPoint
+from sporthealth.timezone_lookup import offset_from_coordinates
 
 _LatLon = tuple[float, float]
 _BBox = tuple[float, float, float, float]
@@ -165,10 +166,20 @@ def parse_gpx(content: bytes) -> CanonicalBatch:
     start_time = stream[0].timestamp_utc
     duration_s = (stream[-1].timestamp_utc - start_time).total_seconds()
     route_start, route_end, route_bbox = _route_endpoints(route_points)
+    # GPX carries no local-time field of its own -- every <trkpt> timestamp is UTC -- so the
+    # only way to get the true calendar date/local time right is to derive it from where the
+    # activity actually happened, not assume UTC=local (which silently shifts an activity onto
+    # the wrong calendar day for any non-UTC athlete). See timezone_lookup.py.
+    utc_offset_s, tz_name = (
+        offset_from_coordinates(route_points[0][0], route_points[0][1], start_time)
+        if route_points
+        else (0, None)
+    )
 
     activity = CanonicalActivity(
         start_time_utc=start_time,
-        utc_offset_s=0,
+        utc_offset_s=utc_offset_s,
+        tz_name=tz_name,
         sport="unknown",
         sub_sport=None,
         name=name,

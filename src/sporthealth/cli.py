@@ -35,6 +35,7 @@ from sporthealth.adapters.strava_export import import_strava_export
 from sporthealth.auth.api_keys import generate_api_key, hash_api_key
 from sporthealth.auth.passwords import hash_password
 from sporthealth.backfill_lap_moving_duration import backfill_lap_moving_duration
+from sporthealth.backfill_locations import backfill_locations
 from sporthealth.backfill_workouts import backfill_workouts
 from sporthealth.config import get_settings
 from sporthealth.db.engine import make_engine
@@ -434,6 +435,24 @@ def backfill_lap_moving_duration_cmd() -> None:
         )
         conn.commit()
     typer.echo(f"backfilled moving_duration_s for {count} laps")
+
+
+@app.command("backfill-locations")
+def backfill_locations_cmd() -> None:
+    """Pre-warms geocoding.py's per-activity location cache for every already-ingested,
+    GPS-bearing activity that doesn't have one yet. See backfill_locations.py's own docstring:
+    this is what makes GET /activities/{id}/location answer from cache in normal use instead of
+    hitting the background-fetch-on-miss path (added because the *first-ever* view of an
+    activity was otherwise the slow one, blocked on Nominatim's own latency and this project's
+    1-req/s throttle for it). Real network calls, respects that throttle, dedupes by rounded
+    coordinate -- so on a large existing archive this can take a while; safe to interrupt and
+    re-run, since already-cached activities are skipped.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        count = backfill_locations(conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID)
+    typer.echo(f"backfilled locations for {count} activities")
 
 
 @app.command("backfill-vdot")

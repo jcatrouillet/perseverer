@@ -158,6 +158,13 @@ class ActivityWeatherOut(BaseModel):
     weather_code: int | None = None
 
 
+class ActivityLocationOut(BaseModel):
+    # False whenever there's nothing to show -- no GPS start point to query against, or the
+    # Nominatim fetch failed/returned no usable place name. Never a fabricated name.
+    available: bool
+    location_name: str | None = None
+
+
 class ActivityWorkoutStepOut(BaseModel):
     step_index: int
     duration_type: str | None

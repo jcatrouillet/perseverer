@@ -88,6 +88,28 @@ def _add_health_observation(
         conn.commit()
 
 
+def test_activity_years_returns_distinct_years_descending(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1", local_date="2023-06-01")
+        seed_activity(conn, activity_id="a2", local_date="2023-11-20")  # same year as a1
+        seed_activity(conn, activity_id="a3", local_date="2025-01-15")
+        seed_activity(conn, activity_id="a4", local_date="2020-08-02")
+
+    r = client.get("/api/v1/activities/years", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == [2025, 2023, 2020]
+
+
+def test_activity_years_empty_when_no_activities(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/activities/years", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == []
+
+
 def test_list_activities_paginates_and_filters_by_sport(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
