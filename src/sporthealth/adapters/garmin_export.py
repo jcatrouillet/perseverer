@@ -35,6 +35,7 @@ from sporthealth.health.ingest import ingest_health_batch
 from sporthealth.health.json_parser import parse_garmin_export_json
 from sporthealth.ingest_dispatch import ingest_fit_bytes
 from sporthealth.insights.engine import refresh_insights
+from sporthealth.pace_bands import refresh_pace_bands
 from sporthealth.performance import refresh_vdot
 from sporthealth.rollups import refresh_daily_and_period_rollups
 
@@ -243,6 +244,7 @@ def import_garmin_export(
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
         refresh_insights(conn, athlete_id=athlete_id)
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
 
     # Corrects sport/name using Garmin's own reclassification from summarizedActivitiesExport

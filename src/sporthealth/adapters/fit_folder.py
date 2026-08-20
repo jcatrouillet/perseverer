@@ -46,6 +46,7 @@ from sporthealth.health.json_parser import parse_daily_summary_json, parse_hydra
 from sporthealth.insights.engine import refresh_insights
 from sporthealth.merge.engine import ActivityCandidate, is_same_activity
 from sporthealth.metrics.registry import get_or_register_metric
+from sporthealth.pace_bands import refresh_pace_bands
 from sporthealth.performance import refresh_vdot
 from sporthealth.rollups import refresh_daily_and_period_rollups
 from sporthealth.streams import write_activity_stream
@@ -547,6 +548,7 @@ def import_from_folder(
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
         refresh_insights(conn, athlete_id=athlete_id)
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(

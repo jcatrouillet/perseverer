@@ -9,12 +9,13 @@ import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, func, select
 
 from sporthealth.api.dependencies import get_conn, require_api_key
 from sporthealth.api.schemas.common import to_utc
-from sporthealth.api.schemas.insights import InsightOut
-from sporthealth.db.schema import insight
+from sporthealth.api.schemas.insights import InsightOut, PaceBandOut
+from sporthealth.db.schema import activity_metric, insight
+from sporthealth.pace_bands import PACE_BANDS
 
 router = APIRouter()
 
@@ -46,4 +47,29 @@ def list_insights(
             computed_at=to_utc(r.computed_at),
         )
         for r in rows
+    ]
+
+
+@router.get("/insights/pace-bands")
+def list_pace_bands(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> list[PaceBandOut]:
+    """Total time-in-band across the athlete's whole running history, one row per
+    `pace_bands.PACE_BANDS` entry (fast to slow). A plain bounded SUM/GROUP BY over
+    already-precomputed `activity_metric` rows (see pace_bands.py::refresh_pace_bands) -- never a
+    live stream scan, matching this codebase's rollup mandate."""
+    band_metric_keys = [band.metric_key for band in PACE_BANDS]
+    rows = conn.execute(
+        select(activity_metric.c.metric_key, func.sum(activity_metric.c.value_num))
+        .where(
+            activity_metric.c.athlete_id == athlete_id,
+            activity_metric.c.metric_key.in_(band_metric_keys),
+        )
+        .group_by(activity_metric.c.metric_key)
+    ).fetchall()
+    totals = {metric_key: total for metric_key, total in rows}
+    return [
+        PaceBandOut(label=band.label, seconds=totals.get(band.metric_key, 0.0))
+        for band in PACE_BANDS
     ]

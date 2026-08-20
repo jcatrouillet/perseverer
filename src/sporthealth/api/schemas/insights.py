@@ -18,3 +18,12 @@ class InsightOut(BaseModel):
     activity_id: str | None
     local_date: str | None
     computed_at: datetime
+
+
+class PaceBandOut(BaseModel):
+    """One `pace_bands.PACE_BANDS` entry, total seconds across the athlete's whole running
+    history. Always present for every defined band, even when `seconds` is 0 -- so a client can
+    render every band's column without checking for missing entries."""
+
+    label: str
+    seconds: float

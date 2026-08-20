@@ -58,6 +58,7 @@ from sporthealth.health.json_parser import (
     parse_hydration_json,
 )
 from sporthealth.insights.engine import refresh_insights
+from sporthealth.pace_bands import refresh_pace_bands
 from sporthealth.performance import refresh_vdot
 from sporthealth.rollups import refresh_daily_and_period_rollups
 
@@ -743,6 +744,7 @@ def sync_garmin_connect(
     # Gated on touched_dates to keep the daily cron cheap (no Parquet reads) on those days.
     if touched_dates:
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(

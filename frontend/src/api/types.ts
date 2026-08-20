@@ -226,6 +226,13 @@ export interface InsightOut {
   computed_at: string;
 }
 
+/** One `pace_bands.PACE_BANDS` entry, total seconds across the athlete's whole running history --
+ * always present for every defined band, even when `seconds` is 0. */
+export interface PaceBandOut {
+  label: string;
+  seconds: number;
+}
+
 export interface StreamResponse {
   activity_id: string;
   tier: string;

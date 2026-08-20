@@ -864,6 +864,10 @@ const SCHEMAS = [
       ["local_date","string(date)|null",""],
       ["computed_at","string(date-time)",""],
     ] },
+  { name: "PaceBandOut", note: "Returned by GET /insights/pace-bands, one row per fixed pace band (fast to slow), always present even when seconds is 0.", fields: [
+      ["label","string","e.g. \"5:00-5:30\", \"< 3:30\", or \"Walk\"."],
+      ["seconds","number","Total time across the athlete's whole running history spent at that instantaneous pace."],
+    ] },
   { name: "NoteOut", note: "Returned by POST /notes (201) and GET /notes.", fields: [
       ["id","integer",""],
       ["entity_type","string","activity or day."],
@@ -1133,6 +1137,11 @@ const GROUPS = [
       ],
       responses: [ { code: 200, ref: "array&lt;InsightOut&gt;" } ],
       example: { qs: "?kind=pb&window=all_time" }
+    },
+    { method: "GET", path: "/api/v1/insights/pace-bands", summary: "Total time spent at each pace, across the athlete's whole running history.",
+      description: "One row per fixed 30-second/km pace band (fast to slow), summed from every running activity's own per-second (well, per-sample — real device cadence) speed stream, not each run's whole-activity average. Precomputed at ingest time and stored per-activity (see pace_bands.py); this endpoint is a plain bounded SUM/GROUP BY over those already-stored rows, never a live stream scan. Always returns every band, even ones with seconds: 0.",
+      responses: [ { code: 200, ref: "array&lt;PaceBandOut&gt;" } ],
+      example: {}
     },
   ]},
 

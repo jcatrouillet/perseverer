@@ -1,128 +1,59 @@
-// Insights' "Training bands" chart: what share of total running time was spent at each pace,
-// bucketed into fixed 30-second/km bands (this app's own pace convention, formatMinPerKm --
-// not the min/mile numbers a reference pace-distribution widget might use). Each run is
-// assigned to exactly one band by its own whole-activity average pace -- an honest
-// simplification, not a fabricated finer-grained number than a run-level summary actually
-// supports (a true within-run breakdown, e.g. warmup vs. a tempo interval, would need each
-// run's own per-second stream fetched and summed -- far too expensive to do for the whole
-// history client-side, and not what this chart claims to show).
+// Insights' "Training bands" tab: what share of total running time was spent at each pace,
+// summed from every running activity's own per-second (well, per-sample -- real device cadence)
+// speed stream, computed server-side and precomputed at ingest time (see pace_bands.py) rather
+// than approximated from each run's whole-activity average pace -- an earlier version of this
+// component did the latter client-side, which hid all within-run pace variation (an interval
+// session with fast reps and slow recovery jogging has the same average pace as a flat steady
+// tempo run, but a completely different time-in-band profile).
 import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { TooltipContentProps } from "recharts";
 
-import type { ActivitySummary } from "../api/types";
-import { effectiveDurationS, formatDurationHM, isPlausibleRunPace } from "../runningStats";
+import { usePaceBands } from "../api/queries";
+import type { PaceBandOut } from "../api/types";
+import { formatDurationHM } from "../runningStats";
 import "../styles/training-bands.css";
 
-interface PaceBand {
-  label: string;
-  /** Inclusive lower bound, seconds/km (lower seconds = faster pace). */
-  minSecPerKm: number;
-  /** Exclusive upper bound, seconds/km; null = unbounded (the fastest band). */
-  maxSecPerKm: number | null;
-  color: string;
-}
-
-// Fast-to-slow, 30-second/km-wide bands. The slowest explicit band's upper edge (8:30/km, i.e.
-// 510s) exactly matches IMPLAUSIBLE_RUN_PACE_MIN_PER_KM (runningStats.ts) -- anything at or past
-// that pace already falls to isPlausibleRunPace's "Walk" bucket below, reusing the app's own
-// real-data-calibrated threshold rather than inventing a second one. Colors are color-mix()
-// blends across the app's own theme tokens (danger -> load -> elevation -> cadence), echoing a
-// slow-to-fast red-to-teal gradient without introducing new arbitrary hex values.
+// Colors keyed by the exact label pace_bands.py's own PACE_BANDS produces (kept in sync by hand
+// -- backend Python, no shared code with this TS frontend, same cross-language-duplication
+// precedent as rules_pb.py/personalRecords). A label with no entry here (e.g. a future band
+// pace_bands.py adds that this array hasn't been updated for yet) falls back to --color-load
+// rather than rendering an uncoloured/invisible bar.
 const WALK_LABEL = "Walk";
-const PACE_BANDS: PaceBand[] = [
-  { label: "< 3:30", minSecPerKm: 0, maxSecPerKm: 210, color: "var(--color-cadence)" },
-  {
-    label: "3:30–4:00",
-    minSecPerKm: 210,
-    maxSecPerKm: 240,
-    color: "color-mix(in srgb, var(--color-cadence) 65%, var(--color-elevation) 35%)",
-  },
-  { label: "4:00–4:30", minSecPerKm: 240, maxSecPerKm: 270, color: "var(--color-elevation)" },
-  {
-    label: "4:30–5:00",
-    minSecPerKm: 270,
-    maxSecPerKm: 300,
-    color: "color-mix(in srgb, var(--color-elevation) 60%, var(--color-load) 40%)",
-  },
-  {
-    label: "5:00–5:30",
-    minSecPerKm: 300,
-    maxSecPerKm: 330,
-    color: "color-mix(in srgb, var(--color-elevation) 25%, var(--color-load) 75%)",
-  },
-  { label: "5:30–6:00", minSecPerKm: 330, maxSecPerKm: 360, color: "var(--color-load)" },
-  {
-    label: "6:00–6:30",
-    minSecPerKm: 360,
-    maxSecPerKm: 390,
-    color: "color-mix(in srgb, var(--color-load) 60%, var(--color-danger) 40%)",
-  },
-  {
-    label: "6:30–7:00",
-    minSecPerKm: 390,
-    maxSecPerKm: 420,
-    color: "color-mix(in srgb, var(--color-load) 30%, var(--color-danger) 70%)",
-  },
-  {
-    label: "7:00–7:30",
-    minSecPerKm: 420,
-    maxSecPerKm: 450,
-    color: "color-mix(in srgb, var(--color-load) 10%, var(--color-danger) 90%)",
-  },
-  { label: "7:30–8:00", minSecPerKm: 450, maxSecPerKm: 480, color: "var(--color-danger)" },
-  {
-    label: "8:00–8:30",
-    minSecPerKm: 480,
-    maxSecPerKm: 510,
-    color: "color-mix(in srgb, var(--color-danger) 80%, black 20%)",
-  },
-  {
-    label: WALK_LABEL,
-    minSecPerKm: 510,
-    maxSecPerKm: null,
-    color: "color-mix(in srgb, var(--color-danger) 55%, black 45%)",
-  },
-];
+const BAND_COLORS: Record<string, string> = {
+  "< 3:30": "var(--color-cadence)",
+  "3:30-4:00": "color-mix(in srgb, var(--color-cadence) 65%, var(--color-elevation) 35%)",
+  "4:00-4:30": "var(--color-elevation)",
+  "4:30-5:00": "color-mix(in srgb, var(--color-elevation) 60%, var(--color-load) 40%)",
+  "5:00-5:30": "color-mix(in srgb, var(--color-elevation) 25%, var(--color-load) 75%)",
+  "5:30-6:00": "var(--color-load)",
+  "6:00-6:30": "color-mix(in srgb, var(--color-load) 60%, var(--color-danger) 40%)",
+  "6:30-7:00": "color-mix(in srgb, var(--color-load) 30%, var(--color-danger) 70%)",
+  "7:00-7:30": "color-mix(in srgb, var(--color-load) 10%, var(--color-danger) 90%)",
+  "7:30-8:00": "var(--color-danger)",
+  "8:00-8:30": "color-mix(in srgb, var(--color-danger) 80%, black 20%)",
+  [WALK_LABEL]: "color-mix(in srgb, var(--color-danger) 55%, black 45%)",
+};
+const FALLBACK_COLOR = "var(--color-load)";
 
-export interface TrainingBandRow {
-  label: string;
+interface ChartRow extends PaceBandOut {
   color: string;
-  seconds: number;
   pct: number;
+  hours: number;
 }
 
-/** Buckets each run's whole-activity average pace into one `PACE_BANDS` entry, weighted by
- * moving time (falling back to elapsed time -- see effectiveDurationS). Activities with no
- * usable duration/distance are silently skipped, not counted as zero. */
-export function computeTrainingBands(activities: ActivitySummary[]): TrainingBandRow[] {
-  const secondsByLabel = new Map<string, number>(PACE_BANDS.map((b) => [b.label, 0]));
-  let total = 0;
-
-  for (const a of activities) {
-    const durationS = effectiveDurationS(a);
-    if (durationS == null || durationS <= 0 || a.distance_m == null || a.distance_m <= 0) continue;
-
-    total += durationS;
-    if (!isPlausibleRunPace(durationS, a.distance_m)) {
-      secondsByLabel.set(WALK_LABEL, secondsByLabel.get(WALK_LABEL)! + durationS);
-      continue;
-    }
-    const secPerKm = durationS / (a.distance_m / 1000);
-    const band =
-      PACE_BANDS.find((b) => secPerKm >= b.minSecPerKm && (b.maxSecPerKm == null || secPerKm < b.maxSecPerKm)) ??
-      PACE_BANDS[PACE_BANDS.length - 2]!; // defensive fallback: slowest explicit (non-Walk) band
-    secondsByLabel.set(band.label, secondsByLabel.get(band.label)! + durationS);
-  }
-
-  return PACE_BANDS.map((b) => {
-    const seconds = secondsByLabel.get(b.label)!;
-    return { label: b.label, color: b.color, seconds, pct: total > 0 ? (seconds / total) * 100 : 0 };
-  });
+function toChartRows(bands: PaceBandOut[]): ChartRow[] {
+  const total = bands.reduce((sum, b) => sum + b.seconds, 0);
+  return bands.map((b) => ({
+    ...b,
+    color: BAND_COLORS[b.label] ?? FALLBACK_COLOR,
+    pct: total > 0 ? (b.seconds / total) * 100 : 0,
+    hours: Math.round((b.seconds / 3600) * 100) / 100,
+  }));
 }
 
 interface BandTooltipPayload {
-  payload: TrainingBandRow;
+  payload: ChartRow;
 }
 
 function isBandPayload(entry: unknown): entry is BandTooltipPayload {
@@ -149,15 +80,17 @@ function BandTooltip({ active, payload }: TooltipContentProps) {
   );
 }
 
-export function TrainingBandsChart({ activities }: { activities: ActivitySummary[] }) {
+export function TrainingBandsChart() {
   const [mode, setMode] = useState<"percentage" | "duration">("percentage");
-  const rows = useMemo(() => computeTrainingBands(activities), [activities]);
+  const bands = usePaceBands();
+  const rows = useMemo(() => toChartRows(bands.data ?? []), [bands.data]);
   const hasData = rows.some((r) => r.seconds > 0);
 
+  if (bands.isLoading) return <p>Loading…</p>;
+  if (bands.isError) return <p role="alert">Could not load training bands.</p>;
   if (!hasData) return null;
 
   const dataKey = mode === "percentage" ? "pct" : "hours";
-  const chartData = rows.map((r) => ({ ...r, hours: Math.round((r.seconds / 3600) * 100) / 100 }));
 
   return (
     <section className="card training-bands">
@@ -181,11 +114,11 @@ export function TrainingBandsChart({ activities }: { activities: ActivitySummary
         </div>
       </div>
       <p className="chart-note">
-        Share of total running time spent at each pace, from every run's own overall average
-        pace -- slowest at right, fastest at left.
+        Share of total running time spent at each pace, second by second across every run's own
+        speed stream -- slowest at right, fastest at left.
       </p>
       <ResponsiveContainer width="100%" height={320}>
-        <BarChart data={chartData} margin={{ top: 8, right: 16, bottom: 48, left: 0 }}>
+        <BarChart data={rows} margin={{ top: 8, right: 16, bottom: 48, left: 0 }}>
           <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey="label"
@@ -207,7 +140,7 @@ export function TrainingBandsChart({ activities }: { activities: ActivitySummary
           />
           <Tooltip content={BandTooltip} cursor={{ fill: "var(--color-surface-raised)" }} />
           <Bar dataKey={dataKey} isAnimationActive={false}>
-            {chartData.map((row) => (
+            {rows.map((row) => (
               <Cell key={row.label} fill={row.color} />
             ))}
           </Bar>

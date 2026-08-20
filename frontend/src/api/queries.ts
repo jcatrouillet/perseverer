@@ -29,6 +29,7 @@ import type {
   InsightOut,
   NoteCreate,
   NoteOut,
+  PaceBandOut,
   Page,
   PeriodCalendarResponse,
   SleepSessionOut,
@@ -367,6 +368,16 @@ export function useInsights() {
   return useQuery({
     queryKey: ["insights"],
     queryFn: () => apiGet<InsightOut[]>("/api/v1/insights"),
+  });
+}
+
+/** Total time-in-pace-band across the athlete's whole running history -- a precomputed,
+ * per-second-accurate aggregate (see pace_bands.py), not something derived client-side from
+ * each run's own average pace. */
+export function usePaceBands() {
+  return useQuery({
+    queryKey: ["insights", "pace-bands"],
+    queryFn: () => apiGet<PaceBandOut[]>("/api/v1/insights/pace-bands"),
   });
 }
 

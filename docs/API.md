@@ -441,6 +441,18 @@ notable efforts, training-load flags, health-metric callouts — refreshed on ev
 
 **Response `200`:** `array<InsightOut>`.
 
+### `GET /insights/pace-bands`
+
+Total time-in-pace-band across the athlete's whole running history, one row per fixed 30-second/km
+band (fast to slow), from every running activity's own per-second (well, per-sample — real device
+cadence, not a synthesized fixed grid) speed stream — a run's *instantaneous* pace at each moment,
+not its whole-activity average. Precomputed at ingest time and stored per-activity (see
+`pace_bands.py`); this endpoint is a plain bounded `SUM`/`GROUP BY` over those already-stored
+rows, never a live stream scan. Always returns every band, even ones with `seconds: 0`, so a
+client can render every column without checking for missing entries.
+
+**Response `200`:** `array<PaceBandOut>`.
+
 ---
 
 ## Notes
@@ -814,6 +826,12 @@ Training Load, 42-day EWMA — "fitness"), `atl` (Acute Training Load, 7-day EWM
 | `metric_key`, `sport_family`, `activity_id` | string, nullable | `sport_family` is null for insights not scoped to one sport; `activity_id` is set for activity-specific insights. |
 | `local_date` | string (date), nullable | |
 | `computed_at` | string (date-time) | |
+
+### PaceBandOut
+
+`label` (string — e.g. `"5:00-5:30"`, `"< 3:30"`, or `"Walk"`), `seconds` (number — total time
+across the athlete's whole running history spent at that instantaneous pace). Returned by
+`GET /insights/pace-bands`, one row per band, always present even when `seconds` is 0.
 
 ### NoteOut
 

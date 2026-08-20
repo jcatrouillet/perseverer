@@ -44,6 +44,7 @@ from sporthealth.db.schema import athlete as athlete_table
 from sporthealth.db.seed import DEFAULT_ATHLETE_ID
 from sporthealth.garmin_activity_summary import backfill_activity_corrections
 from sporthealth.insights.engine import refresh_insights
+from sporthealth.pace_bands import refresh_pace_bands
 from sporthealth.performance import refresh_vdot
 from sporthealth.rebuild import rebuild_database
 from sporthealth.worker.main import run_daily_sync
@@ -471,6 +472,23 @@ def backfill_vdot_cmd() -> None:
         count = refresh_vdot(conn, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
         conn.commit()
     typer.echo(f"backfilled VDOT for {count} activities")
+
+
+@app.command("backfill-pace-bands")
+def backfill_pace_bands_cmd() -> None:
+    """Backfills sporthealth.performance.pace_band.* for already-ingested running activities --
+    no full `sync rebuild` needed. Like backfill-vdot above, reads only what's already in the
+    database and each activity's already-written Parquet stream (this time the raw speed_mps
+    samples, not just distance/duration); new ingests already compute this automatically going
+    forward (see pace_bands.py's own docstring). This command is for backfilling activities
+    ingested before pace bands existed.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        count = refresh_pace_bands(conn, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+    typer.echo(f"backfilled pace bands for {count} activity/band rows")
 
 
 if __name__ == "__main__":
