@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sport Health API Reference</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --color-bg: #12151c;
+    --color-surface: #1b1f29;
+    --color-surface-raised: #232836;
+    --color-border: #2e3441;
+    --color-text: #eef1f6;
+    --color-text-muted: #9aa3b5;
+    --color-text-faint: #6b7386;
+
+    --color-accent: #4da3ff;
+    --color-accent-strong: #7cb9ff;
+
+    --color-get: #4da3ff;
+    --color-post: #4caf7d;
+    --color-put: #b57bee;
+    --color-patch: #e8a33d;
+    --color-delete: #ef5a6f;
+
+    --color-success: #4caf7d;
+    --color-warning: #e8a33d;
+    --color-danger: #ef5a6f;
+
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, Menlo, monospace;
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 14px;
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+
+  :root[data-theme="light"] {
+    --color-bg: #f4f6f9;
+    --color-surface: #ffffff;
+    --color-surface-raised: #f4f6f9;
+    --color-border: #dde2ea;
+    --color-text: #1a1d24;
+    --color-text-muted: #5a6273;
+    --color-text-faint: #8a92a3;
+    --color-accent: #1a73e8;
+    --color-accent-strong: #0f5bc4;
+    --color-get: #1a73e8;
+    --color-post: #2f9160;
+    --color-put: #8c4fd6;
+    --color-patch: #c47f1a;
+    --color-delete: #d43a52;
+    --color-success: #2f9160;
+    --color-warning: #c47f1a;
+    --color-danger: #d43a52;
+    --shadow-card: 0 1px 3px rgba(20, 25, 35, 0.08);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --color-bg: #f4f6f9;
+      --color-surface: #ffffff;
+      --color-surface-raised: #f4f6f9;
+      --color-border: #dde2ea;
+      --color-text: #1a1d24;
+      --color-text-muted: #5a6273;
+      --color-text-faint: #8a92a3;
+      --color-accent: #1a73e8;
+      --color-accent-strong: #0f5bc4;
+      --color-get: #1a73e8;
+      --color-post: #2f9160;
+      --color-put: #8c4fd6;
+      --color-patch: #c47f1a;
+      --color-delete: #d43a52;
+      --color-success: #2f9160;
+      --color-warning: #c47f1a;
+      --color-danger: #d43a52;
+      --shadow-card: 0 1px 3px rgba(20, 25, 35, 0.08);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  a { color: var(--color-accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  code, .mono { font-family: var(--font-mono); }
+
+  h1, h2, h3, h4 { text-wrap: balance; font-weight: 600; }
+
+  /* ---------- shell ---------- */
+  .shell {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; max-height: none; border-right: none; border-bottom: 1px solid var(--color-border); }
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--color-border);
+    padding: 1.5rem 1rem 3rem;
+    background: var(--color-surface);
+  }
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0 0.5rem 1.25rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .brand-mark {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--color-accent-strong);
+    letter-spacing: -0.02em;
+  }
+  .brand-version {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--color-text-faint);
+  }
+
+  .search-box { padding: 0 0.5rem; margin-bottom: 1.25rem; }
+  .search-box input {
+    width: 100%;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: 0.5rem 0.65rem;
+  }
+  .search-box input::placeholder { color: var(--color-text-faint); }
+
+  .nav-group { margin-bottom: 0.35rem; }
+  .nav-group-title {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-faint);
+    padding: 0.55rem 0.5rem 0.25rem;
+  }
+  .nav-link {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.3rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+  }
+  .nav-link:hover { background: var(--color-surface-raised); text-decoration: none; color: var(--color-text); }
+  .nav-link.active { background: var(--color-surface-raised); color: var(--color-text); }
+  .nav-method {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    width: 2.9em;
+    flex: none;
+    text-align: right;
+  }
+  .nav-path { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-static-link {
+    display: block;
+    padding: 0.3rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+  }
+  .nav-static-link:hover, .nav-static-link.active { background: var(--color-surface-raised); color: var(--color-text); text-decoration: none; }
+
+  /* ---------- main ---------- */
+  .main { padding: 3rem clamp(1.25rem, 4vw, 4rem) 8rem; max-width: 920px; }
+
+  .hero { margin-bottom: 3rem; }
+  .hero .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--color-accent-strong);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+  .hero h1 { font-size: clamp(1.7rem, 3vw, 2.3rem); margin: 0 0 0.85rem; }
+  .hero p { color: var(--color-text-muted); max-width: 62ch; margin: 0 0 0.5rem; }
+  .hero .base-url {
+    margin-top: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.6rem 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+  }
+  .hero .base-url .label { color: var(--color-text-faint); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  section.doc-section { margin-bottom: 3rem; scroll-margin-top: 1.5rem; }
+  section.doc-section h2 {
+    font-size: 1.4rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--color-border);
+    margin: 0 0 1.1rem;
+  }
+  section.doc-section h3 { font-size: 1.05rem; margin: 1.6rem 0 0.6rem; }
+  section.doc-section > p { color: var(--color-text-muted); max-width: 68ch; }
+
+  .callout {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-left: 3px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    margin: 1rem 0;
+    font-size: 0.88rem;
+    color: var(--color-text-muted);
+  }
+  .callout strong { color: var(--color-text); }
+  .callout.warn { border-left-color: var(--color-warning); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); margin: 0.9rem 0; }
+  th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-text-faint);
+    background: var(--color-surface-raised);
+    padding: 0.55rem 0.8rem;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--color-border);
+  }
+  td {
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td .field-name { font-family: var(--font-mono); font-weight: 600; }
+  td .field-type { font-family: var(--font-mono); color: var(--color-accent-strong); white-space: nowrap; }
+  .badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+  .badge-req { background: color-mix(in srgb, var(--color-danger) 18%, transparent); color: var(--color-danger); }
+  .badge-opt { background: color-mix(in srgb, var(--color-text-faint) 20%, transparent); color: var(--color-text-muted); }
+  .badge-null { background: color-mix(in srgb, var(--color-accent) 16%, transparent); color: var(--color-accent-strong); margin-left: 0.35rem; }
+
+  pre {
+    background: #0b0d12;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.95rem 1.1rem;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: #d6dde8;
+  }
+  :root[data-theme="light"] pre, :root:not([data-theme="dark"]) pre {
+    background: #10131a;
+    color: #e3e8f0;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) pre { background: #10131a; color: #e3e8f0; }
+  }
+  .cm-str { color: #9fd88a; } .cm-num { color: #e8a33d; } .cm-key { color: #7cb9ff; } .cm-bool { color: #b57bee; } .cm-comment { color: #6b7386; }
+
+  .code-block { position: relative; }
+  .copy-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    background: var(--color-surface-raised);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--color-text); }
+
+  /* ---------- endpoint card ---------- */
+  .endpoint-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    padding: 1.5rem 1.6rem 1.7rem;
+    margin-bottom: 2rem;
+    scroll-margin-top: 1.5rem;
+    box-shadow: var(--shadow-card);
+  }
+  .endpoint-head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.6rem;
+  }
+  .method-badge {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.75rem;
+    padding: 0.22rem 0.55rem;
+    border-radius: 5px;
+    color: #0b0d12;
+    letter-spacing: 0.02em;
+  }
+  .method-GET { background: var(--color-get); }
+  .method-POST { background: var(--color-post); }
+  .method-PUT { background: var(--color-put); }
+  .method-PATCH { background: var(--color-patch); }
+  .method-DELETE { background: var(--color-delete); color: #fff; }
+  .endpoint-path {
+    font-family: var(--font-mono);
+    font-size: 1.02rem;
+    font-weight: 500;
+  }
+  .endpoint-path .param { color: var(--color-accent-strong); }
+  .auth-pill {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--color-text-faint);
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    padding: 0.15rem 0.55rem;
+  }
+  .endpoint-summary { color: var(--color-text-muted); margin: 0.6rem 0 0.2rem; max-width: 68ch; }
+  .status-chip {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+  }
+  .s2 { background: color-mix(in srgb, var(--color-success) 18%, transparent); color: var(--color-success); }
+  .s4 { background: color-mix(in srgb, var(--color-warning) 18%, transparent); color: var(--color-warning); }
+  .schema-link { font-family: var(--font-mono); }
+
+  .subhead {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-faint);
+    margin: 1.3rem 0 0.5rem;
+  }
+
+  /* ---------- schema reference ---------- */
+  .schema-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    padding: 1.1rem 1.3rem 1.3rem;
+    margin-bottom: 1.4rem;
+    scroll-margin-top: 1.5rem;
+  }
+  .schema-card h4 { font-family: var(--font-mono); margin: 0 0 0.3rem; font-size: 0.98rem; }
+  .schema-card .schema-note { color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 0.7rem; }
+
+  footer {
+    max-width: 920px;
+    padding: 2rem clamp(1.25rem, 4vw, 4rem) 4rem;
+    color: var(--color-text-faint);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--color-border);
+    margin-top: 2rem;
+  }
+
+  ::selection { background: color-mix(in srgb, var(--color-accent) 35%, transparent); }
+</style>
+</head>
+<body>
+
+
+<div class="shell">
+  <nav class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="brand-mark">sporthealth</span>
+      <span class="brand-version">API v0.1.0</span>
+    </div>
+    <div class="search-box">
+      <input id="search" type="text" placeholder="Filter endpoints…" autocomplete="off">
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-title">Guide</div>
+      <a class="nav-static-link" href="#overview">Overview</a>
+      <a class="nav-static-link" href="#authentication">Authentication</a>
+      <a class="nav-static-link" href="#errors">Errors</a>
+      <a class="nav-static-link" href="#conventions">Conventions</a>
+    </div>
+    <div id="nav-groups"></div>
+    <div class="nav-group">
+      <div class="nav-group-title">Reference</div>
+      <a class="nav-static-link" href="#schemas">Schema reference</a>
+      <a class="nav-static-link" href="#mcp">MCP server</a>
+    </div>
+  </nav>
+
+  <main class="main" id="main-content">
+    <div class="hero">
+      <div class="eyebrow">API Reference · v0.1.0</div>
+      <h1>Sport Health Data Platform API</h1>
+      <p>A REST/JSON API over a self-hosted archive of Garmin, Strava, and Eufy activity and health data. Every endpoint reads from precomputed rollups or content-addressed raw storage — nothing here scans years of history at request time.</p>
+      <p>This reference is generated from the live OpenAPI schema and cross-checked against the router source, so every field, default, and status code below reflects what the server actually does today.</p>
+      <div class="base-url"><span class="label">Base URL</span> <span id="base-url-example">https://your-sporthealth-host/api/v1</span></div>
+    </div>
+
+    <section class="doc-section" id="overview">
+      <h2>Overview</h2>
+      <p>The API is organized around ten resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
+      <p>There is exactly one athlete per deployment credential — every endpoint is implicitly scoped to the athlete resolved from your auth credential, so there is never an <code>athlete_id</code> parameter to pass yourself.</p>
+      <div class="callout"><strong>Base URL is deployment-specific.</strong> This API has no public multi-tenant host — you run it yourself (Docker/Podman), and the origin depends on how you've exposed it (a reverse-proxy hostname, a local port, a Tailscale address). Substitute your own origin for <code>https://your-sporthealth-host</code> in every example on this page.</div>
+    </section>
+
+    <section class="doc-section" id="authentication">
+      <h2>Authentication</h2>
+      <p>Every route requires a credential <strong>except</strong> <code>GET /healthz</code>, <code>GET /version</code>, and <code>POST /auth/login</code> itself (login <em>is</em> the credential check). Present exactly one of the following:</p>
+
+      <h3>1. Shared API key</h3>
+      <p>Send <code>X-API-Key</code> set to the server's <code>SPORTHEALTH_API_KEY</code> environment variable. This is the simplest option for scripts, the MCP server, and single-athlete deployments — it resolves to the deployment's default athlete.</p>
+      <div class="code-block"><button class="copy-btn" data-copy="curl-shared-key">Copy</button><pre id="curl-shared-key">curl -H "X-API-Key: YOUR_API_KEY" \
+  https://your-sporthealth-host/api/v1/activities?limit=10</pre></div>
+
+      <h3>2. Per-athlete API key</h3>
+      <p>Send <code>X-API-Key</code> set to a key minted for one specific athlete via <code>sync athlete create-key</code> (server-side CLI, printed once). The server compares its SHA-256 hash against <code>athlete.api_key_hash</code> and resolves to that athlete specifically. Same header, same request shape as above — the two key types are tried in order and are indistinguishable to the caller.</p>
+
+      <h3>3. Session token (JWT)</h3>
+      <p>Exchange a username/password for a short-lived bearer token via <code>POST /auth/login</code>, then send it as <code>Authorization: Bearer &lt;token&gt;</code>. This is what the web frontend uses. Tokens expire after <code>SPORTHEALTH_JWT_EXPIRY_DAYS</code> (default <strong>30 days</strong>); there is no refresh endpoint — log in again once expired.</p>
+      <div class="code-block"><button class="copy-btn" data-copy="curl-login">Copy</button><pre id="curl-login">curl -X POST https://your-sporthealth-host/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "jerome", "password": "YOUR_PASSWORD"}'
+
+# => {"access_token": "eyJhbGciOi...", "expires_at": "2026-09-18T12:00:00Z"}
+
+curl -H "Authorization: Bearer eyJhbGciOi..." \
+  https://your-sporthealth-host/api/v1/activities?limit=10</pre></div>
+
+      <h3>Failure modes</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Status</th><th>When</th></tr>
+        <tr><td><span class="status-chip s4">401</span></td><td>No credential presented (and the server has at least one auth method configured), or the credential presented is invalid, malformed, or expired.</td></tr>
+        <tr><td><span class="status-chip s4">503</span></td><td>The server has <strong>neither</strong> <code>SPORTHEALTH_API_KEY</code> nor <code>SPORTHEALTH_JWT_SECRET</code> configured — auth fails closed, never open, so a misconfigured deployment refuses every request rather than silently accepting none. This is a deployment misconfiguration, not something a client can fix by changing its request.</td></tr>
+      </table></div>
+    </section>
+
+    <section class="doc-section" id="errors">
+      <h2>Errors</h2>
+      <p>Errors are returned as a JSON body with a <code>detail</code> field. Validation errors use FastAPI's standard shape and are the same across every endpoint, so they're documented once here rather than repeated per endpoint below.</p>
+
+      <h3>422 · Validation error</h3>
+      <p>Returned when a query parameter, path parameter, or request body fails type/shape validation before the handler even runs — e.g. a non-numeric <code>limit</code>, a malformed date, or a request body missing a required field.</p>
+      <div class="code-block"><button class="copy-btn" data-copy="err-422">Copy</button><pre id="err-422">{
+  "detail": [
+    {
+      "loc": ["query", "limit"],
+      "msg": "Input should be a valid integer",
+      "type": "int_parsing",
+      "input": "abc"
+    }
+  ]
+}</pre></div>
+      <p><code>loc</code> is a path to the offending field (<code>["query", name]</code>, <code>["path", name]</code>, or <code>["body", ...]</code>); <code>type</code> is a stable machine-readable error code; <code>ctx</code> may add extra constraint details (e.g. <code>{"ge": 1}</code> for a range violation).</p>
+
+      <h3>Other status codes</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Status</th><th>Meaning</th></tr>
+        <tr><td><span class="status-chip s2">200</span></td><td>Success.</td></tr>
+        <tr><td><span class="status-chip s2">201</span></td><td>Resource created (only <code>POST /notes</code>).</td></tr>
+        <tr><td><span class="status-chip s4">400</span></td><td>The request was well-formed but semantically invalid for this operation (e.g. an out-of-range <code>tier</code>/<code>channels</code> combination, an unsupported goal <code>period_type</code>, or splitting an activity's only source). <code>detail</code> is a plain string explaining what's wrong.</td></tr>
+        <tr><td><span class="status-chip s4">401</span></td><td>Missing or invalid credential — see Authentication above.</td></tr>
+        <tr><td><span class="status-chip s4">404</span></td><td>The path references an id that doesn't exist, doesn't belong to your athlete, or has been soft-deleted. <code>detail</code> is a plain string, e.g. <code>"activity not found"</code>.</td></tr>
+        <tr><td><span class="status-chip s4">422</span></td><td>Request validation failure — see above.</td></tr>
+        <tr><td><span class="status-chip s4">503</span></td><td>Server-side auth misconfiguration — see Authentication above.</td></tr>
+      </table></div>
+    </section>
+
+    <section class="doc-section" id="conventions">
+      <h2>Conventions</h2>
+
+      <h3>Units</h3>
+      <p>Every numeric value in every response is <strong>SI</strong>: metres, seconds, metres/second, kilograms, °C, watts, beats per minute. There is no unit-conversion query parameter — convert at display time in your own client, the same way this project's own frontend does.</p>
+
+      <h3>Timestamps &amp; dates</h3>
+      <p>Two distinct date/time shapes appear throughout this API, and they are not interchangeable:</p>
+      <div class="table-wrap"><table>
+        <tr><th>Field pattern</th><th>Type</th><th>Meaning</th></tr>
+        <tr><td class="mono">*_utc</td><td class="mono">string (date-time)</td><td>An instant, always UTC, ISO-8601 (e.g. <code>2026-08-15T06:32:11Z</code>).</td></tr>
+        <tr><td class="mono">local_date</td><td class="mono">string (date)</td><td>A calendar date with no time component (<code>YYYY-MM-DD</code>), in whatever timezone the activity/observation actually happened in — not UTC-shifted. This is what the calendar UI groups and filters by.</td></tr>
+        <tr><td class="mono">utc_offset_s</td><td class="mono">integer</td><td>Seconds east of UTC in effect at <code>start_time_utc</code>, for reconstructing local wall-clock time from the UTC instant.</td></tr>
+      </table></div>
+      <p><code>start_date</code>/<code>end_date</code> query parameters are always <code>local_date</code>-typed (<code>YYYY-MM-DD</code>) and both bounds are <strong>inclusive</strong>.</p>
+
+      <h3>Pagination</h3>
+      <p>The two endpoints that can return unbounded result sets (<code>GET /activities</code>, <code>GET /health/observations</code>) use the same envelope:</p>
+      <div class="table-wrap"><table>
+        <tr><th>Field</th><th>Type</th><th></th></tr>
+        <tr><td class="mono">items</td><td class="mono">array</td><td>This page's results.</td></tr>
+        <tr><td class="mono">total</td><td class="mono">integer</td><td>Total matching rows across all pages, not just this one.</td></tr>
+        <tr><td class="mono">limit</td><td class="mono">integer</td><td>The page size that was applied.</td></tr>
+        <tr><td class="mono">offset</td><td class="mono">integer</td><td>The offset that was applied.</td></tr>
+      </table></div>
+      <p>Every other list-returning endpoint (routes, map points, sleep sessions, insights, notes, fitness rollups…) returns a plain unbounded JSON array — these are all backed by precomputed rollups or otherwise-bounded queries, so pagination would add complexity without a real need.</p>
+
+      <h3>"available: false" instead of a fabricated value</h3>
+      <p>A handful of endpoints (activity weather, activity location, goal progress) describe data that may genuinely not exist yet — no GPS fix to geocode, no goal configured for a period. These return <code>200</code> with <code>"available": false</code> and every other field <code>null</code>, rather than a <code>404</code> or a guessed value. Always check <code>available</code> before reading the rest of the object.</p>
+
+      <h3>Multi-value query parameters</h3>
+      <p>Array-typed query parameters (<code>metric_key</code>, <code>channels</code>, <code>metric_keys</code>) are repeated, not comma-joined: <code>?metric_key=a&amp;metric_key=b</code>. (The one exception is <code>ids</code> on <code>GET /activities/routes</code>, which is a single comma-separated string — noted on that endpoint.)</p>
+
+      <h3>Nullable fields</h3>
+      <p>In every table below, a <span class="badge badge-null">nullable</span> tag means the field's type is a union with <code>null</code> and may legitimately be absent — most commonly because a source device never recorded that signal (e.g. <code>avg_hr_bpm</code> on a pool-swim activity with no HR strap), not because of an error.</p>
+    </section>
+
+    <div id="endpoint-groups"></div>
+
+    <section class="doc-section" id="schemas">
+      <h2>Schema reference</h2>
+      <p>Response object shapes referenced by name from the endpoints above. Every field is listed with its type; <span class="badge badge-req">required</span> means the field is always present in the response (it may still be <code>null</code> if also tagged <span class="badge badge-null">nullable</span>); <span class="badge badge-opt">optional</span> means the field may be omitted from the JSON entirely.</p>
+      <div id="schema-cards"></div>
+    </section>
+
+    <section class="doc-section" id="mcp">
+      <h2>MCP server</h2>
+      <p>Every read endpoint above, plus <code>create_note</code>/<code>list_notes</code>, is also exposed as an MCP (Model Context Protocol) tool for AI agents, mounted at <code>/mcp</code> on the same host and gated by the same <code>X-API-Key</code> credential described in Authentication. Each tool is a thin wrapper that calls its REST counterpart in-process — the request/response shapes documented above apply there too. This page documents the REST surface; point an MCP-aware client (e.g. Claude Desktop, Claude Code) at <code>https://your-sporthealth-host/mcp</code> to use the tool form instead.</p>
+    </section>
+  </main>
+</div>
+
+<footer>Sport Health Data Platform API · reference generated from the live OpenAPI schema, cross-checked against router source.</footer>
+
+<script>
+const EX = {
+  ACT: "01HZXK3P8Q9T2VJH4M6W7RNDCE",
+  ACT2: "01HZXK5M2R7Y8ZQF3N9C1WGTBH",
+  LINK: 2,
+  GOAL: 14,
+};
+
+// ---------------------------------------------------------------------------
+// Reusable field-group snippets (shared across schema cards below)
+// ---------------------------------------------------------------------------
+const F = {
+  activitySummary: [
+    ["id","string","ULID primary key."],
+    ["start_time_utc","string(date-time)","Activity start instant, UTC."],
+    ["utc_offset_s","integer","Local UTC offset in effect at start, in seconds."],
+    ["local_date","string(date)|null","Calendar date the activity started on, local time."],
+    ["sport","string","e.g. running, cycling, walking, hiking, strength_training — see Conventions."],
+    ["sub_sport","string|null","Finer-grained classification, e.g. trail_running."],
+    ["name","string|null","Activity title."],
+    ["is_race","boolean|null","Whether this was flagged as a race."],
+    ["duration_s","number|null","Total elapsed duration."],
+    ["moving_duration_s","number|null","Duration excluding detected stops/pauses."],
+    ["distance_m","number|null",""],
+    ["elevation_gain_m","number|null",""],
+    ["calories","number|null",""],
+    ["avg_hr_bpm","number|null",""],
+    ["max_hr_bpm","number|null",""],
+    ["training_load","number|null","Garmin's own per-activity training load, when reported."],
+    ["workout_rpe","number|null","Rate of perceived exertion, when logged."],
+    ["weight_kg","number|null","Athlete body weight at time of activity, if recorded on-device."],
+    ["vdot","number|null","This project's own VDOT estimate for the activity, when computable (running only)."],
+    ["workout_name","string|null","Name of the pre-planned workout structure, if one was attached."],
+    ["primary_source","string","Which adapter this activity's canonical record came from: fit_folder, garmin_export, garmin_connect, strava_export."],
+    ["stream_available","boolean","Whether a per-second sensor stream exists for GET .../stream."],
+  ],
+  device: [
+    ["manufacturer","string|null",""],
+    ["product","string|null",""],
+    ["serial_number","string|null",""],
+  ],
+  lap: [
+    ["lap_index","integer","0-based."],
+    ["start_time_utc","string(date-time)",""],
+    ["duration_s","number|null",""],
+    ["moving_duration_s","number|null",""],
+    ["distance_m","number|null",""],
+    ["avg_hr","number|null",""],
+    ["max_hr","number|null",""],
+    ["avg_speed_mps","number|null",""],
+  ],
+  split: [
+    ["split_index","integer","0-based."],
+    ["split_type","string|null","e.g. distance for an auto-lap kilometre/mile split."],
+    ["start_time_utc","string(date-time)|null",""],
+    ["end_time_utc","string(date-time)|null",""],
+    ["duration_s","number|null",""],
+    ["distance_m","number|null",""],
+  ],
+  route: [
+    ["encoded_polyline","string|null","Google-encoded polyline of the full GPS track, when GPS is present."],
+    ["min_lat","number|null","Bounding box."],
+    ["min_lng","number|null",""],
+    ["max_lat","number|null",""],
+    ["max_lng","number|null",""],
+    ["start_lat","number|null",""],
+    ["start_lng","number|null",""],
+    ["end_lat","number|null",""],
+    ["end_lng","number|null",""],
+  ],
+  activityMetric: [
+    ["metric_key","string","Dotted namespace, e.g. garmin.daily_summary.steps or fit.session.avg_temperature."],
+    ["value_num","number|null","Present when the metric is numeric."],
+    ["value_text","string|null","Present when the metric is text-valued instead."],
+    ["unit","string|null",""],
+    ["source","string","Which adapter/vendor this specific field's value came from."],
+  ],
+};
+
+function page(itemRef) {
+  return [
+    ["items","array<" + itemRef + ">","This page's results."],
+    ["total","integer","Total matching rows across every page."],
+    ["limit","integer","Page size applied."],
+    ["offset","integer","Offset applied."],
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Schema reference (rendered into #schema-cards)
+// ---------------------------------------------------------------------------
+const SCHEMAS = [
+  { name: "ActivitySummary", note: "Returned in list contexts: GET /activities (paginated) and as the item shape implied by GET /activities/map (a reduced projection, see ActivityMapPointOut).", fields: F.activitySummary },
+  { name: "ActivityDetail", note: "Everything in ActivitySummary, plus device/laps/splits/route/metrics. Returned by GET /activities/{id}.", fields: [
+      ...F.activitySummary,
+      ["device","DeviceOut|null","null when the activity has no attributed recording device."],
+      ["laps","array<LapOut>","Empty array if the source recorded no laps."],
+      ["splits","array<SplitOut>",""],
+      ["route","RouteOut|null","null when the activity has no GPS."],
+      ["metrics","array<ActivityMetricOut>","Every stored per-activity field beyond the curated columns above — the raw-first catalog in list form."],
+      ["estimated_sweat_loss_ml","number|null","Computed estimate, not a device measurement."],
+    ] },
+  { name: "DeviceOut", fields: F.device },
+  { name: "LapOut", fields: F.lap },
+  { name: "SplitOut", fields: F.split },
+  { name: "RouteOut", fields: F.route },
+  { name: "ActivityMetricOut", fields: F.activityMetric },
+  { name: "Page&lt;ActivitySummary&gt;", note: "The pagination envelope described in Conventions, applied to ActivitySummary.", fields: page("ActivitySummary") },
+  { name: "ActivityMapPointOut", note: "One GPS-bearing activity's start point — the reduced shape returned by GET /activities/map.", fields: [
+      ["id","string",""],
+      ["local_date","string(date)|null",""],
+      ["sport","string",""],
+      ["name","string|null",""],
+      ["distance_m","number|null",""],
+      ["start_lat","number","Always present — this schema is only ever populated for activities that have a GPS start point."],
+      ["start_lng","number",""],
+    ] },
+  { name: "ActivityRouteOut", fields: [
+      ["id","string",""],
+      ["simplified_polyline","string|null","A lower-resolution polyline than ActivityDetail.route's, sized for a small thumbnail map."],
+    ] },
+  { name: "ActivityContextOut", note: "Returned by GET /activities/{id}/context.", fields: [
+      ["percentile_rank","number|null","0–100. null when there's nothing comparable yet (e.g. a first-ever 5K)."],
+      ["comparable_count","integer","How many other activities the percentile was computed against."],
+      ["recent","array<ActivityContextRecentOut>","Same-sport activities in the 90 days up to and including this activity's own date."],
+      ["fastest","array<ActivityContextRecentOut>","This activity's all-time-fastest same-sport, similar-distance peers."],
+    ] },
+  { name: "ActivityContextRecentOut", fields: [
+      ["id","string",""],
+      ["local_date","string(date)|null",""],
+      ["distance_m","number",""],
+      ["duration_s","number",""],
+      ["avg_hr_bpm","number|null","optional — absent","opt"],
+    ] },
+  { name: "ActivityWeatherOut", note: "Returned by GET /activities/{id}/weather. See “available: false” in Conventions.", fields: [
+      ["available","boolean","required"],
+      ["temperature_min_c","number|null","optional field — omitted from the JSON entirely when available is false","opt"],
+      ["temperature_max_c","number|null","","opt"],
+      ["humidity_min_pct","number|null","","opt"],
+      ["humidity_max_pct","number|null","","opt"],
+      ["weather_code","integer|null","WMO weather interpretation code.","opt"],
+    ] },
+  { name: "ActivityLocationOut", note: "Returned by GET /activities/{id}/location. See “available: false” in Conventions.", fields: [
+      ["available","boolean","required"],
+      ["location_name","string|null","optional — omitted when available is false","opt"],
+    ] },
+  { name: "ActivityWorkoutOut", note: "Returned by GET /activities/{id}/workout (or the endpoint returns bare null).", fields: [
+      ["name","string|null",""],
+      ["description","string|null",""],
+      ["steps","array<ActivityWorkoutStepOut>","Raw step list, including repeat-block markers — not pre-flattened."],
+    ] },
+  { name: "ActivityWorkoutStepOut", fields: [
+      ["step_index","integer",""],
+      ["duration_type","string|null","e.g. time, distance, repeat_until_steps_cmplt."],
+      ["duration_time_s","number|null",""],
+      ["duration_distance_m","number|null",""],
+      ["target_type","string|null","e.g. speed, heart_rate, open."],
+      ["target_low_mps","number|null",""],
+      ["target_high_mps","number|null",""],
+      ["intensity","string|null","e.g. active, rest, warmup, cooldown."],
+      ["repeat_from_step","integer|null","For a repeat-block step: the step_index it loops back to."],
+      ["repeat_count","integer|null",""],
+    ] },
+  { name: "ActivitySourcesOut", note: "Returned by GET /activities/{id}/sources.", fields: [
+      ["sources","array<ActivitySourceOut>",""],
+      ["merge_decisions","array<ActivityMergeDecisionOut>","Why each additional source was linked in."],
+    ] },
+  { name: "ActivitySourceOut", fields: [
+      ["link_id","integer","Pass into POST .../sources/{link_id}/split to undo this merge."],
+      ["source","string","fit_folder, garmin_export, garmin_connect, strava_export, or eufy."],
+      ["external_id","string","That source's own identifier for this record."],
+      ["ingested_at","string(date-time)",""],
+      ["can_split","boolean","false when this is the activity's only source — splitting it would leave nothing behind."],
+    ] },
+  { name: "ActivityMergeDecisionOut", fields: [
+      ["candidate_ref","string","Identifies the candidate record that was evaluated for merging."],
+      ["reasons","array<string>","Human-readable reasons the merge engine matched (or would have matched) this candidate."],
+      ["decided_at","string(date-time)",""],
+    ] },
+  { name: "ActivitySplitOut", fields: [ ["new_activity_id","string","The freshly created activity the split source now belongs to."] ] },
+  { name: "ActivitySportOverrideOut", fields: [ ["sport","string",""], ["sub_sport","string|null",""] ] },
+  { name: "ActivityRaceOverrideOut", fields: [ ["is_race","boolean",""] ] },
+  { name: "ActivityNameOverrideOut", fields: [ ["name","string",""] ] },
+  { name: "StreamResponse", note: "Returned by GET /activities/{id}/stream.", fields: [
+      ["activity_id","string",""],
+      ["tier","string","The tier that was actually applied (echoes the tier query parameter)."],
+      ["channels","array<string>","Which channels are present in series — either the requested subset, or every available channel if none was requested."],
+      ["timestamps","array<string(date-time)>","One UTC instant per sample, shared by every channel."],
+      ["series","object","Map of channel name → array of numbers, one array per entry in channels, each the same length as timestamps."],
+    ] },
+  { name: "HealthObservationOut", note: "Returned by GET /health/observations.", fields: [
+      ["metric_key","string","Dotted vendor namespace, e.g. garmin.daily_summary.steps, eufy.scale.weight."],
+      ["observed_at_utc","string(date-time)",""],
+      ["local_date","string(date)",""],
+      ["aggregation","string","How the value was aggregated at the source, e.g. daily, instant."],
+      ["value_num","number|null",""],
+      ["value_text","string|null",""],
+      ["unit","string|null",""],
+      ["source","string","Adapter this observation came from."],
+    ] },
+  { name: "Page&lt;HealthObservationOut&gt;", fields: page("HealthObservationOut") },
+  { name: "HealthDashboardOut", note: "Returned by GET /health/dashboard.", fields: [ ["metrics","array<HealthDashboardMetricOut>","One entry per curated logical metric (steps, resting_hr, weight_kg, sleep_score, …)."] ] },
+  { name: "HealthDashboardMetricOut", fields: [
+      ["logical_metric","string","The curated, source-independent name — e.g. steps, resting_hr_bpm, weight_kg."],
+      ["last_observed","string(date-time)|null","null if this metric has no data at all in range."],
+      ["daily","array<HealthDashboardDayOut>",""],
+    ] },
+  { name: "HealthDashboardDayOut", fields: [
+      ["local_date","string(date)",""],
+      ["value_sum","number|null",""],
+      ["value_avg","number|null",""],
+      ["value_min","number|null",""],
+      ["value_max","number|null",""],
+      ["value_last","number|null",""],
+      ["n_observations","integer",""],
+      ["source_metric_key","string","Which underlying raw metric_key this day's value was drawn from (a logical metric can be backed by different raw keys on different days if the source device changed)."],
+    ] },
+  { name: "SleepSessionOut", note: "Returned by GET /sleep.", fields: [
+      ["local_date","string(date)","The night this session is attributed to."],
+      ["start_time_utc","string(date-time)",""],
+      ["end_time_utc","string(date-time)",""],
+      ["total_sleep_s","number|null",""],
+      ["sleep_score","number|null",""],
+      ["source","string",""],
+      ["stages","array<SleepStageOut>",""],
+    ] },
+  { name: "SleepStageOut", fields: [
+      ["stage","string","light, deep, rem, or awake."],
+      ["start_time_utc","string(date-time)",""],
+      ["end_time_utc","string(date-time)",""],
+    ] },
+  { name: "CalendarResponse", note: "Returned by GET /calendar.", fields: [ ["days","array<DayRollupOut>",""] ] },
+  { name: "DayRollupOut", fields: [
+      ["local_date","string(date)",""],
+      ["activity_count","integer",""],
+      ["activity_duration_s","number|null",""],
+      ["activity_moving_duration_s","number|null",""],
+      ["activity_distance_m","number|null",""],
+      ["activity_elevation_gain_m","number|null",""],
+      ["activity_calories","number|null",""],
+      ["sleep_total_s","number|null",""],
+      ["sleep_score","number|null",""],
+      ["health_metrics","array<HealthMetricRollupOut>","Restricted to metric_keys if that query parameter was passed."],
+    ] },
+  { name: "HealthMetricRollupOut", fields: [
+      ["metric_key","string",""],
+      ["value_sum","number|null",""],
+      ["value_avg","number|null",""],
+      ["value_min","number|null",""],
+      ["value_max","number|null",""],
+      ["value_last","number|null",""],
+      ["n_observations","integer",""],
+    ] },
+  { name: "PeriodCalendarResponse", note: "Returned by GET /calendar/weeks and GET /calendar/months.", fields: [ ["periods","array<PeriodRollupOut>",""] ] },
+  { name: "PeriodRollupOut", fields: [
+      ["period_type","string","week or month."],
+      ["period_start","string(date)",""],
+      ["period_end","string(date)",""],
+      ["activity_count","integer",""],
+      ["activity_duration_s","number|null",""],
+      ["activity_moving_duration_s","number|null",""],
+      ["activity_distance_m","number|null",""],
+      ["activity_elevation_gain_m","number|null",""],
+      ["activity_calories","number|null",""],
+      ["activity_days_count","integer","Distinct days within the period that had ≥1 activity."],
+      ["sleep_total_s","number|null",""],
+      ["sleep_score","number|null","Period-average."],
+      ["health_metrics","array<PeriodHealthMetricRollupOut>",""],
+    ] },
+  { name: "PeriodHealthMetricRollupOut", fields: [
+      ["metric_key","string",""],["value_sum","number|null",""],["value_avg","number|null",""],
+      ["value_min","number|null",""],["value_max","number|null",""],["value_last","number|null",""],["n_observations","integer",""],
+    ] },
+  { name: "FitnessDailyRollupOut", note: "Returned by GET /fitness.", fields: [
+      ["local_date","string(date)",""],
+      ["training_load","number","That day's own training load input to the EWMA (0 on rest days)."],
+      ["ctl","number","Chronic Training Load — 42-day EWMA (\"fitness\")."],
+      ["atl","number","Acute Training Load — 7-day EWMA (\"fatigue\")."],
+      ["tsb","number","Training Stress Balance — ctl − atl (\"form\")."],
+    ] },
+  { name: "InsightOut", note: "Returned by GET /insights and GET /activities/{id}/insights.", fields: [
+      ["kind","string","effort, health, load, pb, or streak."],
+      ["window","string","current, 30d, 90d, 180d, 365d, or all_time, depending on kind."],
+      ["title","string","Human-readable headline."],
+      ["detail","object","Kind-specific structured payload backing the title (varies by kind — treat as opaque unless you need one specific kind's shape)."],
+      ["value_num","number|null","The headline number, when the insight has one."],
+      ["metric_key","string|null",""],
+      ["sport_family","string|null","running, cycling, etc. — null for insights not scoped to one sport."],
+      ["activity_id","string|null","Set when the insight is about one specific activity."],
+      ["local_date","string(date)|null",""],
+      ["computed_at","string(date-time)",""],
+    ] },
+  { name: "NoteOut", note: "Returned by POST /notes (201) and GET /notes.", fields: [
+      ["id","integer",""],
+      ["entity_type","string","activity or day."],
+      ["entity_id","string","An activity id, or a local_date string when entity_type is day."],
+      ["body","string",""],
+      ["author","string|null",""],
+      ["created_at","string(date-time)",""],
+      ["updated_at","string(date-time)",""],
+    ] },
+  { name: "GoalProgressOut", note: "Returned by GET /goals. See “available: false” in Conventions.", fields: [
+      ["available","boolean","required — false when no goal is configured for this period/sport."],
+      ["goal","GoalOut|null","optional — omitted when available is false","opt"],
+      ["period_end","string(date)|null","optional","opt"],
+      ["daily","array<GoalProgressPoint>","optional — defaults to [] when available is false","opt"],
+      ["target_per_day_m","number|null","optional — the flat daily pace needed to hit the goal exactly","opt"],
+      ["current_distance_m","number|null","optional — cumulative distance so far this period","opt"],
+      ["target_distance_as_of_today_m","number|null","optional — where the pace-to-target line sits today","opt"],
+      ["ahead_behind_m","number|null","optional — current_distance_m minus target_distance_as_of_today_m; positive means ahead","opt"],
+      ["pct_complete","number|null","optional — current_distance_m / target_distance_m × 100","opt"],
+    ] },
+  { name: "GoalOut", note: "Returned inside GoalProgressOut, and directly by PUT /goals.", fields: [
+      ["id","integer",""],
+      ["period_type","string","year or month."],
+      ["period_start","string","\"YYYY\" for a year goal, \"YYYY-MM\" for a month goal."],
+      ["sport","string|null","null means the goal covers every sport combined."],
+      ["target_distance_m","number",""],
+    ] },
+  { name: "GoalProgressPoint", fields: [ ["local_date","string(date)",""], ["cumulative_distance_m","number","Running total from the start of the period through this date."] ] },
+  { name: "HrZoneConfigOut", note: "Returned by GET and PUT /settings/hr-zones.", fields: [
+      ["max_hr_bpm","number|null",""],
+      ["threshold_hr_bpm","number|null",""],
+      ["resting_hr_bpm","number|null",""],
+      ["zone1_high_bpm","number|null","Derived boundaries — null whenever the inputs needed to compute them aren't configured."],
+      ["zone2_high_bpm","number|null",""],
+      ["zone3_high_bpm","number|null",""],
+      ["zone4_high_bpm","number|null",""],
+    ] },
+  { name: "LoginResponse", fields: [ ["access_token","string","JWT — send as Authorization: Bearer <token>."], ["expires_at","string(date-time)",""] ] },
+];
+
+// ---------------------------------------------------------------------------
+// Endpoint groups (rendered into #endpoint-groups + sidebar)
+// ---------------------------------------------------------------------------
+const GROUPS = [
+  { id: "auth", title: "Auth", endpoints: [
+    { method: "POST", path: "/api/v1/auth/login", summary: "Exchange a username and password for a session token.",
+      description: "Not gated by an API key — this endpoint is itself the credential check. Uses a constant-time password comparison, including a dummy-hash comparison for unknown usernames, so a failed login never reveals via timing whether the username exists.",
+      auth: "none",
+      body: { schema: "LoginRequest", fields: [
+        ["username","string","req","",""],
+        ["password","string","req","",""],
+      ]},
+      responses: [
+        { code: 200, schema: "LoginResponse", note: "" },
+        { code: 401, note: 'detail: "invalid username or password"' },
+        { code: 503, note: 'detail: "JWT signing not configured" — SPORTHEALTH_JWT_SECRET not set server-side.' },
+      ],
+      example: { curl: `curl -X POST https://your-sporthealth-host/api/v1/auth/login \\
+  -H "Content-Type: application/json" \\
+  -d '{"username": "jerome", "password": "YOUR_PASSWORD"}'` }
+    },
+  ]},
+
+  { id: "activities", title: "Activities", endpoints: [
+    { method: "GET", path: "/api/v1/activities", summary: "List activities, most recent first.",
+      description: "Paginated activity summaries, optionally filtered by date range and/or sport.",
+      params: [
+        ["start_date","query","opt","string(date)","—","Only activities with local_date ≥ this."],
+        ["end_date","query","opt","string(date)","—","Only activities with local_date ≤ this."],
+        ["sport","query","opt","string","—","Exact match, e.g. running."],
+        ["limit","query","opt","integer","50","1–500."],
+        ["offset","query","opt","integer","0","≥ 0."],
+      ],
+      responses: [ { code: 200, ref: "Page&lt;ActivitySummary&gt;" } ],
+      example: { qs: "?start_date=2026-07-01&end_date=2026-07-31&sport=running&limit=20" }
+    },
+    { method: "GET", path: "/api/v1/activities/years", summary: "Distinct years with at least one activity.",
+      description: "Descending list of years — a cheap aggregate that powers the calendar's year selector without paginating through every activity.",
+      responses: [ { code: 200, note: "array&lt;integer&gt;, e.g. [2026, 2025, 2024, …]" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/map", summary: "Every GPS-bearing activity's start point.",
+      description: "One unbounded response for the map explorer. Activities with no GPS start point (indoor, trainer, pool) are simply absent — never returned with null coordinates.",
+      params: [
+        ["start_date","query","opt","string(date)","—",""],
+        ["end_date","query","opt","string(date)","—",""],
+        ["sport","query","opt","string","—",""],
+      ],
+      responses: [ { code: 200, ref: "array&lt;ActivityMapPointOut&gt;" } ],
+      example: { qs: "?sport=running" }
+    },
+    { method: "GET", path: "/api/v1/activities/routes", summary: "Batch polyline lookup for a set of activities.",
+      description: "One request covering many activity ids, for thumbnail maps on a page of cards. Activities with no route are simply omitted from the response, not returned with a null polyline.",
+      params: [ ["ids","query","req","string","—","Comma-separated activity ids (not repeated — the one exception to the multi-value convention in Conventions)."] ],
+      responses: [ { code: 200, ref: "array&lt;ActivityRouteOut&gt;" } ],
+      example: { qs: `?ids=${EX.ACT},${EX.ACT2}` }
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}", summary: "Full detail for one activity.",
+      description: "Laps, splits, route bounding box, attributed device, and every stored per-activity metric.",
+      params: [ ["activity_id","path","req","string","—","ULID."] ],
+      responses: [ { code: 200, ref: "ActivityDetail" }, { code: 404, note: 'detail: "activity not found"' } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/context", summary: "Same-sport percentile rank and recent/fastest comparisons.",
+      description: "A deliberately honest comparison view — not a reproduction of any vendor's proprietary performance-condition model. percentile_rank is the share of this athlete's own same-sport activities within ±15% distance that this one beat or tied, by effective pace. null when there's nothing comparable yet. recent covers the 90 days up to and including this activity's own date, not \"today\" — browsing an old activity shows its own contemporaries.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, ref: "ActivityContextOut" }, { code: 404, note: "" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/insights", summary: "Point-in-time insights for one activity.",
+      description: "e.g. \"your fastest 10 km to date.\" Computed fresh at request time (unlike GET /insights, which reads a precomputed table), and always bounded to activities at or before this one's own local_date — viewing an old activity never leaks knowledge of activities that hadn't happened yet.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, ref: "array&lt;InsightOut&gt;" }, { code: 404, note: "" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/weather", summary: "Temperature/humidity range and conditions during the activity.",
+      description: "Sourced from Open-Meteo's historical archive, keyed on the activity's GPS start point and time window; cached forever once fetched. available: false — never a fabricated range — when there's no GPS start point, or the fetch came back empty.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, ref: "ActivityWeatherOut" }, { code: 404, note: "" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/location", summary: "Reverse-geocoded place name for the activity's start point.",
+      description: "City/town or national park name via Nominatim, cached forever once resolved. available: false when there's no GPS start point, nothing cached yet, or the lookup came back empty. A cache miss triggers a background fetch and returns immediately rather than blocking on Nominatim's 1 req/s throttle — the name simply appears the next time you fetch this activity.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, ref: "ActivityLocationOut" }, { code: 404, note: "" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/workout", summary: "The pre-planned workout structure attached to this activity, if any.",
+      description: "Garmin Connect's Workout Builder plan downloaded to the device before the activity — null for the large majority of activities with no such plan, never a fabricated one. Steps are returned raw (unflattened repeat blocks), matching how the FIT file itself encodes them.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, ref: "ActivityWorkoutOut", note: "or bare null" }, { code: 404, note: "" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/sources", summary: "Every raw source behind this activity, and how they were merged.",
+      description: "Makes cross-source merges (e.g. the same run recorded by both a Garmin watch and Strava's auto-upload) inspectable — the sibling read half of POST .../sources/{link_id}/split below.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, ref: "ActivitySourcesOut" }, { code: 404, note: "" } ],
+      example: {}
+    },
+    { method: "POST", path: "/api/v1/activities/{activity_id}/sources/{link_id}/split", summary: "Undo a wrong merge.",
+      description: "Re-derives one source's data into a brand-new activity from that source's own already-archived raw bytes. Never destructive — the original activity keeps every other source it had, and nothing is re-parsed for any other link.",
+      params: [ ["activity_id","path","req","string","—",""], ["link_id","path","req","integer","—","From ActivitySourceOut.link_id, see GET .../sources."] ],
+      responses: [
+        { code: 200, ref: "ActivitySplitOut" },
+        { code: 400, note: 'detail: "..." — link_id is the activity\'s only source, nothing to split away from.' },
+        { code: 404, note: 'detail: "activity not found" or "source link not found on this activity"' },
+      ],
+      example: { curl: `curl -X POST https://your-sporthealth-host/api/v1/activities/${EX.ACT}/sources/${EX.LINK}/split \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "PATCH", path: "/api/v1/activities/{activity_id}/sport", summary: "Correct an activity's sport.",
+      description: "For activities whose raw source itself recorded the wrong sport (e.g. a hike logged under a watch's \"Run\" profile) with no second raw source in the archive to auto-detect the mismatch. Stored as a durable, rebuild-safe override — not a direct column edit, so it survives sync rebuild.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { schema: "ActivitySportOverrideIn", fields: [
+        ["sport","string","req","",""],
+        ["sub_sport","string|null","opt","","Omit to leave sub_sport unset."],
+      ]},
+      responses: [ { code: 200, ref: "ActivitySportOverrideOut" }, { code: 404, note: "" } ],
+      example: { curl: `curl -X PATCH https://your-sporthealth-host/api/v1/activities/${EX.ACT}/sport \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"sport": "hiking", "sub_sport": null}'` }
+    },
+    { method: "PATCH", path: "/api/v1/activities/{activity_id}/race", summary: "Mark or unmark an activity as a race.",
+      description: "Corrects Garmin's own eventTypeId heuristic for the (uncommon) case where a real race was never flagged as one inside the Garmin Connect app. Durable, rebuild-safe override.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { schema: "ActivityRaceOverrideIn", fields: [ ["is_race","boolean","req","",""] ] },
+      responses: [ { code: 200, ref: "ActivityRaceOverrideOut" }, { code: 404, note: "" } ],
+      example: { curl: `curl -X PATCH https://your-sporthealth-host/api/v1/activities/${EX.ACT}/race \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"is_race": true}'` }
+    },
+    { method: "PATCH", path: "/api/v1/activities/{activity_id}/name", summary: "Rename an activity.",
+      description: "Garmin Connect's own activity name is not reliably a real athlete-given title — it can be just as generic a template as the on-device default — so there's no safe automatic rule for cleaning it up. Durable, rebuild-safe override.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { schema: "ActivityNameOverrideIn", fields: [ ["name","string","req","",""] ] },
+      responses: [ { code: 200, ref: "ActivityNameOverrideOut" }, { code: 404, note: "" } ],
+      example: { curl: `curl -X PATCH https://your-sporthealth-host/api/v1/activities/${EX.ACT}/name \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"name": "Sunday long run"}'` }
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/stream", summary: "Downsampled per-second sensor stream, for charting.",
+      description: "Server-side bucket-averaged (DuckDB) to one of three point-count tiers, so a chart never has to fetch or render a full-resolution multi-hour stream.",
+      params: [
+        ["activity_id","path","req","string","—",""],
+        ["tier","query","opt","string","medium","One of low (~200 pts), medium (~1000 pts), high (~20000 pts)."],
+        ["channels","query","opt","array&lt;string&gt;","—","Which channels to return. Omit for every available channel. Available names: heart_rate, power, temperature, speed_mps, altitude_m, respiration_rate, distance_m, cadence, lat, lon — an activity only has the channels its device actually recorded."],
+      ],
+      responses: [
+        { code: 200, ref: "StreamResponse" },
+        { code: 400, note: "A requested channel isn't available for this activity, or another downsample-argument mismatch. detail is a plain string." },
+        { code: 404, note: 'detail: "activity not found" or "no stream data for this activity"' },
+      ],
+      example: { qs: "?tier=high&channels=heart_rate&channels=speed_mps&channels=lat&channels=lon" }
+    },
+  ]},
+
+  { id: "health", title: "Health", endpoints: [
+    { method: "GET", path: "/api/v1/health/observations", summary: "Raw health observations for one or more metrics.",
+      description: "The low-level building block behind the health dashboard — every individual observation, unaggregated, for whichever raw metric_key(s) you ask for.",
+      params: [
+        ["metric_key","query","req","array&lt;string&gt;","—","Repeat the parameter per key: ?metric_key=a&metric_key=b."],
+        ["start_date","query","req","string(date)","—",""],
+        ["end_date","query","req","string(date)","—",""],
+        ["limit","query","opt","integer","500",""],
+        ["offset","query","opt","integer","0",""],
+      ],
+      responses: [ { code: 200, ref: "Page&lt;HealthObservationOut&gt;" } ],
+      example: { qs: "?metric_key=garmin.daily_summary.steps&metric_key=garmin.daily_hrv.last_night_avg&start_date=2026-08-01&end_date=2026-08-19" }
+    },
+    { method: "GET", path: "/api/v1/health/dashboard", summary: "Curated per-day metrics for the health dashboard.",
+      description: "Merges each logical metric's several raw vendor metric_key namespaces (e.g. Garmin's several export report kinds, or a Eufy alias) into one series per human-meaningful logical_metric — steps, resting_hr_bpm, weight_kg, sleep_score, body_fat_pct, and similar.",
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      responses: [ { code: 200, ref: "HealthDashboardOut" } ],
+      example: { qs: "?start_date=2026-08-01&end_date=2026-08-19" }
+    },
+  ]},
+
+  { id: "sleep", title: "Sleep", endpoints: [
+    { method: "GET", path: "/api/v1/sleep", summary: "Sleep sessions in a date range.",
+      description: "Each session includes its stage breakdown (light/deep/rem/awake) when the source device reported one.",
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      responses: [ { code: 200, ref: "array&lt;SleepSessionOut&gt;" } ],
+      example: { qs: "?start_date=2026-08-01&end_date=2026-08-19" }
+    },
+  ]},
+
+  { id: "calendar", title: "Calendar", endpoints: [
+    { method: "GET", path: "/api/v1/calendar", summary: "Per-day rollups for the calendar grid.",
+      description: "Activity totals and health-metric rollups per local_date, read from precomputed rollup tables — never a live aggregate over raw history.",
+      params: [
+        ["start_date","query","req","string(date)","—",""],
+        ["end_date","query","req","string(date)","—",""],
+        ["metric_keys","query","opt","array&lt;string&gt;","—","Restrict which health_metrics entries come back per day. Omit for every rolled-up key."],
+      ],
+      responses: [ { code: 200, ref: "CalendarResponse" } ],
+      example: { qs: "?start_date=2026-08-01&end_date=2026-08-31" }
+    },
+    { method: "GET", path: "/api/v1/calendar/weeks", summary: "Weekly rollups for a date range.",
+      description: "Weeks start Monday. period_type in the response is always \"week\".",
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      responses: [ { code: 200, ref: "PeriodCalendarResponse" } ],
+      example: { qs: "?start_date=2026-07-01&end_date=2026-08-19" }
+    },
+    { method: "GET", path: "/api/v1/calendar/months", summary: "Monthly rollups for a date range.",
+      description: "period_type in the response is always \"month\".",
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      responses: [ { code: 200, ref: "PeriodCalendarResponse" } ],
+      example: { qs: "?start_date=2026-01-01&end_date=2026-08-19" }
+    },
+  ]},
+
+  { id: "fitness", title: "Fitness", endpoints: [
+    { method: "GET", path: "/api/v1/fitness", summary: "Daily CTL/ATL/TSB fitness-and-form series.",
+      description: "An independently computed Coggan/Banister EWMA (CTL = 42-day, ATL = 7-day) over daily training load — shown alongside, not reconciled against, any vendor's own training-status metric.",
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      responses: [ { code: 200, ref: "array&lt;FitnessDailyRollupOut&gt;" } ],
+      example: { qs: "?start_date=2026-06-01&end_date=2026-08-19" }
+    },
+  ]},
+
+  { id: "insights", title: "Insights", endpoints: [
+    { method: "GET", path: "/api/v1/insights", summary: "Athlete-wide rules-based insights.",
+      description: "Deterministic, rules-based (not LLM-generated) — personal bests, streaks, notable efforts, training-load flags, and health-metric callouts, refreshed on every ingest run.",
+      params: [
+        ["kind","query","opt","string","—","Filter to one kind: effort, health, load, pb, or streak."],
+        ["window","query","opt","string","—","Filter to one window: current, 30d, 90d, 180d, 365d, or all_time."],
+      ],
+      responses: [ { code: 200, ref: "array&lt;InsightOut&gt;" } ],
+      example: { qs: "?kind=pb&window=all_time" }
+    },
+  ]},
+
+  { id: "notes", title: "Notes", endpoints: [
+    { method: "POST", path: "/api/v1/notes", summary: "Attach a note to an activity or a calendar day.",
+      description: "The write path an AI agent (or the UI) uses to record observations — this is the one write endpoint most of this API is deliberately read-only around.",
+      body: { schema: "NoteCreate", fields: [
+        ["entity_type","\"activity\"|\"day\"","req","",""],
+        ["entity_id","string","req","","An activity id when entity_type is activity; a local_date (YYYY-MM-DD) string when entity_type is day."],
+        ["body","string","req","",""],
+        ["author","string|null","opt","",""],
+      ]},
+      responses: [
+        { code: 201, ref: "NoteOut" },
+        { code: 404, note: 'detail: "activity not found" — only checked when entity_type is activity; a day entity_id is never validated against anything, since a day is just a date, not a row that can be missing.' },
+      ],
+      example: { curl: `curl -X POST https://your-sporthealth-host/api/v1/notes \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"entity_type": "activity", "entity_id": "${EX.ACT}", "body": "Felt strong on the last 2k, negative split.", "author": "jerome"}'` }
+    },
+    { method: "GET", path: "/api/v1/notes", summary: "List notes attached to one entity.",
+      description: "",
+      params: [
+        ["entity_type","query","req","string","—","activity or day."],
+        ["entity_id","query","req","string","—",""],
+      ],
+      responses: [ { code: 200, ref: "array&lt;NoteOut&gt;" } ],
+      example: { qs: `?entity_type=activity&entity_id=${EX.ACT}` }
+    },
+  ]},
+
+  { id: "goals", title: "Goals", endpoints: [
+    { method: "GET", path: "/api/v1/goals", summary: "Progress toward a distance goal for one period.",
+      description: "Cumulative distance so far this period vs. the flat pace-to-target line, plus a day-by-day series for a progress chart. available: false when no goal is configured for this exact period_type/period_start/sport combination.",
+      params: [
+        ["period_type","query","req","string","—","year or month."],
+        ["period_start","query","req","string","—","\"YYYY\" for year, \"YYYY-MM\" for month."],
+      ],
+      responses: [ { code: 200, ref: "GoalProgressOut" } ],
+      example: { qs: "?period_type=month&period_start=2026-08" }
+    },
+    { method: "PUT", path: "/api/v1/goals", summary: "Create or replace the distance goal for one period.",
+      description: "Upsert keyed on (period_type, period_start, sport) — calling this again for the same period and sport replaces the existing goal rather than creating a second one.",
+      body: { schema: "GoalIn", fields: [
+        ["period_type","string","req","","year or month."],
+        ["period_start","string","req","","\"YYYY\" or \"YYYY-MM\", matching period_type."],
+        ["sport","string|null","opt","","Omit (or null) for a goal covering every sport combined."],
+        ["target_distance_m","number","req","",""],
+      ]},
+      responses: [
+        { code: 200, ref: "GoalOut" },
+        { code: 400, note: "period_type isn't year/month, or period_start doesn't parse for the given period_type. detail is a plain string." },
+      ],
+      example: { curl: `curl -X PUT https://your-sporthealth-host/api/v1/goals \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"period_type": "month", "period_start": "2026-08", "sport": "running", "target_distance_m": 160000}'` }
+    },
+    { method: "DELETE", path: "/api/v1/goals/{goal_id}", summary: "Delete a goal.",
+      description: "",
+      params: [ ["goal_id","path","req","integer","—","From GoalOut.id."] ],
+      responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "goal not found"' } ],
+      example: { curl: `curl -X DELETE https://your-sporthealth-host/api/v1/goals/${EX.GOAL} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+  ]},
+
+  { id: "settings", title: "Settings", endpoints: [
+    { method: "GET", path: "/api/v1/settings/hr-zones", summary: "Get the athlete's HR zone configuration.",
+      description: "max_hr_bpm/threshold_hr_bpm/resting_hr_bpm are the three inputs the athlete configures; zone1_high_bpm…zone4_high_bpm are derived boundaries computed from them, null until enough inputs are set to derive them.",
+      responses: [ { code: 200, ref: "HrZoneConfigOut" } ],
+      example: {}
+    },
+    { method: "PUT", path: "/api/v1/settings/hr-zones", summary: "Replace the athlete's HR zone configuration.",
+      description: "A full replacement, not a partial patch — any field you omit is stored as null, not left at its previous value. To change one field, send the current values for the other two alongside it.",
+      body: { schema: "HrZoneConfigIn", fields: [
+        ["max_hr_bpm","number|null","opt","",""],
+        ["threshold_hr_bpm","number|null","opt","",""],
+        ["resting_hr_bpm","number|null","opt","",""],
+      ]},
+      responses: [ { code: 200, ref: "HrZoneConfigOut" } ],
+      example: { curl: `curl -X PUT https://your-sporthealth-host/api/v1/settings/hr-zones \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"max_hr_bpm": 188, "threshold_hr_bpm": 172, "resting_hr_bpm": 46}'` }
+    },
+  ]},
+
+  { id: "system", title: "System", endpoints: [
+    { method: "GET", path: "/api/v1/healthz", summary: "Liveness check.", description: "Unauthenticated. Always returns 200 once the process is up.",
+      responses: [ { code: 200, note: '{"status": "ok"}' } ], auth: "none", example: {} },
+    { method: "GET", path: "/api/v1/version", summary: "Server version and environment.", description: "Unauthenticated.",
+      responses: [ { code: 200, note: '{"version": "0.1.0", "environment": "production"}' } ], auth: "none", example: {} },
+  ]},
+];
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function pathHtml(path) {
+  return esc(path).replace(/\{([^}]+)\}/g, '<span class="param">{$1}</span>');
+}
+
+function slug(method, path) {
+  return (method + "-" + path).toLowerCase().replace(/[{}\/]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+}
+
+function schemaSlug(name) {
+  return "schema-" + name.toLowerCase().replace(/[<>&;]/g, "").replace(/\s+/g, "-");
+}
+
+function linkifyType(t) {
+  // turn "array<Foo>" / "Foo|null" / "Foo" into text with a link to #schema-foo when Foo is a known schema
+  const known = new Set(SCHEMAS.map(s => s.name.replace(/&lt;|&gt;/g, "")));
+  return esc(t).replace(/([A-Z][A-Za-z]+(?:&lt;[A-Za-z]+&gt;)?)/g, (m) => {
+    const bare = m.replace(/&lt;.*&gt;/, "");
+    if (known.has(bare) || known.has(m)) {
+      const target = SCHEMAS.find(s => s.name.replace(/&lt;|&gt;/g,"") === bare || s.name === m);
+      if (target) return `<a href="#${schemaSlug(target.name)}">${m}</a>`;
+    }
+    return m;
+  });
+}
+
+function renderParamsTable(params) {
+  if (!params || !params.length) return "";
+  let rows = params.map(([name, loc, req, type, def, desc]) => `
+    <tr>
+      <td><span class="field-name">${esc(name)}</span></td>
+      <td class="mono">${esc(loc)}</td>
+      <td>${req === "req" ? '<span class="badge badge-req">required</span>' : '<span class="badge badge-opt">optional</span>'}</td>
+      <td class="field-type">${linkifyType(type)}</td>
+      <td class="mono">${def && def !== "—" ? esc(def) : "<span style='color:var(--color-text-faint)'>—</span>"}</td>
+      <td>${desc || ""}</td>
+    </tr>`).join("");
+  return `<div class="subhead">Parameters</div>
+    <div class="table-wrap"><table>
+      <tr><th>Name</th><th>In</th><th>Required</th><th>Type</th><th>Default</th><th>Description</th></tr>
+      ${rows}
+    </table></div>`;
+}
+
+function renderBodyTable(body) {
+  if (!body) return "";
+  let rows = body.fields.map(([name, type, req, def, desc]) => `
+    <tr>
+      <td><span class="field-name">${esc(name)}</span></td>
+      <td class="field-type">${linkifyType(type)}</td>
+      <td>${req === "req" ? '<span class="badge badge-req">required</span>' : '<span class="badge badge-opt">optional</span>'}</td>
+      <td>${desc || ""}</td>
+    </tr>`).join("");
+  return `<div class="subhead">Request body <span class="schema-link">(${esc(body.schema)})</span></div>
+    <div class="table-wrap"><table>
+      <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+      ${rows}
+    </table></div>`;
+}
+
+function renderResponsesTable(responses) {
+  let rows = responses.map(r => {
+    const cls = r.code < 300 ? "s2" : "s4";
+    const shape = r.ref ? `<a class="schema-link" href="#${schemaSlug(r.ref.replace(/^array&lt;|&gt;$/g,""))}">${r.ref}</a>${r.note ? " " + esc(r.note) : ""}`
+                : (r.schema ? `<a class="schema-link" href="#${schemaSlug(r.schema)}">${r.schema}</a>` : (r.note || ""));
+    return `<tr><td><span class="status-chip ${cls}">${r.code}</span></td><td>${shape}</td></tr>`;
+  }).join("");
+  return `<div class="subhead">Responses</div>
+    <div class="table-wrap"><table><tr><th>Status</th><th>Body</th></tr>${rows}</table></div>`;
+}
+
+function renderExample(ep) {
+  if (!ep.example) return "";
+  let curl;
+  if (ep.example.curl) {
+    curl = ep.example.curl;
+  } else {
+    const authHeader = ep.auth === "none" ? "" : ` \\\n  -H "X-API-Key: YOUR_API_KEY"`;
+    curl = `curl${authHeader}\\\n  "https://your-sporthealth-host${ep.path.replace(/\{[^}]+\}/g, m => m === "{activity_id}" ? EX.ACT : (m === "{goal_id}" ? EX.GOAL : (m === "{link_id}" ? EX.LINK : m)))}${ep.example.qs || ""}"`;
+    if (ep.auth === "none") curl = curl.replace(/^curl\\\n  /, "curl ");
+  }
+  const id = "ex-" + slug(ep.method, ep.path);
+  return `<div class="subhead">Example request</div>
+    <div class="code-block"><button class="copy-btn" data-copy="${id}">Copy</button><pre id="${id}">${esc(curl)}</pre></div>`;
+}
+
+function renderEndpointCard(ep) {
+  const id = slug(ep.method, ep.path);
+  return `<article class="endpoint-card" id="${id}">
+    <div class="endpoint-head">
+      <span class="method-badge method-${ep.method}">${ep.method}</span>
+      <span class="endpoint-path">${pathHtml(ep.path)}</span>
+      <span class="auth-pill">${ep.auth === "none" ? "no auth" : "auth required"}</span>
+    </div>
+    <p class="endpoint-summary"><strong>${esc(ep.summary)}</strong></p>
+    ${ep.description ? `<p class="endpoint-summary">${ep.description}</p>` : ""}
+    ${renderParamsTable(ep.params)}
+    ${renderBodyTable(ep.body)}
+    ${renderResponsesTable(ep.responses)}
+    ${renderExample(ep)}
+  </article>`;
+}
+
+function renderSchemaCard(s) {
+  let rows = s.fields.map(f => {
+    const [name, type, desc, optFlag] = f;
+    const isOpt = optFlag === "opt" || /optional/i.test(desc || "");
+    return `<tr>
+      <td><span class="field-name">${esc(name)}</span></td>
+      <td class="field-type">${linkifyType(type)}</td>
+      <td>${isOpt ? '<span class="badge badge-opt">optional</span>' : '<span class="badge badge-req">required</span>'}${/\|null/.test(type) ? '<span class="badge badge-null">nullable</span>' : ""}</td>
+      <td>${desc && desc !== "required" ? desc : ""}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="schema-card" id="${schemaSlug(s.name)}">
+    <h4>${s.name}</h4>
+    ${s.note ? `<p class="schema-note">${s.note}</p>` : ""}
+    <div class="table-wrap"><table><tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr>${rows}</table></div>
+  </div>`;
+}
+
+// Build sidebar nav + endpoint groups
+const navGroupsEl = document.getElementById("nav-groups");
+const groupsEl = document.getElementById("endpoint-groups");
+
+GROUPS.forEach(group => {
+  const navGroup = document.createElement("div");
+  navGroup.className = "nav-group";
+  navGroup.innerHTML = `<div class="nav-group-title">${esc(group.title)}</div>` +
+    group.endpoints.map(ep => {
+      const id = slug(ep.method, ep.path);
+      return `<a class="nav-link" href="#${id}" data-search="${esc((ep.method + " " + ep.path + " " + ep.summary).toLowerCase())}">
+        <span class="nav-method method-${ep.method}" style="color:var(--color-${ep.method.toLowerCase()});background:none;">${ep.method}</span>
+        <span class="nav-path">${esc(ep.path.replace("/api/v1", ""))}</span>
+      </a>`;
+    }).join("");
+  navGroupsEl.appendChild(navGroup);
+
+  const section = document.createElement("section");
+  section.className = "doc-section";
+  section.id = "group-" + group.id;
+  section.innerHTML = `<h2>${esc(group.title)}</h2>` + group.endpoints.map(renderEndpointCard).join("");
+  groupsEl.appendChild(section);
+});
+
+document.getElementById("schema-cards").innerHTML = SCHEMAS.map(renderSchemaCard).join("");
+
+// Search filter
+document.getElementById("search").addEventListener("input", (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  document.querySelectorAll(".nav-link").forEach(a => {
+    a.style.display = !q || a.dataset.search.includes(q) ? "" : "none";
+  });
+});
+
+// Copy buttons
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".copy-btn");
+  if (!btn) return;
+  const target = document.getElementById(btn.dataset.copy);
+  if (!target) return;
+  navigator.clipboard.writeText(target.textContent).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = "Copied";
+    setTimeout(() => { btn.textContent = orig; }, 1200);
+  });
+});
+
+// Active-link highlighting on scroll
+const allAnchors = Array.from(document.querySelectorAll(".endpoint-card, section.doc-section, .schema-card"));
+const navLinks = Array.from(document.querySelectorAll(".nav-link, .nav-static-link"));
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id;
+      navLinks.forEach(l => l.classList.toggle("active", l.getAttribute("href") === "#" + id));
+    }
+  });
+}, { rootMargin: "-10% 0px -75% 0px" });
+allAnchors.forEach(el => el.id && io.observe(el));
+</script>
+
+</body>
+</html>

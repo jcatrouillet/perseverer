@@ -315,4 +315,8 @@ fast-moving vendor libraries is exactly what this project's brief warns is stale
 - `docs/DEPLOY.md` — Windows → NAS handoff runbook.
 - `docs/DATA_DICTIONARY.md` — grows every phase; the source of truth for what every stored
   field means and where it came from.
+- `docs/API.md` — the REST API reference for third-party integration: every endpoint, param,
+  and response shape, generated from the live OpenAPI schema and cross-checked against router
+  source. A polished HTML twin of the same content is served by the frontend container itself
+  at `/api-docs.html` (`frontend/public/api-docs.html`) — update both when an endpoint changes.
 - `docs/adr/` — one ADR per phase, written before implementation starts.
