@@ -10,6 +10,7 @@ import type {
   ActivityLocationOut,
   ActivityMapPointOut,
   ActivityNameOverrideOut,
+  ActivityPaceBandsOut,
   ActivityRouteOut,
   ActivitySourcesOut,
   ActivitySplitOut,
@@ -378,6 +379,15 @@ export function usePaceBands() {
   return useQuery({
     queryKey: ["insights", "pace-bands"],
     queryFn: () => apiGet<PaceBandOut[]>("/api/v1/insights/pace-bands"),
+  });
+}
+
+/** Per-activity time-in-band breakdown -- the composition-over-time strip above the aggregate
+ * bar chart usePaceBands() feeds. */
+export function usePaceBandsByActivity() {
+  return useQuery({
+    queryKey: ["insights", "pace-bands", "by-activity"],
+    queryFn: () => apiGet<ActivityPaceBandsOut[]>("/api/v1/insights/pace-bands/by-activity"),
   });
 }
 

@@ -233,6 +233,14 @@ export interface PaceBandOut {
   seconds: number;
 }
 
+/** One running activity's own time-in-band breakdown -- `bands` always lists every band, in the
+ * same fixed order, even ones this activity spent 0 seconds in. */
+export interface ActivityPaceBandsOut {
+  activity_id: string;
+  local_date: string | null;
+  bands: PaceBandOut[];
+}
+
 export interface StreamResponse {
   activity_id: string;
   tier: string;

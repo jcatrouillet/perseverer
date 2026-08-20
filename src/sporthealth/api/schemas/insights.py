@@ -27,3 +27,14 @@ class PaceBandOut(BaseModel):
 
     label: str
     seconds: float
+
+
+class ActivityPaceBandsOut(BaseModel):
+    """One running activity's own time-in-band breakdown -- the per-run data behind the Training
+    bands chart's composition-over-time strip, as opposed to PaceBandOut's athlete-wide sum.
+    `bands` always lists every `pace_bands.PACE_BANDS` entry, in the same fixed order, even ones
+    this activity spent 0 seconds in."""
+
+    activity_id: str
+    local_date: str | None
+    bands: list[PaceBandOut]

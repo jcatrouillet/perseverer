@@ -868,6 +868,11 @@ const SCHEMAS = [
       ["label","string","e.g. \"5:00-5:30\", \"< 3:30\", or \"Walk\"."],
       ["seconds","number","Total time across the athlete's whole running history spent at that instantaneous pace."],
     ] },
+  { name: "ActivityPaceBandsOut", note: "Returned by GET /insights/pace-bands/by-activity, one row per running activity with at least one non-zero band.", fields: [
+      ["activity_id","string",""],
+      ["local_date","string(date)|null",""],
+      ["bands","array<PaceBandOut>","Every band in the same fixed order as GET /insights/pace-bands, even ones this activity spent 0 seconds in."],
+    ] },
   { name: "NoteOut", note: "Returned by POST /notes (201) and GET /notes.", fields: [
       ["id","integer",""],
       ["entity_type","string","activity or day."],
@@ -1141,6 +1146,11 @@ const GROUPS = [
     { method: "GET", path: "/api/v1/insights/pace-bands", summary: "Total time spent at each pace, across the athlete's whole running history.",
       description: "One row per fixed 30-second/km pace band (fast to slow), summed from every running activity's own per-second (well, per-sample — real device cadence) speed stream, not each run's whole-activity average. Precomputed at ingest time and stored per-activity (see pace_bands.py); this endpoint is a plain bounded SUM/GROUP BY over those already-stored rows, never a live stream scan. Always returns every band, even ones with seconds: 0.",
       responses: [ { code: 200, ref: "array&lt;PaceBandOut&gt;" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/insights/pace-bands/by-activity", summary: "Per-run time-in-band breakdown, for a composition-over-time view.",
+      description: "The same precomputed per-activity time-in-band rows GET /insights/pace-bands sums athlete-wide, here grouped by activity instead — one row per running activity that has at least one non-zero band, each listing its own full bands breakdown (what share of *this one run* was spent at each pace). Still a plain bounded query over already-stored rows, never a live stream scan.",
+      responses: [ { code: 200, ref: "array&lt;ActivityPaceBandsOut&gt;" } ],
       example: {}
     },
   ]},

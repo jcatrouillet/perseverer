@@ -453,6 +453,16 @@ client can render every column without checking for missing entries.
 
 **Response `200`:** `array<PaceBandOut>`.
 
+### `GET /insights/pace-bands/by-activity`
+
+The same precomputed per-activity time-in-band rows `GET /insights/pace-bands` sums athlete-wide,
+here grouped by activity instead — one row per running activity that has at least one non-zero
+band, each listing its own full `bands` breakdown. Powers a composition-over-time view (what
+share of *this one run* was spent at each pace) as opposed to the athlete-wide aggregate above.
+Still a plain bounded query over already-stored rows, never a live stream scan.
+
+**Response `200`:** `array<ActivityPaceBandsOut>`.
+
 ---
 
 ## Notes
@@ -832,6 +842,13 @@ Training Load, 42-day EWMA — "fitness"), `atl` (Acute Training Load, 7-day EWM
 `label` (string — e.g. `"5:00-5:30"`, `"< 3:30"`, or `"Walk"`), `seconds` (number — total time
 across the athlete's whole running history spent at that instantaneous pace). Returned by
 `GET /insights/pace-bands`, one row per band, always present even when `seconds` is 0.
+
+### ActivityPaceBandsOut
+
+`activity_id` (string), `local_date` (string, nullable), `bands` (`array<PaceBandOut>` — every
+band in the same fixed order as `GET /insights/pace-bands`, even ones this activity spent 0
+seconds in). Returned by `GET /insights/pace-bands/by-activity`, one row per running activity
+with at least one non-zero band.
 
 ### NoteOut
 

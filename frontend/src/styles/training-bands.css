@@ -12,14 +12,3 @@
   gap: 2px;
 }
 
-.training-bands__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.training-bands__header h2 {
-  margin: 0;
-}
