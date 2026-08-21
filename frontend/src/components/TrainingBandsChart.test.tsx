@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ActivityPaceBandsOut, PaceBandOut } from "../api/types";
@@ -75,9 +75,7 @@ describe("TrainingBandsChart", () => {
     mockBoth({ aggregate: aggregateWithData({ "5:00-5:30": 1800 }), byActivity: [] });
     render(<TrainingBandsChart />);
     expect(screen.getByText("Training bands")).toBeInTheDocument();
-    expect(
-      screen.getByText("Total time spent at each pace, summed across the whole running history."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Total time spent at each pace/)).toBeInTheDocument();
     expect(screen.queryByText(/Every run as its own bar/)).not.toBeInTheDocument();
     expect(screen.queryByText("Duration of each run -- always the full history.")).not.toBeInTheDocument();
   });
@@ -103,5 +101,28 @@ describe("TrainingBandsChart", () => {
     mockBoth({ aggregate: aggregateWithData({ "5:00-5:30": 1800 }), byActivity: ONE_RUN });
     const { container } = render(<TrainingBandsChart />);
     expect(container.querySelector("section")?.className).toContain("training-bands--wide");
+  });
+
+  it("clicking a pace in the middle chart isolates it in the top chart, and the reset button clears it", () => {
+    mockBoth({ aggregate: aggregateWithData({ "5:00-5:30": 1800 }), byActivity: ONE_RUN });
+    const { container } = render(<TrainingBandsChart />);
+
+    expect(screen.getByText(/Click a pace in the chart below to isolate it here/)).toBeInTheDocument();
+
+    // Three charts render top to bottom (composition, aggregate, duration) -- the aggregate
+    // chart's own wrapper is the second one. Recharts doesn't render a rectangle at all for a
+    // zero-height bar, and this fixture only gives "5:00-5:30" a nonzero value, so exactly one
+    // rectangle exists here -- unambiguously that band's own.
+    const aggregateWrapper = container.querySelectorAll(".recharts-wrapper")[1]!;
+    const bars = aggregateWrapper.querySelectorAll(".recharts-rectangle");
+    expect(bars).toHaveLength(1);
+    fireEvent.click(bars[0]!);
+
+    expect(screen.getByText(/Showing only 5:00-5:30 \/km/)).toBeInTheDocument();
+    expect(screen.queryByText(/Click a pace in the chart below/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Show every pace"));
+
+    expect(screen.getByText(/Click a pace in the chart below to isolate it here/)).toBeInTheDocument();
   });
 });

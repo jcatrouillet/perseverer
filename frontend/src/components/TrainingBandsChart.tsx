@@ -8,7 +8,7 @@
 // chart, built from each run's whole-activity *average* pace, which hid exactly that variation).
 // The middle chart sums the same data athlete-wide, in absolute time per band. The bottom chart
 // is each run's own duration, styled identically to PaceTrendsChart's own bottom chart.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -30,27 +30,38 @@ import { parseIsoDate } from "../dateUtils";
 import { formatDurationHM } from "../runningStats";
 import "../styles/training-bands.css";
 
-// Colors keyed by the exact label pace_bands.py's own PACE_BANDS produces, fast to slow (kept in
-// sync by hand -- backend Python, no shared code with this TS frontend, same cross-language-
-// duplication precedent as rules_pb.py/personalRecords). A label with no entry here (e.g. a
-// future band pace_bands.py adds that this array hasn't been updated for yet) falls back to
-// --color-load rather than rendering an uncoloured/invisible bar. Also doubles as the canonical
-// band order for both charts, via Object.keys -- insertion order is guaranteed for string keys.
+// Fixed, vivid hues -- deliberately NOT the app's own muted theme tokens (unlike most charts
+// here), because these need to read as a continuous fast-to-slow gradient across 12 adjacent
+// bands, which a set of pre-picked semantic colors can't produce. Red = fastest, green = walk,
+// smoothly interpolated in between (0deg-120deg hue) -- opposite of this app's usual "red = bad"
+// convention, by explicit request, and independent of light/dark theme so the gradient itself
+// never shifts. High, uniform saturation/lightness (80%/50%) for brightness and so no single band
+// reads as muddier than its neighbors. A label with no entry here (e.g. a future band
+// pace_bands.py adds that this array hasn't been updated for yet) falls back to --color-load
+// rather than rendering an uncoloured/invisible bar. BAND_LABELS_FAST_TO_SLOW doubles as the
+// canonical band order for both charts, via Object.keys -- insertion order is guaranteed for
+// string keys.
 const WALK_LABEL = "Walk";
-const BAND_COLORS: Record<string, string> = {
-  "< 3:30": "var(--color-cadence)",
-  "3:30-4:00": "color-mix(in srgb, var(--color-cadence) 65%, var(--color-elevation) 35%)",
-  "4:00-4:30": "var(--color-elevation)",
-  "4:30-5:00": "color-mix(in srgb, var(--color-elevation) 60%, var(--color-load) 40%)",
-  "5:00-5:30": "color-mix(in srgb, var(--color-elevation) 25%, var(--color-load) 75%)",
-  "5:30-6:00": "var(--color-load)",
-  "6:00-6:30": "color-mix(in srgb, var(--color-load) 60%, var(--color-danger) 40%)",
-  "6:30-7:00": "color-mix(in srgb, var(--color-load) 30%, var(--color-danger) 70%)",
-  "7:00-7:30": "color-mix(in srgb, var(--color-load) 10%, var(--color-danger) 90%)",
-  "7:30-8:00": "var(--color-danger)",
-  "8:00-8:30": "color-mix(in srgb, var(--color-danger) 80%, black 20%)",
-  [WALK_LABEL]: "color-mix(in srgb, var(--color-danger) 55%, black 45%)",
-};
+const BAND_LABEL_ORDER_FAST_TO_SLOW = [
+  "< 3:30",
+  "3:30-4:00",
+  "4:00-4:30",
+  "4:30-5:00",
+  "5:00-5:30",
+  "5:30-6:00",
+  "6:00-6:30",
+  "6:30-7:00",
+  "7:00-7:30",
+  "7:30-8:00",
+  "8:00-8:30",
+  WALK_LABEL,
+];
+const BAND_COLORS: Record<string, string> = Object.fromEntries(
+  BAND_LABEL_ORDER_FAST_TO_SLOW.map((label, i) => {
+    const hue = (i / (BAND_LABEL_ORDER_FAST_TO_SLOW.length - 1)) * 120;
+    return [label, `hsl(${Math.round(hue)}, 80%, 50%)`];
+  }),
+);
 const FALLBACK_COLOR = "var(--color-load)";
 const BAND_LABELS_FAST_TO_SLOW = Object.keys(BAND_COLORS);
 const MS_PER_DAY = 86_400_000;
@@ -188,7 +199,18 @@ function estimateBarWidthPx(rows: CompositionRow[]): number {
 // elements below render in.
 const BAND_LABELS_SLOW_TO_FAST = [...BAND_LABELS_FAST_TO_SLOW].reverse();
 
-function CompositionBars({ rows, barWidthPx }: { rows: CompositionRow[]; barWidthPx: number }) {
+function CompositionBars({
+  rows,
+  barWidthPx,
+  selectedLabel,
+}: {
+  rows: CompositionRow[];
+  barWidthPx: number;
+  /** When set (a click on that band's bar in the middle chart), each run shows only *this*
+   * band's own share -- a plain bar from 0 to that share, not the full stack -- rather than
+   * every band. Runs that spent no time at this pace simply don't get a bar. */
+  selectedLabel: string | null;
+}) {
   const xScale = useXAxisScale();
   const yScale = useYAxisScale();
   if (!xScale || !yScale) return null;
@@ -198,6 +220,25 @@ function CompositionBars({ rows, barWidthPx }: { rows: CompositionRow[]; barWidt
       {rows.map((row) => {
         const cx = xScale(row.ts);
         if (cx == null) return null;
+
+        if (selectedLabel != null) {
+          const pct = row.pctByLabel[selectedLabel] ?? 0;
+          if (pct <= 0) return null;
+          const y0 = yScale(0);
+          const y1 = yScale(pct);
+          if (y0 == null || y1 == null) return null;
+          return (
+            <rect
+              key={row.activityId}
+              x={cx - barWidthPx / 2}
+              y={Math.min(y0, y1)}
+              width={barWidthPx}
+              height={Math.abs(y0 - y1)}
+              fill={BAND_COLORS[selectedLabel] ?? FALLBACK_COLOR}
+            />
+          );
+        }
+
         let cumulative = 0;
         return (
           <g key={row.activityId}>
@@ -262,6 +303,7 @@ function CompositionTooltip({ active, payload }: TooltipContentProps) {
 
 export function TrainingBandsChart() {
   const [, setLocation] = useLocation();
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const aggregate = usePaceBands();
   const byActivity = usePaceBandsByActivity();
 
@@ -304,8 +346,25 @@ export function TrainingBandsChart() {
       {hasCompositionData && (
         <>
           <p className="chart-note">
-            Every run as its own bar -- the share of that one run spent at each pace, second by
-            second across its own speed stream. Slow paces sit at the bottom, fast at the top.
+            {selectedLabel == null ? (
+              <>
+                Every run as its own bar -- the share of that one run spent at each pace, second
+                by second across its own speed stream. Slow paces sit at the bottom, fast at the
+                top. Click a pace in the chart below to isolate it here.
+              </>
+            ) : (
+              <>
+                Showing only {selectedLabel === WALK_LABEL ? "walk pace" : `${selectedLabel} /km`}
+                , as a share of each run.{" "}
+                <button
+                  type="button"
+                  className="training-bands__reset"
+                  onClick={() => setSelectedLabel(null)}
+                >
+                  Show every pace
+                </button>
+              </>
+            )}
           </p>
           <ResponsiveContainer width="100%" height={360}>
             <BarChart data={compositionRows} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
@@ -331,7 +390,7 @@ export function TrainingBandsChart() {
                 unit="%"
               />
               <Tooltip content={CompositionTooltip} cursor={{ fill: "var(--color-surface-raised)" }} />
-              <CompositionBars rows={compositionRows} barWidthPx={barWidthPx} />
+              <CompositionBars rows={compositionRows} barWidthPx={barWidthPx} selectedLabel={selectedLabel} />
               {BAND_LABELS_SLOW_TO_FAST.map((label) => (
                 <Bar
                   key={label}
@@ -357,7 +416,8 @@ export function TrainingBandsChart() {
       {hasAggregateData && (
         <>
           <p className="chart-note">
-            Total time spent at each pace, summed across the whole running history.
+            Total time spent at each pace, summed across the whole running history. Click a pace
+            to isolate it in the chart above.
           </p>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={aggregateRows} margin={{ top: 8, right: 16, bottom: 48, left: 0 }}>
@@ -381,9 +441,22 @@ export function TrainingBandsChart() {
                 unit="h"
               />
               <Tooltip content={AggregateTooltip} cursor={{ fill: "var(--color-surface-raised)" }} />
-              <Bar dataKey="hours" isAnimationActive={false}>
+              <Bar
+                dataKey="hours"
+                isAnimationActive={false}
+                cursor="pointer"
+                onClick={(bar: { payload?: AggregateRow }) => {
+                  const label = bar.payload?.label;
+                  if (!label) return;
+                  setSelectedLabel((prev) => (prev === label ? null : label));
+                }}
+              >
                 {aggregateRows.map((row) => (
-                  <Cell key={row.label} fill={row.color} />
+                  <Cell
+                    key={row.label}
+                    fill={row.color}
+                    fillOpacity={selectedLabel == null || selectedLabel === row.label ? 1 : 0.3}
+                  />
                 ))}
               </Bar>
             </BarChart>
