@@ -113,4 +113,34 @@ describe("HikeStatsCard", () => {
     render(<HikeStatsCard activities={activities} />);
     expect(screen.getByText("Hike")).toBeInTheDocument();
   });
+
+  it("shows average and max elevation gain, only over hikes that actually recorded it", () => {
+    const activities = [
+      hike("h1", { elevation_gain_m: 200 }),
+      hike("h2", { elevation_gain_m: 600 }),
+      hike("h3", { elevation_gain_m: null }), // no elevation data -- excluded from the average
+    ];
+    render(<HikeStatsCard activities={activities} />);
+    expect(screen.getByText("Average elevation gain")).toBeInTheDocument();
+    expect(screen.getByText("400")).toBeInTheDocument(); // (200 + 600) / 2, not / 3
+    expect(screen.getByText("Max elevation gain")).toBeInTheDocument();
+    expect(screen.getByText("600")).toBeInTheDocument();
+  });
+
+  it("links the max elevation gain tile to that specific hike", () => {
+    const activities = [
+      hike("low", { elevation_gain_m: 100 }),
+      hike("high", { elevation_gain_m: 900 }),
+    ];
+    render(<HikeStatsCard activities={activities} />);
+    const link = screen.getByText("Max elevation gain").closest("a");
+    expect(link).toHaveAttribute("href", "/activities/high");
+  });
+
+  it("omits both elevation stat tiles when no hike has elevation data", () => {
+    const activities = [hike("h1", { elevation_gain_m: null })];
+    render(<HikeStatsCard activities={activities} />);
+    expect(screen.queryByText("Average elevation gain")).not.toBeInTheDocument();
+    expect(screen.queryByText("Max elevation gain")).not.toBeInTheDocument();
+  });
 });

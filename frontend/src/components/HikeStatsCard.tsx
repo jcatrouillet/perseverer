@@ -94,6 +94,21 @@ function FeaturedHikeCard({
   );
 }
 
+/** Both computed from the same "has elevation_gain_m recorded at all" subset -- a hike whose
+ * device never reported elevation contributes to neither the average nor the max, rather than
+ * being treated as a real 0m gain (which would silently pull the average down and could even
+ * crown a genuinely elevation-less GPS track as tied for "highest"). `null` when no hike in the
+ * period has elevation data at all. */
+function hikeElevationStats(
+  activities: ActivitySummary[],
+): { averageM: number; maxHike: ActivitySummary } | null {
+  const withElevation = activities.filter((a) => (a.elevation_gain_m ?? 0) > 0);
+  if (withElevation.length === 0) return null;
+  const totalM = withElevation.reduce((sum, a) => sum + a.elevation_gain_m!, 0);
+  const maxHike = withElevation.reduce((max, a) => (a.elevation_gain_m! > max.elevation_gain_m! ? a : max));
+  return { averageM: totalM / withElevation.length, maxHike };
+}
+
 export function HikeStatsCard({ activities }: { activities: ActivitySummary[] }) {
   const featured = pickFeaturedHikes(activities);
 
@@ -113,6 +128,7 @@ export function HikeStatsCard({ activities }: { activities: ActivitySummary[] })
 
   const totalDistanceM = activities.reduce((sum, a) => sum + (a.distance_m ?? 0), 0);
   const totalDurationS = activities.reduce((sum, a) => sum + (effectiveDurationS(a) ?? 0), 0);
+  const elevationStats = hikeElevationStats(activities);
 
   return (
     <section className="card">
@@ -140,6 +156,30 @@ export function HikeStatsCard({ activities }: { activities: ActivitySummary[] })
           tone="elevation"
           hero
         />
+        {elevationStats && (
+          <StatTile
+            label="Average elevation gain"
+            value={Math.round(elevationStats.averageM)}
+            unit="m"
+            icon="mountain"
+            tone="elevation"
+          />
+        )}
+        {elevationStats && (
+          <Link
+            href={`/activities/${elevationStats.maxHike.id}`}
+            className="hike-stat-tile-link"
+          >
+            <StatTile
+              label="Max elevation gain"
+              value={Math.round(elevationStats.maxHike.elevation_gain_m!)}
+              unit="m"
+              meta={elevationStats.maxHike.local_date}
+              icon="mountain"
+              tone="elevation"
+            />
+          </Link>
+        )}
       </div>
 
       {featured.length > 0 && (

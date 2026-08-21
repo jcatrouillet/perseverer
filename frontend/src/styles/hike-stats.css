@@ -53,3 +53,21 @@
   font-size: var(--font-size-sm);
   color: var(--color-text);
 }
+
+/* The "Max elevation gain" stat tile, wrapped in a Link -- everything else in .stat-grid is
+   plain/non-interactive (see StatTile.tsx's own docstring), so this needs its own affordance: no
+   underline, and the figure itself picks up the accent colour on hover, echoing .hike-featured-
+   card's border-highlight above without needing a border this tile doesn't otherwise have. */
+.hike-stat-tile-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.hike-stat-tile-link:hover {
+  text-decoration: none;
+}
+
+.hike-stat-tile-link:hover .stat-tile__value {
+  color: var(--color-accent);
+}
