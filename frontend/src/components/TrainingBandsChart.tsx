@@ -1,11 +1,13 @@
-// Insights' "Training bands" tab: two views of the same underlying data (every running
+// Insights' "Training bands" tab: three views of the same underlying data (every running
 // activity's own per-second, well, per-sample -- real device cadence -- speed stream, computed
-// server-side and precomputed at ingest time, see pace_bands.py). The top chart is one 100%-
+// server-side and precomputed at ingest time, see pace_bands.py), laid out to match Pace trends'
+// own full-bleed width and top-chart/bottom-duration-chart shape. The top chart is one 100%-
 // stacked bar per run, showing what *share of that one run* was spent at each pace -- an interval
 // session with fast reps and slow recovery jogging reads very differently here than a flat steady
-// tempo run, which is the whole point (an earlier version of this component only had the bottom
+// tempo run, which is the whole point (an earlier version of this component only had the middle
 // chart, built from each run's whole-activity *average* pace, which hid exactly that variation).
-// The bottom chart sums the same data athlete-wide, in absolute time per band.
+// The middle chart sums the same data athlete-wide, in absolute time per band. The bottom chart
+// is each run's own duration, styled identically to PaceTrendsChart's own bottom chart.
 import { useMemo } from "react";
 import {
   Bar,
@@ -14,6 +16,8 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
+  useXAxisScale,
+  useYAxisScale,
   XAxis,
   YAxis,
 } from "recharts";
@@ -111,6 +115,7 @@ interface CompositionRow {
   ts: number;
   localDate: string | null;
   pctByLabel: Record<string, number>;
+  hours: number;
 }
 
 function toCompositionRows(activities: ActivityPaceBandsOut[]): CompositionRow[] {
@@ -127,9 +132,89 @@ function toCompositionRows(activities: ActivityPaceBandsOut[]): CompositionRow[]
         ts: parseIsoDate(a.local_date!).getTime(),
         localDate: a.local_date,
         pctByLabel,
+        // The same total this activity's own bands already sum to -- not activity.moving_duration_s
+        // (a separate fetch this component doesn't otherwise need), so the duration chart's totals
+        // stay exactly consistent with the composition chart directly above it.
+        hours: Math.round((total / 3600) * 100) / 100,
       };
     });
   return rows.sort((a, b) => a.ts - b.ts);
+}
+
+// Recharts derives a numeric-axis Bar's width from the single *smallest* pixel gap between any
+// two data points (see node_modules/recharts es6/util/ChartUtils.js -- getBandSizeOfAxis), and
+// -- confirmed by reading combineAllBarPositions.js -- an explicit `barSize` prop can only shrink
+// a stacked bar *below* that computed band, never widen it past it. With ~1000 runs spanning a
+// decade, one same-day (or near-same-day) pair collapses that auto-computed band to a hairline
+// for the *entire* chart, even in stretches where runs are days apart and would otherwise read as
+// a continuous block -- there is no supported way to fix this by configuring <Bar/> itself.
+// CompositionBars below renders past that limitation entirely: real <Bar/> elements stay mounted
+// (invisible) purely so Recharts' own stacking math, Tooltip hover-tracking, and click handling
+// keep working exactly as already wired up, while this component reads the resolved axis scales
+// directly (Recharts 3's useXAxisScale/useYAxisScale -- "render arbitrary elements anywhere") and
+// draws its own, deliberately wider, rects underneath them. Width is sized off the *typical*
+// (median) gap between runs rather than the single tightest one, so it closes up in well-
+// populated stretches of the timeline while leaving genuinely sparse stretches (this athlete's
+// own 2016-2019) still visibly separate -- matching how a real "training load over time" view
+// should read. PLOT_WIDTH_PX approximates training-bands--wide's own rendered plot width (this
+// component has no resize observer to measure it live) minus the chart's left/right margins.
+const PLOT_WIDTH_PX = 1650;
+const WIDEN_FACTOR = 1.5;
+
+function estimateBarWidthPx(rows: CompositionRow[]): number {
+  if (rows.length < 2) return 2;
+  const gaps: number[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    gaps.push(rows[i]!.ts - rows[i - 1]!.ts);
+  }
+  gaps.sort((a, b) => a - b);
+  const medianGapMs = gaps[Math.floor(gaps.length / 2)]!;
+  const totalSpanMs = rows[rows.length - 1]!.ts - rows[0]!.ts;
+  if (totalSpanMs <= 0) return 2;
+  const pxPerMs = PLOT_WIDTH_PX / totalSpanMs;
+  return Math.min(12, Math.max(2, medianGapMs * pxPerMs * WIDEN_FACTOR));
+}
+
+// Bottom (0%) to top (100%) of the stack, same slow-to-fast order the real stacked <Bar/>
+// elements below render in.
+const BAND_LABELS_SLOW_TO_FAST = [...BAND_LABELS_FAST_TO_SLOW].reverse();
+
+function CompositionBars({ rows, barWidthPx }: { rows: CompositionRow[]; barWidthPx: number }) {
+  const xScale = useXAxisScale();
+  const yScale = useYAxisScale();
+  if (!xScale || !yScale) return null;
+
+  return (
+    <g style={{ pointerEvents: "none" }}>
+      {rows.map((row) => {
+        const cx = xScale(row.ts);
+        if (cx == null) return null;
+        let cumulative = 0;
+        return (
+          <g key={row.activityId}>
+            {BAND_LABELS_SLOW_TO_FAST.map((label) => {
+              const pct = row.pctByLabel[label] ?? 0;
+              if (pct <= 0) return null;
+              const y1 = yScale(cumulative);
+              const y2 = yScale(cumulative + pct);
+              cumulative += pct;
+              if (y1 == null || y2 == null) return null;
+              return (
+                <rect
+                  key={label}
+                  x={cx - barWidthPx / 2}
+                  y={Math.min(y1, y2)}
+                  width={barWidthPx}
+                  height={Math.abs(y1 - y2)}
+                  fill={BAND_COLORS[label] ?? FALLBACK_COLOR}
+                />
+              );
+            })}
+          </g>
+        );
+      })}
+    </g>
+  );
 }
 
 interface CompositionTooltipPayload {
@@ -176,6 +261,7 @@ export function TrainingBandsChart() {
     () => toCompositionRows(byActivity.data ?? []),
     [byActivity.data],
   );
+  const barWidthPx = useMemo(() => estimateBarWidthPx(compositionRows), [compositionRows]);
 
   const hasAggregateData = aggregateRows.some((r) => r.seconds > 0);
   const hasCompositionData = compositionRows.length > 0;
@@ -203,7 +289,7 @@ export function TrainingBandsChart() {
   };
 
   return (
-    <section className="card training-bands">
+    <section className="card training-bands training-bands--wide">
       <h2>Training bands</h2>
 
       {hasCompositionData && (
@@ -236,12 +322,19 @@ export function TrainingBandsChart() {
                 unit="%"
               />
               <Tooltip content={CompositionTooltip} cursor={{ fill: "var(--color-surface-raised)" }} />
-              {[...BAND_LABELS_FAST_TO_SLOW].reverse().map((label) => (
+              <CompositionBars rows={compositionRows} barWidthPx={barWidthPx} />
+              {BAND_LABELS_SLOW_TO_FAST.map((label) => (
                 <Bar
                   key={label}
                   dataKey={(row: CompositionRow) => row.pctByLabel[label] ?? 0}
                   stackId="composition"
+                  // Invisible -- the real, wider bars are CompositionBars above. This one stays
+                  // mounted purely so Recharts' own stacking math, Tooltip hover-tracking, and
+                  // click handling (goToActivity) keep working: fillOpacity 0 hides the paint
+                  // without affecting hit-testing, which SVG bases on the fill being *set*, not
+                  // its opacity.
                   fill={BAND_COLORS[label] ?? FALLBACK_COLOR}
+                  fillOpacity={0}
                   isAnimationActive={false}
                   cursor="pointer"
                   onClick={goToActivity}
@@ -284,6 +377,41 @@ export function TrainingBandsChart() {
                   <Cell key={row.label} fill={row.color} />
                 ))}
               </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )}
+
+      {hasCompositionData && (
+        <>
+          <p className="chart-note">Duration of each run -- always the full history.</p>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={compositionRows} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+              <XAxis dataKey="ts" type="number" scale="time" domain={["dataMin", "dataMax"]} hide />
+              <YAxis
+                dataKey="hours"
+                type="number"
+                domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
+                stroke="var(--color-text-muted)"
+                fontSize={11}
+                width={32}
+                unit="h"
+              />
+              <Tooltip
+                formatter={(value) => [value == null ? "No data" : `${value} h`, "Duration"]}
+                labelFormatter={() => ""}
+                contentStyle={{
+                  background: "var(--color-surface-raised)",
+                  border: "1px solid var(--color-border)",
+                }}
+              />
+              <Bar
+                dataKey="hours"
+                fill="var(--color-text-faint)"
+                isAnimationActive={false}
+                cursor="pointer"
+                onClick={goToActivity}
+              />
             </BarChart>
           </ResponsiveContainer>
         </>

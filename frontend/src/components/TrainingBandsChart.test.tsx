@@ -71,7 +71,7 @@ describe("TrainingBandsChart", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders the aggregate chart even with no per-run data", () => {
+  it("renders the aggregate chart even with no per-run data, and no composition/duration charts", () => {
     mockBoth({ aggregate: aggregateWithData({ "5:00-5:30": 1800 }), byActivity: [] });
     render(<TrainingBandsChart />);
     expect(screen.getByText("Training bands")).toBeInTheDocument();
@@ -79,20 +79,29 @@ describe("TrainingBandsChart", () => {
       screen.getByText("Total time spent at each pace, summed across the whole running history."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Every run as its own bar/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Duration of each run -- always the full history.")).not.toBeInTheDocument();
   });
 
-  it("renders the composition chart even with no aggregate data", () => {
+  it("renders the composition and duration charts even with no aggregate data", () => {
     mockBoth({ aggregate: ALL_ZERO, byActivity: ONE_RUN });
     render(<TrainingBandsChart />);
     expect(screen.getByText("Training bands")).toBeInTheDocument();
     expect(screen.getByText(/Every run as its own bar/)).toBeInTheDocument();
+    expect(screen.getByText("Duration of each run -- always the full history.")).toBeInTheDocument();
     expect(screen.queryByText(/Total time spent at each pace/)).not.toBeInTheDocument();
   });
 
-  it("renders both charts when both have data", () => {
+  it("renders all three charts when both sources have data", () => {
     mockBoth({ aggregate: aggregateWithData({ "5:00-5:30": 1800 }), byActivity: ONE_RUN });
     render(<TrainingBandsChart />);
     expect(screen.getByText(/Every run as its own bar/)).toBeInTheDocument();
     expect(screen.getByText(/Total time spent at each pace/)).toBeInTheDocument();
+    expect(screen.getByText("Duration of each run -- always the full history.")).toBeInTheDocument();
+  });
+
+  it("uses the same full-bleed width treatment as Pace trends", () => {
+    mockBoth({ aggregate: aggregateWithData({ "5:00-5:30": 1800 }), byActivity: ONE_RUN });
+    const { container } = render(<TrainingBandsChart />);
+    expect(container.querySelector("section")?.className).toContain("training-bands--wide");
   });
 });

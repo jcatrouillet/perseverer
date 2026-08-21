@@ -12,3 +12,14 @@
   gap: 2px;
 }
 
+/* Matches pace-trends.css's own .pace-trends--wide exactly -- breaks out of .app-main's 1080px
+   column so this tab's charts use the same amount of the viewport Pace trends' own do. */
+.training-bands--wide {
+  width: 100vw;
+  max-width: 1680px;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+}
+

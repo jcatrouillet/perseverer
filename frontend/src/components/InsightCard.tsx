@@ -6,6 +6,7 @@ import { Link } from "wouter";
 import type { InsightOut } from "../api/types";
 import type { Tone } from "../metricStyle";
 import { Icon, type IconName } from "./Icon";
+import "../styles/insights.css";
 
 const KIND_STYLE: Record<string, { icon: IconName; tone: Tone }> = {
   effort: { icon: "bolt", tone: "pace" },
