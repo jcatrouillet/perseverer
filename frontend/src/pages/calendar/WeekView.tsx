@@ -11,6 +11,7 @@ import {
 } from "../../api/queries";
 import { ActivityCard } from "../../components/ActivityCard";
 import { DateNavigator } from "../../components/DateNavigator";
+import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { NotesPanel } from "../../components/NotesPanel";
 import { MetricChip, StatTile } from "../../components/StatTile";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
@@ -81,6 +82,7 @@ export function WeekView({ date }: { date: string }) {
   const activitiesByDate = new Map(
     groupByLocalDate(activities.data?.items ?? []).map((g) => [g.localDate, g.activities]),
   );
+  const hikes = (activities.data?.items ?? []).filter((a) => a.sport === "hiking");
 
   // Training load/fitness/fatigue/form for the week: the week's own summed daily training load,
   // and CTL/ATL/TSB as of the week's last day (its cumulative fitness/fatigue/form state, not an
@@ -197,6 +199,8 @@ export function WeekView({ date }: { date: string }) {
           allTimeRecords={personalRecords(allTimeRunning.data ?? [])}
         />
       )}
+
+      <HikeStatsCard activities={hikes} />
 
       {health.data && (
         <WeekWellnessCharts

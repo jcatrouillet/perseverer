@@ -9,6 +9,7 @@ import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
+import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
@@ -71,6 +72,7 @@ export function AllTimeView() {
       ? monthlyAverageSleepHours(sleep.data ?? [], sleepDates[0]!, sleepDates[sleepDates.length - 1]!)
       : [];
   const runs = all.filter((a) => a.sport === "running");
+  const hikes = all.filter((a) => a.sport === "hiking");
   const busiest = busiestYear(all);
 
   return (
@@ -96,6 +98,8 @@ export function AllTimeView() {
           trailingWindowDays={365}
         />
       )}
+
+      <HikeStatsCard activities={hikes} />
 
       <section className="card">
         <h2>Fitness &amp; Form</h2>
