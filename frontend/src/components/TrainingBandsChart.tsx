@@ -152,27 +152,36 @@ function toCompositionRows(activities: ActivityPaceBandsOut[]): CompositionRow[]
 // (invisible) purely so Recharts' own stacking math, Tooltip hover-tracking, and click handling
 // keep working exactly as already wired up, while this component reads the resolved axis scales
 // directly (Recharts 3's useXAxisScale/useYAxisScale -- "render arbitrary elements anywhere") and
-// draws its own, deliberately wider, rects underneath them. Width is sized off the *typical*
-// (median) gap between runs rather than the single tightest one, so it closes up in well-
-// populated stretches of the timeline while leaving genuinely sparse stretches (this athlete's
-// own 2016-2019) still visibly separate -- matching how a real "training load over time" view
-// should read. PLOT_WIDTH_PX approximates training-bands--wide's own rendered plot width (this
-// component has no resize observer to measure it live) minus the chart's left/right margins.
+// draws its own, deliberately wider, rects underneath them.
+//
+// Width is sized off a *high percentile* of the gap between consecutive runs, not the median --
+// confirmed against this athlete's own real data (~990 gaps): the median is only 2 days, but a
+// bar sized for the median still left every routine multi-day break (a rest week, a short trip)
+// as a visible seam threading through otherwise-dense years, since about a fifth of all gaps run
+// longer than that. WIDEN_PERCENTILE=0.98 bridges the routine cases -- p98 was 10 real days in
+// this athlete's history -- while still leaving the genuinely long breaks (p99 jumps to 24 days,
+// and 2016-2019 stretches run into the hundreds) visibly separate, matching how a real "training
+// load over time" view should read. PLOT_WIDTH_PX approximates training-bands--wide's own
+// rendered plot width (this component has no resize observer to measure it live) minus the
+// chart's left/right margins.
 const PLOT_WIDTH_PX = 1650;
-const WIDEN_FACTOR = 1.5;
+const WIDEN_PERCENTILE = 0.98;
+const WIDEN_BUFFER = 1.1;
+const MIN_BAR_WIDTH_PX = 2;
+const MAX_BAR_WIDTH_PX = 16;
 
 function estimateBarWidthPx(rows: CompositionRow[]): number {
-  if (rows.length < 2) return 2;
+  if (rows.length < 2) return MIN_BAR_WIDTH_PX;
   const gaps: number[] = [];
   for (let i = 1; i < rows.length; i++) {
     gaps.push(rows[i]!.ts - rows[i - 1]!.ts);
   }
   gaps.sort((a, b) => a - b);
-  const medianGapMs = gaps[Math.floor(gaps.length / 2)]!;
+  const targetGapMs = gaps[Math.floor(gaps.length * WIDEN_PERCENTILE)]!;
   const totalSpanMs = rows[rows.length - 1]!.ts - rows[0]!.ts;
-  if (totalSpanMs <= 0) return 2;
+  if (totalSpanMs <= 0) return MIN_BAR_WIDTH_PX;
   const pxPerMs = PLOT_WIDTH_PX / totalSpanMs;
-  return Math.min(12, Math.max(2, medianGapMs * pxPerMs * WIDEN_FACTOR));
+  return Math.min(MAX_BAR_WIDTH_PX, Math.max(MIN_BAR_WIDTH_PX, targetGapMs * pxPerMs * WIDEN_BUFFER));
 }
 
 // Bottom (0%) to top (100%) of the stack, same slow-to-fast order the real stacked <Bar/>
