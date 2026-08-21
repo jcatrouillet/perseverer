@@ -45,10 +45,9 @@ describe("HikeStatsCard", () => {
     mockUseActivityLocation.mockReturnValue({ data: NO_LOCATION });
   });
 
-  it("shows an empty-state message when there are no hikes", () => {
-    render(<HikeStatsCard activities={[]} periodLabel="June 2026" />);
-    expect(screen.getByText("Hikes")).toBeInTheDocument();
-    expect(screen.getByText("No hikes recorded in June 2026.")).toBeInTheDocument();
+  it("renders nothing when there are no hikes in the period", () => {
+    const { container } = render(<HikeStatsCard activities={[]} />);
+    expect(container.firstChild).toBeNull();
   });
 
   it("shows count, total distance, and total time across all hikes", () => {
@@ -56,7 +55,7 @@ describe("HikeStatsCard", () => {
       hike("h1", { distance_m: 10000, moving_duration_s: 7200 }),
       hike("h2", { distance_m: 5000, moving_duration_s: 3600 }),
     ];
-    render(<HikeStatsCard activities={activities} periodLabel="June 2026" />);
+    render(<HikeStatsCard activities={activities} />);
     expect(screen.getByText("2")).toBeInTheDocument(); // hike count
     expect(screen.getByText("15.0")).toBeInTheDocument(); // 15km total
     expect(screen.getByText("3h 0m")).toBeInTheDocument(); // 2h + 1h
@@ -68,7 +67,7 @@ describe("HikeStatsCard", () => {
       hike("longest-time", { distance_m: 5000, moving_duration_s: 20000, elevation_gain_m: 100 }),
       hike("most-elevation", { distance_m: 5000, moving_duration_s: 3600, elevation_gain_m: 1500 }),
     ];
-    render(<HikeStatsCard activities={activities} periodLabel="June 2026" />);
+    render(<HikeStatsCard activities={activities} />);
     expect(screen.getByText("Longest hike")).toBeInTheDocument();
     expect(screen.getByText("Longest hike by time")).toBeInTheDocument();
     expect(screen.getByText("Highest elevation gain")).toBeInTheDocument();
@@ -80,7 +79,7 @@ describe("HikeStatsCard", () => {
       hike("dominant", { distance_m: 20000, moving_duration_s: 20000, elevation_gain_m: 0 }),
       hike("other", { distance_m: 1000, moving_duration_s: 600, elevation_gain_m: 0 }),
     ];
-    render(<HikeStatsCard activities={activities} periodLabel="June 2026" />);
+    render(<HikeStatsCard activities={activities} />);
     expect(screen.getByText("Longest hike")).toBeInTheDocument();
     expect(screen.queryByText("Longest hike by time")).not.toBeInTheDocument();
     // Neither hike has elevation data, so that slot doesn't appear at all.
@@ -89,13 +88,13 @@ describe("HikeStatsCard", () => {
 
   it("omits the elevation-gain feature entirely when no hike has elevation data", () => {
     const activities = [hike("h1", { elevation_gain_m: null })];
-    render(<HikeStatsCard activities={activities} periodLabel="June 2026" />);
+    render(<HikeStatsCard activities={activities} />);
     expect(screen.queryByText("Highest elevation gain")).not.toBeInTheDocument();
   });
 
   it("links each featured hike to its activity detail page", () => {
     const activities = [hike("h1")];
-    render(<HikeStatsCard activities={activities} periodLabel="June 2026" />);
+    render(<HikeStatsCard activities={activities} />);
     const link = screen.getByText("Longest hike").closest("a");
     expect(link).toHaveAttribute("href", "/activities/h1");
   });
@@ -105,13 +104,13 @@ describe("HikeStatsCard", () => {
       data: { available: true, location_name: "Yosemite National Park" },
     });
     const activities = [hike("h1")];
-    render(<HikeStatsCard activities={activities} periodLabel="June 2026" />);
+    render(<HikeStatsCard activities={activities} />);
     expect(screen.getByText(/Yosemite National Park/)).toBeInTheDocument();
   });
 
   it("falls back to a generic 'Hike' title when the activity has no real name", () => {
     const activities = [hike("h1", { name: "Hike", workout_name: null })];
-    render(<HikeStatsCard activities={activities} periodLabel="June 2026" />);
+    render(<HikeStatsCard activities={activities} />);
     expect(screen.getByText("Hike")).toBeInTheDocument();
   });
 });

@@ -132,7 +132,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
         />
       )}
 
-      {hikes.data && <HikeStatsCard activities={hikes.data.items} periodLabel={periodLabel} />}
+      {hikes.data && <HikeStatsCard activities={hikes.data.items} />}
 
       <section className="card">
         <h2>Fitness &amp; Form</h2>

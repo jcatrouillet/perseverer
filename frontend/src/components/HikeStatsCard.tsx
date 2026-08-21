@@ -94,13 +94,7 @@ function FeaturedHikeCard({
   );
 }
 
-export function HikeStatsCard({
-  activities,
-  periodLabel,
-}: {
-  activities: ActivitySummary[];
-  periodLabel: string;
-}) {
+export function HikeStatsCard({ activities }: { activities: ActivitySummary[] }) {
   const featured = pickFeaturedHikes(activities);
 
   // Fixed at exactly three hook calls regardless of how many featured slots are actually filled
@@ -111,14 +105,11 @@ export function HikeStatsCard({
   const loc2 = useActivityLocation(featured[2]?.activity.id ?? "", featured[2] != null);
   const locations = [loc0, loc1, loc2];
 
-  if (activities.length === 0) {
-    return (
-      <section className="card">
-        <h2>Hikes</h2>
-        <p>No hikes recorded in {periodLabel}.</p>
-      </section>
-    );
-  }
+  // No hikes at all this period -- the section simply doesn't appear, rather than a "no hikes"
+  // placeholder card (unlike RunningStats, which every period has at least some of for this
+  // athlete; hiking is seasonal/occasional enough that an empty-state card on most months would
+  // be pure noise, not useful information).
+  if (activities.length === 0) return null;
 
   const totalDistanceM = activities.reduce((sum, a) => sum + (a.distance_m ?? 0), 0);
   const totalDurationS = activities.reduce((sum, a) => sum + (effectiveDurationS(a) ?? 0), 0);
