@@ -191,6 +191,14 @@ export function RunningStats({
   const longest = activities.reduce((max, a) =>
     (a.distance_m ?? 0) > (max.distance_m ?? 0) ? a : max,
   );
+  // Peak heart rate reached during any single run this period, not an average across runs --
+  // matches "Longest run"/"Best VDOT" above in being the strongest single reading actually
+  // produced, not a trend. null (rather than 0) when no run in the period recorded one at all.
+  const maxHrActivity = activities.reduce<ActivitySummary | null>((best, a) => {
+    if (a.max_hr_bpm == null) return best;
+    if (best == null || a.max_hr_bpm > best.max_hr_bpm!) return a;
+    return best;
+  }, null);
   const activeDates = distinctActiveDates(activities);
   const streaks = longestStreakAndBreak(activeDates);
   const weekdays = weekdayStats(activities);
@@ -429,22 +437,38 @@ export function RunningStats({
           tone="pace"
           hero
         />
-        <StatTile
-          label="Longest run"
-          value={((longest.distance_m ?? 0) / 1000).toFixed(1)}
-          unit="km"
-          icon="trophy"
-          tone="load"
-          hero
-        />
-        {bestVdotThisPeriod && (
+        <Link href={`/activities/${longest.id}`} className="stat-tile-link">
           <StatTile
-            label="Best VDOT"
-            value={bestVdotThisPeriod.value.toFixed(1)}
-            meta={bestVdotThisPeriod.date}
-            icon="trend"
-            tone="pace"
+            label="Longest run"
+            value={((longest.distance_m ?? 0) / 1000).toFixed(1)}
+            unit="km"
+            icon="trophy"
+            tone="load"
+            hero
           />
+        </Link>
+        {bestVdotThisPeriod && (
+          <Link href={`/activities/${bestVdotThisPeriod.activityId}`} className="stat-tile-link">
+            <StatTile
+              label="Best VDOT"
+              value={bestVdotThisPeriod.value.toFixed(1)}
+              meta={bestVdotThisPeriod.date}
+              icon="trend"
+              tone="pace"
+            />
+          </Link>
+        )}
+        {maxHrActivity && (
+          <Link href={`/activities/${maxHrActivity.id}`} className="stat-tile-link">
+            <StatTile
+              label="Max heart rate"
+              value={Math.round(maxHrActivity.max_hr_bpm!)}
+              unit="bpm"
+              meta={maxHrActivity.local_date}
+              icon="heart"
+              tone="hr"
+            />
+          </Link>
         )}
         <StatTile
           label="Average run length"

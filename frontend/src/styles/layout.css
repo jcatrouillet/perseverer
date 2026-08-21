@@ -371,6 +371,24 @@ select {
   color: var(--tone);
 }
 
+/* A StatTile wrapped in a Link, for the handful (Longest run, Max heart rate, Best VDOT, Max
+   elevation gain, ...) that point at the one activity that set them -- everything else in
+   .stat-grid stays plain/non-interactive. No border to react to like .month-tile's own hover
+   state, so the figure itself picks up the accent colour instead. */
+.stat-tile-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.stat-tile-link:hover {
+  text-decoration: none;
+}
+
+.stat-tile-link:hover .stat-tile__value {
+  color: var(--color-accent);
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

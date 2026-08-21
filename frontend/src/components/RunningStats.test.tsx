@@ -67,6 +67,49 @@ describe("RunningStats click-through", () => {
     const hrefs = Array.from(cells).map((c) => c.getAttribute("href"));
     expect(hrefs).toContain("/day/2025-06-15");
   });
+
+  it("links Longest run, Best VDOT, and Max heart rate to the activity that set each", () => {
+    // Three different activities, each the sole record-setter for one tile, so each link is
+    // unambiguous.
+    const activities = [
+      activity("longest", "2025-06-10", { distance_m: 20000 }),
+      activity("best-vdot", "2025-06-15", { distance_m: 5000, vdot: 45.0 }),
+      activity("max-hr", "2025-06-20", { distance_m: 5000, max_hr_bpm: 188 }),
+    ];
+    render(
+      <RunningStats
+        activities={activities}
+        startDate="2025-06-01"
+        endDate="2025-06-30"
+        periodLabel="June 2025"
+      />,
+    );
+    expect(screen.getByText("Longest run").closest("a")).toHaveAttribute(
+      "href",
+      "/activities/longest",
+    );
+    expect(screen.getByText("Best VDOT").closest("a")).toHaveAttribute(
+      "href",
+      "/activities/best-vdot",
+    );
+    expect(screen.getByText("Max heart rate").closest("a")).toHaveAttribute(
+      "href",
+      "/activities/max-hr",
+    );
+    expect(screen.getByText("188")).toBeInTheDocument();
+  });
+
+  it("omits the Max heart rate tile when no activity in the period recorded one", () => {
+    render(
+      <RunningStats
+        activities={[activity("a1", "2025-06-15")]}
+        startDate="2025-06-01"
+        endDate="2025-06-30"
+        periodLabel="June 2025"
+      />,
+    );
+    expect(screen.queryByText("Max heart rate")).not.toBeInTheDocument();
+  });
 });
 
 describe("RunningStats best VDOT tile", () => {

@@ -522,7 +522,7 @@ describe("bestVdot", () => {
       activity("2025-05-15", 5000, { vdot: 41.0 }),
       activity("2025-05-20", 5000, { vdot: 35.1 }),
     ];
-    expect(bestVdot(activities)).toEqual({ value: 41.0, date: "2025-05-15" });
+    expect(bestVdot(activities)).toEqual({ value: 41.0, date: "2025-05-15", activityId: "2025-05-15" });
   });
 
   it("ignores activities with no vdot", () => {
@@ -530,7 +530,7 @@ describe("bestVdot", () => {
       activity("2025-05-01", 5000, { vdot: null }),
       activity("2025-05-15", 5000, { vdot: 27.6 }),
     ];
-    expect(bestVdot(activities)).toEqual({ value: 27.6, date: "2025-05-15" });
+    expect(bestVdot(activities)).toEqual({ value: 27.6, date: "2025-05-15", activityId: "2025-05-15" });
   });
 
   it("returns null when nothing in the period has a vdot", () => {

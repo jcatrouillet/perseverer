@@ -633,6 +633,7 @@ export function newAllTimePrs(
 export interface BestVdot {
   value: number;
   date: string;
+  activityId: string;
 }
 
 /** The best (highest) VDOT among `activities` that have one -- see performance.py's own
@@ -645,7 +646,7 @@ export function bestVdot(activities: ActivitySummary[]): BestVdot | null {
   for (const a of activities) {
     if (a.vdot == null) continue;
     if (best == null || a.vdot > best.value) {
-      best = { value: a.vdot, date: a.local_date ?? a.start_time_utc.slice(0, 10) };
+      best = { value: a.vdot, date: a.local_date ?? a.start_time_utc.slice(0, 10), activityId: a.id };
     }
   }
   return best;

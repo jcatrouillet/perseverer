@@ -168,7 +168,7 @@ export function HikeStatsCard({ activities }: { activities: ActivitySummary[] })
         {elevationStats && (
           <Link
             href={`/activities/${elevationStats.maxHike.id}`}
-            className="hike-stat-tile-link"
+            className="stat-tile-link"
           >
             <StatTile
               label="Max elevation gain"
