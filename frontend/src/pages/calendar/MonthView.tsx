@@ -16,6 +16,7 @@ import { FitnessChart } from "../../components/FitnessChart";
 import { GoalButton } from "../../components/GoalButton";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
+import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { NotesPanel } from "../../components/NotesPanel";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
@@ -60,6 +61,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   const sleep = useSleep(start, end);
   const allActivities = useActivities({ startDate: start, endDate: end, limit: 500 });
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
+  const hikes = useActivities({ sport: "hiking", startDate: start, endDate: end, limit: 500 });
   // Unbounded, all-history fetch (distinct from `runs`' period-scoped one) so RunningStats can
   // tell a genuine all-time PR apart from merely "fastest within this month" -- see ADR 0011
   // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
@@ -129,6 +131,8 @@ export function MonthView({ year, month }: { year: number; month: number }) {
           compareDistanceM={priorYearMonthRunningDistanceM}
         />
       )}
+
+      {hikes.data && <HikeStatsCard activities={hikes.data.items} periodLabel={periodLabel} />}
 
       <section className="card">
         <h2>Fitness &amp; Form</h2>
