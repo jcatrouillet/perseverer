@@ -10,10 +10,10 @@ from typing import Any
 
 from sqlalchemy import Engine, select
 
-from sporthealth.adapters.eufy import EufyAuthError, EufyClient, sync_eufy
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import athlete, health_observation, raw_object
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.adapters.eufy import EufyAuthError, EufyClient, sync_eufy
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import athlete, health_observation, raw_object
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 RECORD_1 = {
     "id": "record-1",
@@ -76,7 +76,7 @@ def _seed_athlete(engine: Engine) -> None:
 
 def _run(tmp_path: Path, client: FakeEufyClient) -> Any:
     engine = make_engine(tmp_path / "db.sqlite")
-    from sporthealth.db.schema import metadata
+    from perseverer.db.schema import metadata
 
     metadata.create_all(engine)
     _seed_athlete(engine)
@@ -101,7 +101,7 @@ def _run(tmp_path: Path, client: FakeEufyClient) -> Any:
 
 def test_skips_without_error_when_credentials_missing(tmp_path: Path) -> None:
     engine = make_engine(tmp_path / "db.sqlite")
-    from sporthealth.db.schema import metadata
+    from perseverer.db.schema import metadata
 
     metadata.create_all(engine)
     _seed_athlete(engine)

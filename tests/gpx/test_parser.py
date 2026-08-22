@@ -5,7 +5,7 @@ itself originally produced)."""
 
 from __future__ import annotations
 
-from sporthealth.gpx.parser import parse_gpx
+from perseverer.gpx.parser import parse_gpx
 
 _BARE_GPX = b"""<?xml version="1.0" encoding="UTF-8"?>
 <gpx creator="StravaGPX" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">

@@ -9,8 +9,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import activity_workout, activity_workout_step
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.schema import activity_workout, activity_workout_step
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from tests.api.conftest import seed_activity
 
 

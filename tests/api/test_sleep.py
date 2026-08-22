@@ -5,8 +5,8 @@ import datetime as dt
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import sleep_session, sleep_stage
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.schema import sleep_session, sleep_stage
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 
 def test_list_sleep_returns_sessions_with_nested_stages(

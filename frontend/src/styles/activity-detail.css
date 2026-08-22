@@ -12,6 +12,29 @@
   margin-top: 0;
 }
 
+/* Heart rate and Elevation side by side, each with its own heading directly above its own
+   tiles -- not one combined grid/heading (that made the elevation tiles read as unlabelled),
+   but still adjacent rather than two more full-width stacked rows. Wraps to stacked on narrow
+   viewports rather than squeezing each column's own stat-grid below a usable width. */
+.activity-stats__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  /* Neither inner h3 gets the usual .activity-stats h3 top margin -- each is the first child of
+     its own column, not a sibling further down the flat stack -- so the row itself carries that
+     same spacing instead. */
+  margin-top: var(--space-5);
+}
+
+.activity-stats__row:first-child {
+  margin-top: 0;
+}
+
+.activity-stats__col {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
 /* "Fastest for this distance" as a narrow side column next to the whole stats grid (Distance &
    time through Hydration), not a full-width section below it -- the column's own height is
    whatever its row count needs, which may run longer or shorter than the stats grid beside it;
@@ -149,6 +172,30 @@
   margin: 0 0 var(--space-4);
 }
 
+/* Weather + Pace variability side by side -- the ring reads as a companion stat to the weather
+   card next to it, not a full-width section of its own. Wraps to stacked on narrow viewports. */
+.activity-detail__weather-pace-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-5);
+  margin: 0 0 var(--space-4);
+}
+
+.activity-detail__weather-pace-row .activity-detail__weather {
+  margin: 0;
+  /* No grow -- this used to be 1 1 260px, which stretched to fill the whole row's width and
+     shoved Pace variability all the way out to the far right edge instead of sitting right next
+     to it. Fixed width, content-sized, so the pair reads as one compact group. */
+  flex: 0 0 auto;
+  width: 260px;
+}
+
+.activity-detail__pace-variability {
+  flex: 0 0 176px;
+  text-align: center;
+}
+
 /* Matches the plain `h2` size every other section title on this page uses (Notes, Intervals,
    Time in zones, ...) -- this heading is an `h3` for outline-nesting reasons, not because
    weather is a lesser section, so it needs its own explicit override rather than falling
@@ -178,6 +225,35 @@
 .activity-detail__weather-readout > span:first-child {
   color: var(--color-text);
   text-transform: capitalize;
+}
+
+.activity-detail__fueling {
+  margin: 0 0 var(--space-4);
+}
+
+.activity-detail__fueling-heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.activity-detail__fueling-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.activity-detail__fueling-readout {
+  display: flex;
+  gap: var(--space-3);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.activity-detail__fueling input[type="number"] {
+  width: 8em;
 }
 
 /* One full-width panel per row, stacked -- side-by-side panels made it hard to read a single

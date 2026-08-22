@@ -1,6 +1,6 @@
 # API Reference
 
-The source of truth for integrating with the Sport Health Data Platform REST API — every
+The source of truth for integrating with the Perseverer REST API — every
 endpoint, parameter (required/optional, default), and response shape. Generated from the live
 OpenAPI schema (`GET /openapi.json`) and cross-checked against router source for the details
 OpenAPI doesn't capture (auth semantics, error codes, enumerable string fields). Grows every
@@ -12,7 +12,7 @@ copyable curl examples) is served by the frontend container at `/api-docs.html`
 page, kept in sync by hand when endpoints change.
 
 Base path: every endpoint below is prefixed `/api/v1`. Base URL is deployment-specific
-(`SPORTHEALTH_API_BASE_URL`) — there is no public multi-tenant host.
+(`PERSEVERER_API_BASE_URL`) — there is no public multi-tenant host.
 
 ## Authentication
 
@@ -21,9 +21,9 @@ Every route requires a credential **except** `GET /healthz`, `GET /version`, and
 
 | Method | Header | Resolves to |
 |---|---|---|
-| Shared API key | `X-API-Key: <SPORTHEALTH_API_KEY>` | The deployment's default athlete. Simplest option for scripts, the MCP server, single-athlete deployments. |
+| Shared API key | `X-API-Key: <PERSEVERER_API_KEY>` | The deployment's default athlete. Simplest option for scripts, the MCP server, single-athlete deployments. |
 | Per-athlete API key | `X-API-Key: <key from sync athlete create-key>` | The specific athlete the key was minted for (matched via SHA-256 hash against `athlete.api_key_hash`). |
-| Session token | `Authorization: Bearer <JWT from POST /auth/login>` | The athlete who logged in. What the web frontend uses. Expires after `SPORTHEALTH_JWT_EXPIRY_DAYS` (default **30 days**); no refresh endpoint — log in again once expired. |
+| Session token | `Authorization: Bearer <JWT from POST /auth/login>` | The athlete who logged in. What the web frontend uses. Expires after `PERSEVERER_JWT_EXPIRY_DAYS` (default **30 days**); no refresh endpoint — log in again once expired. |
 
 There is exactly one athlete per deployment credential — every endpoint is implicitly scoped to
 the resolved athlete, so there is never an `athlete_id` parameter to pass yourself.
@@ -31,16 +31,16 @@ the resolved athlete, so there is never an `athlete_id` parameter to pass yourse
 ```bash
 # Shared or per-athlete key
 curl -H "X-API-Key: YOUR_API_KEY" \
-  https://your-sporthealth-host/api/v1/activities?limit=10
+  https://your-perseverer-host/api/v1/activities?limit=10
 
 # Session token
-curl -X POST https://your-sporthealth-host/api/v1/auth/login \
+curl -X POST https://your-perseverer-host/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "jerome", "password": "YOUR_PASSWORD"}'
 # => {"access_token": "eyJhbGciOi...", "expires_at": "2026-09-18T12:00:00Z"}
 
 curl -H "Authorization: Bearer eyJhbGciOi..." \
-  https://your-sporthealth-host/api/v1/activities?limit=10
+  https://your-perseverer-host/api/v1/activities?limit=10
 ```
 
 **Failure modes:**
@@ -48,7 +48,7 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 | Status | When |
 |---|---|
 | `401` | No credential presented (and the server has at least one auth method configured), or the credential is invalid, malformed, or expired. |
-| `503` | The server has **neither** `SPORTHEALTH_API_KEY` nor `SPORTHEALTH_JWT_SECRET` configured — auth fails closed, never open. A deployment misconfiguration, not something a client request can fix. |
+| `503` | The server has **neither** `PERSEVERER_API_KEY` nor `PERSEVERER_JWT_SECRET` configured — auth fails closed, never open. A deployment misconfiguration, not something a client request can fix. |
 
 ## Errors
 
@@ -149,7 +149,7 @@ username exists.
 |---|---|
 | `200` | `LoginResponse`: `access_token` (string, JWT), `expires_at` (string, date-time) |
 | `401` | `detail: "invalid username or password"` |
-| `503` | `detail: "JWT signing not configured"` (`SPORTHEALTH_JWT_SECRET` unset) |
+| `503` | `detail: "JWT signing not configured"` (`PERSEVERER_JWT_SECRET` unset) |
 
 ---
 
@@ -232,9 +232,9 @@ knowledge of activities that hadn't happened yet.
 
 ### `GET /activities/{activity_id}/weather`
 
-Temperature/humidity range and a WMO weather code for the activity's time window, from
-Open-Meteo's historical archive, cached forever once fetched. `available: false` when there's no
-GPS start point or the fetch came back empty.
+Temperature/humidity range, feels-like temperature, wind speed/direction, and a WMO weather
+code for the activity's time window, from Open-Meteo's historical archive, cached forever once
+fetched. `available: false` when there's no GPS start point or the fetch came back empty.
 
 **Responses:** `200` → `ActivityWeatherOut`. `404`.
 
@@ -311,6 +311,24 @@ there's no safe automatic rule for cleaning up a generic one. Durable, rebuild-s
 **Request body** (`ActivityNameOverrideIn`): `name` (string, required).
 
 **Responses:** `200` → `ActivityNameOverrideOut`. `404`.
+
+### `PATCH /activities/{activity_id}/fueling`
+
+Records the athlete's own carbohydrate/sodium intake during the activity. Unlike the three
+corrections above, there's no vendor source for this at all — neither the FIT profile nor the
+Garmin Connect API carry it (confirmed by introspecting both directly) — so this is the
+athlete's only input, not a fix to something derived. Durable, rebuild-safe override, same
+mechanism as sport/race/name. Both fields are set together: send the current value of whichever
+one you're not changing, or it's cleared back to null.
+
+**Request body** (`ActivityFuelingIn`):
+
+| Field | Type | Required |
+|---|---|---|
+| `carbohydrates_g` | number, nullable | optional (omit or null to clear) |
+| `sodium_mg` | number, nullable | optional (omit or null to clear) |
+
+**Responses:** `200` → `ActivityFuelingOut`. `404`. `422` → a negative value.
 
 ### `GET /activities/{activity_id}/stream`
 
@@ -635,6 +653,8 @@ Everything in `ActivitySummary`, plus:
 | `route` | `RouteOut`, nullable | required | `null` when the activity has no GPS. |
 | `metrics` | array\<`ActivityMetricOut`\> | required | Every stored per-activity field beyond the curated columns — the raw-first catalog in list form. |
 | `estimated_sweat_loss_ml` | number, nullable | required | Computed estimate, not a device measurement. |
+| `carbohydrates_g` | number, nullable | required | Athlete-logged fueling intake — no vendor source, `null` until set via `PATCH .../fueling`. |
+| `sodium_mg` | number, nullable | required | Athlete-logged fueling intake — no vendor source, `null` until set via `PATCH .../fueling`. |
 
 Returned by `GET /activities/{id}`.
 
@@ -707,10 +727,16 @@ nullable) — optional.
 
 ### ActivityWeatherOut
 
-`available` (boolean, required). When `true`: `temperature_min_c`/`temperature_max_c`/
-`humidity_min_pct`/`humidity_max_pct` (number, nullable) and `weather_code` (integer, nullable —
-WMO weather interpretation code) — all optional fields, omitted from the JSON when `available`
-is `false`.
+`available` (boolean, required) — `false` whenever there's no GPS start point to query against,
+or the Open-Meteo fetch/parse came back empty; every other field is `null` in that case rather
+than omitted. `temperature_min_c`/`temperature_max_c`/`humidity_min_pct`/`humidity_max_pct`
+(number, nullable) are ranges across the activity's own duration; `weather_code` (integer,
+nullable — WMO weather interpretation code, see https://open-meteo.com/en/docs) is a single
+representative code at the hour closest to the activity's start. `feels_like_c`,
+`wind_speed_mps` (metres/second), and `wind_direction_deg` (degrees, meteorological convention —
+the direction the wind is blowing *from*) are likewise single values at that same closest hour,
+not ranges, and each is independently nullable since Open-Meteo's historical archive doesn't
+always carry every field for every hour.
 
 ### ActivityLocationOut
 
@@ -759,9 +785,10 @@ step list, including repeat-block markers, not pre-flattened).
 
 `new_activity_id` (string) — the freshly created activity the split source now belongs to.
 
-### ActivitySportOverrideOut / ActivityRaceOverrideOut / ActivityNameOverrideOut
+### ActivitySportOverrideOut / ActivityRaceOverrideOut / ActivityNameOverrideOut / ActivityFuelingOut
 
-Echo the corrected field(s): `{sport, sub_sport}`, `{is_race}`, `{name}` respectively.
+Echo the corrected field(s): `{sport, sub_sport}`, `{is_race}`, `{name}`, `{carbohydrates_g,
+sodium_mg}` respectively.
 
 ### StreamResponse
 

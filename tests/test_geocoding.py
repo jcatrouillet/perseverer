@@ -18,10 +18,10 @@ from pathlib import Path
 import httpx
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, activity_metric, athlete, metadata, raw_object
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.geocoding import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, activity_metric, athlete, metadata, raw_object
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.geocoding import (
     METRIC_LOCATION_NAME,
     get_or_fetch_activity_location,
     parse_nominatim_response,

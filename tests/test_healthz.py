@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from sporthealth import __version__
-from sporthealth.api.main import app
+from perseverer import __version__
+from perseverer.api.main import app
 
 
 def test_healthz_ok() -> None:

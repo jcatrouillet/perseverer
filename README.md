@@ -1,4 +1,4 @@
-# my-sport-health-data
+# Perseverer
 
 Self-hosted fitness & health data platform — own the Garmin/Strava data, stop depending on a
 vendor cloud. Runs on a Synology DS1019+ behind an existing reverse proxy.

@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.api.mcp_server import (
+from perseverer.api.mcp_server import (
     create_note,
     get_activity,
     get_activity_stream,
@@ -27,11 +27,11 @@ from sporthealth.api.mcp_server import (
     list_notes,
     list_sleep,
 )
-from sporthealth.config import get_settings
-from sporthealth.db.schema import activity_stream, day_rollup, health_observation, metric_definition
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fit.types import StreamPoint
-from sporthealth.streams import write_activity_stream
+from perseverer.config import get_settings
+from perseverer.db.schema import activity_stream, day_rollup, health_observation, metric_definition
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fit.types import StreamPoint
+from perseverer.streams import write_activity_stream
 from tests.api.conftest import TEST_API_KEY, seed_activity
 
 
@@ -42,7 +42,7 @@ def _mcp_tool_api_key_env(monkeypatch: pytest.MonkeyPatch) -> Generator[None, No
     env-backed settings at TEST_API_KEY too, so the tool's outgoing in-process request is
     accepted by the same server it's calling.
     """
-    monkeypatch.setenv("SPORTHEALTH_API_KEY", TEST_API_KEY)
+    monkeypatch.setenv("PERSEVERER_API_KEY", TEST_API_KEY)
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

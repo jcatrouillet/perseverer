@@ -9,8 +9,8 @@ from pathlib import Path
 
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import (
     activity,
     athlete,
     health_metric_period_rollup,
@@ -19,8 +19,8 @@ from sporthealth.db.schema import (
     metric_definition,
     period_rollup,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.rollups import (
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.rollups import (
     month_start,
     refresh_daily_rollup,
     refresh_period_rollup,

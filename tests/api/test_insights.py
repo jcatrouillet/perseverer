@@ -8,8 +8,8 @@ import json
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import insight
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.schema import insight
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 
 def _seed_insight(

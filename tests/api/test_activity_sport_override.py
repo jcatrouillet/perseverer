@@ -6,7 +6,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 
-from sporthealth.db.schema import activity, activity_sport_override
+from perseverer.db.schema import activity, activity_sport_override
 from tests.api.conftest import seed_activity
 
 
@@ -268,5 +268,126 @@ class TestNameOverride:
 
         r = client.patch(
             "/api/v1/activities/target/name", json={"name": "  "}, headers=auth_headers
+        )
+        assert r.status_code == 422
+
+
+class TestFuelingOverride:
+    """PATCH /activities/{id}/fueling -- the athlete's own carbohydrate/sodium intake logging.
+    Unlike sport/race/name, there's no vendor source to correct here at all (see
+    sport_override.py's own docstring), so this is pure user input, recorded the same durable,
+    rebuild-safe way."""
+
+    def test_override_records_fueling_immediately(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="target", sport="running")
+
+        r = client.patch(
+            "/api/v1/activities/target/fueling",
+            json={"carbohydrates_g": 60.0, "sodium_mg": 500.0},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.json() == {"carbohydrates_g": 60.0, "sodium_mg": 500.0}
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(activity.c.carbohydrates_g, activity.c.sodium_mg).where(
+                    activity.c.id == "target"
+                )
+            ).fetchone()
+        assert row is not None
+        assert (row.carbohydrates_g, row.sodium_mg) == (60.0, 500.0)
+
+    def test_fueling_override_does_not_disturb_a_separate_name_correction(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="target", sport="running")
+
+        client.patch(
+            "/api/v1/activities/target/name", json={"name": "My Title"}, headers=auth_headers
+        )
+        client.patch(
+            "/api/v1/activities/target/fueling",
+            json={"carbohydrates_g": 40.0, "sodium_mg": 300.0},
+            headers=auth_headers,
+        )
+
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(activity.c.name, activity.c.carbohydrates_g).where(
+                    activity.c.id == "target"
+                )
+            ).fetchone()
+        assert row is not None
+        assert (row.name, row.carbohydrates_g) == ("My Title", 40.0)
+
+    def test_override_replaces_a_previous_fueling_entry(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="target", sport="running")
+
+        client.patch(
+            "/api/v1/activities/target/fueling",
+            json={"carbohydrates_g": 40.0, "sodium_mg": 300.0},
+            headers=auth_headers,
+        )
+        r = client.patch(
+            "/api/v1/activities/target/fueling",
+            json={"carbohydrates_g": 60.0, "sodium_mg": 500.0},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+
+        with engine.connect() as conn:
+            rows = conn.execute(select(activity_sport_override)).fetchall()
+            activity_row = conn.execute(
+                select(activity.c.carbohydrates_g, activity.c.sodium_mg).where(
+                    activity.c.id == "target"
+                )
+            ).fetchone()
+        assert len(rows) == 1  # upserted, not a second row
+        assert (rows[0].carbohydrates_g, rows[0].sodium_mg) == (60.0, 500.0)
+        assert activity_row is not None
+        assert (activity_row.carbohydrates_g, activity_row.sodium_mg) == (60.0, 500.0)
+
+    def test_override_accepts_only_one_field_at_a_time(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="target", sport="running")
+
+        r = client.patch(
+            "/api/v1/activities/target/fueling",
+            json={"carbohydrates_g": 60.0},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.json() == {"carbohydrates_g": 60.0, "sodium_mg": None}
+
+    def test_override_404s_for_a_missing_activity(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        r = client.patch(
+            "/api/v1/activities/does-not-exist/fueling",
+            json={"carbohydrates_g": 60.0},
+            headers=auth_headers,
+        )
+        assert r.status_code == 404
+
+    def test_override_422s_for_a_negative_value(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="target", sport="running")
+
+        r = client.patch(
+            "/api/v1/activities/target/fueling",
+            json={"carbohydrates_g": -5.0},
+            headers=auth_headers,
         )
         assert r.status_code == 422

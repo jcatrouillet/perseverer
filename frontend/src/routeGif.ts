@@ -21,6 +21,7 @@ import { drawBasemapTiles } from "./mapTiles";
 import { drawOutlinedText, drawRouteTrace, POSTER_PADDING, type ProjectedPoint, type RoutePosterStats } from "./routeExport";
 
 const GIF_SIZE = 640;
+const STATS_LINE_HEIGHT = 26;
 const FRAME_COUNT = 60;
 // Matches ActivityRoute.tsx's own ANIMATION_DURATION_MS (15s) so the exported GIF plays back at
 // the same pace as the in-app playback the user is exporting.
@@ -100,7 +101,18 @@ export async function renderRouteGif(
       ctx.stroke();
     }
 
-    drawOutlinedText(ctx, stats.distanceLabel, POSTER_PADDING, GIF_SIZE - POSTER_PADDING);
+    // Same bottom-up stacking as routeExport.ts::drawRoutePoster -- distance, time, then pace,
+    // anchored so the last line sits POSTER_PADDING above the bottom edge regardless of how many
+    // lines there are.
+    const lines = [stats.distanceLabel, stats.durationLabel, stats.paceLabel];
+    lines.forEach((line, i) => {
+      drawOutlinedText(
+        ctx,
+        line,
+        POSTER_PADDING,
+        GIF_SIZE - POSTER_PADDING + i * STATS_LINE_HEIGHT - (lines.length - 1) * STATS_LINE_HEIGHT,
+      );
+    });
 
     gif.addFrame(ctx, { copy: true, delay: FRAME_DELAY_MS });
   }

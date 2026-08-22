@@ -8,16 +8,16 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import (
+from perseverer.db.schema import (
     activity_metric,
     activity_stream,
     health_observation,
     metric_definition,
     route_geom,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fit.types import StreamPoint
-from sporthealth.streams import write_activity_stream
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fit.types import StreamPoint
+from perseverer.streams import write_activity_stream
 from tests.api.conftest import seed_activity
 
 _SWEAT_LOSS_METRIC_KEY = "garmin.export.HydrationLogFile.estimatedSweatLossInML"
@@ -220,7 +220,7 @@ def test_list_and_detail_surface_vdot(
 ) -> None:
     with engine.connect() as conn:
         seed_activity(conn, activity_id="a1")
-    _add_metric(engine, activity_id="a1", metric_key="sporthealth.performance.vdot", value=41.2)
+    _add_metric(engine, activity_id="a1", metric_key="perseverer.performance.vdot", value=41.2)
 
     r = client.get("/api/v1/activities", headers=auth_headers)
     assert r.json()["items"][0]["vdot"] == 41.2
@@ -322,6 +322,36 @@ def test_get_activity_detail_sweat_loss_picks_the_nearest_observation(
     r = client.get("/api/v1/activities/a1", headers=auth_headers)
     assert r.status_code == 200
     assert r.json()["estimated_sweat_loss_ml"] == 500.0
+
+
+def test_get_activity_detail_fueling_null_until_entered(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["carbohydrates_g"] is None
+    assert r.json()["sodium_mg"] is None
+
+
+def test_get_activity_detail_reflects_a_recorded_fueling_entry(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+
+    client.patch(
+        "/api/v1/activities/a1/fueling",
+        json={"carbohydrates_g": 60.0, "sodium_mg": 500.0},
+        headers=auth_headers,
+    )
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["carbohydrates_g"] == 60.0
+    assert r.json()["sodium_mg"] == 500.0
 
 
 def test_stream_endpoint_downsamples_and_404s_without_stream(

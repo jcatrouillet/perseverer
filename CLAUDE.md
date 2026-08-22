@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Self-hosted fitness & health data platform. Garmin + Strava in, one owned SQLite+Parquet
+**Perseverer** — a self-hosted fitness & health data platform. Garmin + Strava in, one owned SQLite+Parquet
 archive, a REST/JSON API an AI agent can write notes through, a fast web frontend. Runs on a
 Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing reverse proxy;
 developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
@@ -80,10 +80,10 @@ because you don't recognize it — stop, that's the bug.
   adopted yet. See `docs/adr/0007-phase-4-mcp-server.md`.
 - **Per-athlete auth (Phase 5)**: `require_api_key` (`api/dependencies.py`) resolves — not just
   gates — the authenticated `athlete_id` from any of three credentials: the legacy shared
-  `SPORTHEALTH_API_KEY` (→ `DEFAULT_ATHLETE_ID`, so the MCP server and existing scripts keep
+  `PERSEVERER_API_KEY` (→ `DEFAULT_ATHLETE_ID`, so the MCP server and existing scripts keep
   working unchanged), a per-athlete `X-API-Key` (SHA-256-hashed, `athlete.api_key_hash`), or an
   `Authorization: Bearer` JWT issued by `POST /auth/login` (password checked via stdlib
-  PBKDF2, `auth/passwords.py`; signed with `SPORTHEALTH_JWT_SECRET`, `auth/tokens.py`). Every
+  PBKDF2, `auth/passwords.py`; signed with `PERSEVERER_JWT_SECRET`, `auth/tokens.py`). Every
   router query is scoped to the resolved athlete, not a hardcoded default. Provisioned via
   `sync athlete set-password`/`create-key` — CLI-only, no self-service signup. See
   `docs/adr/0008-phase-5-frontend.md`.
@@ -91,7 +91,7 @@ because you don't recognize it — stop, that's the bug.
   `@tanstack/react-query` for data fetching, a hand-rolled SVG chart (no charting library) for
   the one stream-chart need. The API base URL is runtime-configured
   (`frontend/public/config.js`, regenerated at container start from
-  `SPORTHEALTH_API_BASE_URL` via nginx's own `docker-entrypoint.d` mechanism) — never baked
+  `PERSEVERER_API_BASE_URL` via nginx's own `docker-entrypoint.d` mechanism) — never baked
   into the Vite build, since the reverse-proxy hostname doesn't resolve the same way inside vs.
   outside the house (double-NAT/split-horizon DNS, see `docs/DEPLOY.md`). `AuthGate` offers
   either credential path (password or a pasted API key); a background 401 clears the stored
@@ -207,11 +207,11 @@ because you don't recognize it — stop, that's the bug.
   anywhere. Garmin's SSO 429-locks per account with no recovery path; see
   `docs/adr/0003-phase-2-garmin-adapters.md` for how this is enforced structurally, not just
   by convention.
-- **Staleness is a first-class signal, not an afterthought.** `sporthealth/staleness.py` checks
+- **Staleness is a first-class signal, not an afterthought.** `perseverer/staleness.py` checks
   (a) whether `garmin_connect` has succeeded recently — escalating from "warning" to "critical"
-  past `SPORTHEALTH_GARMIN_STALE_ESCALATE_DAYS` (default 7) — and (b) whether
-  `athlete.last_full_export_at` is fresh enough (`SPORTHEALTH_EXPORT_FRESHNESS_DAYS`, default
-  90). Both fire a generic JSON webhook (`SPORTHEALTH_STALENESS_WEBHOOK_URL`) if configured.
+  past `PERSEVERER_GARMIN_STALE_ESCALATE_DAYS` (default 7) — and (b) whether
+  `athlete.last_full_export_at` is fresh enough (`PERSEVERER_EXPORT_FRESHNESS_DAYS`, default
+  90). Both fire a generic JSON webhook (`PERSEVERER_STALENESS_WEBHOOK_URL`) if configured.
   The worker container (`worker/main.py`, APScheduler) runs `garmin_connect` sync + this check
   daily (default 04:15 local, jittered); `garmin_export` is never scheduled, it's a manual
   CLI action.
@@ -234,7 +234,7 @@ uv run pytest                # test suite
 uv run ruff check .          # lint
 uv run mypy                  # strict type check
 
-# Database (SPORTHEALTH_DATA_DIR in .env controls where — defaults to ./data for host tooling)
+# Database (PERSEVERER_DATA_DIR in .env controls where — defaults to ./data for host tooling)
 uv run alembic upgrade head              # create/migrate schema, seeds the one athlete row
 uv run alembic revision --autogenerate -m "..."   # after changing db/schema.py
 
@@ -255,7 +255,7 @@ uv run sync athlete create-key           # generate a per-athlete API key (print
 cd frontend && npm install
 npm run typecheck            # tsc --noEmit
 npm run build                # tsc --noEmit && vite build
-npm run dev                  # Vite dev server w/ HMR — needs SPORTHEALTH_CORS_ALLOWED_ORIGINS
+npm run dev                  # Vite dev server w/ HMR — needs PERSEVERER_CORS_ALLOWED_ORIGINS
                               # in .env to include its origin (default http://localhost:5173)
 
 # Full stack (Windows/Podman Desktop — compose.override.yml auto-merges)
@@ -264,7 +264,7 @@ curl http://localhost:8008/api/v1/healthz
 # Every route except /healthz, /version, and /auth/login needs X-API-Key or
 # Authorization: Bearer <jwt> — presenting neither fails closed (503) only when nothing is
 # configured at all, never open. See docs/adr/0008-phase-5-frontend.md.
-curl -H "X-API-Key: $SPORTHEALTH_API_KEY" http://localhost:8008/api/v1/calendar?start_date=2025-01-01&end_date=2025-01-31
+curl -H "X-API-Key: $PERSEVERER_API_KEY" http://localhost:8008/api/v1/calendar?start_date=2025-01-01&end_date=2025-01-31
 curl -X POST http://localhost:8008/api/v1/auth/login -H "Content-Type: application/json" -d '{"username":"...","password":"..."}'
 
 # NAS deploy — the NAS runs Docker (DSM Container Manager), not Podman; never build on the

@@ -7,8 +7,8 @@ import datetime as dt
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import fitness_daily_rollup
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.schema import fitness_daily_rollup
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 
 def test_fitness_returns_rows_in_range_ordered_by_date(

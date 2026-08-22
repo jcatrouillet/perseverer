@@ -14,11 +14,11 @@ from unittest.mock import patch
 
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.backfill_lap_moving_duration import backfill_lap_moving_duration
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, activity_source_link, athlete, lap, metadata, raw_object
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fit.types import CanonicalActivity, CanonicalBatch, ParsedLap
+from perseverer.backfill_lap_moving_duration import backfill_lap_moving_duration
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, activity_source_link, athlete, lap, metadata, raw_object
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fit.types import CanonicalActivity, CanonicalBatch, ParsedLap
 
 
 def _engine(tmp_path: Path) -> Engine:
@@ -161,7 +161,7 @@ class TestBackfillLapMovingDuration:
 
         with (
             patch(
-                "sporthealth.backfill_lap_moving_duration.parse_fit",
+                "perseverer.backfill_lap_moving_duration.parse_fit",
                 return_value=_batch_with_paused_lap(),
             ),
             engine.connect() as conn,
@@ -186,7 +186,7 @@ class TestBackfillLapMovingDuration:
             conn.commit()
 
         with patch(
-            "sporthealth.backfill_lap_moving_duration.parse_fit",
+            "perseverer.backfill_lap_moving_duration.parse_fit",
             return_value=_batch_with_paused_lap(),
         ):
             with engine.connect() as conn:
@@ -212,7 +212,7 @@ class TestBackfillLapMovingDuration:
 
         with (
             patch(
-                "sporthealth.backfill_lap_moving_duration.parse_fit",
+                "perseverer.backfill_lap_moving_duration.parse_fit",
                 return_value=_batch_with_no_laps(),
             ),
             engine.connect() as conn,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sporthealth.insights.rules_efforts import compute_effort_insights
-from sporthealth.insights.types import InsightActivity
+from perseverer.insights.rules_efforts import compute_effort_insights
+from perseverer.insights.types import InsightActivity
 
 
 def _activity(
@@ -17,6 +17,7 @@ def _activity(
     avg_hr: float | None = None,
     max_hr: float | None = None,
     cadence: float | None = None,
+    max_cadence: float | None = None,
     elevation_gain_m: float | None = None,
     elevation_loss_m: float | None = None,
     temperature_min_c: float | None = None,
@@ -38,6 +39,7 @@ def _activity(
         avg_hr=avg_hr,
         max_hr=max_hr,
         cadence=cadence,
+        max_cadence=max_cadence,
         elevation_gain_m=elevation_gain_m,
         elevation_loss_m=elevation_loss_m,
         temperature_min_c=temperature_min_c,
@@ -100,6 +102,21 @@ def test_avg_hr_high_and_low_are_distinct_insights() -> None:
     by_key = {i.subject_key: i for i in insights if i.window == "30d"}
     assert by_key["avg_hr_high:run"].activity_id == "high_hr"
     assert by_key["avg_hr_low:run"].activity_id == "low_hr"
+
+
+def test_max_cadence_is_a_distinct_dimension_from_avg_cadence() -> None:
+    activities = [
+        _activity("high_avg", "2026-08-10", cadence=170.0, max_cadence=178.0),
+        _activity("high_max_only", "2026-08-11", cadence=165.0, max_cadence=185.0),
+    ]
+    insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
+    by_key = {i.subject_key: i for i in insights if i.window == "30d"}
+    assert by_key["cadence:run"].activity_id == "high_avg"
+    assert by_key["max_cadence:run"].activity_id == "high_max_only"
+    # Distinct titles -- "Highest cadence" alone would be ambiguous now that both an avg-cadence
+    # and a max-cadence dimension exist side by side.
+    assert by_key["cadence:run"].title == "Highest average cadence (run)"
+    assert by_key["max_cadence:run"].title == "Highest max cadence (run)"
 
 
 def test_non_sport_scoped_dimension_ignores_sport_family() -> None:

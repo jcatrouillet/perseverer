@@ -1,5 +1,5 @@
 // VDOT (Daniels-Gilbert running performance index) forward formula and its race-time inverse --
-// mirrors src/sporthealth/vdot.py::compute_vdot exactly (same published Daniels & Gilbert,
+// mirrors src/perseverer/vdot.py::compute_vdot exactly (same published Daniels & Gilbert,
 // "Oxygen Power" (1979) equations; kept in sync deliberately, same precedent as gap.ts's own
 // mirroring of vdot.py's grade-adjustment math, see that file's docstring). The backend only
 // ever computes VDOT forward (from a real run's own pace/duration); this adds the inverse --

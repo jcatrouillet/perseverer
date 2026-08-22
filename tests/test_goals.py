@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, athlete, metadata
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.goals import InvalidPeriod, compute_progress, period_bounds
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, athlete, metadata
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.goals import InvalidPeriod, compute_progress, period_bounds
 
 
 class TestPeriodBounds:

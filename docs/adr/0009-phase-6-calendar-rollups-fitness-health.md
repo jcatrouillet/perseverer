@@ -4,7 +4,7 @@
 
 Accepted. Grounded in the real ~1250-activity/4-year database throughout — every alias list,
 every "does this data exist" question in this ADR was answered by direct SQL against
-`data/sporthealth.db`, not assumed from parser docstrings, per CLAUDE.md's standing rule for
+`data/perseverer.db`, not assumed from parser docstrings, per CLAUDE.md's standing rule for
 verifying rather than recalling.
 
 ## Context

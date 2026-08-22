@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sporthealth.insights.rules_health import (
+from perseverer.insights.rules_health import (
     RESTING_HR_ELEVATED_PCT,
     SLEEP_SCORE_DROP_PCT,
     compute_health_insights,

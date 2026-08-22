@@ -1,6 +1,6 @@
 export type Theme = "dark" | "light";
 
-const STORAGE_KEY = "sporthealth.theme";
+const STORAGE_KEY = "perseverer.theme";
 
 export function getStoredTheme(): Theme | null {
   const value = localStorage.getItem(STORAGE_KEY);

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sporthealth.insights.rules_activity import compute_activity_insights
-from sporthealth.insights.types import InsightActivity
+from perseverer.insights.rules_activity import compute_activity_insights
+from perseverer.insights.types import InsightActivity
 
 
 def _activity(
@@ -14,6 +14,8 @@ def _activity(
     sport_family: str = "run",
     temperature_min_c: float | None = None,
     temperature_max_c: float | None = None,
+    cadence: float | None = None,
+    max_cadence: float | None = None,
 ) -> InsightActivity:
     return InsightActivity(
         id=id_,
@@ -27,7 +29,8 @@ def _activity(
         moving_duration_s=duration_s,
         avg_hr=None,
         max_hr=None,
-        cadence=None,
+        cadence=cadence,
+        max_cadence=max_cadence,
         elevation_gain_m=None,
         elevation_loss_m=None,
         temperature_min_c=temperature_min_c,
@@ -109,18 +112,32 @@ def test_effort_and_pb_titles_state_the_covered_period() -> None:
     target = _activity("solo", "2026-06-15", 42000.0, 15000.0)
     pad1 = _activity("pad1", "2026-01-01", 10000.0, 3600.0)
     pad2 = _activity("pad2", "2026-03-01", 10000.0, 3600.0)
-    # Longer than "solo" but outside both the 365d window and every STANDARD_DISTANCES PB band
-    # (its 60km clears the marathon band's 54.85km ceiling) -- keeps "solo" the 365d window's own
-    # longest without also making it the all-time longest, so the title stays window-scoped
-    # rather than upgrading to "ever" (see the dedicated all-time test below for that case).
+    # Longer than "solo" but outside both the 365d window and "solo"'s own whole-km band (42km
+    # floors to "42 km"; 60km floors to "60 km", a disjoint bucket under floor-km banding) --
+    # keeps "solo" the 365d window's own longest without also making it the all-time longest, so
+    # the title stays window-scoped rather than upgrading to "ever" (see the dedicated all-time
+    # test below for that case).
     far_longer = _activity("far", "2024-01-01", 60000.0, 20000.0)
     insights = compute_activity_insights(
         "solo", [target, pad1, pad2, far_longer], dt.date(2026, 6, 15)
     )
     distance = next(i for i in insights if i.subject_key == "distance:run")
     assert distance.title == "Longest run in the last 12 months"
-    pb = next(i for i in insights if i.kind == "pb" and i.subject_key == "pb:run:Marathon")
-    assert pb.title == "All-time best Marathon"
+    pb = next(i for i in insights if i.kind == "pb" and i.subject_key == "pb:run:42 km")
+    assert pb.title == "All-time best 42 km"
+
+
+def test_avg_and_max_cadence_get_distinct_relabeled_titles() -> None:
+    # "Highest cadence" alone would be ambiguous now that both an avg-cadence and a max-cadence
+    # dimension exist -- each must relabel to a title that names which one it is.
+    target = _activity(
+        "solo", "2026-06-15", 5000.0, 1500.0, cadence=170.0, max_cadence=185.0
+    )
+    insights = compute_activity_insights("solo", [target], dt.date(2026, 6, 15))
+    avg_cadence = next(i for i in insights if i.subject_key == "cadence:run")
+    max_cadence = next(i for i in insights if i.subject_key == "max_cadence:run")
+    assert avg_cadence.title == "Highest average cadence ever"
+    assert max_cadence.title == "Highest max cadence ever"
 
 
 def test_genuine_all_time_extreme_is_labeled_ever_not_a_window() -> None:
@@ -171,3 +188,51 @@ def test_non_running_sport_still_gets_effort_insights_scoped_to_its_own_family()
     pad2 = _activity("ride3", "2026-03-01", 10000.0, 1800.0, sport_family="ride")
     insights = compute_activity_insights("ride1", [ride, pad1, pad2], dt.date(2026, 6, 15))
     assert any(i.subject_key == "distance:ride" and i.activity_id == "ride1" for i in insights)
+
+
+def test_recent_best_that_is_not_the_all_time_best_gets_a_window_best_insight() -> None:
+    # Real-data motivated: an ordinary 6:26/km run was the fastest ~6km effort in the last 30
+    # days (only one other, slower, candidate in that window), but ranked ~20th within the last
+    # 365 days alone -- a much faster run from over a year back still holds the all-time record.
+    # compute_pb_insights correctly stays silent for a claim that weak; this is the separate,
+    # honestly-labelled insight that should fire instead. All distances floor to the same "6 km"
+    # band (6000-6999m).
+    all_time_best = _activity("old_pb", "2024-03-15", 6050.0, 1390.0)  # ~4:35/km
+    target = _activity("recent", "2026-08-20", 6020.0, 2320.0)  # ~6:26/km
+    other_recent = _activity("other_recent", "2026-07-25", 6030.0, 2430.0)  # slightly slower
+    # Faster than "recent" but outside the 30d window (60 days back) -- present from the 90d
+    # window on, so "recent" is only ever the window's own best at the narrowest (30d) level,
+    # matching the real scenario this insight is meant to catch.
+    faster_but_older = _activity("faster_but_older", "2026-06-21", 6040.0, 2200.0)
+    insights = compute_activity_insights(
+        "recent",
+        [all_time_best, target, other_recent, faster_but_older],
+        dt.date(2026, 8, 20),
+    )
+    assert not any(i.kind == "pb" for i in insights)  # not close to the all-time record
+    window_best = next(
+        i for i in insights if i.kind == "window_best" and i.subject_key == "window_best:run:6 km"
+    )
+    assert window_best.activity_id == "recent"
+    assert window_best.title == "Fastest 6 km in the last 30 days"
+
+
+def test_window_best_is_not_shown_when_it_coincides_with_the_all_time_best() -> None:
+    # Would otherwise be a redundant, weaker echo of the "pb" insight for the same activity.
+    slower = _activity("slower", "2026-01-01", 5000.0, 1600.0)
+    fastest = _activity("fastest", "2026-08-10", 5000.0, 1200.0)
+    insights = compute_activity_insights("fastest", [slower, fastest], dt.date(2026, 8, 14))
+    assert any(i.kind == "pb" for i in insights)
+    assert not any(i.kind == "window_best" for i in insights)
+
+
+def test_window_best_dedupes_to_the_widest_window_still_true() -> None:
+    all_time_best = _activity("old_pb", "2024-01-01", 5000.0, 1000.0)
+    target = _activity("recent", "2026-08-14", 5000.0, 1300.0)
+    insights = compute_activity_insights(
+        "recent", [all_time_best, target], dt.date(2026, 8, 14)
+    )
+    window_best = [i for i in insights if i.kind == "window_best"]
+    # "recent" is the only non-all-time-best candidate across every window here, so only the
+    # single widest true claim should survive, not five near-identical repeats.
+    assert len(window_best) == 1

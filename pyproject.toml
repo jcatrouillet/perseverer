@@ -1,5 +1,5 @@
 [project]
-name = "sporthealth"
+name = "perseverer"
 version = "0.1.0"
 description = "Self-hosted fitness & health data platform"
 requires-python = ">=3.12"
@@ -30,7 +30,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sync = "sporthealth.cli:app"
+sync = "perseverer.cli:app"
 
 [dependency-groups]
 dev = [
@@ -47,7 +47,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sporthealth"]
+packages = ["src/perseverer"]
 
 [tool.ruff]
 line-length = 100

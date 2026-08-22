@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeKmSplits } from "./splits";
+import { computeKmSplits, computeSplitsAtInterval } from "./splits";
 
 // Synthetic 2.5km stream at a constant 5:00/km pace, 100m/30s samples: flat for km 1, a steady
 // 5% uphill grade for km 2, flat again for the final 500m partial split.
@@ -76,5 +76,41 @@ describe("computeKmSplits", () => {
 
   it("returns an empty list for a stream with no distance channel", () => {
     expect(computeKmSplits([], [])).toEqual([]);
+  });
+});
+
+describe("computeSplitsAtInterval", () => {
+  it("segments a 2.5km stream into 100m segments (25 full + a trailing partial dropped below 50m)", () => {
+    const { distanceM, elapsedS, altitudeM } = buildStream();
+    const segments = computeSplitsAtInterval(distanceM, elapsedS, 100, altitudeM);
+
+    // 2500m / 100m = exactly 25 full segments, no remainder -- nothing trailing to drop.
+    expect(segments).toHaveLength(25);
+    expect(segments.every((s) => s.distanceM === 100)).toBe(true);
+    expect(segments.map((s) => s.km)).toEqual(Array.from({ length: 25 }, (_, i) => i + 1));
+  });
+
+  it("computes real pace per 100m segment, matching the stream's constant 5:00/km pace", () => {
+    const { distanceM, elapsedS, altitudeM } = buildStream();
+    const [first] = computeSplitsAtInterval(distanceM, elapsedS, 100, altitudeM);
+
+    expect(first!.durationS).toBeCloseTo(30, 5); // 100m at 5:00/km => 30s
+    expect(first!.paceMinPerKm).toBeCloseTo(5, 5);
+  });
+
+  it("emits a shorter trailing segment for a remainder that clears the 50m floor", () => {
+    const distanceM = [0, 100, 200, 250];
+    const elapsedS = [0, 30, 60, 75];
+    const segments = computeSplitsAtInterval(distanceM, elapsedS, 100);
+
+    expect(segments).toHaveLength(3);
+    expect(segments.map((s) => s.distanceM)).toEqual([100, 100, 50]);
+  });
+
+  it("computeKmSplits is equivalent to computeSplitsAtInterval at 1000m", () => {
+    const { distanceM, elapsedS, altitudeM } = buildStream();
+    expect(computeKmSplits(distanceM, elapsedS, altitudeM)).toEqual(
+      computeSplitsAtInterval(distanceM, elapsedS, 1000, altitudeM),
+    );
   });
 });

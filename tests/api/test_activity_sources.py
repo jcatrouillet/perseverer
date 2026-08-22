@@ -11,10 +11,10 @@ import json
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 
-from sporthealth.archive import archive_raw_bytes
-from sporthealth.config import Settings
-from sporthealth.db.schema import activity, activity_source_link, merge_decision
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.archive import archive_raw_bytes
+from perseverer.config import Settings
+from perseverer.db.schema import activity, activity_source_link, merge_decision
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from tests.api.conftest import seed_activity
 
 _GPX_BODY = b"""<?xml version="1.0" encoding="UTF-8"?>

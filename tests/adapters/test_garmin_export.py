@@ -12,13 +12,13 @@ from pathlib import Path
 
 from sqlalchemy import Engine, select
 
-from sporthealth.adapters.garmin_export import (
+from perseverer.adapters.garmin_export import (
     _derive_export_external_id,
     import_garmin_export,
     report_kind_from_filename,
 )
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import (
     activity_source_link,
     athlete,
     day_rollup,
@@ -26,7 +26,7 @@ from sporthealth.db.schema import (
     metadata,
     raw_object,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_run.fit"
 HEALTH_FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_health.fit"

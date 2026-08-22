@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.weather import WeatherSummary
+from perseverer.weather import WeatherSummary
 from tests.api.conftest import seed_activity
 from tests.api.test_activities import _add_route
 
@@ -48,9 +48,10 @@ def test_returns_the_fetched_summary_when_available(
     summary = WeatherSummary(
         temperature_min_c=18.0, temperature_max_c=26.0,
         humidity_min_pct=35.0, humidity_max_pct=60.0, weather_code=2,
+        feels_like_c=17.0, wind_speed_mps=4.5, wind_direction_deg=225.0,
     )
     monkeypatch.setattr(
-        "sporthealth.api.routers.activities.get_or_fetch_activity_weather",
+        "perseverer.api.routers.activities.get_or_fetch_activity_weather",
         lambda *args, **kwargs: summary,
     )
 
@@ -64,6 +65,9 @@ def test_returns_the_fetched_summary_when_available(
         "humidity_min_pct": 35.0,
         "humidity_max_pct": 60.0,
         "weather_code": 2,
+        "feels_like_c": 17.0,
+        "wind_speed_mps": 4.5,
+        "wind_direction_deg": 225.0,
     }
 
 
@@ -78,7 +82,7 @@ def test_unavailable_when_the_fetch_returns_none(
     _add_route(engine, activity_id="a1", start_lat=37.36, start_lng=-121.97)
 
     monkeypatch.setattr(
-        "sporthealth.api.routers.activities.get_or_fetch_activity_weather",
+        "perseverer.api.routers.activities.get_or_fetch_activity_weather",
         lambda *args, **kwargs: None,
     )
 

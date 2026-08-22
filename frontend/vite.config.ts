@@ -14,19 +14,19 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       workbox: {
-        // config.js is regenerated at container START from SPORTHEALTH_API_BASE_URL (see
+        // config.js is regenerated at container START from PERSEVERER_API_BASE_URL (see
         // docker/frontend-entrypoint.d/20-generate-config.sh), never baked into the build --
         // precaching it here would let the service worker keep serving whatever API base URL
         // was live the first time a PWA install happened, surviving future redeploys that
-        // change SPORTHEALTH_API_BASE_URL (its precache revision hash is computed from the
+        // change PERSEVERER_API_BASE_URL (its precache revision hash is computed from the
         // committed dev-default file, so it never changes across builds and a stale cached copy
         // would never get invalidated by vite-plugin-pwa's own update mechanism). Must always
         // be fetched live.
         globIgnores: ["config.js"],
       },
       manifest: {
-        name: "Sport Health Data Platform",
-        short_name: "SportHealth",
+        name: "Perseverer",
+        short_name: "Perseverer",
         description: "Self-hosted fitness & health data dashboard.",
         start_url: "/",
         display: "standalone",

@@ -11,7 +11,7 @@ RUN npm run build
 FROM nginx:1.27-alpine AS runtime
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /build/dist /usr/share/nginx/html
-# Regenerates config.js from SPORTHEALTH_API_BASE_URL at container start, via nginx's own
+# Regenerates config.js from PERSEVERER_API_BASE_URL at container start, via nginx's own
 # stock docker-entrypoint.d mechanism -- see docs/adr/0008-phase-5-frontend.md.
 COPY docker/frontend-entrypoint.d/20-generate-config.sh /docker-entrypoint.d/20-generate-config.sh
 RUN chmod +x /docker-entrypoint.d/20-generate-config.sh

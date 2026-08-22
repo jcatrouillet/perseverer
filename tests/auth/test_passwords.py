@@ -1,6 +1,6 @@
 """Tests for auth/passwords.py -- PBKDF2 password hashing (Phase 5, ADR 0008)."""
 
-from sporthealth.auth.passwords import hash_password, verify_password
+from perseverer.auth.passwords import hash_password, verify_password
 
 
 def test_round_trip() -> None:

@@ -38,6 +38,8 @@ function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
     route: null,
     metrics: [],
     estimated_sweat_loss_ml: null,
+    carbohydrates_g: null,
+    sodium_mg: null,
     ...overrides,
   };
 }
@@ -96,6 +98,17 @@ describe("ActivityStatsGrid", () => {
     expect(screen.getByText("166")).toBeInTheDocument();
   });
 
+  it("doubles the raw max_running_cadence the same way as the avg", () => {
+    render(
+      <ActivityStatsGrid
+        activity={activity({ metrics: [metric("fit.session.max_running_cadence", 88)] })}
+      />,
+    );
+    expect(screen.getByText("Running dynamics")).toBeInTheDocument();
+    expect(screen.getByText("Max cadence")).toBeInTheDocument();
+    expect(screen.getByText("176")).toBeInTheDocument();
+  });
+
   it("shows Respiration only when a respiration metric is actually present, e.g. a yoga session", () => {
     render(
       <ActivityStatsGrid
@@ -136,5 +149,39 @@ describe("ActivityStatsGrid", () => {
     );
     expect(screen.getByText("Elevation")).toBeInTheDocument();
     expect(screen.getByText("Elevation loss")).toBeInTheDocument();
+  });
+
+  it("gives Heart rate and Elevation their own separate headings, not a combined one", () => {
+    render(
+      <ActivityStatsGrid
+        activity={activity({
+          avg_hr_bpm: 140,
+          elevation_gain_m: 120,
+        })}
+      />,
+    );
+    expect(screen.getByText("Heart rate", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("Elevation", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("Heart rate & Elevation")).not.toBeInTheDocument();
+    expect(screen.getByText("Elevation gain")).toBeInTheDocument();
+  });
+
+  it("renders afterTemperature content between Temperature and Hydration", () => {
+    render(
+      <ActivityStatsGrid
+        activity={activity({
+          metrics: [metric("fit.session.avg_temperature", 18)],
+          estimated_sweat_loss_ml: 500,
+        })}
+        afterTemperature={<h3>Pace variability</h3>}
+      />,
+    );
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    const tempIndex = headings.indexOf("Temperature");
+    const slotIndex = headings.indexOf("Pace variability");
+    const hydrationIndex = headings.indexOf("Hydration");
+    expect(tempIndex).toBeGreaterThanOrEqual(0);
+    expect(slotIndex).toBeGreaterThan(tempIndex);
+    expect(hydrationIndex).toBeGreaterThan(slotIndex);
   });
 });

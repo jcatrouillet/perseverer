@@ -4,7 +4,7 @@ import { predictRaceTimeS, vdotForEffort } from "./vdot";
 
 describe("vdotForEffort", () => {
   it("matches the backend's own compute_vdot for a known 5000m/1500s effort", () => {
-    // Cross-checked directly against `uv run python -c "from sporthealth.vdot import
+    // Cross-checked directly against `uv run python -c "from perseverer.vdot import
     // compute_vdot; print(compute_vdot(5000, 1500))"` -- 38.30936290766015.
     expect(vdotForEffort(5000, 1500)).toBeCloseTo(38.30936290766015, 9);
   });

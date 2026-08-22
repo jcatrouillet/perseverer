@@ -18,7 +18,7 @@ and observability pieces as they're built.
 
 A Vite build or a Python wheel compile on a J3455 is measured in double-digit minutes. All
 images are built on Windows (manually, via Podman) or in GitHub Actions (CI), tagged, and
-pushed to **GHCR** (`ghcr.io/<owner>/my-sport-health-data-{api,worker,frontend}`). The NAS
+pushed to **GHCR** (`ghcr.io/<owner>/perseverer-{api,worker,frontend}`). The NAS
 only ever pulls, using Docker (DSM Container Manager) — the two engines never need to
 interoperate directly, only agree on the OCI image format, which they do.
 
@@ -60,7 +60,7 @@ scope is a health check, not a dev loop optimized for iteration) — rebuild wit
 directly on the host instead of through the container, for HMR
 (`cd frontend && npm install && npm run dev`). It uses the committed
 `frontend/public/config.js` dev default (`http://localhost:8008`) unchanged, and needs
-`SPORTHEALTH_CORS_ALLOWED_ORIGINS` in `.env` to include the Vite dev server's origin (default
+`PERSEVERER_CORS_ALLOWED_ORIGINS` in `.env` to include the Vite dev server's origin (default
 `http://localhost:5173`; Vite falls back to `5174`, `5175`, ... if that port is taken, so add
 whichever it actually reports) or the browser blocks every request at the CORS preflight step.
 
@@ -68,7 +68,7 @@ If you ever need the Docker CLI locally (e.g. to sanity-check an image before it
 NAS), Podman Desktop can also emulate the `docker` command; not required for the dev loop
 above.
 
-**Known issue: the podman `api` container's named volume corrupts `sporthealth.db` on
+**Known issue: the podman `api` container's named volume corrupts `perseverer.db` on
 Windows.** Confirmed via `PRAGMA integrity_check`/`page_count`: the file gets silently
 truncated within seconds of the `api` container starting, even from a hash-verified clean
 copy with no stale `-wal`/`-shm` files — `db/engine.py` only sets standard WAL-mode pragmas,
@@ -78,7 +78,7 @@ copy. For day-to-day API verification, run the API directly on the host instead 
 the same port the frontend's `config.js` already points at, so the already-running frontend
 container (or `npm run dev`) works against it with zero changes:
 ```bash
-uv run uvicorn sporthealth.api.main:app --host 0.0.0.0 --port 8008
+uv run uvicorn perseverer.api.main:app --host 0.0.0.0 --port 8008
 ```
 Reserve `podman compose up --build` (api container included) for occasionally confirming the
 container still builds/runs — not for iterative dev work. Unconfirmed whether this reproduces
@@ -105,11 +105,11 @@ docker compose -f compose.yaml -f compose.nas.yml up -d
 
 ### One-time host setup
 
-1. Create the data directory on a DSM shared folder, e.g. `/volume1/docker/sporthealth/data`.
+1. Create the data directory on a DSM shared folder, e.g. `/volume1/docker/perseverer/data`.
 2. `chown` it to the UID/GID the containers run as (`NAS_UID`/`NAS_GID` in `.env` — default
    1000:1000, confirm against whatever DSM assigns your Docker user):
    ```bash
-   sudo chown -R 1000:1000 /volume1/docker/sporthealth/data
+   sudo chown -R 1000:1000 /volume1/docker/perseverer/data
    ```
    Synology's shared-folder permissions and the container's UID must agree, or writes
    (SQLite, raw archive, Parquet) will fail silently into a read-only-feeling mount.
@@ -128,10 +128,10 @@ DNS, not hairpin NAT — **the public hostname does not necessarily resolve the 
 and outside the house.** Consequences:
 - The frontend's API base URL is runtime-configurable, never baked into the Vite build — see
   `docs/adr/0008-phase-5-frontend.md` decision 6. `frontend/public/config.js` sets
-  `window.__SPORTHEALTH_CONFIG__.apiBaseUrl`; the built nginx image regenerates that file at
-  **container start** (not build time) from a `SPORTHEALTH_API_BASE_URL` env var, via a script
+  `window.__PERSEVERER_CONFIG__.apiBaseUrl`; the built nginx image regenerates that file at
+  **container start** (not build time) from a `PERSEVERER_API_BASE_URL` env var, via a script
   in `docker/frontend-entrypoint.d/` that runs through nginx's own stock
-  `/docker-entrypoint.d/` startup mechanism. Set `SPORTHEALTH_API_BASE_URL` to whichever
+  `/docker-entrypoint.d/` startup mechanism. Set `PERSEVERER_API_BASE_URL` to whichever
   hostname/URL resolves correctly for wherever the browser actually is — this is a per-deployment
   value, not a build-time constant, exactly because of the split-horizon DNS behavior above.
 - `X-Forwarded-*` headers are trusted **only** from the known reverse-proxy IP (configured

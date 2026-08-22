@@ -2,7 +2,7 @@
 // (ActivityCharts, replacing StreamChart's single-channel-with-a-selector), a categorized stats
 // grid, a time-in-zone breakdown, and a styled laps table -- all built on the Milestone A/B
 // design system (Icon, StatTile, sportStyle, tone colours).
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 
 import { extractHrZones } from "../activityMetrics";
@@ -16,6 +16,7 @@ import {
   useActivityWeather,
   useActivityWorkout,
   useHrZoneConfig,
+  useSetFuelingOverride,
   useSetNameOverride,
   useSetRaceOverride,
   useSetSportOverride,
@@ -24,17 +25,20 @@ import {
 import { ActivityCharts } from "../components/ActivityCharts";
 import { ActivityContextStrip } from "../components/ActivityContextStrip";
 import { ActivityFastestTable } from "../components/ActivityFastestTable";
+import { ActivityFueling } from "../components/ActivityFueling";
 import { ActivityInsightsPanel } from "../components/ActivityInsightsPanel";
 import { ActivityNameCorrection } from "../components/ActivityNameCorrection";
-import { ActivityRoute } from "../components/ActivityRoute";
+import { ActivityRoute, buildRouteData } from "../components/ActivityRoute";
 import { ActivitySourcesPanel } from "../components/ActivitySourcesPanel";
 import { ActivitySportCorrection } from "../components/ActivitySportCorrection";
 import { ActivityStatsGridPrimary, ActivityStatsGridSecondary } from "../components/ActivityStatsGrid";
 import { ActivityWeather } from "../components/ActivityWeather";
 import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
+import { PaceVariabilityChart } from "../components/PaceVariabilityChart";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
 import { sportStyle } from "../metricStyle";
+import { computePaceVariability } from "../paceVariability";
 import {
   effectiveDurationS,
   formatClockDuration,
@@ -43,6 +47,7 @@ import {
   isRunningSport,
   localTimeLabel,
 } from "../runningStats";
+import { computeSplitsAtInterval } from "../splits";
 import {
   expandWorkoutSteps,
   formatStepDurationLabel,
@@ -64,6 +69,18 @@ export function ActivityDetailPage({ id }: { id: string }) {
   // there's no reason to pay that cost for the charts too, so it's fetched independently rather
   // than bumping the shared `stream` query's tier.
   const routeStream = useActivityStream(id, activity.data?.stream_available ?? false, "high");
+  // Below the Temperature section (ActivityStatsGridSecondary's own afterTemperature slot), not
+  // beside the map -- computed here rather than inside ActivityRoute.tsx since that component
+  // only knows about the route map/splits table, not the stats grid it needs to slot into. 100m
+  // segments (not the Splits table's own whole-km rows) so the ring shows real pace texture
+  // within each kilometre rather than smoothing it away -- see paceVariability.ts.
+  const paceVariability = useMemo(() => {
+    if (!routeStream.data || activity.data == null) return null;
+    if (!isRunningSport(displaySport(activity.data))) return null;
+    const route = buildRouteData(routeStream.data);
+    const segments = computeSplitsAtInterval(route.distanceM, route.elapsedS, 100);
+    return computePaceVariability(segments);
+  }, [routeStream.data, activity.data]);
   const context = useActivityContext(id);
   const runInsights = useActivityInsights(
     id,
@@ -78,6 +95,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const sportOverride = useSetSportOverride(id);
   const raceOverride = useSetRaceOverride(id);
   const nameOverride = useSetNameOverride(id);
+  const fuelingOverride = useSetFuelingOverride(id);
 
   if (activity.isLoading) return <p>Loading…</p>;
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
@@ -184,7 +202,26 @@ export function ActivityDetailPage({ id }: { id: string }) {
         )}
         {a.device && a.device.manufacturer && ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
       </p>
-      {weather.data && <ActivityWeather weather={weather.data} />}
+      {((weather.data && weather.data.available) || paceVariability) && (
+        <div className="activity-detail__weather-pace-row">
+          {weather.data && <ActivityWeather weather={weather.data} />}
+          {paceVariability && (
+            <div className="activity-detail__pace-variability">
+              <h3 className="activity-detail__weather-heading">Pace variability</h3>
+              <PaceVariabilityChart result={paceVariability} />
+            </div>
+          )}
+        </div>
+      )}
+      {isRunningSport(sport) && (
+        <ActivityFueling
+          carbohydratesG={a.carbohydrates_g}
+          sodiumMg={a.sodium_mg}
+          onSubmit={(values) => fuelingOverride.mutate(values)}
+          isSubmitting={fuelingOverride.isPending}
+          isError={fuelingOverride.isError}
+        />
+      )}
 
       {/* Insights sit beside Distance & time / Heart rate only -- not beside the map, which is
           why the map is rendered as its own full-width block below this row rather than passed
@@ -327,7 +364,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
 
       <section className="card">
         <h2>Notes</h2>
-        <NotesPanel entityType="activity" entityId={id} />
+        <NotesPanel entityType="activity" entityId={id} showHeading={false} />
       </section>
 
       {sources.data && (

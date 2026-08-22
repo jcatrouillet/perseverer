@@ -12,6 +12,9 @@ const KIND_STYLE: Record<string, { icon: IconName; tone: Tone }> = {
   effort: { icon: "bolt", tone: "pace" },
   streak: { icon: "flame", tone: "load" },
   pb: { icon: "trophy", tone: "pace" },
+  // Deliberately not "trophy" -- a window_best is a weaker claim than an all-time PB (see
+  // rules_pb.py's own docstring), and reusing the trophy icon would visually overstate it.
+  window_best: { icon: "trend", tone: "pace" },
   load: { icon: "gauge", tone: "load" },
   health: { icon: "heart", tone: "hr" },
 };

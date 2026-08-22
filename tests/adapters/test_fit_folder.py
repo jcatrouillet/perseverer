@@ -9,9 +9,9 @@ from pathlib import Path
 
 from sqlalchemy import Engine, select
 
-from sporthealth.adapters.fit_folder import _local_date, import_from_folder
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import (
+from perseverer.adapters.fit_folder import _local_date, import_from_folder
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import (
     activity,
     athlete,
     day_rollup,
@@ -19,9 +19,9 @@ from sporthealth.db.schema import (
     metadata,
     sleep_session,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.rebuild import rebuild_database
-from sporthealth.sport_override import set_name_override, set_race_override, set_sport_override
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.rebuild import rebuild_database
+from perseverer.sport_override import set_name_override, set_race_override, set_sport_override
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_run.fit"
 HEALTH_FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_health.fit"

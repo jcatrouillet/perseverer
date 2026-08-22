@@ -10,17 +10,19 @@ import datetime as dt
 import json
 from pathlib import Path
 
+import httpx
+import pytest
 from sqlalchemy import Engine, select
 
-from sporthealth.adapters.garmin_export import import_garmin_export
-from sporthealth.adapters.strava_export import import_strava_export
-from sporthealth.archive import archive_raw_bytes
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, athlete, health_observation, metadata, sleep_session
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.health.eufy_parser import parse_eufy_scale_reading
-from sporthealth.health.ingest import ingest_health_batch
-from sporthealth.health.json_parser import (
+from perseverer.adapters.garmin_export import import_garmin_export
+from perseverer.adapters.strava_export import import_strava_export
+from perseverer.archive import archive_raw_bytes
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, athlete, health_observation, metadata, sleep_session
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.health.eufy_parser import parse_eufy_scale_reading
+from perseverer.health.ingest import ingest_health_batch
+from perseverer.health.json_parser import (
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
@@ -29,7 +31,7 @@ from sporthealth.health.json_parser import (
     parse_daily_training_status_json,
     parse_hydration_json,
 )
-from sporthealth.rebuild import rebuild_database
+from perseverer.rebuild import rebuild_database
 
 SLEEP_DATA_RECORDS = [
     {
@@ -588,7 +590,20 @@ _STRAVA_CSV_HEADER = (
 )
 
 
-def test_rebuild_replays_strava_export_gpx_and_manual_entry(tmp_path: Path) -> None:
+def _mock_weather_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests aren't about weather at all -- a failed response makes
+    backfill_weather_titles (wired into every ingest entry point, including strava_export and
+    rebuild, now that it runs automatically) a clean no-op for this fixture's real GPS
+    coordinates, instead of silently reaching real Open-Meteo over the network."""
+    real_client = httpx.Client
+    transport = httpx.MockTransport(lambda r: httpx.Response(503))
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: real_client(transport=transport))
+
+
+def test_rebuild_replays_strava_export_gpx_and_manual_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_weather_unavailable(monkeypatch)
     """Both strava_export_gpx and manual-entry (file-less) rows were previously silently
     dropped by `sync rebuild`: the gpx raw_object kind fell into the catch-all `else:
     continue`, and a manual-entry row has *no* distinguishing raw_object at all -- its
@@ -638,7 +653,9 @@ def test_rebuild_replays_strava_export_gpx_and_manual_entry(tmp_path: Path) -> N
     assert ("training", "Gym session") in after
 
 
-def test_rebuild_on_a_db_with_existing_insight_rows_does_not_fk_crash(tmp_path: Path) -> None:
+def test_rebuild_on_a_db_with_existing_insight_rows_does_not_fk_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A real, previously-unknown bug found via a real `sync rebuild` run against the live
     database: `insight.activity_id` is FK-constrained to `activity.id`, but `insight` was
     missing from `_REBUILDABLE_TABLES` (added after that list was last written, in Phase 8) --
@@ -646,6 +663,7 @@ def test_rebuild_on_a_db_with_existing_insight_rows_does_not_fk_crash(tmp_path: 
     rebuild after the first `refresh_insights` call ever ran) FK-crashed on `DELETE FROM
     activity`. Rebuilding into a fresh, empty database never hit this, which is why it wasn't
     caught earlier. See ADR 0013."""
+    _mock_weather_unavailable(monkeypatch)
     root = tmp_path / "strava"
     (root / "activities").mkdir(parents=True)
     (root / "activities" / "999111.gpx").write_bytes(_STRAVA_GPX_BODY)

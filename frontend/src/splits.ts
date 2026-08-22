@@ -68,13 +68,27 @@ function interpolateAtDistance(
  * (seconds since activity start, same length/order as `distanceM`), and optional `altitudeM`.
  * `gapMinPerKm` uses each split's own average grade (elevation change / distance) as a
  * one-value-per-split approximation of the point-by-point GAP curve -- adequate for a summary
- * table row, distinct from the finer-grained GAP chart panel. */
+ * table row, distinct from the finer-grained GAP chart panel. A thin wrapper over
+ * `computeSplitsAtInterval` fixed to whole kilometres, for the Splits table's own display. */
 export function computeKmSplits(
   distanceM: (number | null)[],
   elapsedS: number[],
   altitudeM?: (number | null)[],
 ): KmSplit[] {
-  if (distanceM.length === 0 || distanceM.length !== elapsedS.length) return [];
+  return computeSplitsAtInterval(distanceM, elapsedS, KM_M, altitudeM);
+}
+
+/** Same interpolation as `computeKmSplits`, generalized to any fixed segment length -- e.g.
+ * 250m for PaceVariabilityChart's finer-grained ring, where whole-km segments would be too few
+ * and too coarse to show real pace texture within each kilometre. `KmSplit.km` becomes a plain
+ * 1-indexed segment number rather than a literal kilometre count when `segmentM !== 1000`. */
+export function computeSplitsAtInterval(
+  distanceM: (number | null)[],
+  elapsedS: number[],
+  segmentM: number,
+  altitudeM?: (number | null)[],
+): KmSplit[] {
+  if (distanceM.length === 0 || distanceM.length !== elapsedS.length || segmentM <= 0) return [];
 
   const totalDistance = [...distanceM].reverse().find((d) => d != null) ?? null;
   if (totalDistance == null || totalDistance <= 0) return [];
@@ -84,19 +98,33 @@ export function computeKmSplits(
   let prevTimeS = elapsedS[0] ?? 0;
   let prevAltitude = altitudeM?.[0] ?? null;
   let prevDistance = 0;
-  let km = 1;
+  let segment = 1;
 
-  while (km * KM_M <= totalDistance) {
-    const crossing = interpolateAtDistance(distanceM, elapsedS, altitudeM, km * KM_M, prevIndex);
+  while (segment * segmentM <= totalDistance) {
+    const crossing = interpolateAtDistance(
+      distanceM,
+      elapsedS,
+      altitudeM,
+      segment * segmentM,
+      prevIndex,
+    );
     if (crossing == null) break;
     splits.push(
-      buildSplit(km, prevDistance, km * KM_M, prevTimeS, crossing, prevIndex, prevAltitude),
+      buildSplit(
+        segment,
+        prevDistance,
+        segment * segmentM,
+        prevTimeS,
+        crossing,
+        prevIndex,
+        prevAltitude,
+      ),
     );
     prevIndex = crossing.index;
     prevTimeS = crossing.timeS;
     prevAltitude = crossing.altitudeM;
-    prevDistance = km * KM_M;
-    km += 1;
+    prevDistance = segment * segmentM;
+    segment += 1;
   }
 
   const remainder = totalDistance - prevDistance;
@@ -105,7 +133,7 @@ export function computeKmSplits(
     const lastAltitude = altitudeM?.[lastIndex] ?? null;
     splits.push(
       buildSplit(
-        km,
+        segment,
         prevDistance,
         totalDistance,
         prevTimeS,

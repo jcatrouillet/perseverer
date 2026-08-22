@@ -11,12 +11,12 @@ import httpx
 import pytest
 from sqlalchemy import Engine, select
 
-import sporthealth.geocoding as geocoding_module
-from sporthealth.backfill_locations import backfill_locations
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, activity_metric, athlete, metadata, route_geom
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.geocoding import METRIC_LOCATION_NAME, SOURCE, _store
+import perseverer.geocoding as geocoding_module
+from perseverer.backfill_locations import backfill_locations
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, activity_metric, athlete, metadata, route_geom
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.geocoding import METRIC_LOCATION_NAME, SOURCE, _store
 
 _SUNNYVALE_RESPONSE = {
     "addresstype": "road",

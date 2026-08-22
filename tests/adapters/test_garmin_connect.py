@@ -12,8 +12,8 @@ import pytest
 from garminconnect import GarminConnectAuthenticationError, GarminConnectTooManyRequestsError
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.adapters.fit_folder import IngestResult
-from sporthealth.adapters.garmin_connect import (
+from perseverer.adapters.fit_folder import IngestResult
+from perseverer.adapters.garmin_connect import (
     GarminAuthRequired,
     GarminConnectAdapter,
     GarminRateLimitAborted,
@@ -21,8 +21,8 @@ from sporthealth.adapters.garmin_connect import (
     RateLimitSettings,
     sync_garmin_connect,
 )
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import (
     activity_source_link,
     athlete,
     day_rollup,
@@ -31,7 +31,7 @@ from sporthealth.db.schema import (
     raw_object,
     sleep_session,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_run.fit"
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sporthealth.insights.rules_streaks import compute_streak_insights
-from sporthealth.insights.types import InsightActivity
+from perseverer.insights.rules_streaks import compute_streak_insights
+from perseverer.insights.types import InsightActivity
 
 
 def _activity(id_: str, local_date: str) -> InsightActivity:
@@ -20,6 +20,7 @@ def _activity(id_: str, local_date: str) -> InsightActivity:
         avg_hr=None,
         max_hr=None,
         cadence=None,
+        max_cadence=None,
         elevation_gain_m=None,
         elevation_loss_m=None,
         temperature_min_c=None,

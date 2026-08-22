@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sport Health API Reference</title>
+<title>Perseverer API Reference</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
   :root {
@@ -419,7 +419,7 @@
 <div class="shell">
   <nav class="sidebar" id="sidebar">
     <div class="brand">
-      <span class="brand-mark">sporthealth</span>
+      <span class="brand-mark">perseverer</span>
       <span class="brand-version">API v0.1.0</span>
     </div>
     <div class="search-box">
@@ -443,17 +443,17 @@
   <main class="main" id="main-content">
     <div class="hero">
       <div class="eyebrow">API Reference · v0.1.0</div>
-      <h1>Sport Health Data Platform API</h1>
+      <h1>Perseverer API</h1>
       <p>A REST/JSON API over a self-hosted archive of Garmin, Strava, and Eufy activity and health data. Every endpoint reads from precomputed rollups or content-addressed raw storage — nothing here scans years of history at request time.</p>
       <p>This reference is generated from the live OpenAPI schema and cross-checked against the router source, so every field, default, and status code below reflects what the server actually does today.</p>
-      <div class="base-url"><span class="label">Base URL</span> <span id="base-url-example">https://your-sporthealth-host/api/v1</span></div>
+      <div class="base-url"><span class="label">Base URL</span> <span id="base-url-example">https://your-perseverer-host/api/v1</span></div>
     </div>
 
     <section class="doc-section" id="overview">
       <h2>Overview</h2>
       <p>The API is organized around ten resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
       <p>There is exactly one athlete per deployment credential — every endpoint is implicitly scoped to the athlete resolved from your auth credential, so there is never an <code>athlete_id</code> parameter to pass yourself.</p>
-      <div class="callout"><strong>Base URL is deployment-specific.</strong> This API has no public multi-tenant host — you run it yourself (Docker/Podman), and the origin depends on how you've exposed it (a reverse-proxy hostname, a local port, a Tailscale address). Substitute your own origin for <code>https://your-sporthealth-host</code> in every example on this page.</div>
+      <div class="callout"><strong>Base URL is deployment-specific.</strong> This API has no public multi-tenant host — you run it yourself (Docker/Podman), and the origin depends on how you've exposed it (a reverse-proxy hostname, a local port, a Tailscale address). Substitute your own origin for <code>https://your-perseverer-host</code> in every example on this page.</div>
     </section>
 
     <section class="doc-section" id="authentication">
@@ -461,29 +461,29 @@
       <p>Every route requires a credential <strong>except</strong> <code>GET /healthz</code>, <code>GET /version</code>, and <code>POST /auth/login</code> itself (login <em>is</em> the credential check). Present exactly one of the following:</p>
 
       <h3>1. Shared API key</h3>
-      <p>Send <code>X-API-Key</code> set to the server's <code>SPORTHEALTH_API_KEY</code> environment variable. This is the simplest option for scripts, the MCP server, and single-athlete deployments — it resolves to the deployment's default athlete.</p>
+      <p>Send <code>X-API-Key</code> set to the server's <code>PERSEVERER_API_KEY</code> environment variable. This is the simplest option for scripts, the MCP server, and single-athlete deployments — it resolves to the deployment's default athlete.</p>
       <div class="code-block"><button class="copy-btn" data-copy="curl-shared-key">Copy</button><pre id="curl-shared-key">curl -H "X-API-Key: YOUR_API_KEY" \
-  https://your-sporthealth-host/api/v1/activities?limit=10</pre></div>
+  https://your-perseverer-host/api/v1/activities?limit=10</pre></div>
 
       <h3>2. Per-athlete API key</h3>
       <p>Send <code>X-API-Key</code> set to a key minted for one specific athlete via <code>sync athlete create-key</code> (server-side CLI, printed once). The server compares its SHA-256 hash against <code>athlete.api_key_hash</code> and resolves to that athlete specifically. Same header, same request shape as above — the two key types are tried in order and are indistinguishable to the caller.</p>
 
       <h3>3. Session token (JWT)</h3>
-      <p>Exchange a username/password for a short-lived bearer token via <code>POST /auth/login</code>, then send it as <code>Authorization: Bearer &lt;token&gt;</code>. This is what the web frontend uses. Tokens expire after <code>SPORTHEALTH_JWT_EXPIRY_DAYS</code> (default <strong>30 days</strong>); there is no refresh endpoint — log in again once expired.</p>
-      <div class="code-block"><button class="copy-btn" data-copy="curl-login">Copy</button><pre id="curl-login">curl -X POST https://your-sporthealth-host/api/v1/auth/login \
+      <p>Exchange a username/password for a short-lived bearer token via <code>POST /auth/login</code>, then send it as <code>Authorization: Bearer &lt;token&gt;</code>. This is what the web frontend uses. Tokens expire after <code>PERSEVERER_JWT_EXPIRY_DAYS</code> (default <strong>30 days</strong>); there is no refresh endpoint — log in again once expired.</p>
+      <div class="code-block"><button class="copy-btn" data-copy="curl-login">Copy</button><pre id="curl-login">curl -X POST https://your-perseverer-host/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "jerome", "password": "YOUR_PASSWORD"}'
 
 # => {"access_token": "eyJhbGciOi...", "expires_at": "2026-09-18T12:00:00Z"}
 
 curl -H "Authorization: Bearer eyJhbGciOi..." \
-  https://your-sporthealth-host/api/v1/activities?limit=10</pre></div>
+  https://your-perseverer-host/api/v1/activities?limit=10</pre></div>
 
       <h3>Failure modes</h3>
       <div class="table-wrap"><table>
         <tr><th>Status</th><th>When</th></tr>
         <tr><td><span class="status-chip s4">401</span></td><td>No credential presented (and the server has at least one auth method configured), or the credential presented is invalid, malformed, or expired.</td></tr>
-        <tr><td><span class="status-chip s4">503</span></td><td>The server has <strong>neither</strong> <code>SPORTHEALTH_API_KEY</code> nor <code>SPORTHEALTH_JWT_SECRET</code> configured — auth fails closed, never open, so a misconfigured deployment refuses every request rather than silently accepting none. This is a deployment misconfiguration, not something a client can fix by changing its request.</td></tr>
+        <tr><td><span class="status-chip s4">503</span></td><td>The server has <strong>neither</strong> <code>PERSEVERER_API_KEY</code> nor <code>PERSEVERER_JWT_SECRET</code> configured — auth fails closed, never open, so a misconfigured deployment refuses every request rather than silently accepting none. This is a deployment misconfiguration, not something a client can fix by changing its request.</td></tr>
       </table></div>
     </section>
 
@@ -565,12 +565,12 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
 
     <section class="doc-section" id="mcp">
       <h2>MCP server</h2>
-      <p>Every read endpoint above, plus <code>create_note</code>/<code>list_notes</code>, is also exposed as an MCP (Model Context Protocol) tool for AI agents, mounted at <code>/mcp</code> on the same host and gated by the same <code>X-API-Key</code> credential described in Authentication. Each tool is a thin wrapper that calls its REST counterpart in-process — the request/response shapes documented above apply there too. This page documents the REST surface; point an MCP-aware client (e.g. Claude Desktop, Claude Code) at <code>https://your-sporthealth-host/mcp</code> to use the tool form instead.</p>
+      <p>Every read endpoint above, plus <code>create_note</code>/<code>list_notes</code>, is also exposed as an MCP (Model Context Protocol) tool for AI agents, mounted at <code>/mcp</code> on the same host and gated by the same <code>X-API-Key</code> credential described in Authentication. Each tool is a thin wrapper that calls its REST counterpart in-process — the request/response shapes documented above apply there too. This page documents the REST surface; point an MCP-aware client (e.g. Claude Desktop, Claude Code) at <code>https://your-perseverer-host/mcp</code> to use the tool form instead.</p>
     </section>
   </main>
 </div>
 
-<footer>Sport Health Data Platform API · reference generated from the live OpenAPI schema, cross-checked against router source.</footer>
+<footer>Perseverer API · reference generated from the live OpenAPI schema, cross-checked against router source.</footer>
 
 <script>
 const EX = {
@@ -673,6 +673,8 @@ const SCHEMAS = [
       ["route","RouteOut|null","null when the activity has no GPS."],
       ["metrics","array<ActivityMetricOut>","Every stored per-activity field beyond the curated columns above — the raw-first catalog in list form."],
       ["estimated_sweat_loss_ml","number|null","Computed estimate, not a device measurement."],
+      ["carbohydrates_g","number|null","Athlete-logged fueling intake — no vendor source, null until set via PATCH .../fueling."],
+      ["sodium_mg","number|null","Athlete-logged fueling intake — no vendor source, null until set via PATCH .../fueling."],
     ] },
   { name: "DeviceOut", fields: F.device },
   { name: "LapOut", fields: F.lap },
@@ -708,11 +710,14 @@ const SCHEMAS = [
     ] },
   { name: "ActivityWeatherOut", note: "Returned by GET /activities/{id}/weather. See “available: false” in Conventions.", fields: [
       ["available","boolean","required"],
-      ["temperature_min_c","number|null","optional field — omitted from the JSON entirely when available is false","opt"],
+      ["temperature_min_c","number|null","null when available is false; a range across the activity's duration otherwise","opt"],
       ["temperature_max_c","number|null","","opt"],
       ["humidity_min_pct","number|null","","opt"],
       ["humidity_max_pct","number|null","","opt"],
-      ["weather_code","integer|null","WMO weather interpretation code.","opt"],
+      ["weather_code","integer|null","WMO weather interpretation code — a single value at the hour closest to the activity's start.","opt"],
+      ["feels_like_c","number|null","Single value at the hour closest to the activity's start, not a range.","opt"],
+      ["wind_speed_mps","number|null","Metres/second, same closest-hour convention as feels_like_c.","opt"],
+      ["wind_direction_deg","number|null","Degrees, meteorological convention (direction the wind blows from).","opt"],
     ] },
   { name: "ActivityLocationOut", note: "Returned by GET /activities/{id}/location. See “available: false” in Conventions.", fields: [
       ["available","boolean","required"],
@@ -755,6 +760,7 @@ const SCHEMAS = [
   { name: "ActivitySportOverrideOut", fields: [ ["sport","string",""], ["sub_sport","string|null",""] ] },
   { name: "ActivityRaceOverrideOut", fields: [ ["is_race","boolean",""] ] },
   { name: "ActivityNameOverrideOut", fields: [ ["name","string",""] ] },
+  { name: "ActivityFuelingOut", fields: [ ["carbohydrates_g","number|null",""], ["sodium_mg","number|null",""] ] },
   { name: "StreamResponse", note: "Returned by GET /activities/{id}/stream.", fields: [
       ["activity_id","string",""],
       ["tier","string","The tier that was actually applied (echoes the tier query parameter)."],
@@ -928,9 +934,9 @@ const GROUPS = [
       responses: [
         { code: 200, schema: "LoginResponse", note: "" },
         { code: 401, note: 'detail: "invalid username or password"' },
-        { code: 503, note: 'detail: "JWT signing not configured" — SPORTHEALTH_JWT_SECRET not set server-side.' },
+        { code: 503, note: 'detail: "JWT signing not configured" — PERSEVERER_JWT_SECRET not set server-side.' },
       ],
-      example: { curl: `curl -X POST https://your-sporthealth-host/api/v1/auth/login \\
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/auth/login \\
   -H "Content-Type: application/json" \\
   -d '{"username": "jerome", "password": "YOUR_PASSWORD"}'` }
     },
@@ -988,7 +994,7 @@ const GROUPS = [
       responses: [ { code: 200, ref: "array&lt;InsightOut&gt;" }, { code: 404, note: "" } ],
       example: {}
     },
-    { method: "GET", path: "/api/v1/activities/{activity_id}/weather", summary: "Temperature/humidity range and conditions during the activity.",
+    { method: "GET", path: "/api/v1/activities/{activity_id}/weather", summary: "Temperature/humidity range, feels-like temperature, wind, and conditions during the activity.",
       description: "Sourced from Open-Meteo's historical archive, keyed on the activity's GPS start point and time window; cached forever once fetched. available: false — never a fabricated range — when there's no GPS start point, or the fetch came back empty.",
       params: [ ["activity_id","path","req","string","—",""] ],
       responses: [ { code: 200, ref: "ActivityWeatherOut" }, { code: 404, note: "" } ],
@@ -1020,7 +1026,7 @@ const GROUPS = [
         { code: 400, note: 'detail: "..." — link_id is the activity\'s only source, nothing to split away from.' },
         { code: 404, note: 'detail: "activity not found" or "source link not found on this activity"' },
       ],
-      example: { curl: `curl -X POST https://your-sporthealth-host/api/v1/activities/${EX.ACT}/sources/${EX.LINK}/split \\
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/activities/${EX.ACT}/sources/${EX.LINK}/split \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "PATCH", path: "/api/v1/activities/{activity_id}/sport", summary: "Correct an activity's sport.",
@@ -1031,7 +1037,7 @@ const GROUPS = [
         ["sub_sport","string|null","opt","","Omit to leave sub_sport unset."],
       ]},
       responses: [ { code: 200, ref: "ActivitySportOverrideOut" }, { code: 404, note: "" } ],
-      example: { curl: `curl -X PATCH https://your-sporthealth-host/api/v1/activities/${EX.ACT}/sport \\
+      example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/sport \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"sport": "hiking", "sub_sport": null}'` }
     },
@@ -1040,7 +1046,7 @@ const GROUPS = [
       params: [ ["activity_id","path","req","string","—",""] ],
       body: { schema: "ActivityRaceOverrideIn", fields: [ ["is_race","boolean","req","",""] ] },
       responses: [ { code: 200, ref: "ActivityRaceOverrideOut" }, { code: 404, note: "" } ],
-      example: { curl: `curl -X PATCH https://your-sporthealth-host/api/v1/activities/${EX.ACT}/race \\
+      example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/race \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"is_race": true}'` }
     },
@@ -1049,9 +1055,21 @@ const GROUPS = [
       params: [ ["activity_id","path","req","string","—",""] ],
       body: { schema: "ActivityNameOverrideIn", fields: [ ["name","string","req","",""] ] },
       responses: [ { code: 200, ref: "ActivityNameOverrideOut" }, { code: 404, note: "" } ],
-      example: { curl: `curl -X PATCH https://your-sporthealth-host/api/v1/activities/${EX.ACT}/name \\
+      example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/name \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"name": "Sunday long run"}'` }
+    },
+    { method: "PATCH", path: "/api/v1/activities/{activity_id}/fueling", summary: "Log carbohydrate/sodium intake during the activity.",
+      description: "Unlike sport/race/name above, there's no vendor source for this at all — neither the FIT profile nor the Garmin Connect API carry it (confirmed by introspecting both directly) — so this is the athlete's own input, not a fix to something derived. Durable, rebuild-safe override, same mechanism as sport/race/name. Both fields are set together — send the current value of whichever one you're not changing, or it's cleared back to null.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { schema: "ActivityFuelingIn", fields: [
+        ["carbohydrates_g","number|null","opt","","Grams. Omit or null to clear."],
+        ["sodium_mg","number|null","opt","","Milligrams. Omit or null to clear."],
+      ]},
+      responses: [ { code: 200, ref: "ActivityFuelingOut" }, { code: 404, note: "" }, { code: 422, note: "a negative value" } ],
+      example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/fueling \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"carbohydrates_g": 60, "sodium_mg": 500}'` }
     },
     { method: "GET", path: "/api/v1/activities/{activity_id}/stream", summary: "Downsampled per-second sensor stream, for charting.",
       description: "Server-side bucket-averaged (DuckDB) to one of three point-count tiers, so a chart never has to fetch or render a full-resolution multi-hour stream.",
@@ -1168,7 +1186,7 @@ const GROUPS = [
         { code: 201, ref: "NoteOut" },
         { code: 404, note: 'detail: "activity not found" — only checked when entity_type is activity; a day entity_id is never validated against anything, since a day is just a date, not a row that can be missing.' },
       ],
-      example: { curl: `curl -X POST https://your-sporthealth-host/api/v1/notes \\
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/notes \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"entity_type": "activity", "entity_id": "${EX.ACT}", "body": "Felt strong on the last 2k, negative split.", "author": "jerome"}'` }
     },
@@ -1205,7 +1223,7 @@ const GROUPS = [
         { code: 200, ref: "GoalOut" },
         { code: 400, note: "period_type isn't year/month, or period_start doesn't parse for the given period_type. detail is a plain string." },
       ],
-      example: { curl: `curl -X PUT https://your-sporthealth-host/api/v1/goals \\
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/goals \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"period_type": "month", "period_start": "2026-08", "sport": "running", "target_distance_m": 160000}'` }
     },
@@ -1213,7 +1231,7 @@ const GROUPS = [
       description: "",
       params: [ ["goal_id","path","req","integer","—","From GoalOut.id."] ],
       responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "goal not found"' } ],
-      example: { curl: `curl -X DELETE https://your-sporthealth-host/api/v1/goals/${EX.GOAL} \\
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/goals/${EX.GOAL} \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
   ]},
@@ -1232,7 +1250,7 @@ const GROUPS = [
         ["resting_hr_bpm","number|null","opt","",""],
       ]},
       responses: [ { code: 200, ref: "HrZoneConfigOut" } ],
-      example: { curl: `curl -X PUT https://your-sporthealth-host/api/v1/settings/hr-zones \\
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/hr-zones \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"max_hr_bpm": 188, "threshold_hr_bpm": 172, "resting_hr_bpm": 46}'` }
     },
@@ -1328,7 +1346,7 @@ function renderExample(ep) {
     curl = ep.example.curl;
   } else {
     const authHeader = ep.auth === "none" ? "" : ` \\\n  -H "X-API-Key: YOUR_API_KEY"`;
-    curl = `curl${authHeader}\\\n  "https://your-sporthealth-host${ep.path.replace(/\{[^}]+\}/g, m => m === "{activity_id}" ? EX.ACT : (m === "{goal_id}" ? EX.GOAL : (m === "{link_id}" ? EX.LINK : m)))}${ep.example.qs || ""}"`;
+    curl = `curl${authHeader}\\\n  "https://your-perseverer-host${ep.path.replace(/\{[^}]+\}/g, m => m === "{activity_id}" ? EX.ACT : (m === "{goal_id}" ? EX.GOAL : (m === "{link_id}" ? EX.LINK : m)))}${ep.example.qs || ""}"`;
     if (ep.auth === "none") curl = curl.replace(/^curl\\\n  /, "curl ");
   }
   const id = "ex-" + slug(ep.method, ep.path);

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import fitdecode
 
-from sporthealth.fit.parser import (
+from perseverer.fit.parser import (
     FIT_EPOCH,
     _derive_utc_offset_s,
     _parse_workout,

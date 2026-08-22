@@ -1,0 +1,21 @@
+/* PaceVariabilityChart -- a ring of radial bars around a centred percentage. */
+
+.pace-variability__svg {
+  display: block;
+  width: 100%;
+  max-width: 176px;
+  margin: 0 auto;
+}
+
+.pace-variability__bar {
+  stroke: var(--color-pace);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.pace-variability__value {
+  fill: var(--color-text);
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

@@ -10,7 +10,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from sporthealth.stream_query import downsample
+from perseverer.stream_query import downsample
 
 
 def _write_fixture(path: Path, n_samples: int, *, heart_rate_value: float = 100.0) -> None:

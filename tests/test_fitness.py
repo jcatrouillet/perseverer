@@ -9,8 +9,8 @@ from pathlib import Path
 
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import (
     activity,
     activity_metric,
     athlete,
@@ -18,8 +18,8 @@ from sporthealth.db.schema import (
     metadata,
     metric_definition,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fitness import refresh_fitness_rollup
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fitness import refresh_fitness_rollup
 
 _METRIC_KEY = "fit.session.training_load_peak"
 

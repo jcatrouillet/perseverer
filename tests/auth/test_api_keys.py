@@ -1,6 +1,6 @@
 """Tests for auth/api_keys.py -- per-athlete API key generation/hashing (Phase 5, ADR 0008)."""
 
-from sporthealth.auth.api_keys import generate_api_key, hash_api_key
+from perseverer.auth.api_keys import generate_api_key, hash_api_key
 
 
 def test_generated_keys_are_unique_and_high_entropy() -> None:

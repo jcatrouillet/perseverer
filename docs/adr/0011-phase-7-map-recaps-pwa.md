@@ -80,7 +80,7 @@ and for offline support, in the performance budget:
 
 > ...service worker for offline reads of recent activities.
 
-**Real-data inventory** (confirmed against `data/sporthealth.db`, not assumed): 904 of 1250
+**Real-data inventory** (confirmed against `data/perseverer.db`, not assumed): 904 of 1250
 activities have real GPS route data (`route_geom` rows with a start point, bounding box, and
 encoded polyline) — running (624), walking (200), hiking (50), cycling (22), alpine skiing (6),
 snowshoeing (2). The rest are indoor/no-GPS activities (strength training, indoor yoga, etc.)
@@ -221,12 +221,12 @@ per-dependency verification rule. Configuration in `vite.config.ts`:
   match the manifest's declared `sizes`.
 - **`workbox.globIgnores: ["config.js"]`** — a real bug caught during verification, not a
   precaution taken blindly: `config.js` is regenerated at **container start** from
-  `SPORTHEALTH_API_BASE_URL` (`docker/frontend-entrypoint.d/20-generate-config.sh`), specifically
+  `PERSEVERER_API_BASE_URL` (`docker/frontend-entrypoint.d/20-generate-config.sh`), specifically
   so the same built image works across environments with different reverse-proxy topologies
   (`docs/DEPLOY.md`, ADR 0008 decision 6). Workbox's default `generateSW` glob matches every file
   under the build output, including `public/`-copied static files — precaching `config.js` would
   compute its revision hash from the *committed dev-default* file content at build time (a fixed
-  value, identical across every image build regardless of what `SPORTHEALTH_API_BASE_URL` gets
+  value, identical across every image build regardless of what `PERSEVERER_API_BASE_URL` gets
   set to later), so the service worker would never recognize a redeployed container's differently
   regenerated `config.js` as "changed" and would keep serving whichever API base URL happened to
   be live the first time a given browser installed the PWA — silently breaking connectivity after

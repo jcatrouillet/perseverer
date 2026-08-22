@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from sporthealth.hr_zones import compute_hr_zone_boundaries
+from perseverer.hr_zones import compute_hr_zone_boundaries
 
 
 def test_returns_none_when_any_reference_value_is_missing() -> None:

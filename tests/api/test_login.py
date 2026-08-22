@@ -6,13 +6,13 @@ import duckdb
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.api.dependencies import get_duckdb, get_engine
-from sporthealth.api.main import app
-from sporthealth.auth.passwords import hash_password
-from sporthealth.auth.tokens import verify_session_token
-from sporthealth.config import Settings, get_settings
-from sporthealth.db.schema import athlete
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.api.dependencies import get_duckdb, get_engine
+from perseverer.api.main import app
+from perseverer.auth.passwords import hash_password
+from perseverer.auth.tokens import verify_session_token
+from perseverer.config import Settings, get_settings
+from perseverer.db.schema import athlete
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 JWT_SECRET = "test-jwt-secret"
 

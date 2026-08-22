@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sporthealth.timezone_lookup import offset_from_coordinates
+from perseverer.timezone_lookup import offset_from_coordinates
 
 
 def test_bay_area_coordinates_resolve_to_los_angeles_offset() -> None:

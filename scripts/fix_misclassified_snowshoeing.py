@@ -21,18 +21,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from sqlalchemy import select, update
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fitness import refresh_fitness_rollup
-from sporthealth.rollups import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fitness import refresh_fitness_rollup
+from perseverer.rollups import (
     month_start,
     refresh_daily_rollup,
     refresh_period_rollup,
     week_start_monday,
 )
 
-DB_PATH = Path(__file__).parent.parent / "data" / "sporthealth.db"
+DB_PATH = Path(__file__).parent.parent / "data" / "perseverer.db"
 
 MISCLASSIFIED_SNOWSHOEING_IDS = [
     "01KZ5ZSG4YQRMVX6MJ2CT7QX3J",  # 2026-01-31, confirmed snowshoeing by the athlete

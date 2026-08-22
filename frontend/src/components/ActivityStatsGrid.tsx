@@ -27,6 +27,12 @@ export function ActivityStatsGridPrimary({
 }) {
   const durationS = effectiveDurationS(activity);
   const paceSport = isPaceSport(activity.sport);
+  const totalDescent = metricValueAliased(activity.metrics, [
+    "fit.session.total_descent",
+    "strava.session.total_descent",
+  ]);
+  const hasHeartRate = activity.avg_hr_bpm != null || activity.max_hr_bpm != null;
+  const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
 
   return (
     <div className="activity-stats">
@@ -64,25 +70,43 @@ export function ActivityStatsGridPrimary({
         )}
       </div>
 
-      {(activity.avg_hr_bpm != null || activity.max_hr_bpm != null) && (
-        <>
-          <h3>Heart rate</h3>
-          <div className="stat-grid">
-            {activity.avg_hr_bpm != null && (
-              <StatTile
-                label="Avg heart rate"
-                value={Math.round(activity.avg_hr_bpm)}
-                unit="bpm"
-                icon="heart"
-                tone="hr"
-                hero
-              />
-            )}
-            {activity.max_hr_bpm != null && (
-              <StatTile label="Max heart rate" value={Math.round(activity.max_hr_bpm)} unit="bpm" icon="heart" tone="hr" />
-            )}
-          </div>
-        </>
+      {(hasHeartRate || hasElevation) && (
+        <div className="activity-stats__row">
+          {hasHeartRate && (
+            <div className="activity-stats__col">
+              <h3>Heart rate</h3>
+              <div className="stat-grid">
+                {activity.avg_hr_bpm != null && (
+                  <StatTile
+                    label="Avg heart rate"
+                    value={Math.round(activity.avg_hr_bpm)}
+                    unit="bpm"
+                    icon="heart"
+                    tone="hr"
+                    hero
+                  />
+                )}
+                {activity.max_hr_bpm != null && (
+                  <StatTile label="Max heart rate" value={Math.round(activity.max_hr_bpm)} unit="bpm" icon="heart" tone="hr" />
+                )}
+              </div>
+            </div>
+          )}
+
+          {hasElevation && (
+            <div className="activity-stats__col">
+              <h3>Elevation</h3>
+              <div className="stat-grid">
+                {activity.elevation_gain_m != null && (
+                  <StatTile label="Elevation gain" value={activity.elevation_gain_m.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
+                )}
+                {totalDescent != null && (
+                  <StatTile label="Elevation loss" value={totalDescent.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {afterHeartRate}
@@ -92,19 +116,28 @@ export function ActivityStatsGridPrimary({
 
 /** Respiration through Hydration -- the part of the stats grid that shares a row with the
  * "fastest for this distance" side column on ActivityDetailPage. */
-export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDetail }) {
+export function ActivityStatsGridSecondary({
+  activity,
+  afterTemperature,
+}: {
+  activity: ActivityDetail;
+  /** Rendered right after the Temperature section (before Hydration) -- a slot for the same
+   * reason ActivityStatsGridPrimary's afterHeartRate is: this component only knows about
+   * `activity.metrics`, not the separate high-tier stream the pace variability chart needs. */
+  afterTemperature?: React.ReactNode;
+}) {
   const metrics = activity.metrics;
 
-  const totalDescent = metricValueAliased(metrics, ["fit.session.total_descent", "strava.session.total_descent"]);
   const aerobicEffect = metricValue(metrics, "fit.session.total_training_effect");
   const anaerobicEffect = metricValue(metrics, "fit.session.total_anaerobic_training_effect");
   const avgPower = metricValue(metrics, "fit.session.avg_power");
   const maxPower = metricValue(metrics, "fit.session.max_power");
   const normalizedPower = metricValue(metrics, "fit.session.normalized_power");
-  // FIT's avg_running_cadence is a single-foot rate; Garmin Connect's own "avg cadence" for a
-  // run is that figure doubled (confirmed against real data: session values of ~75-88
+  // FIT's avg/max_running_cadence are single-foot rates; Garmin Connect's own "avg/max cadence"
+  // for a run is that figure doubled (confirmed against real data: session values of ~75-88
   // correspond to the conventional 150-176 spm runners actually see displayed).
   const avgRunningCadenceRaw = metricValue(metrics, "fit.session.avg_running_cadence");
+  const maxRunningCadenceRaw = metricValue(metrics, "fit.session.max_running_cadence");
   const avgVerticalOscillation = metricValue(metrics, "fit.session.avg_vertical_oscillation");
   const avgStanceTime = metricValue(metrics, "fit.session.avg_stance_time");
   const avgStepLengthMm = metricValue(metrics, "fit.session.avg_step_length");
@@ -123,8 +156,11 @@ export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDet
     activity.workout_rpe != null ||
     activity.vdot != null;
   const hasRunningDynamics =
-    avgRunningCadenceRaw != null || avgVerticalOscillation != null || avgStanceTime != null || avgStepLengthMm != null;
-  const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
+    avgRunningCadenceRaw != null ||
+    maxRunningCadenceRaw != null ||
+    avgVerticalOscillation != null ||
+    avgStanceTime != null ||
+    avgStepLengthMm != null;
   const hasTemperature = avgTemp != null;
   const hasPower = avgPower != null || maxPower != null || normalizedPower != null;
   const hasRespiration = avgRespiration != null || maxRespiration != null;
@@ -198,6 +234,15 @@ export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDet
                 tone="cadence"
               />
             )}
+            {maxRunningCadenceRaw != null && (
+              <StatTile
+                label="Max cadence"
+                value={Math.round(maxRunningCadenceRaw * 2)}
+                unit="spm"
+                icon="steps"
+                tone="cadence"
+              />
+            )}
             {avgStepLengthMm != null && (
               <StatTile label="Step length" value={(avgStepLengthMm / 10).toFixed(0)} unit="cm" icon="route" tone="cadence" />
             )}
@@ -220,20 +265,6 @@ export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDet
         </>
       )}
 
-      {hasElevation && (
-        <>
-          <h3>Elevation</h3>
-          <div className="stat-grid">
-            {activity.elevation_gain_m != null && (
-              <StatTile label="Elevation gain" value={activity.elevation_gain_m.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
-            )}
-            {totalDescent != null && (
-              <StatTile label="Elevation loss" value={totalDescent.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
-            )}
-          </div>
-        </>
-      )}
-
       {hasTemperature && (
         <>
           <h3>Temperature</h3>
@@ -251,6 +282,8 @@ export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDet
           </div>
         </>
       )}
+
+      {afterTemperature}
 
       {hasHydration && (
         <>
@@ -279,14 +312,16 @@ export function ActivityStatsGridSecondary({ activity }: { activity: ActivityDet
 export function ActivityStatsGrid({
   activity,
   afterHeartRate,
+  afterTemperature,
 }: {
   activity: ActivityDetail;
   afterHeartRate?: React.ReactNode;
+  afterTemperature?: React.ReactNode;
 }) {
   return (
     <>
       <ActivityStatsGridPrimary activity={activity} afterHeartRate={afterHeartRate} />
-      <ActivityStatsGridSecondary activity={activity} />
+      <ActivityStatsGridSecondary activity={activity} afterTemperature={afterTemperature} />
     </>
   );
 }

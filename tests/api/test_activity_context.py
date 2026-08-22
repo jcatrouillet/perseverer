@@ -10,8 +10,8 @@ import datetime as dt
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import activity_metric, metric_definition
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.schema import activity_metric, metric_definition
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from tests.api.conftest import seed_activity
 
 

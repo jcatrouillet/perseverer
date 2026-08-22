@@ -4,7 +4,7 @@ correctly stored per activity, so this is a pure SQL recompute, no FIT re-parsin
 Then refreshes every rollup table for every affected day/week/month, plus a full
 fitness_daily_rollup recompute (already whole-history by design).
 
-Run once against the real data/sporthealth.db; the ingest code fix (adapters/fit_folder.py)
+Run once against the real data/perseverer.db; the ingest code fix (adapters/fit_folder.py)
 covers all future ingests going forward.
 """
 
@@ -17,18 +17,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from sqlalchemy import select, text
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fitness import refresh_fitness_rollup
-from sporthealth.rollups import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fitness import refresh_fitness_rollup
+from perseverer.rollups import (
     month_start,
     refresh_daily_rollup,
     refresh_period_rollup,
     week_start_monday,
 )
 
-DB_PATH = Path(__file__).parent.parent / "data" / "sporthealth.db"
+DB_PATH = Path(__file__).parent.parent / "data" / "perseverer.db"
 
 
 def main() -> None:

@@ -1030,6 +1030,75 @@ wheels = [
 ]
 
 [[package]]
+name = "perseverer"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "alembic" },
+    { name = "apscheduler" },
+    { name = "duckdb" },
+    { name = "fastapi" },
+    { name = "garmin-fit-sdk" },
+    { name = "garminconnect" },
+    { name = "httpx" },
+    { name = "mcp" },
+    { name = "numpy" },
+    { name = "polyline" },
+    { name = "pyarrow" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt" },
+    { name = "python-ulid" },
+    { name = "sqlalchemy" },
+    { name = "timezonefinder" },
+    { name = "typer" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "fitdecode" },
+    { name = "hypothesis" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.13" },
+    { name = "apscheduler", specifier = ">=3.10" },
+    { name = "duckdb", specifier = ">=1.1" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "garmin-fit-sdk", specifier = ">=21.158" },
+    { name = "garminconnect", specifier = ">=0.3.5" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "mcp", specifier = ">=1.9,<2" },
+    { name = "numpy", specifier = ">=2.1" },
+    { name = "polyline", specifier = ">=2.0" },
+    { name = "pyarrow", specifier = ">=17.0" },
+    { name = "pydantic", specifier = ">=2.9" },
+    { name = "pydantic-settings", specifier = ">=2.6" },
+    { name = "pyjwt", specifier = ">=2.9,<3" },
+    { name = "python-ulid", specifier = ">=1.1" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
+    { name = "timezonefinder", specifier = ">=8.2.5" },
+    { name = "typer", specifier = ">=0.13" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "fitdecode", specifier = ">=0.10" },
+    { name = "hypothesis", specifier = ">=6.115" },
+    { name = "mypy", specifier = ">=1.13" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "ruff", specifier = ">=0.7" },
+]
+
+[[package]]
 name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1519,75 +1588,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
-]
-
-[[package]]
-name = "sporthealth"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "alembic" },
-    { name = "apscheduler" },
-    { name = "duckdb" },
-    { name = "fastapi" },
-    { name = "garmin-fit-sdk" },
-    { name = "garminconnect" },
-    { name = "httpx" },
-    { name = "mcp" },
-    { name = "numpy" },
-    { name = "polyline" },
-    { name = "pyarrow" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyjwt" },
-    { name = "python-ulid" },
-    { name = "sqlalchemy" },
-    { name = "timezonefinder" },
-    { name = "typer" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "fitdecode" },
-    { name = "hypothesis" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.13" },
-    { name = "apscheduler", specifier = ">=3.10" },
-    { name = "duckdb", specifier = ">=1.1" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "garmin-fit-sdk", specifier = ">=21.158" },
-    { name = "garminconnect", specifier = ">=0.3.5" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "mcp", specifier = ">=1.9,<2" },
-    { name = "numpy", specifier = ">=2.1" },
-    { name = "polyline", specifier = ">=2.0" },
-    { name = "pyarrow", specifier = ">=17.0" },
-    { name = "pydantic", specifier = ">=2.9" },
-    { name = "pydantic-settings", specifier = ">=2.6" },
-    { name = "pyjwt", specifier = ">=2.9,<3" },
-    { name = "python-ulid", specifier = ">=1.1" },
-    { name = "sqlalchemy", specifier = ">=2.0" },
-    { name = "timezonefinder", specifier = ">=8.2.5" },
-    { name = "typer", specifier = ">=0.13" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "fitdecode", specifier = ">=0.10" },
-    { name = "hypothesis", specifier = ">=6.115" },
-    { name = "mypy", specifier = ">=1.13" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "pytest-asyncio", specifier = ">=0.24" },
-    { name = "ruff", specifier = ">=0.7" },
 ]
 
 [[package]]

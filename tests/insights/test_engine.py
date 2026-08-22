@@ -8,8 +8,8 @@ import datetime as dt
 
 from sqlalchemy import select
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import (
     activity,
     activity_metric,
     athlete,
@@ -19,8 +19,8 @@ from sporthealth.db.schema import (
     metric_definition,
     sleep_session,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.insights.engine import refresh_insights
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.insights.engine import refresh_insights
 
 
 def _seed_athlete(engine) -> None:  # type: ignore[no-untyped-def]

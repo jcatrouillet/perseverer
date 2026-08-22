@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from hypothesis import given
 from hypothesis import strategies as st
 
-from sporthealth.merge.engine import (
+from perseverer.merge.engine import (
     ActivityCandidate,
     is_same_activity,
     sport_family,

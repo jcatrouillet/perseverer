@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 
-from sporthealth.db.schema import goal as goal_table
+from perseverer.db.schema import goal as goal_table
 from tests.api.conftest import seed_activity
 
 

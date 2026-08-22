@@ -1,4 +1,4 @@
-// One useQuery/useMutation hook per REST endpoint (src/sporthealth/api/routers/*.py). Note
+// One useQuery/useMutation hook per REST endpoint (src/perseverer/api/routers/*.py). Note
 // mutations invalidate both the calendar and the activity/day's own note list, since a note
 // can be created from either the calendar page or the activity detail page.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +7,7 @@ import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 import type {
   ActivityContextOut,
   ActivityDetail,
+  ActivityFuelingOut,
   ActivityLocationOut,
   ActivityMapPointOut,
   ActivityNameOverrideOut,
@@ -361,6 +362,20 @@ export function useSetNameOverride(activityId: string) {
       void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
       void queryClient.invalidateQueries({ queryKey: ["activities"] });
       void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+/** The athlete's own carbohydrate/sodium intake for this activity -- unlike the sport/race/name
+ * corrections above, there's no vendor source to correct here (see sport_override.py's own
+ * docstring); this is the athlete's only input. */
+export function useSetFuelingOverride(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { carbohydrates_g?: number | null; sodium_mg?: number | null }) =>
+      apiPatch<ActivityFuelingOut>(`/api/v1/activities/${activityId}/fueling`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
     },
   });
 }

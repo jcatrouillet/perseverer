@@ -7,12 +7,12 @@ from pathlib import Path
 
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, activity_metric, activity_stream, athlete, metadata
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fit.types import StreamPoint
-from sporthealth.pace_bands import PACE_BANDS, compute_pace_band_seconds, refresh_pace_bands
-from sporthealth.streams import write_activity_stream
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, activity_metric, activity_stream, athlete, metadata
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fit.types import StreamPoint
+from perseverer.pace_bands import PACE_BANDS, compute_pace_band_seconds, refresh_pace_bands
+from perseverer.streams import write_activity_stream
 
 
 def _band_key(suffix: str) -> str:

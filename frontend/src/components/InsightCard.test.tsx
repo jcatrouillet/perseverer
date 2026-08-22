@@ -59,4 +59,24 @@ describe("InsightCard", () => {
     );
     expect(container.querySelector(".tone-neutral")).toBeInTheDocument();
   });
+
+  it("styles a window_best insight distinctly from an all-time pb", () => {
+    const { container: windowBest } = render(
+      <Router>
+        <InsightCard insight={insight({ kind: "window_best", title: "Fastest 5 km in the last 30 days" })} />
+      </Router>,
+    );
+    const { container: pb } = render(
+      <Router>
+        <InsightCard insight={insight({ kind: "pb", title: "All-time best 5 km" })} />
+      </Router>,
+    );
+    expect(windowBest.querySelector(".tone-pace")).toBeInTheDocument();
+    expect(pb.querySelector(".tone-pace")).toBeInTheDocument();
+    // Different icons -- a window_best is a weaker claim than a genuine all-time PB, and
+    // reusing the trophy icon would visually overstate it.
+    expect(windowBest.querySelector("use")?.getAttribute("href")).not.toBe(
+      pb.querySelector("use")?.getAttribute("href"),
+    );
+  });
 });

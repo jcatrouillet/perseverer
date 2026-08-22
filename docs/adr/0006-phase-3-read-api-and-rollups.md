@@ -102,7 +102,7 @@ query-string parameter and a SQL-identifier-injection-shaped bug.
 
 ### 6. Auth: a single shared API key, fail-closed
 
-`X-API-Key` header checked via `secrets.compare_digest` against `SPORTHEALTH_API_KEY`. Fails
+`X-API-Key` header checked via `secrets.compare_digest` against `PERSEVERER_API_KEY`. Fails
 closed (503) when the env var is unset, rather than fail-open — the safer default for a
 personal health-data API, and consistent with this project's existing security posture (e.g.
 `garmin_connect` structurally never falls back to credentials rather than failing open into a
@@ -119,7 +119,7 @@ narrowly to activities/days per this session's explicit decision; `sleep_session
 `health_observation` notes are a small follow-up if ever needed, not a redesign, since the
 table shape already generalizes.
 
-### 8. `SPORTHEALTH_TRUSTED_PROXY_IP` added but not wired
+### 8. `PERSEVERER_TRUSTED_PROXY_IP` added but not wired
 
 The `Settings` field is added (matches the existing reserved-but-unused convention already
 established for it in `.env.example`), but actually using it to set uvicorn's

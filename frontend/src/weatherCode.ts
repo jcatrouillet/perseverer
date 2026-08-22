@@ -45,3 +45,12 @@ const FALLBACK: WeatherCodeInfo = { icon: "cloud", label: "Unknown conditions" }
 export function weatherCodeInfo(code: number): WeatherCodeInfo {
   return CODE_TABLE[code] ?? FALLBACK;
 }
+
+const COMPASS_POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+
+// Degrees (meteorological convention: the direction the wind is *coming from*) -> 8-point compass.
+export function compassDirection(degrees: number): string {
+  const normalized = ((degrees % 360) + 360) % 360;
+  const index = Math.round(normalized / 45) % 8;
+  return COMPASS_POINTS[index];
+}

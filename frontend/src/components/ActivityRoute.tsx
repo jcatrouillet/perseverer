@@ -181,9 +181,9 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
         route.distanceM,
         route.elapsedS,
         {
-          distanceLabel: `${distanceKm.toFixed(2)} km`,
-          durationLabel: formatClockDuration(totalDurationS),
-          paceLabel,
+          distanceLabel: `Distance: ${distanceKm.toFixed(2)} km`,
+          durationLabel: `Time: ${formatClockDuration(totalDurationS)}`,
+          paceLabel: `Pace: ${paceLabel}`,
         },
         setGifProgress,
       );

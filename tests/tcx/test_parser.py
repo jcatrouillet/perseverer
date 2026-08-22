@@ -5,7 +5,7 @@ device's TPX-extension cadence to confirm the local-name-based extension lookup.
 
 from __future__ import annotations
 
-from sporthealth.tcx.parser import parse_tcx
+from perseverer.tcx.parser import parse_tcx
 
 _TCX_WITH_LAP = b"""<?xml version="1.0" encoding="UTF-8"?>
 <TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">

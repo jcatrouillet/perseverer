@@ -8,7 +8,7 @@ synthetic_run.fit — no real personal monitoring data is committed.
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sporthealth.health.fit_parser import (
+from perseverer.health.fit_parser import (
     FIT_EPOCH,
     _resolve_compressed_timestamps,
     parse_health_fit,

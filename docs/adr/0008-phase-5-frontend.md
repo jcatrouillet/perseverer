@@ -39,7 +39,7 @@ same "never store the plaintext" property while allowing an O(1) indexed lookup
 ### 2. JWT session tokens via `pyjwt`, already resolved as a transitive dependency
 
 `POST /auth/login` verifies username/password and issues an HS256 JWT
-(`auth/tokens.py::create_session_token`), signed with a new `SPORTHEALTH_JWT_SECRET` setting.
+(`auth/tokens.py::create_session_token`), signed with a new `PERSEVERER_JWT_SECRET` setting.
 `pyjwt` was already in `uv.lock` as a transitive dependency of `mcp` (Phase 4) — promoted to an
 explicit `pyproject.toml` entry since it's now directly imported. Verified against the actual
 installed `pyjwt` 2.13.0 API (`jwt.encode`/`decode` signatures, `ExpiredSignatureError`
@@ -50,13 +50,13 @@ rule for vendor libraries.
 
 Before this phase it checked one process-wide `X-API-Key` against `settings.api_key` and
 returned `None`. It now returns the resolved `athlete_id: str`, accepting: (a) `X-API-Key`
-matching the legacy shared `SPORTHEALTH_API_KEY` → resolves to `DEFAULT_ATHLETE_ID`, so **every
+matching the legacy shared `PERSEVERER_API_KEY` → resolves to `DEFAULT_ATHLETE_ID`, so **every
 existing consumer of the shared key — scripts, and the Phase 4 MCP server — keeps working with
 zero changes**, confirmed by running the MCP server's `initialize` handshake against a real
 `podman compose` build with the legacy key; (b) `X-API-Key` whose SHA-256 hash matches an
 athlete's `api_key_hash`; (c) `Authorization: Bearer <jwt>` verified via
 `verify_session_token`. Fails closed exactly as before when nothing could ever succeed (503 when
-no credential is presented and neither `SPORTHEALTH_API_KEY` nor `SPORTHEALTH_JWT_SECRET` is
+no credential is presented and neither `PERSEVERER_API_KEY` nor `PERSEVERER_JWT_SECRET` is
 configured) — but a *presented* credential that simply doesn't match anything is correctly a 401
 even if the legacy key happens to be unset, since per-athlete keys are now an independent valid
 mechanism (this narrows the old "unset key → always 503" contract; see the updated test in
@@ -92,16 +92,16 @@ plain SVG polyline is enough for one chart need.
 
 ### 6. Runtime API-base-URL config via nginx's own `docker-entrypoint.d`, not a bespoke entrypoint
 
-`frontend/public/config.js` sets `window.__SPORTHEALTH_CONFIG__.apiBaseUrl`, loaded via a
+`frontend/public/config.js` sets `window.__PERSEVERER_CONFIG__.apiBaseUrl`, loaded via a
 `<script>` tag before the main bundle — Vite's default `publicDir` serves/copies it verbatim in
 both dev and build, confirmed, no `vite.config.ts` change needed. The committed file is the dev
 default (`http://localhost:8008`). The Docker image regenerates it at container **start**, not
-build time, from a `SPORTHEALTH_API_BASE_URL` env var — via a script dropped in
+build time, from a `PERSEVERER_API_BASE_URL` env var — via a script dropped in
 `/docker-entrypoint.d/`, the base `nginx:1.27-alpine` image's own stock startup-script
 mechanism, rather than overriding `ENTRYPOINT`/`CMD` (which would risk clobbering the base
 image's own entrypoint chain). This is the actual "never baked into the Vite build" mechanism
 `docs/DEPLOY.md` called for — verified by rebuilding the frontend container with
-`SPORTHEALTH_API_BASE_URL` set and confirming the served `config.js` reflected it.
+`PERSEVERER_API_BASE_URL` set and confirming the served `config.js` reflected it.
 
 ### 7. Auth UX: two credential paths in one gate, not just a key prompt
 
@@ -110,7 +110,7 @@ in `localStorage`, sent as `Authorization: Bearer`) and an API-key tab (a CLI-ge
 sent as `X-API-Key`) — matching the explicit ask that each athlete can authenticate either way.
 `api/client.ts` branches on response status rather than treating every failure alike: 401 clears
 the stored credential and re-shows the gate (including reactively, via a custom
-`sporthealth:auth-cleared` event, when a *background* query's token expires mid-session — not
+`perseverer:auth-cleared` event, when a *background* query's token expires mid-session — not
 just on the login form's own submit); 503 shows a distinct "server not configured" message
 instead of re-prompting, since re-prompting for a credential that can never succeed until the
 server's env vars are set would loop forever.

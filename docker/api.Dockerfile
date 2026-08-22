@@ -31,7 +31,7 @@ import duckdb; \
 duckdb.connect(':memory:', config={'extension_directory': '/app/.duckdb_extensions'}).execute('INSTALL sqlite')"
 
 FROM python:3.12-slim AS runtime
-RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin sporthealth
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin perseverer
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
@@ -40,10 +40,10 @@ COPY --from=builder /app/.duckdb_extensions /app/.duckdb_extensions
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
-    SPORTHEALTH_DUCKDB_EXTENSION_DIR=/app/.duckdb_extensions
+    PERSEVERER_DUCKDB_EXTENSION_DIR=/app/.duckdb_extensions
 
-USER sporthealth
+USER perseverer
 EXPOSE 8000
 
 # 2 workers, not cpu_count() — 8GB RAM total is shared with DSM (§4b).
-CMD ["uvicorn", "sporthealth.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "perseverer.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

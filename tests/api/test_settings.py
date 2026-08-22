@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 
-from sporthealth.db.schema import athlete_hr_zone_config
+from perseverer.db.schema import athlete_hr_zone_config
 
 
 def test_get_returns_all_null_when_unconfigured(

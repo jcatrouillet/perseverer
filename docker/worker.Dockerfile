@@ -17,7 +17,7 @@ COPY config ./config
 RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.12-slim AS runtime
-RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin sporthealth
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin perseverer
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
@@ -26,7 +26,7 @@ COPY --from=builder /app/config /app/config
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1
 
-USER sporthealth
+USER perseverer
 
-# No scheduled jobs yet (Phase 0 placeholder) — see sporthealth/worker/main.py.
-CMD ["python", "-m", "sporthealth.worker.main"]
+# No scheduled jobs yet (Phase 0 placeholder) — see perseverer/worker/main.py.
+CMD ["python", "-m", "perseverer.worker.main"]

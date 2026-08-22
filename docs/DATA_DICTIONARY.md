@@ -59,7 +59,7 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
 
 - **`athlete`** — single row today (multi-tenancy scaffolding for a possible future).
   `last_full_export_at` is set by `garmin_export` on successful completion — the "days since
-  last full Garmin export" health signal `sporthealth.staleness` nags on past 90 days.
+  last full Garmin export" health signal `perseverer.staleness` nags on past 90 days.
   `username`/`password_hash`/`api_key_hash`/`api_key_created_at` (Phase 5) are nullable —
   an athlete may have neither, either, or both credential types; provisioned via
   `sync athlete set-password`/`create-key`, never a self-service UI. See
@@ -80,7 +80,19 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
   own entries below) — a `day_rollup` row's activity data and health data can reference
   boundaries up to `utc_offset_s` apart for a non-UTC athlete. `local_date` originally matched
   `health_observation`/`sleep_session`'s UTC-date convention exactly (ADR 0006 decision 2); that
-  symmetry no longer holds for `activity` after this fix.
+  symmetry no longer holds for `activity` after this fix. `carbohydrates_g`/`sodium_mg` are the
+  athlete's own logged fueling intake during the activity — unlike every other column here,
+  neither has a vendor source at all (confirmed by introspecting both the FIT profile and the
+  Garmin Connect API directly), so they're `null` until set via `PATCH .../fueling` and the
+  durable record actually lives in `activity_sport_override` below, reapplied on every rebuild.
+- **`activity_sport_override`** — the athlete's own after-the-fact corrections: `sport`/
+  `sub_sport`, `is_race`, `name`, and `carbohydrates_g`/`sodium_mg`, each settable independently
+  without disturbing the others. Keyed by `(athlete_id, start_time_utc)`, not `activity.id` (a
+  fresh ULID minted on every `sync rebuild`), so a correction survives a full wipe-and-replay —
+  `apply_sport_overrides` reapplies every recorded row onto `activity` at the end of `sync
+  rebuild`, and immediately once when a correction is first set. Deliberately not one of
+  `rebuild.py`'s `_REBUILDABLE_TABLES`. See `sport_override.py`'s own docstring for why
+  carbohydrates_g/sodium_mg are pure user input rather than a correction of anything derived.
 - **`activity_source_link`** — links one `activity` to every raw file/record that contributes
   to it. `external_id` is the adapter's idempotency key: for `fit_folder`, derived from the FIT
   file's device serial + start time (falling back to the file's sha256), deliberately never the
@@ -250,7 +262,7 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
   garmin-export ...`, the daily scheduled `garmin_connect` sync, or `sync import
   garmin-connect` on demand), tracking `items_seen`/`items_new`/`errors` (JSON) and, for
   `garmin_connect`, `watermark_from`/`watermark_to` (the rolling re-fetch window actually used).
-  This is what `sporthealth.staleness.check_garmin_connect_staleness` reads to decide whether
+  This is what `perseverer.staleness.check_garmin_connect_staleness` reads to decide whether
   to fire the staleness webhook.
 - **`merge_decision`** — one row per activity-ingest attempt, logging whether it matched an
   existing activity or became a new one, with the full `MergeDecision.reasons`/`inputs` for
@@ -271,7 +283,7 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
 
 ## Metric registry
 
-Populated automatically by `sporthealth.metrics.registry.get_or_register_metric`, called from
+Populated automatically by `perseverer.metrics.registry.get_or_register_metric`, called from
 the activity FIT parser's, health FIT/JSON parsers', and GDPR-export JSON parser's ingest
 paths for every field they encounter. As of the Phase 1 acceptance run (776 real activity FIT
 files), 824 distinct metric keys were cataloged; after the Phase 2 health extension against
@@ -293,8 +305,8 @@ downsampled to a `low`/`medium`/`high` tier — see `stream_query.py`), `/health
 `POST`/`GET /notes`. Every route except `/healthz`/`/version`/`/auth/login` requires either an
 `X-API-Key` header or an `Authorization: Bearer <jwt>` header (Phase 5 broadened this from a
 single shared key — see below); presenting nothing at all fails closed (503) only when neither
-`SPORTHEALTH_API_KEY` nor `SPORTHEALTH_JWT_SECRET` is configured, never silently open.
-`SPORTHEALTH_CORS_ALLOWED_ORIGINS` (comma-separated) enables `CORSMiddleware` when set; unset
+`PERSEVERER_API_KEY` nor `PERSEVERER_JWT_SECRET` is configured, never silently open.
+`PERSEVERER_CORS_ALLOWED_ORIGINS` (comma-separated) enables `CORSMiddleware` when set; unset
 means no CORS middleware at all. See `docs/adr/0006-phase-3-read-api-and-rollups.md`.
 
 ## MCP server (Phase 4)
@@ -312,17 +324,17 @@ asked, since full-resolution stream data doesn't belong in an agent's context wi
 ## Per-athlete auth + frontend (Phase 5)
 
 `POST /api/v1/auth/login` (unauthenticated, like `/healthz`) verifies `athlete.username`/
-`password_hash` and issues an HS256 JWT signed with `SPORTHEALTH_JWT_SECRET`
-(`SPORTHEALTH_JWT_EXPIRY_DAYS`, default 30). `require_api_key` (despite the name, now the
+`password_hash` and issues an HS256 JWT signed with `PERSEVERER_JWT_SECRET`
+(`PERSEVERER_JWT_EXPIRY_DAYS`, default 30). `require_api_key` (despite the name, now the
 shared auth dependency for every protected route) resolves the authenticated `athlete_id` from
-any of three credentials: the legacy shared `SPORTHEALTH_API_KEY` (resolves to
+any of three credentials: the legacy shared `PERSEVERER_API_KEY` (resolves to
 `DEFAULT_ATHLETE_ID` — existing scripts and the Phase 4 MCP server need no changes), a
 per-athlete `X-API-Key` (hash-matched against `athlete.api_key_hash`), or a JWT bearer token.
 Every router query is scoped to the resolved `athlete_id`, not a hardcoded default. The
 frontend (`frontend/src/`) is a Vite/React SPA: `wouter` for routing, `@tanstack/react-query`
 for data fetching, a hand-rolled SVG chart for the one stream-chart need (no charting library).
 Its API base URL is runtime-configured via `frontend/public/config.js`, regenerated at
-container start from `SPORTHEALTH_API_BASE_URL` — never baked into the Vite build. See
+container start from `PERSEVERER_API_BASE_URL` — never baked into the Vite build. See
 `docs/adr/0008-phase-5-frontend.md`.
 
 ## Calendar grid, Fitness & Form, health dashboard (Phase 6)
@@ -398,7 +410,7 @@ See `docs/adr/0013-activity-view-map-export-strava-completeness.md`.
 
 ## Running performance index (VDOT)
 
-New `activity_metric` key `sporthealth.performance.vdot` (`source="sporthealth"`, distinguishing
+New `activity_metric` key `perseverer.performance.vdot` (`source="perseverer"`, distinguishing
 it from anything a vendor reported) — a Daniels-Gilbert VDOT score computed for every
 `sport == "running"` activity from its `distance_m`/`moving_duration_s`, GAP-adjusted (grade-
 adjusted pace) when the activity's Parquet stream has `distance_m`+`altitude_m` channels
@@ -488,7 +500,7 @@ cross-validated here against two other fields in the same real sample — `muscl
 `None` — e.g. `fat_free_weight`/`body_fat_mass` read identically in the live probe, which doesn't
 cleanly resolve either interpretation, so neither is guessed at.
 
-Credentials (`SPORTHEALTH_EUFY_EMAIL`/`_PASSWORD`/`_DEVICE_ID`/`_CUSTOMER_ID`, all optional) are
+Credentials (`PERSEVERER_EUFY_EMAIL`/`_PASSWORD`/`_DEVICE_ID`/`_CUSTOMER_ID`, all optional) are
 deliberately **not** held to `garmin_connect.py`'s stricter token-store-only/never-auto-login model:
 there's no evidence Eufy's API shares Garmin's SSO 429-lockout fragility, and the sibling project's
 own plain-env-var pattern has run this exact login flow safely, daily, unattended, for months.

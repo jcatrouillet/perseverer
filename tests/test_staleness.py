@@ -8,10 +8,10 @@ from typing import Any
 
 from sqlalchemy import Engine
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import athlete, ingest_run, metadata
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.staleness import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import athlete, ingest_run, metadata
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.staleness import (
     StalenessAlert,
     check_export_freshness,
     check_garmin_connect_staleness,

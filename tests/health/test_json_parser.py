@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from sporthealth.health.json_parser import (
+from perseverer.health.json_parser import (
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,

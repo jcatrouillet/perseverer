@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sporthealth.insights.rules_load import (
+from perseverer.insights.rules_load import (
     TSB_SUSTAINED_LOW_MIN_DAYS,
     TSB_SUSTAINED_LOW_THRESHOLD,
     FitnessDay,

@@ -336,6 +336,20 @@ select {
   height: 26px;
 }
 
+/* Paired with several stacked lines of text (e.g. ActivityWeather's condition/temp/feels-like/
+   humidity/wind readout) -- bigger again than --lg so the icon doesn't read as undersized next
+   to that much text. */
+.icon-chip--xl {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+}
+
+.icon-chip--xl .icon {
+  width: 36px;
+  height: 36px;
+}
+
 .stat-tile__value {
   font-size: 1.5rem;
   font-weight: 600;

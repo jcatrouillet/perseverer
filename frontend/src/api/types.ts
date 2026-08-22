@@ -1,4 +1,4 @@
-// Mirrors src/sporthealth/api/schemas/*.py exactly -- field-for-field, same names. Datetimes
+// Mirrors src/perseverer/api/schemas/*.py exactly -- field-for-field, same names. Datetimes
 // arrive as ISO-8601 strings (JSON has no date type); parse with `new Date(...)` at the point
 // of use, not here.
 
@@ -94,6 +94,10 @@ export interface ActivityDetail extends ActivitySummary {
   route: RouteOut | null;
   metrics: ActivityMetricOut[];
   estimated_sweat_loss_ml: number | null;
+  // The athlete's own logged fueling intake -- no vendor source carries this, so both are null
+  // until entered via PATCH .../fueling (see sport_override.py's own docstring).
+  carbohydrates_g: number | null;
+  sodium_mg: number | null;
 }
 
 export interface ActivityContextRecentOut {
@@ -133,6 +137,10 @@ export interface ActivityWeatherOut {
   humidity_min_pct: number | null;
   humidity_max_pct: number | null;
   weather_code: number | null;
+  // Single representative (closest-hour) values, independently nullable -- not ranges.
+  feels_like_c: number | null;
+  wind_speed_mps: number | null;
+  wind_direction_deg: number | null;
 }
 
 export interface ActivityLocationOut {
@@ -174,6 +182,11 @@ export interface ActivityRaceOverrideOut {
 
 export interface ActivityNameOverrideOut {
   name: string;
+}
+
+export interface ActivityFuelingOut {
+  carbohydrates_g: number | null;
+  sodium_mg: number | null;
 }
 
 export interface HrZoneConfigOut {

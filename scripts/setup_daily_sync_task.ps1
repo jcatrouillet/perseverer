@@ -1,6 +1,6 @@
 # Registers a Windows Scheduled Task that runs `sync daily-sync` once a day -- the same
 # garmin_connect incremental sync + staleness check the `worker` container's APScheduler job
-# does (see src/sporthealth/worker/main.py), but via a plain OS scheduler instead of a
+# does (see src/perseverer/worker/main.py), but via a plain OS scheduler instead of a
 # container. Podman on Windows is known to corrupt this project's SQLite WAL file (see
 # CLAUDE.md), so the `worker` container is a NAS-deployment thing, not a Windows-dev thing --
 # this is the Windows-native equivalent, following the same proven pattern as the sibling
@@ -26,13 +26,13 @@ $action = New-ScheduledTaskAction -Execute $syncExe -Argument "daily-sync" -Work
 $trigger = New-ScheduledTaskTrigger -Daily -At "04:15"
 
 Register-ScheduledTask `
-    -TaskName "SportHealthDailySync" `
+    -TaskName "PersevererDailySync" `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "sporthealth: daily garmin_connect incremental sync + staleness check" `
+    -Description "perseverer: daily garmin_connect incremental sync + staleness check" `
     -Force
 
-Write-Host "Task 'SportHealthDailySync' registered (daily at 04:15)." -ForegroundColor Green
-Write-Host "To run it manually right now: Start-ScheduledTask -TaskName SportHealthDailySync"
-Write-Host "To check its last result: Get-ScheduledTaskInfo -TaskName SportHealthDailySync"
+Write-Host "Task 'PersevererDailySync' registered (daily at 04:15)." -ForegroundColor Green
+Write-Host "To run it manually right now: Start-ScheduledTask -TaskName PersevererDailySync"
+Write-Host "To check its last result: Get-ScheduledTaskInfo -TaskName PersevererDailySync"

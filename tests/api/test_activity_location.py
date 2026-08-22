@@ -62,7 +62,7 @@ def test_cache_miss_returns_unavailable_immediately_and_schedules_a_background_f
         return "Sunnyvale, California"
 
     monkeypatch.setattr(
-        "sporthealth.api.routers.activities.get_or_fetch_activity_location", fake_fetch
+        "perseverer.api.routers.activities.get_or_fetch_activity_location", fake_fetch
     )
 
     # The response must never wait on the (mocked-slow-in-reality) fetch -- TestClient still
@@ -93,14 +93,14 @@ def test_second_request_reads_the_now_cached_value(
         lat: float,
         lon: float,
     ) -> str:
-        from sporthealth.geocoding import _store
+        from perseverer.geocoding import _store
 
         _store(conn, athlete_id, activity_id, "Sunnyvale, California")
         conn.commit()
         return "Sunnyvale, California"
 
     monkeypatch.setattr(
-        "sporthealth.api.routers.activities.get_or_fetch_activity_location", fake_fetch
+        "perseverer.api.routers.activities.get_or_fetch_activity_location", fake_fetch
     )
 
     first = client.get("/api/v1/activities/a1/location", headers=auth_headers)

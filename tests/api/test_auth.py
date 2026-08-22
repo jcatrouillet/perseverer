@@ -13,13 +13,13 @@ import duckdb
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.api.dependencies import get_duckdb, get_engine
-from sporthealth.api.main import app
-from sporthealth.auth.api_keys import generate_api_key, hash_api_key
-from sporthealth.auth.tokens import create_session_token
-from sporthealth.config import Settings, get_settings
-from sporthealth.db.schema import athlete
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.api.dependencies import get_duckdb, get_engine
+from perseverer.api.main import app
+from perseverer.auth.api_keys import generate_api_key, hash_api_key
+from perseverer.auth.tokens import create_session_token
+from perseverer.config import Settings, get_settings
+from perseverer.db.schema import athlete
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from tests.api.conftest import seed_activity
 
 

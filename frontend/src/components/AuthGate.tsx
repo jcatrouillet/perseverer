@@ -36,7 +36,7 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }) {
       if (err instanceof AuthError) {
         setError("Invalid username or password.");
       } else if (err instanceof ServerUnconfiguredError) {
-        setError("Server is not configured for password login (SPORTHEALTH_JWT_SECRET unset).");
+        setError("Server is not configured for password login (PERSEVERER_JWT_SECRET unset).");
       } else {
         setError("Login failed. Please try again.");
       }
@@ -136,8 +136,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       </div>
       <main className="auth-card">
         <div className="auth-card__brand">
-          <div className="auth-card__logo">SH</div>
-          <h1>Sport Health</h1>
+          <div className="auth-card__logo">P</div>
+          <h1>Perseverer</h1>
           <p className="auth-card__subtitle">Sign in to view your training and health data</p>
         </div>
         <div className="auth-tabs" role="tablist">

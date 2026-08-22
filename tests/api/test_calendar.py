@@ -8,14 +8,14 @@ import datetime as dt
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection, Engine
 
-from sporthealth.db.schema import (
+from perseverer.db.schema import (
     day_rollup,
     health_metric_daily_rollup,
     health_metric_period_rollup,
     metric_definition,
     period_rollup,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 
 def _register_metric(conn: Connection, metric_key: str, now: dt.datetime) -> None:

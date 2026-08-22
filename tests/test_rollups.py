@@ -7,8 +7,8 @@ from pathlib import Path
 
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import (
     activity,
     athlete,
     day_rollup,
@@ -18,8 +18,8 @@ from sporthealth.db.schema import (
     metric_definition,
     sleep_session,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.rollups import refresh_daily_rollup
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.rollups import refresh_daily_rollup
 
 
 def _engine(tmp_path: Path) -> Engine:

@@ -321,7 +321,7 @@ export function DayViewPage({ date }: { date: string }) {
 
       <section className="card">
         <h2>Notes</h2>
-        <NotesPanel entityType="day" entityId={date} />
+        <NotesPanel entityType="day" entityId={date} showHeading={false} />
       </section>
     </main>
   );

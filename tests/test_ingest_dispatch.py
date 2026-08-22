@@ -10,10 +10,10 @@ from pathlib import Path
 
 from sqlalchemy import Engine, select
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, athlete, health_observation, metadata, sleep_session
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.ingest_dispatch import ingest_fit_bytes
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, athlete, health_observation, metadata, sleep_session
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.ingest_dispatch import ingest_fit_bytes
 
 FIXTURES = Path(__file__).parent / "fixtures" / "fit"
 ACTIVITY_FIT = (FIXTURES / "synthetic_run.fit").read_bytes()

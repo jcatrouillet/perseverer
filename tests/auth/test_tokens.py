@@ -5,7 +5,7 @@ import datetime as dt
 import jwt
 import pytest
 
-from sporthealth.auth.tokens import InvalidSessionToken, create_session_token, verify_session_token
+from perseverer.auth.tokens import InvalidSessionToken, create_session_token, verify_session_token
 
 
 def test_round_trip() -> None:

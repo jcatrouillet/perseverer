@@ -8,8 +8,8 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import EXEMPT_FROM_ATHLETE_SCOPING, metadata
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import EXEMPT_FROM_ATHLETE_SCOPING, metadata
 
 
 def test_schema_creates_cleanly(tmp_path: Path) -> None:

@@ -4,8 +4,8 @@
 // docs/adr/0008-phase-5-frontend.md.
 import type { LoginRequest, LoginResponse } from "./types";
 
-const JWT_STORAGE_KEY = "sporthealth_jwt";
-const API_KEY_STORAGE_KEY = "sporthealth_api_key";
+const JWT_STORAGE_KEY = "perseverer_jwt";
+const API_KEY_STORAGE_KEY = "perseverer_api_key";
 
 export class AuthError extends Error {}
 export class ServerUnconfiguredError extends Error {}
@@ -13,13 +13,13 @@ export class ServerUnconfiguredError extends Error {}
 // Fired whenever a stored credential is cleared (a 401 on any request, anywhere in the app --
 // not just from the login form). AuthGate listens for this to re-show itself even when the
 // 401 came from a background query, e.g. a JWT that expired mid-session.
-export const AUTH_CLEARED_EVENT = "sporthealth:auth-cleared";
+export const AUTH_CLEARED_EVENT = "perseverer:auth-cleared";
 
 function getBaseUrl(): string {
-  const config = window.__SPORTHEALTH_CONFIG__;
+  const config = window.__PERSEVERER_CONFIG__;
   if (!config?.apiBaseUrl) {
     throw new Error(
-      "window.__SPORTHEALTH_CONFIG__.apiBaseUrl is not set -- did /config.js fail to load?",
+      "window.__PERSEVERER_CONFIG__.apiBaseUrl is not set -- did /config.js fail to load?",
     );
   }
   return config.apiBaseUrl;

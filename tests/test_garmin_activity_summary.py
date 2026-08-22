@@ -12,10 +12,10 @@ from pathlib import Path
 
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, athlete, metadata
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.garmin_activity_summary import (
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, athlete, metadata
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.garmin_activity_summary import (
     CorrectionResult,
     GarminActivitySummaryEntry,
     correct_activities_from_summary,

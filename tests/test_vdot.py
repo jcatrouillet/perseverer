@@ -1,6 +1,6 @@
 import pytest
 
-from sporthealth.vdot import compute_gap_factor, compute_vdot
+from perseverer.vdot import compute_gap_factor, compute_vdot
 
 
 class TestComputeVdot:

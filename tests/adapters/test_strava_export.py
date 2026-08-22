@@ -10,15 +10,27 @@ import datetime as dt
 import gzip
 from pathlib import Path
 
+import httpx
+import pytest
 from sqlalchemy import select
 
-from sporthealth.adapters.fit_folder import ingest_canonical_batch
-from sporthealth.adapters.strava_export import _map_sport, import_strava_export
-from sporthealth.archive import archive_raw_bytes
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import activity, activity_metric, activity_source_link, athlete, metadata
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fit.types import CanonicalActivity, CanonicalBatch
+from perseverer.adapters.fit_folder import ingest_canonical_batch
+from perseverer.adapters.strava_export import _map_sport, import_strava_export
+from perseverer.archive import archive_raw_bytes
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import activity, activity_metric, activity_source_link, athlete, metadata
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fit.types import CanonicalActivity, CanonicalBatch
+
+
+def _mock_weather_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests aren't about weather at all -- a failed response makes
+    backfill_weather_titles (wired into every ingest entry point, including this one, now that
+    it runs automatically) a clean no-op for this fixture's real GPS coordinates, instead of
+    silently reaching real Open-Meteo over the network."""
+    real_client = httpx.Client
+    transport = httpx.MockTransport(lambda r: httpx.Response(503))
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: real_client(transport=transport))
 
 _GPX_BODY = b"""<?xml version="1.0" encoding="UTF-8"?>
 <gpx creator="StravaGPX" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
@@ -114,7 +126,10 @@ def test_sport_map_matches_real_verified_fit_derived_values() -> None:
     assert _map_sport("Kayaking") == ("kayaking", None)
 
 
-def test_gpx_activity_gets_csv_totals_overlaid(tmp_path: Path) -> None:
+def test_gpx_activity_gets_csv_totals_overlaid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_weather_unavailable(monkeypatch)
     root = _make_archive(tmp_path, with_manual_row=False)
     engine = make_engine(tmp_path / "db.sqlite")
     metadata.create_all(engine)
@@ -140,6 +155,51 @@ def test_gpx_activity_gets_csv_totals_overlaid(tmp_path: Path) -> None:
     assert row.name == "Bryce Canyon hike"
     assert row.distance_m == 4800.5  # from CSV, not re-derived from the two GPS points
     assert row.duration_s == 1800.0
+
+
+def test_ingest_automatically_prepends_a_weather_emoji_to_the_title(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The positive counterpart to the (mocked-unavailable) tests above -- proves
+    backfill_weather_titles is actually wired into import_strava_export's own touched-dates
+    block, not just that its absence doesn't break anything. See weather_titles.py's own
+    docstring for why this now runs automatically on every ingest, not just via the CLI."""
+    real_client = httpx.Client
+    transport = httpx.MockTransport(
+        lambda r: httpx.Response(
+            200,
+            json={
+                "hourly": {
+                    "time": ["2026-04-17T22:00"],
+                    "temperature_2m": [15.0],
+                    "relative_humidity_2m": [40.0],
+                    "weathercode": [0],  # clear sky -> ☀️
+                    "apparent_temperature": [14.0],
+                    "wind_speed_10m": [2.0],
+                    "wind_direction_10m": [180.0],
+                }
+            },
+        )
+    )
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: real_client(transport=transport))
+
+    root = _make_archive(tmp_path, with_manual_row=False)
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+
+    with engine.connect() as conn:
+        import_strava_export(
+            conn,
+            tmp_path / "archive",
+            tmp_path / "parquet",
+            tmp_path / "extract",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            path=root,
+        )
+        row = conn.execute(select(activity.c.name)).scalar_one()
+
+    assert row == "☀️ Bryce Canyon hike"
 
 
 def test_gpx_activity_gets_hr_and_elevation_loss_from_csv(tmp_path: Path) -> None:
@@ -237,7 +297,10 @@ def test_reimport_is_idempotent(tmp_path: Path) -> None:
     assert len(activity_count) == 2  # not 4 -- the second run is a clean no-op
 
 
-def test_gz_file_is_decompressed_and_archived_verbatim_first(tmp_path: Path) -> None:
+def test_gz_file_is_decompressed_and_archived_verbatim_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_weather_unavailable(monkeypatch)
     root = tmp_path / "strava"
     (root / "activities").mkdir(parents=True)
     (root / "activities" / "999333.gpx.gz").write_bytes(gzip.compress(_GPX_BODY))

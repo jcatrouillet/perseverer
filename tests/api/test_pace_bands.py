@@ -8,10 +8,10 @@ import datetime as dt
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import activity, activity_metric
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.metrics.registry import get_or_register_metric
-from sporthealth.pace_bands import PACE_BANDS
+from perseverer.db.schema import activity, activity_metric
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.metrics.registry import get_or_register_metric
+from perseverer.pace_bands import PACE_BANDS
 
 
 def _seed_activity(engine: Engine, *, activity_id: str, local_date: str = "2026-01-01") -> None:
@@ -40,7 +40,7 @@ def _seed_pace_band(engine: Engine, *, activity_id: str, suffix: str, seconds: f
         get_or_register_metric(
             conn,
             metric_key=band.metric_key,
-            source="sporthealth",
+            source="perseverer",
             display_name=f"Pace band: {band.label}",
             unit_si="s",
             category="performance",
@@ -54,7 +54,7 @@ def _seed_pace_band(engine: Engine, *, activity_id: str, suffix: str, seconds: f
                 value_num=seconds,
                 value_text=None,
                 unit="s",
-                source="sporthealth",
+                source="perseverer",
                 created_at=now,
             )
         )

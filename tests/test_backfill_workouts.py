@@ -14,9 +14,9 @@ from unittest.mock import patch
 
 from sqlalchemy import Connection, Engine, select
 
-from sporthealth.backfill_workouts import backfill_workouts
-from sporthealth.db.engine import make_engine
-from sporthealth.db.schema import (
+from perseverer.backfill_workouts import backfill_workouts
+from perseverer.db.engine import make_engine
+from perseverer.db.schema import (
     activity,
     activity_source_link,
     activity_workout,
@@ -25,8 +25,8 @@ from sporthealth.db.schema import (
     metadata,
     raw_object,
 )
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
-from sporthealth.fit.types import (
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fit.types import (
     CanonicalActivity,
     CanonicalBatch,
     ParsedWorkout,
@@ -166,7 +166,7 @@ class TestBackfillWorkouts:
             conn.commit()
 
         with (
-            patch("sporthealth.backfill_workouts.parse_fit", return_value=_batch_with_workout()),
+            patch("perseverer.backfill_workouts.parse_fit", return_value=_batch_with_workout()),
             engine.connect() as conn,
         ):
             count = backfill_workouts(conn, archive_root, athlete_id=DEFAULT_ATHLETE_ID)
@@ -197,7 +197,7 @@ class TestBackfillWorkouts:
             before = conn.execute(select(activity.c.updated_at)).scalar_one()
 
         with (
-            patch("sporthealth.backfill_workouts.parse_fit", return_value=_batch_with_workout()),
+            patch("perseverer.backfill_workouts.parse_fit", return_value=_batch_with_workout()),
             engine.connect() as conn,
         ):
             backfill_workouts(conn, archive_root, athlete_id=DEFAULT_ATHLETE_ID)
@@ -216,7 +216,7 @@ class TestBackfillWorkouts:
             )
             conn.commit()
 
-        with patch("sporthealth.backfill_workouts.parse_fit", return_value=_batch_with_workout()):
+        with patch("perseverer.backfill_workouts.parse_fit", return_value=_batch_with_workout()):
             with engine.connect() as conn:
                 first = backfill_workouts(conn, archive_root, athlete_id=DEFAULT_ATHLETE_ID)
                 conn.commit()
@@ -240,7 +240,7 @@ class TestBackfillWorkouts:
             conn.commit()
 
         with patch(
-            "sporthealth.backfill_workouts.parse_fit", return_value=_batch_with_no_workout()
+            "perseverer.backfill_workouts.parse_fit", return_value=_batch_with_no_workout()
         ), engine.connect() as conn:
             count = backfill_workouts(conn, archive_root, athlete_id=DEFAULT_ATHLETE_ID)
             conn.commit()
@@ -277,7 +277,7 @@ class TestBackfillWorkouts:
             conn.commit()
 
         with (
-            patch("sporthealth.backfill_workouts.parse_fit", return_value=_batch_with_workout()),
+            patch("perseverer.backfill_workouts.parse_fit", return_value=_batch_with_workout()),
             engine.connect() as conn,
         ):
             count = backfill_workouts(conn, archive_root, athlete_id=DEFAULT_ATHLETE_ID)

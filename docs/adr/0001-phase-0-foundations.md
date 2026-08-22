@@ -23,10 +23,10 @@ Confirmed constraints going in:
 
 ## Decisions
 
-### 1. `uv` for Python packaging, single `sporthealth` package, src-layout
+### 1. `uv` for Python packaging, single `perseverer` package, src-layout
 
 One package shared by the `api` and `worker` containers (two thin entrypoints —
-`sporthealth.api.main:app` and `sporthealth.worker.main`) rather than two separate
+`perseverer.api.main:app` and `perseverer.worker.main`) rather than two separate
 distributions, because they will share the schema, adapter interfaces, and config code
 starting Phase 1-2. `uv` because it's a single fast tool for venv + dependency resolution +
 lockfile, and multi-stage Docker builds shell out to it cleanly (`uv sync --frozen`).
@@ -40,7 +40,7 @@ dependency sets diverge later (e.g. FIT-parsing-heavy libs the API never touches
 
 ### 3. Config: `pydantic-settings`, TOML defaults + env override
 
-`config/default.toml` holds non-secret defaults; environment variables (`SPORTHEALTH_*`) and
+`config/default.toml` holds non-secret defaults; environment variables (`PERSEVERER_*`) and
 `.env` override them, in that priority order (env wins). This is the standard 12-factor shape
 and keeps secrets out of any committed file. Flat keys for now (no nested TOML tables) — there
 isn't enough config surface yet to justify the nesting; revisit once Phase 2's
@@ -109,7 +109,7 @@ which `podman build` handles natively via buildah). The dev commands change from
 This is dev-only. **The NAS is unaffected** — DSM Container Manager runs Docker, not Podman,
 so `compose.nas.yml` and the GHCR pull-based deploy flow in `docs/DEPLOY.md` stay exactly as
 designed. Podman's rootless-by-default model also happens to line up with the non-root `USER
-sporthealth` already set in both `api.Dockerfile` and `worker.Dockerfile` — no change needed
+perseverer` already set in both `api.Dockerfile` and `worker.Dockerfile` — no change needed
 there either.
 
 **Verified, after real debugging.** Once Podman Desktop was installed, `podman compose up
@@ -123,10 +123,10 @@ repo and one in the default Podman Desktop setup:
    interpreter at runtime (`exec ... uvicorn: No such file or directory`) — the api container
    crash-looped. Fixed by building at `/app` in both stages so the path matches.
 2. **Image name collision (repo bug, fixed)**: `compose.yaml` used
-   `${GHCR_IMAGE_PREFIX:-sporthealth-api}:${IMAGE_TAG:-local}`. That fallback only applies when
+   `${GHCR_IMAGE_PREFIX:-perseverer-api}:${IMAGE_TAG:-local}`. That fallback only applies when
    the variable is *unset* — since `.env` sets `GHCR_IMAGE_PREFIX` (for the NAS), all three
    services silently resolved to the identical image name. Fixed by decoupling local dev tags
-   entirely from the GHCR prefix: `compose.yaml` now hardcodes `sporthealth-{api,worker,frontend}:local`,
+   entirely from the GHCR prefix: `compose.yaml` now hardcodes `perseverer-{api,worker,frontend}:local`,
    and only `compose.nas.yml` references `GHCR_IMAGE_PREFIX`/`IMAGE_TAG`.
 3. **Podman machine needs User-Mode Networking (environment, not a repo bug)**: the default
    Podman machine Podman Desktop creates on Windows (`UserModeNetworking: false`) never

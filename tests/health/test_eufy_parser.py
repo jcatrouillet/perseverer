@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from sporthealth.health.eufy_parser import parse_eufy_scale_reading
+from perseverer.health.eufy_parser import parse_eufy_scale_reading
 
 RECORD = {
     "id": "27A67DD8-7E14-4ADE-8106-0C4116F05C58",

@@ -3,8 +3,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from sporthealth.config import get_settings
-from sporthealth.db.schema import metadata
+from perseverer.config import get_settings
+from perseverer.db.schema import metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -17,7 +17,7 @@ if config.config_file_name is not None:
 
 target_metadata = metadata
 
-# Drive the DB location from our own Settings (SPORTHEALTH_DATA_DIR / .env) rather than a
+# Drive the DB location from our own Settings (PERSEVERER_DATA_DIR / .env) rather than a
 # static URL in alembic.ini, so `alembic upgrade head` always targets the same database the
 # app itself would use.
 _db_path = get_settings().db_path

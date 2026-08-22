@@ -12,6 +12,9 @@ function weather(overrides: Partial<ActivityWeatherOut> = {}): ActivityWeatherOu
     humidity_min_pct: 45.0,
     humidity_max_pct: 71.0,
     weather_code: 0,
+    feels_like_c: null,
+    wind_speed_mps: null,
+    wind_direction_deg: null,
     ...overrides,
   };
 }
@@ -41,10 +44,13 @@ describe("ActivityWeather", () => {
     expect(screen.getByTitle("Clear sky")).toBeInTheDocument();
   });
 
-  it("renders a visible 'Weather' heading and a large icon chip", () => {
+  it("renders a visible 'Weather' heading and an extra-large icon chip", () => {
     const { container } = render(<ActivityWeather weather={weather()} />);
     expect(screen.getByRole("heading", { name: "Weather" })).toBeInTheDocument();
-    expect(container.querySelector(".icon-chip--lg")).toBeInTheDocument();
+    // --xl, not --lg -- the readout can run up to five lines (condition, temp, feels like,
+    // humidity, wind), so the icon needs to be bigger than the standard large chip to still
+    // look proportionate next to it.
+    expect(container.querySelector(".icon-chip--xl")).toBeInTheDocument();
   });
 
   it("shows a single value, not a repeated range, when min and max are the same", () => {
@@ -61,5 +67,32 @@ describe("ActivityWeather", () => {
     expect(screen.getByText("20°C")).toBeInTheDocument();
     expect(screen.getByText("50% RH")).toBeInTheDocument();
     expect(screen.queryByText(/–/)).not.toBeInTheDocument();
+  });
+
+  it("renders feels-like and wind lines when present", () => {
+    render(
+      <ActivityWeather
+        weather={weather({
+          feels_like_c: 27.6,
+          wind_speed_mps: 5.4,
+          wind_direction_deg: 270,
+        })}
+      />,
+    );
+    expect(screen.getByText("Feels like 28°C")).toBeInTheDocument();
+    expect(screen.getByText("Wind 5m/s from W")).toBeInTheDocument();
+  });
+
+  it("omits feels-like and wind lines when they are null", () => {
+    render(<ActivityWeather weather={weather()} />);
+    expect(screen.queryByText(/Feels like/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Wind/)).not.toBeInTheDocument();
+  });
+
+  it("shows wind speed without a direction when direction is missing", () => {
+    render(
+      <ActivityWeather weather={weather({ wind_speed_mps: 3.0, wind_direction_deg: null })} />,
+    );
+    expect(screen.getByText("Wind 3m/s")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 // Decodes the Google encoded-polyline algorithm format used by route_geom.encoded_polyline /
 // simplified_polyline (encoded server-side by the Python `polyline` package, default precision
-// 5 -- confirmed by reading src/sporthealth/adapters/fit_folder.py's own `polyline_codec.encode`
+// 5 -- confirmed by reading src/perseverer/adapters/fit_folder.py's own `polyline_codec.encode`
 // call rather than assumed). Hand-rolled rather than a new dependency: this is ~25 lines of a
 // well-known, stable algorithm, matching this project's existing bar for "small and stable
 // enough to not need a package" (e.g. Icon.tsx's hand-rolled sprite).

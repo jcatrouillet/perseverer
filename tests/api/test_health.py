@@ -5,8 +5,8 @@ import datetime as dt
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from sporthealth.db.schema import health_metric_daily_rollup, health_observation, metric_definition
-from sporthealth.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.db.schema import health_metric_daily_rollup, health_observation, metric_definition
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 
 def _seed_observation(engine: Engine, *, metric_key: str, local_date: str, value: float) -> None:
