@@ -1,10 +1,14 @@
 # CLAUDE.md
 
 **Perseverer** — a self-hosted fitness & health data platform. Garmin + Strava in, one owned SQLite+Parquet
-archive, a REST/JSON API an AI agent can write notes through, a fast web frontend. Runs on a
-Synology DS1019+ (Celeron J3455, no AVX/AVX2, 8GB RAM) behind an existing reverse proxy;
-developed on Windows + Podman Desktop. The NAS itself runs Docker (DSM Container Manager) —
-the engine swap is dev-only, see `docs/adr/0001-phase-0-foundations.md` decision 8.
+archive, a REST/JSON API an AI agent can write notes through, a fast web frontend. Runs on
+`bercy`, an Intel NUC6i55SYH (i5-6260U, AVX2, 32GB RAM) running Ubuntu Server 26.04 LTS, behind
+an existing reverse proxy; developed on Windows + Podman Desktop. Production moved off an
+original Synology DS1019+ target — see `docs/DEPLOY.md`'s history note and decision 8 of
+`docs/adr/0001-phase-0-foundations.md` for the now-superseded NAS-era rationale (Docker via DSM
+Container Manager vs. Podman in dev) that no longer applies now that both dev and prod run
+Podman. Production is deployed as systemd Quadlet units (`quadlet/`), not Compose — see
+`docs/DEPLOY.md`.
 
 **Current phase: 8 (strava_export importer, merge visibility/split, rules-based insight engine —
 see `docs/adr/0012-phase-8-strava-merge-insights.md`). Phase 7 (map explorer, recaps, PWA/offline
@@ -267,31 +271,36 @@ curl http://localhost:8008/api/v1/healthz
 curl -H "X-API-Key: $PERSEVERER_API_KEY" http://localhost:8008/api/v1/calendar?start_date=2025-01-01&end_date=2025-01-31
 curl -X POST http://localhost:8008/api/v1/auth/login -H "Content-Type: application/json" -d '{"username":"...","password":"..."}'
 
-# NAS deploy — the NAS runs Docker (DSM Container Manager), not Podman; never build on the
-# NAS, see docs/DEPLOY.md
-docker compose -f compose.yaml -f compose.nas.yml pull
-docker compose -f compose.yaml -f compose.nas.yml up -d
+# bercy deploy — rootless Podman + systemd Quadlet units (quadlet/), no Compose; never build
+# on bercy, see docs/DEPLOY.md
+podman quadlet install quadlet/perseverer-api.container quadlet/perseverer-worker.container \
+  quadlet/perseverer-frontend.container
+systemctl --user enable --now perseverer-api perseverer-worker perseverer-frontend
 ```
 
 ## Platform constraints that shape every decision
 
-- **DS1019+ / Celeron J3455 (Goldmont): no AVX, no AVX2, only up to SSE4.2.** Anything built
-  for x86-64-v3 illegal-instruction-crashes on the NAS. Native builds are capped at
-  x86-64-v2; numpy/pyarrow/duckdb ship wheels that runtime-dispatch. CI runs an AVX-masked
-  (QEMU `Westmere` CPU model — SSE4.2 + AES-NI, no AVX, matching Goldmont; the generic
-  `qemu64` model tried first turned out to lack even SSE4.1/SSE4.2, a stricter and
-  non-representative baseline that false-positived on every push) import smoke test
-  specifically to catch this before it reaches the NAS.
-- **8GB RAM total, shared with DSM.** Whole stack budgeted at ~1.5GB. uvicorn runs 2 workers,
-  not `cpu_count()`. This is also why SQLite, not Postgres.
-- **Never build on the NAS.** Images are built on Windows or in CI, pushed to GHCR, pulled by
-  the DS1019+'s Container Manager.
-- **Precomputed rollups are mandatory.** The Celeron cannot aggregate a decade of activities
-  per request — every dashboard/calendar/recap view reads a `*_rollup` table (`day_rollup`,
-  `health_metric_daily_rollup`, `rollups.py`) refreshed on ingest, never scans at request time.
-  Every ingest entry point (`fit_folder`, `garmin_export`, `garmin_connect`, `rebuild`)
-  accumulates which `local_date`s it touched and calls `refresh_daily_rollup` once per
-  distinct date after its loop — bounded by dates touched, not files processed. A future
+- **Historical: DS1019+ / Celeron J3455 (Goldmont) had no AVX/AVX2, only up to SSE4.2.**
+  bercy's i5-6260U has full AVX2, so this no longer binds the deploy target — but the
+  x86-64-v2 CFLAGS cap in the Dockerfiles and CI's AVX-masked (QEMU `Westmere` CPU model)
+  import smoke test are still in place as of this writing (not yet removed; see
+  `docs/DEPLOY.md`'s environments table). Harmless to keep, and still useful if the NAS is ever
+  pressed back into service for something else — a deliberate "cost nothing, don't rip out
+  opportunistically" call, not an oversight.
+- **32GB RAM on bercy, not meaningfully budget-constrained** — unlike the DS1019+'s 8GB shared
+  with DSM, which is what originally forced the ~1.5GB whole-stack budget and 2-worker uvicorn
+  cap. Those specific numbers haven't been revisited post-move; SQLite (not Postgres) remains
+  the storage choice regardless — that's a raw-first/provenance-model decision this project is
+  built around at this point, not something the old RAM ceiling alone justified.
+- **Never build on bercy.** Images are built on Windows or in CI, pushed to GHCR, pulled by
+  bercy's Quadlet units (`AutoUpdate=registry` + `podman-auto-update.timer`).
+- **Precomputed rollups.** Originally mandatory because the Celeron couldn't aggregate a decade
+  of activities per request; bercy's i5 likely could, but the pattern stays because it's good
+  design regardless of hardware — every dashboard/calendar/recap view reads a `*_rollup` table
+  (`day_rollup`, `health_metric_daily_rollup`, `rollups.py`) refreshed on ingest, never scans at
+  request time. Every ingest entry point (`fit_folder`, `garmin_export`, `garmin_connect`,
+  `rebuild`) accumulates which `local_date`s it touched and calls `refresh_daily_rollup` once
+  per distinct date after its loop — bounded by dates touched, not files processed. A future
   adapter must honor this same contract. See `docs/adr/0006-phase-3-read-api-and-rollups.md`.
 - **Windows dev, Linux prod.** LF enforced via `.gitattributes`. `pathlib` everywhere. The
   `fit_folder` watcher polls (no reliance on inotify — SMB/rsync-written files don't reliably
@@ -312,7 +321,7 @@ fast-moving vendor libraries is exactly what this project's brief warns is stale
 
 ## Docs
 
-- `docs/DEPLOY.md` — Windows → NAS handoff runbook.
+- `docs/DEPLOY.md` — Windows → bercy handoff runbook.
 - `docs/DATA_DICTIONARY.md` — grows every phase; the source of truth for what every stored
   field means and where it came from.
 - `docs/API.md` — the REST API reference for third-party integration: every endpoint, param,

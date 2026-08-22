@@ -1,26 +1,41 @@
-# Deploy runbook: Windows dev → Synology DS1019+ production
+# Deploy runbook: Windows dev → bercy production
 
 This is a living document — Phase 0 lays out the shape; Phase 3 fills in the reverse-proxy
 specifics once auth and public exposure actually exist; later phases add the backup/restore
 and observability pieces as they're built.
 
+**Production moved off the original Synology DS1019+ target onto `bercy`, an Intel NUC6i55SYH**
+(Ubuntu Server 26.04 LTS, rootless Podman, systemd Quadlet units — see `quadlet/`) — the
+Synology-specific runbook this document used to describe (DSM Container Manager, Docker,
+`compose.nas.yml`, the Celeron J3455's no-AVX/AVX2 constraint) no longer applies to production.
+It's kept only as prior art in git history if the NAS is ever pressed back into service for
+something else.
+
 ## Environments
 
 | | Dev | Production |
 |---|---|---|
-| Host | Windows 10, Podman Desktop | Synology DS1019+, DSM 7.x Container Manager (Docker) |
-| CPU | whatever your dev machine has | Intel Celeron J3455 (Goldmont, **no AVX/AVX2**, 4 cores, 1.5GHz) |
-| RAM budget | not constrained | ~1.5GB for the whole stack (8GB total, shared with DSM) |
+| Host | Windows 10, Podman Desktop | `bercy`: Intel NUC6i55SYH, Ubuntu Server 26.04 LTS, rootless Podman |
+| CPU | whatever your dev machine has | Intel Core i5-6260U (Skylake, **has AVX/AVX2**, 4 threads, 1.8GHz) |
+| RAM budget | not constrained | 32GB total — no meaningful budget pressure, unlike the old NAS |
 | Build location | here | **never** — see below |
-| Ingress | `localhost:<port>` | DSM reverse proxy only, TLS-terminated |
+| Ingress | `localhost:<port>` | published to the host (`8000`/`8080`), fronted by your existing reverse proxy pointed at bercy's LAN IP |
+| Orchestration | Compose (`compose.yaml` + `compose.override.yml`) | systemd Quadlet units (`quadlet/`), no Compose |
 
-## Golden rule: never build on the NAS
+Since production hardware now has AVX2, the x86-64-v2 CFLAGS cap in the Dockerfiles and the
+AVX-masked (Westmere) CI smoke test are no longer load-bearing for deployment — they're left in
+place for now since they cost nothing and don't hurt, but are candidates to simplify away in a
+future pass if the NAS is fully retired. Not done as part of this change to keep this rewrite
+scoped to the deploy mechanism itself.
 
-A Vite build or a Python wheel compile on a J3455 is measured in double-digit minutes. All
-images are built on Windows (manually, via Podman) or in GitHub Actions (CI), tagged, and
-pushed to **GHCR** (`ghcr.io/<owner>/perseverer-{api,worker,frontend}`). The NAS
-only ever pulls, using Docker (DSM Container Manager) — the two engines never need to
-interoperate directly, only agree on the OCI image format, which they do.
+## Golden rule: never build on bercy
+
+A Vite build or a Python wheel compile has no hard reason to avoid bercy's i5 the way it did the
+J3455, but the "build on Windows/CI, only ever pull on the deploy host" split is kept anyway —
+it's what keeps the deploy host's job simple (pull, verify a digest, restart) and reproducible
+regardless of which machine ends up hosting production next. All images are built on Windows
+(manually, via Podman) or in GitHub Actions (CI), tagged, and pushed to **GHCR**
+(`ghcr.io/jcatrouillet/perseverer-{api,worker,frontend}`). bercy only ever pulls.
 
 ## Dev loop (Windows, Podman Desktop)
 
@@ -49,9 +64,9 @@ podman compose up --build
 curl http://localhost:8008/api/v1/healthz
 ```
 
-`compose.yaml`/`compose.override.yml`/`compose.nas.yml` are plain Compose Specification files
-with no Docker-only extensions, so `podman compose` works the same way `docker compose` would
-— it auto-merges `compose.yaml` + `compose.override.yml`, no `-f` flags needed. The override
+`compose.yaml`/`compose.override.yml` are plain Compose Specification files with no Docker-only
+extensions, so `podman compose` works the same way `docker compose` would — it auto-merges the
+two, no `-f` flags needed. The override
 publishes the API on `DEV_API_PUBLISHED_PORT` (default 8008 — deliberately not 8000, which
 collided with an unrelated local process) and the frontend on
 `DEV_FRONTEND_PUBLISHED_PORT` (default 5173). There is no live-reload wired up yet (Phase 0
@@ -64,8 +79,8 @@ directly on the host instead of through the container, for HMR
 `http://localhost:5173`; Vite falls back to `5174`, `5175`, ... if that port is taken, so add
 whichever it actually reports) or the browser blocks every request at the CORS preflight step.
 
-If you ever need the Docker CLI locally (e.g. to sanity-check an image before it reaches the
-NAS), Podman Desktop can also emulate the `docker` command; not required for the dev loop
+If you ever need the Docker CLI locally (e.g. to sanity-check an image before it reaches
+bercy), Podman Desktop can also emulate the `docker` command; not required for the dev loop
 above.
 
 **Known issue: the podman `api` container's named volume corrupts `perseverer.db` on
@@ -82,46 +97,77 @@ uv run uvicorn perseverer.api.main:app --host 0.0.0.0 --port 8008
 ```
 Reserve `podman compose up --build` (api container included) for occasionally confirming the
 container still builds/runs — not for iterative dev work. Unconfirmed whether this reproduces
-on the NAS (native Linux/Docker storage, not the same virtualized volume backend) — treat as
+on bercy (native Linux storage, not the same virtualized volume backend) — treat as
 Windows-dev-specific until shown otherwise.
 
-## NAS deploy
+## bercy deploy (rootless Podman + Quadlet, no Compose)
 
-The NAS runs Docker (DSM Container Manager), not Podman — this step is unaffected by the dev
-engine choice.
-
-```bash
-# one-time: authenticate the NAS's docker CLI/Container Manager to pull from GHCR
-docker compose -f compose.yaml -f compose.nas.yml pull
-docker compose -f compose.yaml -f compose.nas.yml up -d
-```
-
-`compose.nas.yml`:
-- Publishes **no ports to the host** — the DSM reverse proxy is the sole ingress.
-- Sets `user: ${NAS_UID}:${NAS_GID}` on `api`/`worker` so they can write to the bind-mounted
-  data directory without running as root.
-- Caps `worker` at `cpus: 1.0` (ingestion must never starve the API or DSM) and each service's
-  `mem_limit` so the whole stack stays inside the ~1.5GB budget.
+`quadlet/*.container` are systemd Quadlet unit files — Podman's native systemd integration,
+not Compose. Each `.container` file is a plain INI unit (`[Unit]`/`[Container]`/`[Service]`/
+`[Install]`) that systemd's own `podman-user-generator` turns into a regular `systemctl --user`
+service on `daemon-reload`. This runs entirely rootless: `prez`'s own user session, no root
+daemon, no privileged install. See `quadlet/perseverer-api.container` for the design notes
+(bind mount vs. named volume, `AutoUpdate=registry`, the shared env file) — `worker`/`frontend`
+follow the same shape.
 
 ### One-time host setup
 
-1. Create the data directory on a DSM shared folder, e.g. `/volume1/docker/perseverer/data`.
-2. `chown` it to the UID/GID the containers run as (`NAS_UID`/`NAS_GID` in `.env` — default
-   1000:1000, confirm against whatever DSM assigns your Docker user):
+1. **Data directory + ownership.** The Quadlet units bind-mount `/home/prez/perseverer/data`
+   (not a Podman-managed named volume — this project's whole ethos is an inspectable,
+   directly-browsable archive, not something opaque under Podman's storage tree). The
+   Dockerfiles' own `USER perseverer` (uid 1000 *inside* the container) needs the host directory
+   owned to match under rootless Podman's user-namespace remapping — `podman unshare` runs a
+   command inside that namespace so the uid arithmetic (subuid range, not literally "1000") is
+   handled for you:
    ```bash
-   sudo chown -R 1000:1000 /volume1/docker/perseverer/data
+   mkdir -p /home/prez/perseverer/data
+   podman unshare chown -R 1000:1000 /home/prez/perseverer/data
    ```
-   Synology's shared-folder permissions and the container's UID must agree, or writes
-   (SQLite, raw archive, Parquet) will fail silently into a read-only-feeling mount.
-3. Copy `.env.example` to `.env` on the NAS and fill in `NAS_DATA_DIR`, `NAS_UID`, `NAS_GID`,
-   `GHCR_IMAGE_PREFIX`, `IMAGE_TAG`.
+2. **Env file.** Copy `quadlet/perseverer.env.example` to
+   `~/.config/containers/systemd/perseverer.env` on bercy and fill in the secrets
+   (`PERSEVERER_API_KEY`, `PERSEVERER_JWT_SECRET`, `PERSEVERER_CORS_ALLOWED_ORIGINS`,
+   `PERSEVERER_API_BASE_URL`, Garmin/Eufy settings). Never commit this file. All three
+   containers read it via `EnvironmentFile=` — each just ignores the keys it doesn't use.
+3. **GHCR auth**, if the packages are private:
+   ```bash
+   podman login ghcr.io -u <github-username>
+   ```
+4. **Install the units and start them:**
+   ```bash
+   podman quadlet install quadlet/perseverer-api.container \
+     quadlet/perseverer-worker.container quadlet/perseverer-frontend.container
+   systemctl --user enable --now perseverer-api perseverer-worker perseverer-frontend
+   ```
+5. **Auto-update on new pushes.** Each unit sets `AutoUpdate=registry` (checks GHCR for a newer
+   digest under the same `:latest` tag and restarts in place) — this only actually runs on a
+   schedule once the stock timer is enabled:
+   ```bash
+   systemctl --user enable --now podman-auto-update.timer
+   ```
+6. **Survive logout / start on boot**, since this is a rootless *user* session with no one
+   permanently logged in:
+   ```bash
+   sudo loginctl enable-linger prez
+   ```
+
+### Redeploying after a new image push
+
+```bash
+podman auto-update                      # or just wait for the timer
+# or, to force a specific unit right now regardless of digest:
+systemctl --user restart perseverer-api
+```
 
 ## Reverse proxy, TLS, and the double-NAT/split-horizon-DNS constraint (Phase 3+)
 
-You already run DSM's built-in reverse proxy with a Let's Encrypt certificate issued via
-DNS-01 — this stack reuses that certificate and proxy rather than adding a second ACME client
-or terminating TLS in the app containers. The app containers bind to the compose network only
-and are never published directly to the host.
+You already run a reverse proxy with a Let's Encrypt certificate issued via DNS-01 (DSM's
+built-in one, on the same Synology box that used to also run the app containers) — this stack
+reuses that certificate and proxy rather than adding a second ACME client or terminating TLS in
+the app containers. What changed with the move to bercy: the proxy no longer reaches a
+container directly over a shared Docker network the way it could when both lived on the same
+DSM host — bercy's Quadlet units publish `8000` (api) and `8080` (frontend) to the host
+directly (see "bercy deploy" above), so point the proxy's upstream at bercy's LAN IP on those
+ports instead of whatever container reference it used to target.
 
 Your network is double-NAT (ISP router + UniFi) and internal access relies on split-horizon
 DNS, not hairpin NAT — **the public hostname does not necessarily resolve the same way inside
@@ -143,12 +189,13 @@ real per-athlete authentication instead (password login issuing a JWT, or a stan
 API key; see ADR 0008). `sync athlete set-password` / `sync athlete create-key` provision an
 athlete's credentials.
 
-TODO (still open): document the exact DSM reverse-proxy rule (hostname → `frontend`/`api`
-service + port), the header-forwarding configuration, and the certificate path — this needs the
-user's actual DSM configuration, not something decidable from this repo alone. Also still open:
-there is currently no migration step for the containerized deploy's data volume in this runbook
-at all (`docker compose ... up -d` alone does not run `alembic upgrade head` against it) — a gap
-this phase found but did not fix, since it predates Phase 5 and isn't specific to it.
+TODO (still open): document the exact reverse-proxy rule now pointing at bercy (hostname →
+`bercy:8080`/`bercy:8000`), the header-forwarding configuration, and the certificate path — this
+needs the user's actual proxy configuration, not something decidable from this repo alone. Also
+still open: there is currently no migration step for the containerized deploy's data volume in
+this runbook at all (starting the Quadlet units alone does not run `alembic upgrade head`
+against the bind-mounted database) — a gap this phase found but did not fix, since it predates
+Phase 5 and isn't specific to it.
 
 ## One-time backfills
 

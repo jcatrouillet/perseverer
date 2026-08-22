@@ -1,0 +1,22 @@
+# See perseverer-api.container for the shared design notes (bind mount, AutoUpdate, env file).
+
+[Unit]
+Description=Perseverer background sync worker
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=ghcr.io/jcatrouillet/perseverer-worker:latest
+ContainerName=perseverer-worker
+AutoUpdate=registry
+EnvironmentFile=%h/.config/containers/systemd/perseverer.env
+Environment=PERSEVERER_DATA_DIR=/data
+Volume=/home/prez/perseverer/data:/data
+# Ingestion must never starve the API or the host -- matches compose.nas.yml's own cap.
+PodmanArgs=--cpus=1.0 --memory=512m
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

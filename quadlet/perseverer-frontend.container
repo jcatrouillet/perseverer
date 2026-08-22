@@ -1,0 +1,24 @@
+# See perseverer-api.container for the shared design notes. No data volume -- the frontend
+# image is stateless (static assets + nginx), same as compose.yaml's frontend service.
+
+[Unit]
+Description=Perseverer frontend
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=ghcr.io/jcatrouillet/perseverer-frontend:latest
+ContainerName=perseverer-frontend
+AutoUpdate=registry
+# Regenerates frontend/public/config.js at container start from PERSEVERER_API_BASE_URL (see
+# docker/frontend-entrypoint.d) -- pulled from the same shared env file as api/worker even
+# though frontend only reads this one key from it.
+EnvironmentFile=%h/.config/containers/systemd/perseverer.env
+PublishPort=8080:80
+PodmanArgs=--memory=128m
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

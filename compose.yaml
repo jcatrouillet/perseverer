@@ -1,15 +1,15 @@
 name: perseverer
 
-# Base service definitions. No ports published and no bind mounts here — see
-# compose.override.yml (dev/Windows, auto-merged) and compose.nas.yml (NAS, applied via -f).
-#
-# `image:` here is a purely local build tag — GHCR_IMAGE_PREFIX/IMAGE_TAG are deliberately
-# NOT referenced in this file. They only apply in compose.nas.yml, which overrides `image:`
-# entirely for the pull-only NAS deploy. (An earlier version used
-# `${GHCR_IMAGE_PREFIX:-perseverer-api}:${IMAGE_TAG:-local}` here — the `:-default` fallback
-# only kicks in when the variable is fully unset, so once .env sets GHCR_IMAGE_PREFIX for the
-# NAS, all three services silently collapsed onto the same image name. Decoupling local
-# build tags from the registry prefix avoids that whole bug class.)
+# Base service definitions, for local dev only (Windows/Podman Desktop) — see
+# compose.override.yml (auto-merged) for the published-port overlay. Production (bercy) uses
+# systemd Quadlet units instead (quadlet/), not Compose at all — see docs/DEPLOY.md. This file
+# used to also have a compose.nas.yml overlay for the original Synology deploy target; that's
+# gone now that production moved to bercy's Quadlet-based deploy, along with the
+# GHCR_IMAGE_PREFIX/IMAGE_TAG variables it alone used to reference (an earlier version of this
+# file referenced them directly here too — `${GHCR_IMAGE_PREFIX:-perseverer-api}:${IMAGE_TAG:-
+# local}` — which silently collapsed onto one shared image name once GHCR_IMAGE_PREFIX was set
+# for that overlay; decoupling local build tags from any registry prefix avoided that bug class,
+# and remains true now with no NAS overlay to decouple from at all).
 
 services:
   api:
