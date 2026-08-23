@@ -22,6 +22,7 @@ import {
 } from "recharts";
 
 import type { ActivityWorkoutOut, LapOut, StreamResponse } from "../api/types";
+import { ChartFullscreen } from "./ChartFullscreen";
 import type { IconName } from "./Icon";
 import { gapSeriesMinPerKm } from "../gap";
 import { toneColor, type Tone } from "../metricStyle";
@@ -259,16 +260,16 @@ export function ActivityCharts({
             if (range == null || i >= lapBoundaries.length - 1) return null;
             return { start: lapBoundaries[i]!, end: lapBoundaries[i + 1]!, slowMinPerKm: range[1] };
           })
-          .filter(
-            (b): b is { start: number; end: number; slowMinPerKm: number } => b != null,
-          )
+          .filter((b): b is { start: number; end: number; slowMinPerKm: number } => b != null)
       : [];
 
   // The hovered Intervals-table row's own time range, in the same elapsed-seconds terms as
   // lapBands above -- `laps` and `lapBoundaries` are built from the same ordered list, so the
   // lap at `highlightLapIndex` maps directly onto boundary index `highlightLapIndex`/`+1`.
   const highlightRange: [number, number] | null =
-    highlightLapIndex != null && highlightLapIndex >= 0 && highlightLapIndex < lapBoundaries.length - 1
+    highlightLapIndex != null &&
+    highlightLapIndex >= 0 &&
+    highlightLapIndex < lapBoundaries.length - 1
       ? [lapBoundaries[highlightLapIndex]!, lapBoundaries[highlightLapIndex + 1]!]
       : null;
 
@@ -297,7 +298,8 @@ export function ActivityCharts({
   const speedWithPausesMarked = stream.series.speed_mps?.map((v, i) =>
     postPauseIndices.has(i) ? null : v,
   );
-  const cleanedSpeed = speedWithPausesMarked != null ? rejectSpeedOutliers(speedWithPausesMarked) : undefined;
+  const cleanedSpeed =
+    speedWithPausesMarked != null ? rejectSpeedOutliers(speedWithPausesMarked) : undefined;
 
   // GAP isn't a raw stream channel -- it's derived from distance_m + altitude_m + the same
   // speed_mps->pace conversion the Pace panel already does -- so it's computed once here onto a
@@ -306,7 +308,10 @@ export function ActivityCharts({
   // altitude data to derive a grade from).
   const paceSeries = cleanedSpeed?.map((v) => streamSpeedValue(sport, v)) ?? [];
   const gapSeries =
-    isPaceSport(sport) && cleanedSpeed != null && stream.series.distance_m != null && stream.series.altitude_m != null
+    isPaceSport(sport) &&
+    cleanedSpeed != null &&
+    stream.series.distance_m != null &&
+    stream.series.altitude_m != null
       ? gapSeriesMinPerKm(stream.series.distance_m, stream.series.altitude_m, paceSeries)
       : null;
   const series: Record<string, (number | null)[]> = {
@@ -352,146 +357,189 @@ export function ActivityCharts({
         const isLastPanel = panelIndex === panels.length - 1;
         return (
           <div className="activity-charts__panel" key={panel.key}>
-            <h4>
-              <span className={`icon-chip tone-${panel.tone}`}>
-                <Icon name={panel.icon} />
-              </span>
-              {panel.title}
-            </h4>
-            <ResponsiveContainer width="100%" height={92}>
-              {panel.kind === "area" ? (
-                <AreaChart data={data} syncId="activity-charts" margin={{ top: 2, right: 12, bottom: 0, left: 0 }}>
-                  <defs>
-                    <linearGradient id={`activity-chart-fill-${panel.key}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={color} stopOpacity={0.32} />
-                      <stop offset="100%" stopColor={color} stopOpacity={0.03} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="t"
-                    type="number"
-                    domain={[0, "dataMax"]}
-                    stroke="var(--color-text-muted)"
-                    fontSize={11}
-                    tickFormatter={formatClockDuration}
-                    hide={!isLastPanel}
-                  />
-                  <YAxis stroke="var(--color-text-muted)" fontSize={11} width={40} domain={["auto", "auto"]} />
-                  {lapBands
-                    .filter((b) => b.shaded)
-                    .map((b) => (
-                      <ReferenceArea
-                        key={b.start}
-                        x1={b.start}
-                        x2={b.end}
-                        fill="var(--color-text-faint)"
-                        fillOpacity={0.08}
-                        stroke="none"
-                        ifOverflow="visible"
-                      />
-                    ))}
-                  {highlightRange && (
-                    <ReferenceArea
-                      x1={highlightRange[0]}
-                      x2={highlightRange[1]}
-                      fill="var(--color-load)"
-                      fillOpacity={0.18}
-                      stroke="var(--color-load)"
-                      strokeOpacity={0.5}
-                      ifOverflow="visible"
+            <ChartFullscreen
+              as="h4"
+              title={panel.title}
+              titlePrefix={
+                <span className={`icon-chip tone-${panel.tone}`}>
+                  <Icon name={panel.icon} />
+                </span>
+              }
+            >
+              <ResponsiveContainer width="100%" height={92}>
+                {panel.kind === "area" ? (
+                  <AreaChart
+                    data={data}
+                    syncId="activity-charts"
+                    margin={{ top: 2, right: 12, bottom: 0, left: 0 }}
+                  >
+                    <defs>
+                      <linearGradient
+                        id={`activity-chart-fill-${panel.key}`}
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop offset="0%" stopColor={color} stopOpacity={0.32} />
+                        <stop offset="100%" stopColor={color} stopOpacity={0.03} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="t"
+                      type="number"
+                      domain={[0, "dataMax"]}
+                      stroke="var(--color-text-muted)"
+                      fontSize={11}
+                      tickFormatter={formatClockDuration}
+                      hide={!isLastPanel}
                     />
-                  )}
-                  {lapMarks.map((t) => (
-                    <ReferenceLine key={t} x={t} stroke="var(--color-text-faint)" strokeDasharray="2 2" />
-                  ))}
-                  <Tooltip content={panelTooltipContent(panel)} />
-                  <Area
-                    type="monotone"
-                    dataKey="v"
-                    stroke={color}
-                    fill={`url(#activity-chart-fill-${panel.key})`}
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                    connectNulls
-                  />
-                </AreaChart>
-              ) : (
-                <ComposedChart data={chartData} syncId="activity-charts" margin={{ top: 2, right: 12, bottom: 0, left: 0 }}>
-                  <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="t"
-                    type="number"
-                    domain={[0, "dataMax"]}
-                    stroke="var(--color-text-muted)"
-                    fontSize={11}
-                    tickFormatter={formatClockDuration}
-                    hide={!isLastPanel}
-                  />
-                  <YAxis stroke="var(--color-text-muted)" fontSize={11} width={40} domain={["auto", "auto"]} />
-                  {lapBands
-                    .filter((b) => b.shaded)
-                    .map((b) => (
+                    <YAxis
+                      stroke="var(--color-text-muted)"
+                      fontSize={11}
+                      width={40}
+                      domain={["auto", "auto"]}
+                    />
+                    {lapBands
+                      .filter((b) => b.shaded)
+                      .map((b) => (
+                        <ReferenceArea
+                          key={b.start}
+                          x1={b.start}
+                          x2={b.end}
+                          fill="var(--color-text-faint)"
+                          fillOpacity={0.08}
+                          stroke="none"
+                          ifOverflow="visible"
+                        />
+                      ))}
+                    {highlightRange && (
                       <ReferenceArea
-                        key={b.start}
-                        x1={b.start}
-                        x2={b.end}
-                        fill="var(--color-text-faint)"
-                        fillOpacity={0.08}
-                        stroke="none"
+                        x1={highlightRange[0]}
+                        x2={highlightRange[1]}
+                        fill="var(--color-load)"
+                        fillOpacity={0.18}
+                        stroke="var(--color-load)"
+                        strokeOpacity={0.5}
                         ifOverflow="visible"
                       />
+                    )}
+                    {lapMarks.map((t) => (
+                      <ReferenceLine
+                        key={t}
+                        x={t}
+                        stroke="var(--color-text-faint)"
+                        strokeDasharray="2 2"
+                      />
                     ))}
-                  {/* The planned workout's target pace, shown as a grey step area filled down to
+                    <Tooltip content={panelTooltipContent(panel)} />
+                    <Area
+                      type="monotone"
+                      dataKey="v"
+                      stroke={color}
+                      fill={`url(#activity-chart-fill-${panel.key})`}
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                      connectNulls
+                    />
+                  </AreaChart>
+                ) : (
+                  <ComposedChart
+                    data={chartData}
+                    syncId="activity-charts"
+                    margin={{ top: 2, right: 12, bottom: 0, left: 0 }}
+                  >
+                    <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="t"
+                      type="number"
+                      domain={[0, "dataMax"]}
+                      stroke="var(--color-text-muted)"
+                      fontSize={11}
+                      tickFormatter={formatClockDuration}
+                      hide={!isLastPanel}
+                    />
+                    <YAxis
+                      stroke="var(--color-text-muted)"
+                      fontSize={11}
+                      width={40}
+                      domain={["auto", "auto"]}
+                    />
+                    {lapBands
+                      .filter((b) => b.shaded)
+                      .map((b) => (
+                        <ReferenceArea
+                          key={b.start}
+                          x1={b.start}
+                          x2={b.end}
+                          fill="var(--color-text-faint)"
+                          fillOpacity={0.08}
+                          stroke="none"
+                          ifOverflow="visible"
+                        />
+                      ))}
+                    {/* The planned workout's target pace, shown as a grey step area filled down to
                       the chart's bottom edge -- matching Garmin Connect's own rendering (no
                       on-chart text: the exact numbers are already in the workout panel above). */}
-                  {panel.key === "speed_mps" && workoutBands.length > 0 && (
-                    <Area
-                      type="stepAfter"
-                      dataKey="target"
-                      stroke="none"
-                      fill="var(--color-text-faint)"
-                      fillOpacity={0.35}
+                    {panel.key === "speed_mps" && workoutBands.length > 0 && (
+                      <Area
+                        type="stepAfter"
+                        dataKey="target"
+                        stroke="none"
+                        fill="var(--color-text-faint)"
+                        fillOpacity={0.35}
+                        isAnimationActive={false}
+                        connectNulls={false}
+                      />
+                    )}
+                    {highlightRange && (
+                      <ReferenceArea
+                        x1={highlightRange[0]}
+                        x2={highlightRange[1]}
+                        fill="var(--color-load)"
+                        fillOpacity={0.18}
+                        stroke="var(--color-load)"
+                        strokeOpacity={0.5}
+                        ifOverflow="visible"
+                      />
+                    )}
+                    {lapMarks.map((t) => (
+                      <ReferenceLine
+                        key={t}
+                        x={t}
+                        stroke="var(--color-text-faint)"
+                        strokeDasharray="2 2"
+                      />
+                    ))}
+                    {panel.key === "speed_mps" && expectedPaceMinPerKm != null && (
+                      <ReferenceLine
+                        y={expectedPaceMinPerKm}
+                        stroke="var(--color-text-muted)"
+                        strokeDasharray="4 4"
+                        label={{
+                          value: "Avg",
+                          position: "insideTopRight",
+                          fill: "var(--color-text-muted)",
+                          fontSize: 11,
+                        }}
+                      />
+                    )}
+                    <Tooltip content={panelTooltipContent(panel)} />
+                    <Line
+                      type="monotone"
+                      dataKey="v"
+                      stroke={color}
+                      strokeWidth={2}
+                      dot={false}
                       isAnimationActive={false}
-                      connectNulls={false}
+                      connectNulls
                     />
-                  )}
-                  {highlightRange && (
-                    <ReferenceArea
-                      x1={highlightRange[0]}
-                      x2={highlightRange[1]}
-                      fill="var(--color-load)"
-                      fillOpacity={0.18}
-                      stroke="var(--color-load)"
-                      strokeOpacity={0.5}
-                      ifOverflow="visible"
-                    />
-                  )}
-                  {lapMarks.map((t) => (
-                    <ReferenceLine key={t} x={t} stroke="var(--color-text-faint)" strokeDasharray="2 2" />
-                  ))}
-                  {panel.key === "speed_mps" && expectedPaceMinPerKm != null && (
-                    <ReferenceLine
-                      y={expectedPaceMinPerKm}
-                      stroke="var(--color-text-muted)"
-                      strokeDasharray="4 4"
-                      label={{ value: "Avg", position: "insideTopRight", fill: "var(--color-text-muted)", fontSize: 11 }}
-                    />
-                  )}
-                  <Tooltip content={panelTooltipContent(panel)} />
-                  <Line
-                    type="monotone"
-                    dataKey="v"
-                    stroke={color}
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                    connectNulls
-                  />
-                </ComposedChart>
-              )}
-            </ResponsiveContainer>
+                  </ComposedChart>
+                )}
+              </ResponsiveContainer>
+            </ChartFullscreen>
           </div>
         );
       })}

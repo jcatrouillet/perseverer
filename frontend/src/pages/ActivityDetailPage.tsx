@@ -36,6 +36,7 @@ import {
   ActivityStatsGridSecondary,
 } from "../components/ActivityStatsGrid";
 import { ActivityWeather } from "../components/ActivityWeather";
+import { ChartFullscreen } from "../components/ChartFullscreen";
 import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
 import { PaceVariabilityChart } from "../components/PaceVariabilityChart";
@@ -215,8 +216,13 @@ export function ActivityDetailPage({ id }: { id: string }) {
           {weather.data && <ActivityWeather weather={weather.data} />}
           {paceVariability && (
             <div className="activity-detail__pace-variability">
-              <h3 className="activity-detail__weather-heading">Pace variability</h3>
-              <PaceVariabilityChart result={paceVariability} />
+              <ChartFullscreen
+                as="h3"
+                className="activity-detail__weather-heading"
+                title="Pace variability"
+              >
+                <PaceVariabilityChart result={paceVariability} />
+              </ChartFullscreen>
             </div>
           )}
         </div>

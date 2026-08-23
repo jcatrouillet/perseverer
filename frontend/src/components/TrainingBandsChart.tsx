@@ -26,6 +26,7 @@ import { useLocation } from "wouter";
 
 import { usePaceBands, usePaceBandsByActivity } from "../api/queries";
 import type { ActivityPaceBandsOut, PaceBandOut } from "../api/types";
+import { ChartFullscreen } from "./ChartFullscreen";
 import { parseIsoDate } from "../dateUtils";
 import { formatDurationHM } from "../runningStats";
 import "../styles/training-bands.css";
@@ -192,7 +193,10 @@ function estimateBarWidthPx(rows: CompositionRow[]): number {
   const totalSpanMs = rows[rows.length - 1]!.ts - rows[0]!.ts;
   if (totalSpanMs <= 0) return MIN_BAR_WIDTH_PX;
   const pxPerMs = PLOT_WIDTH_PX / totalSpanMs;
-  return Math.min(MAX_BAR_WIDTH_PX, Math.max(MIN_BAR_WIDTH_PX, targetGapMs * pxPerMs * WIDEN_BUFFER));
+  return Math.min(
+    MAX_BAR_WIDTH_PX,
+    Math.max(MIN_BAR_WIDTH_PX, targetGapMs * pxPerMs * WIDEN_BUFFER),
+  );
 }
 
 // Bottom (0%) to top (100%) of the stack, same slow-to-fast order the real stacked <Bar/>
@@ -329,7 +333,11 @@ export function TrainingBandsChart() {
   const useYearTicks = spanDays > 540;
   const yearTicks: number[] = [];
   if (useYearTicks && firstTs != null && lastTs != null) {
-    for (let year = new Date(firstTs).getUTCFullYear(); year <= new Date(lastTs).getUTCFullYear(); year++) {
+    for (
+      let year = new Date(firstTs).getUTCFullYear();
+      year <= new Date(lastTs).getUTCFullYear();
+      year++
+    ) {
       yearTicks.push(Date.UTC(year, 0, 1));
     }
   }
@@ -341,163 +349,189 @@ export function TrainingBandsChart() {
 
   return (
     <section className="card training-bands training-bands--wide">
-      <h2>Training bands</h2>
+      {/* Wraps the whole section (all three charts), not each chart separately: the
+          composition/aggregate/duration charts below are interactively coupled (clicking the
+          aggregate bar filters the composition chart above it, clicking a duration bar
+          navigates to that activity) -- fullscreening just one would either lose that coupling
+          or need three separate, confusingly overlapping click targets for what reads as one
+          connected visualization. */}
+      <ChartFullscreen as="h2" title="Training bands">
+        {hasCompositionData && (
+          <>
+            <p className="chart-note">
+              {selectedLabel == null ? (
+                <>
+                  Every run as its own bar -- the share of that one run spent at each pace, second
+                  by second across its own speed stream. Slow paces sit at the bottom, fast at the
+                  top. Click a pace in the chart below to isolate it here.
+                </>
+              ) : (
+                <>
+                  Showing only {selectedLabel === WALK_LABEL ? "walk pace" : `${selectedLabel} /km`}
+                  , as a share of each run.{" "}
+                  <button
+                    type="button"
+                    className="training-bands__reset"
+                    onClick={() => setSelectedLabel(null)}
+                  >
+                    Show every pace
+                  </button>
+                </>
+              )}
+            </p>
+            <ResponsiveContainer width="100%" height={360}>
+              <BarChart data={compositionRows} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="ts"
+                  type="number"
+                  scale="time"
+                  domain={["dataMin", "dataMax"]}
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  tickFormatter={useYearTicks ? formatYearTick : formatMonthTick}
+                  ticks={useYearTicks ? yearTicks : undefined}
+                />
+                <YAxis
+                  type="number"
+                  domain={[0, 100]}
+                  allowDataOverflow
+                  tickFormatter={(v: number) => String(Math.round(v))}
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  width={40}
+                  unit="%"
+                />
+                <Tooltip
+                  content={CompositionTooltip}
+                  cursor={{ fill: "var(--color-surface-raised)" }}
+                />
+                <CompositionBars
+                  rows={compositionRows}
+                  barWidthPx={barWidthPx}
+                  selectedLabel={selectedLabel}
+                />
+                {BAND_LABELS_SLOW_TO_FAST.map((label) => (
+                  <Bar
+                    key={label}
+                    dataKey={(row: CompositionRow) => row.pctByLabel[label] ?? 0}
+                    stackId="composition"
+                    // Invisible -- the real, wider bars are CompositionBars above. This one stays
+                    // mounted purely so Recharts' own stacking math, Tooltip hover-tracking, and
+                    // click handling (goToActivity) keep working: fillOpacity 0 hides the paint
+                    // without affecting hit-testing, which SVG bases on the fill being *set*, not
+                    // its opacity.
+                    fill={BAND_COLORS[label] ?? FALLBACK_COLOR}
+                    fillOpacity={0}
+                    isAnimationActive={false}
+                    cursor="pointer"
+                    onClick={goToActivity}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </>
+        )}
 
-      {hasCompositionData && (
-        <>
-          <p className="chart-note">
-            {selectedLabel == null ? (
-              <>
-                Every run as its own bar -- the share of that one run spent at each pace, second
-                by second across its own speed stream. Slow paces sit at the bottom, fast at the
-                top. Click a pace in the chart below to isolate it here.
-              </>
-            ) : (
-              <>
-                Showing only {selectedLabel === WALK_LABEL ? "walk pace" : `${selectedLabel} /km`}
-                , as a share of each run.{" "}
-                <button
-                  type="button"
-                  className="training-bands__reset"
-                  onClick={() => setSelectedLabel(null)}
-                >
-                  Show every pace
-                </button>
-              </>
-            )}
-          </p>
-          <ResponsiveContainer width="100%" height={360}>
-            <BarChart data={compositionRows} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="ts"
-                type="number"
-                scale="time"
-                domain={["dataMin", "dataMax"]}
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                tickFormatter={useYearTicks ? formatYearTick : formatMonthTick}
-                ticks={useYearTicks ? yearTicks : undefined}
-              />
-              <YAxis
-                type="number"
-                domain={[0, 100]}
-                allowDataOverflow
-                tickFormatter={(v: number) => String(Math.round(v))}
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                width={40}
-                unit="%"
-              />
-              <Tooltip content={CompositionTooltip} cursor={{ fill: "var(--color-surface-raised)" }} />
-              <CompositionBars rows={compositionRows} barWidthPx={barWidthPx} selectedLabel={selectedLabel} />
-              {BAND_LABELS_SLOW_TO_FAST.map((label) => (
+        {hasAggregateData && (
+          <>
+            <p className="chart-note">
+              Total time spent at each pace, summed across the whole running history. Click a pace
+              to isolate it in the chart above.
+            </p>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={aggregateRows} margin={{ top: 8, right: 16, bottom: 48, left: 0 }}>
+                <CartesianGrid
+                  stroke="var(--color-border)"
+                  strokeDasharray="3 3"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="label"
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  interval={0}
+                  angle={-40}
+                  textAnchor="end"
+                  height={64}
+                />
+                <YAxis
+                  dataKey="hours"
+                  type="number"
+                  domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  width={40}
+                  unit="h"
+                />
+                <Tooltip
+                  content={AggregateTooltip}
+                  cursor={{ fill: "var(--color-surface-raised)" }}
+                />
                 <Bar
-                  key={label}
-                  dataKey={(row: CompositionRow) => row.pctByLabel[label] ?? 0}
-                  stackId="composition"
-                  // Invisible -- the real, wider bars are CompositionBars above. This one stays
-                  // mounted purely so Recharts' own stacking math, Tooltip hover-tracking, and
-                  // click handling (goToActivity) keep working: fillOpacity 0 hides the paint
-                  // without affecting hit-testing, which SVG bases on the fill being *set*, not
-                  // its opacity.
-                  fill={BAND_COLORS[label] ?? FALLBACK_COLOR}
-                  fillOpacity={0}
+                  dataKey="hours"
+                  isAnimationActive={false}
+                  cursor="pointer"
+                  onClick={(bar: { payload?: AggregateRow }) => {
+                    const label = bar.payload?.label;
+                    if (!label) return;
+                    setSelectedLabel((prev) => (prev === label ? null : label));
+                  }}
+                >
+                  {aggregateRows.map((row) => (
+                    <Cell
+                      key={row.label}
+                      fill={row.color}
+                      fillOpacity={selectedLabel == null || selectedLabel === row.label ? 1 : 0.3}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </>
+        )}
+
+        {hasCompositionData && (
+          <>
+            <p className="chart-note">Duration of each run -- always the full history.</p>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={compositionRows} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+                <XAxis
+                  dataKey="ts"
+                  type="number"
+                  scale="time"
+                  domain={["dataMin", "dataMax"]}
+                  hide
+                />
+                <YAxis
+                  dataKey="hours"
+                  type="number"
+                  domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  width={32}
+                  unit="h"
+                />
+                <Tooltip
+                  formatter={(value) => [value == null ? "No data" : `${value} h`, "Duration"]}
+                  labelFormatter={() => ""}
+                  contentStyle={{
+                    background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                />
+                <Bar
+                  dataKey="hours"
+                  fill="var(--color-text-faint)"
                   isAnimationActive={false}
                   cursor="pointer"
                   onClick={goToActivity}
                 />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </>
-      )}
-
-      {hasAggregateData && (
-        <>
-          <p className="chart-note">
-            Total time spent at each pace, summed across the whole running history. Click a pace
-            to isolate it in the chart above.
-          </p>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={aggregateRows} margin={{ top: 8, right: 16, bottom: 48, left: 0 }}>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="label"
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                interval={0}
-                angle={-40}
-                textAnchor="end"
-                height={64}
-              />
-              <YAxis
-                dataKey="hours"
-                type="number"
-                domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                width={40}
-                unit="h"
-              />
-              <Tooltip content={AggregateTooltip} cursor={{ fill: "var(--color-surface-raised)" }} />
-              <Bar
-                dataKey="hours"
-                isAnimationActive={false}
-                cursor="pointer"
-                onClick={(bar: { payload?: AggregateRow }) => {
-                  const label = bar.payload?.label;
-                  if (!label) return;
-                  setSelectedLabel((prev) => (prev === label ? null : label));
-                }}
-              >
-                {aggregateRows.map((row) => (
-                  <Cell
-                    key={row.label}
-                    fill={row.color}
-                    fillOpacity={selectedLabel == null || selectedLabel === row.label ? 1 : 0.3}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </>
-      )}
-
-      {hasCompositionData && (
-        <>
-          <p className="chart-note">Duration of each run -- always the full history.</p>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={compositionRows} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-              <XAxis dataKey="ts" type="number" scale="time" domain={["dataMin", "dataMax"]} hide />
-              <YAxis
-                dataKey="hours"
-                type="number"
-                domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                width={32}
-                unit="h"
-              />
-              <Tooltip
-                formatter={(value) => [value == null ? "No data" : `${value} h`, "Duration"]}
-                labelFormatter={() => ""}
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <Bar
-                dataKey="hours"
-                fill="var(--color-text-faint)"
-                isAnimationActive={false}
-                cursor="pointer"
-                onClick={goToActivity}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </>
-      )}
+              </BarChart>
+            </ResponsiveContainer>
+          </>
+        )}
+      </ChartFullscreen>
     </section>
   );
 }

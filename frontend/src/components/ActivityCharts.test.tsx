@@ -51,8 +51,11 @@ function lap(start_time_utc: string, index: number): LapOut {
 describe("ActivityCharts", () => {
   it("renders one panel per channel the activity actually has, and nothing else", () => {
     render(<ActivityCharts stream={stream()} laps={[]} sport="running" />);
-    expect(screen.getByText("Heart rate")).toBeInTheDocument();
-    expect(screen.getByText("Elevation")).toBeInTheDocument();
+    // getByRole, not getByText: ChartFullscreen's mobile tap-to-expand affordance renders each
+    // panel title twice (a real button plus an aria-hidden static span, CSS-toggled) --
+    // getByRole's accessible-name computation correctly excludes the aria-hidden copy.
+    expect(screen.getByRole("heading", { name: "Heart rate" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Elevation" })).toBeInTheDocument();
     // No power, cadence, temperature, or speed channel in this fixture.
     expect(screen.queryByText("Power")).not.toBeInTheDocument();
     expect(screen.queryByText("Cadence")).not.toBeInTheDocument();
@@ -67,7 +70,7 @@ describe("ActivityCharts", () => {
       series: { heart_rate: [80, 82, 81], respiration_rate: [14, 15, 14] },
     });
     render(<ActivityCharts stream={withRespiration} laps={[]} sport="training" />);
-    expect(screen.getByText("Respiration")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Respiration" })).toBeInTheDocument();
   });
 
   it("labels the speed panel 'Pace' for a foot sport and 'Speed' for a wheeled one", () => {
@@ -76,11 +79,11 @@ describe("ActivityCharts", () => {
       series: { speed_mps: [3.0, 3.2, 3.1] },
     });
     const { rerender } = render(<ActivityCharts stream={withSpeed} laps={[]} sport="running" />);
-    expect(screen.getByText("Pace")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Pace" })).toBeInTheDocument();
     expect(screen.queryByText("Speed")).not.toBeInTheDocument();
 
     rerender(<ActivityCharts stream={withSpeed} laps={[]} sport="cycling" />);
-    expect(screen.getByText("Speed")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Speed" })).toBeInTheDocument();
     expect(screen.queryByText("Pace")).not.toBeInTheDocument();
   });
 
@@ -115,7 +118,7 @@ describe("ActivityCharts", () => {
       },
     });
     render(<ActivityCharts stream={withElevation} laps={[]} sport="cycling" />);
-    expect(screen.getByText("Speed")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Speed" })).toBeInTheDocument();
     expect(screen.queryByText("Grade Adjusted Pace")).not.toBeInTheDocument();
   });
 

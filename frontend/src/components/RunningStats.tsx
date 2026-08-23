@@ -24,6 +24,7 @@ import {
 } from "recharts";
 
 import type { ActivitySummary } from "../api/types";
+import { ChartFullscreen } from "./ChartFullscreen";
 import { ChartLegend } from "./ChartLegend";
 import { Icon } from "./Icon";
 import { StatTile } from "./StatTile";
@@ -524,148 +525,159 @@ export function RunningStats({
 
       <div className="running-stats__charts">
         <div>
-          <h3>
-            {useDailyBuckets
-              ? "Distance per day"
-              : useYearRows
-                ? "Distance per year"
-                : "Distance per month"}
-          </h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={bucketData}>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="label"
-                interval={bucketTickInterval}
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-              />
-              <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <Bar dataKey="km" fill="var(--color-pace)" isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartFullscreen
+            as="h3"
+            title={
+              useDailyBuckets
+                ? "Distance per day"
+                : useYearRows
+                  ? "Distance per year"
+                  : "Distance per month"
+            }
+          >
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={bucketData}>
+                <CartesianGrid
+                  stroke="var(--color-border)"
+                  strokeDasharray="3 3"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="label"
+                  interval={bucketTickInterval}
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                />
+                <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                />
+                <Bar dataKey="km" fill="var(--color-pace)" isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFullscreen>
         </div>
 
         <div>
-          <h3>Trailing {trailingWindowDays}-day kilometers</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={rollingData}>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="local_date"
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                ticks={trailingTicks}
-                tickFormatter={trailingTickFormatter}
-              />
-              <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="km"
-                stroke="var(--color-pace)"
-                dot={false}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <ChartFullscreen as="h3" title={`Trailing ${trailingWindowDays}-day kilometers`}>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={rollingData}>
+                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="local_date"
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  ticks={trailingTicks}
+                  tickFormatter={trailingTickFormatter}
+                />
+                <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="km"
+                  stroke="var(--color-pace)"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartFullscreen>
         </div>
 
         <div>
-          <h3>Pace vs distance</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <ScatterChart>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="km"
-                type="number"
-                name="Distance"
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-              />
-              <YAxis
-                dataKey="pace"
-                type="number"
-                name="Pace"
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                width={40}
-                reversed
-                domain={["dataMin - 0.3", "dataMax + 0.3"]}
-                tickFormatter={(v: number) => formatMinPerKm(v)}
-              />
-              <Tooltip
-                cursor={{ strokeDasharray: "3 3" }}
-                formatter={(value, name) =>
-                  name === "Pace"
-                    ? [`${formatMinPerKm(Number(value))} /km`, name]
-                    : [`${value} km`, name]
-                }
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <Scatter
-                data={scatterData}
-                isAnimationActive={false}
-                cursor="pointer"
-                onClick={(point: { payload?: { id: string } }) => {
-                  if (point.payload) setLocation(`/activities/${point.payload.id}`);
-                }}
-              >
-                {scatterData.map((entry) => (
-                  <Cell key={entry.id} fill="var(--color-pace)" fillOpacity={entry.opacity} />
-                ))}
-              </Scatter>
-            </ScatterChart>
-          </ResponsiveContainer>
+          <ChartFullscreen as="h3" title="Pace vs distance">
+            <ResponsiveContainer width="100%" height={180}>
+              <ScatterChart>
+                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="km"
+                  type="number"
+                  name="Distance"
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                />
+                <YAxis
+                  dataKey="pace"
+                  type="number"
+                  name="Pace"
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  width={40}
+                  reversed
+                  domain={["dataMin - 0.3", "dataMax + 0.3"]}
+                  tickFormatter={(v: number) => formatMinPerKm(v)}
+                />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  formatter={(value, name) =>
+                    name === "Pace"
+                      ? [`${formatMinPerKm(Number(value))} /km`, name]
+                      : [`${value} km`, name]
+                  }
+                  contentStyle={{
+                    background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                />
+                <Scatter
+                  data={scatterData}
+                  isAnimationActive={false}
+                  cursor="pointer"
+                  onClick={(point: { payload?: { id: string } }) => {
+                    if (point.payload) setLocation(`/activities/${point.payload.id}`);
+                  }}
+                >
+                  {scatterData.map((entry) => (
+                    <Cell key={entry.id} fill="var(--color-pace)" fillOpacity={entry.opacity} />
+                  ))}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </ChartFullscreen>
         </div>
 
         <div>
-          <h3>Time of day</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <PieChart>
-              <Pie
-                data={amPmData}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={45}
-                outerRadius={70}
-                isAnimationActive={false}
-              >
-                <Cell fill="var(--color-pace)" />
-                <Cell fill="var(--color-elevation)" />
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <ChartLegend
-            center
-            items={[
-              { label: `AM ${am}`, color: "var(--color-pace)" },
-              { label: `PM ${pm}`, color: "var(--color-elevation)" },
-            ]}
-          />
-          <p className="running-stats__pie-caption">
-            {pmShare}% of runs are in the afternoon/evening (local time)
-          </p>
+          <ChartFullscreen as="h3" title="Time of day">
+            <ResponsiveContainer width="100%" height={180}>
+              <PieChart>
+                <Pie
+                  data={amPmData}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={45}
+                  outerRadius={70}
+                  isAnimationActive={false}
+                >
+                  <Cell fill="var(--color-pace)" />
+                  <Cell fill="var(--color-elevation)" />
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <ChartLegend
+              center
+              items={[
+                { label: `AM ${am}`, color: "var(--color-pace)" },
+                { label: `PM ${pm}`, color: "var(--color-elevation)" },
+              ]}
+            />
+            <p className="running-stats__pie-caption">
+              {pmShare}% of runs are in the afternoon/evening (local time)
+            </p>
+          </ChartFullscreen>
         </div>
       </div>
 

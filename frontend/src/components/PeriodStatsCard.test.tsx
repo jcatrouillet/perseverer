@@ -47,7 +47,12 @@ describe("PeriodStatsCard activities-by-type breakdown", () => {
       />,
     );
 
-    expect(screen.getByText("Activities by type")).toBeInTheDocument();
+    // getByRole, not getByText: ChartFullscreen's mobile-only "tap to expand" affordance
+    // (PeriodStatsCard.tsx) renders the title twice -- a real button (mobile) and an
+    // aria-hidden static span (desktop), toggled by CSS media query rather than JS, so both
+    // exist in the DOM regardless of test viewport. getByRole's accessible-name computation
+    // correctly excludes the aria-hidden copy; getByText would match both and throw.
+    expect(screen.getByRole("heading", { name: "Activities by type" })).toBeInTheDocument();
     expect(document.querySelector(".recharts-pie")).not.toBeNull();
     // No legend/list beside the pie -- reading values is hover-only via the Tooltip.
     expect(document.querySelector(".type-list")).toBeNull();

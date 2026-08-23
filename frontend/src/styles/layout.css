@@ -130,6 +130,53 @@ select {
   overflow-x: auto;
 }
 
+/* ChartFullscreen.tsx: mobile-only "tap a chart's title to see it bigger". Pure CSS toggle
+   between the static title (desktop) and the button (mobile) rather than a JS viewport check --
+   a display:none button can't be focused or clicked at all regardless of window size, so this
+   alone is what keeps the feature mobile-only, with no flash-of-wrong-variant on load and no
+   resize-listener bookkeeping. */
+.chart-fullscreen-heading {
+  display: flex;
+  align-items: center;
+}
+
+.chart-fullscreen-trigger {
+  display: none;
+}
+
+.chart-fullscreen-icon {
+  width: 0.85em;
+  height: 0.85em;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .chart-fullscreen-static-title {
+    display: none;
+  }
+
+  .chart-fullscreen-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    font-weight: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+}
+
+/* The chart re-rendered fresh and larger inside the modal -- Recharts' own ResponsiveContainer
+   measures its own parent, so giving it more room here is what actually renders it bigger, not
+   a CSS transform on the small inline copy. */
+.chart-fullscreen-modal-body {
+  min-height: 60vh;
+}
+
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

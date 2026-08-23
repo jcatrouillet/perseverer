@@ -24,8 +24,14 @@ import type { MouseHandlerDataParam, TooltipContentProps } from "recharts";
 import { useLocation } from "wouter";
 
 import type { ActivitySummary } from "../api/types";
-import { formatClockDuration, formatDurationHM, vdotTrendPoints, type VdotTrendPoint } from "../runningStats";
+import {
+  formatClockDuration,
+  formatDurationHM,
+  vdotTrendPoints,
+  type VdotTrendPoint,
+} from "../runningStats";
 import { predictRaceTimeS } from "../vdot";
+import { ChartFullscreen } from "./ChartFullscreen";
 import { ChartLegend } from "./ChartLegend";
 import "../styles/pace-trends.css";
 
@@ -62,7 +68,9 @@ function toDataIndex(value: unknown): number | null {
 /** Ordinary least squares over {x: ts, y: vdot} -- `x` is normalized to days-since-first-point
  * before fitting so the regression isn't done on raw epoch-ms magnitudes (numerically noisy
  * for a fit this small). Null when there's nothing to draw a line through. */
-function fitTrend(points: VdotTrendPoint[]): { slope: number; intercept: number; residualStd: number } | null {
+function fitTrend(
+  points: VdotTrendPoint[],
+): { slope: number; intercept: number; residualStd: number } | null {
   if (points.length < 2) return null;
   const x0 = points[0]!.ts;
   const xs = points.map((p) => (p.ts - x0) / 86_400_000);
@@ -172,8 +180,16 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
   // What the duration chart currently highlights: the live drag in progress, or (once
   // released) the committed selection -- so the highlighted band never disappears until the
   // user explicitly resets it.
-  const highlightStartIndex = isDragging ? Math.min(dragAnchorIndex, dragIndex) : isZoomed ? startIndex : null;
-  const highlightEndIndex = isDragging ? Math.max(dragAnchorIndex, dragIndex) : isZoomed ? endIndex : null;
+  const highlightStartIndex = isDragging
+    ? Math.min(dragAnchorIndex, dragIndex)
+    : isZoomed
+      ? startIndex
+      : null;
+  const highlightEndIndex = isDragging
+    ? Math.max(dragAnchorIndex, dragIndex)
+    : isZoomed
+      ? endIndex
+      : null;
 
   const trend = fitTrend(visiblePoints);
   const firstTs = visiblePoints[0]!.ts;
@@ -214,7 +230,10 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
   const bestPoints = visiblePoints.filter((p) => p.isWeeklyBest);
   const otherPoints = visiblePoints.filter((p) => !p.isWeeklyBest && !p.isRace);
   const racePoints = visiblePoints.filter((p) => p.isRace);
-  const durationData = points.map((p) => ({ ts: p.ts, hours: p.durationS != null ? Math.round((p.durationS / 3600) * 100) / 100 : null }));
+  const durationData = points.map((p) => ({
+    ts: p.ts,
+    hours: p.durationS != null ? Math.round((p.durationS / 3600) * 100) / 100 : null,
+  }));
 
   const goToActivity = (point: { payload?: { id?: string } }) => {
     if (point.payload?.id) setLocation(`/activities/${point.payload.id}`);
@@ -241,173 +260,177 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
 
   return (
     <section className="card pace-trends pace-trends--wide">
-      <h2>Pace trends</h2>
-      <p className="chart-note">
-        Every run's VDOT over time -- gold traces the best run of each week, red dots are
-        races, grey is everything else. Click once on the duration chart below, move the mouse,
-        and click again to zoom into that period and recalculate its trend.
-      </p>
-      <div className="pace-trends__selection-bar">
-        <span>
-          <strong>{visiblePoints[0]!.localDate}</strong> to{" "}
-          <strong>{visiblePoints[visiblePoints.length - 1]!.localDate}</strong>
-          {weeklyTrendChange != null && (
-            <>
-              {" "}
-              · trend {weeklyTrendChange >= 0 ? "+" : ""}
-              {weeklyTrendChange} VDOT/week
-            </>
+      {/* Wraps the whole section (both charts), not each separately: the duration chart below
+          drives the trend chart's own zoom range via a click-move-click gesture (see the note
+          right below) -- fullscreening just one would break that coupling. */}
+      <ChartFullscreen as="h2" title="Pace trends">
+        <p className="chart-note">
+          Every run's VDOT over time -- gold traces the best run of each week, red dots are races,
+          grey is everything else. Click once on the duration chart below, move the mouse, and click
+          again to zoom into that period and recalculate its trend.
+        </p>
+        <div className="pace-trends__selection-bar">
+          <span>
+            <strong>{visiblePoints[0]!.localDate}</strong> to{" "}
+            <strong>{visiblePoints[visiblePoints.length - 1]!.localDate}</strong>
+            {weeklyTrendChange != null && (
+              <>
+                {" "}
+                · trend {weeklyTrendChange >= 0 ? "+" : ""}
+                {weeklyTrendChange} VDOT/week
+              </>
+            )}
+            {fiveKTimeDeltaS != null && Math.abs(fiveKTimeDeltaS) >= 1 && (
+              <>
+                {" "}
+                · {fiveKTimeDeltaS >= 0 ? "Cut" : "Added"}{" "}
+                {formatClockDuration(Math.abs(fiveKTimeDeltaS))}{" "}
+                {fiveKTimeDeltaS >= 0 ? "from" : "to"} your estimated 5K finish time
+              </>
+            )}
+          </span>
+          {isZoomed && (
+            <button type="button" className="pace-trends__reset" onClick={() => setSelection(null)}>
+              Reset to full history
+            </button>
           )}
-          {fiveKTimeDeltaS != null && Math.abs(fiveKTimeDeltaS) >= 1 && (
-            <>
-              {" "}
-              · {fiveKTimeDeltaS >= 0 ? "Cut" : "Added"}{" "}
-              {formatClockDuration(Math.abs(fiveKTimeDeltaS))}{" "}
-              {fiveKTimeDeltaS >= 0 ? "from" : "to"} your estimated 5K finish time
-            </>
-          )}
-        </span>
-        {isZoomed && (
-          <button type="button" className="pace-trends__reset" onClick={() => setSelection(null)}>
-            Reset to full history
-          </button>
-        )}
-      </div>
-      <ResponsiveContainer width="100%" height={640}>
-        <ComposedChart margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
-          <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-          <XAxis
-            dataKey="ts"
-            type="number"
-            scale="time"
-            domain={["dataMin", "dataMax"]}
-            stroke="var(--color-text-muted)"
-            fontSize={11}
-            tickFormatter={useYearTicks ? formatYearTick : formatMonthTick}
-            ticks={useYearTicks ? yearTicks : undefined}
-          />
-          <YAxis
-            dataKey="vdot"
-            type="number"
-            domain={["auto", "auto"]}
-            stroke="var(--color-text-muted)"
-            fontSize={11}
-            width={32}
-          />
-          <Tooltip content={VdotTooltip} />
-          {bandData.length > 0 && (
-            <Area
-              data={bandData}
-              dataKey="band"
-              stroke="none"
-              fill={GREY}
-              fillOpacity={0.16}
-              isAnimationActive={false}
-              legendType="none"
+        </div>
+        <ResponsiveContainer width="100%" height={640}>
+          <ComposedChart margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="ts"
+              type="number"
+              scale="time"
+              domain={["dataMin", "dataMax"]}
+              stroke="var(--color-text-muted)"
+              fontSize={11}
+              tickFormatter={useYearTicks ? formatYearTick : formatMonthTick}
+              ticks={useYearTicks ? yearTicks : undefined}
             />
-          )}
-          {bandData.length > 0 && (
-            <Line
-              data={bandData}
-              dataKey="trend"
-              stroke={GREY}
-              strokeWidth={1.5}
-              dot={false}
-              isAnimationActive={false}
-              legendType="none"
-            />
-          )}
-          {bestPoints.length > 1 && (
-            <Line
-              data={bestPoints}
+            <YAxis
               dataKey="vdot"
-              stroke={GOLD}
-              strokeWidth={1}
-              strokeOpacity={0.6}
-              dot={false}
+              type="number"
+              domain={["auto", "auto"]}
+              stroke="var(--color-text-muted)"
+              fontSize={11}
+              width={32}
+            />
+            <Tooltip content={VdotTooltip} />
+            {bandData.length > 0 && (
+              <Area
+                data={bandData}
+                dataKey="band"
+                stroke="none"
+                fill={GREY}
+                fillOpacity={0.16}
+                isAnimationActive={false}
+                legendType="none"
+              />
+            )}
+            {bandData.length > 0 && (
+              <Line
+                data={bandData}
+                dataKey="trend"
+                stroke={GREY}
+                strokeWidth={1.5}
+                dot={false}
+                isAnimationActive={false}
+                legendType="none"
+              />
+            )}
+            {bestPoints.length > 1 && (
+              <Line
+                data={bestPoints}
+                dataKey="vdot"
+                stroke={GOLD}
+                strokeWidth={1}
+                strokeOpacity={0.6}
+                dot={false}
+                isAnimationActive={false}
+                legendType="none"
+              />
+            )}
+            <Scatter
+              name="Other runs"
+              data={otherPoints}
+              fill={GREY}
               isAnimationActive={false}
-              legendType="none"
+              cursor="pointer"
+              onClick={goToActivity}
             />
-          )}
-          <Scatter
-            name="Other runs"
-            data={otherPoints}
-            fill={GREY}
-            isAnimationActive={false}
-            cursor="pointer"
-            onClick={goToActivity}
-          />
-          <Scatter
-            name="Best of week"
-            data={bestPoints}
-            fill={GOLD}
-            isAnimationActive={false}
-            cursor="pointer"
-            onClick={goToActivity}
-          />
-          <Scatter
-            name="Races"
-            data={racePoints}
-            fill={RACE}
-            isAnimationActive={false}
-            cursor="pointer"
-            onClick={goToActivity}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
-
-      <ChartLegend
-        center
-        items={[
-          { label: "Best of week", color: GOLD },
-          { label: "Races", color: RACE },
-          { label: "Other runs", color: GREY },
-        ]}
-      />
-
-      <p className="chart-note">
-        Duration of each run -- always the full history. Click once to start a period, move the
-        mouse, click again to finish; the trend chart above zooms to match.
-      </p>
-      <ResponsiveContainer width="100%" height={180}>
-        <BarChart
-          data={durationData}
-          margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
-          onClick={handleChartClick}
-          onMouseMove={handleChartMouseMove}
-          style={{ cursor: "crosshair", userSelect: "none" }}
-        >
-          <XAxis dataKey="ts" type="number" scale="time" domain={["dataMin", "dataMax"]} hide />
-          <YAxis
-            dataKey="hours"
-            type="number"
-            domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
-            stroke="var(--color-text-muted)"
-            fontSize={11}
-            width={32}
-            unit="h"
-          />
-          <Tooltip
-            formatter={(value) => [value == null ? "No data" : `${value} h`, "Duration"]}
-            labelFormatter={() => ""}
-            contentStyle={{
-              background: "var(--color-surface-raised)",
-              border: "1px solid var(--color-border)",
-            }}
-          />
-          <Bar dataKey="hours" fill="var(--color-text-faint)" isAnimationActive={false} />
-          {highlightStartIndex != null && highlightEndIndex != null && (
-            <ReferenceArea
-              x1={durationData[highlightStartIndex]!.ts}
-              x2={durationData[highlightEndIndex]!.ts}
-              fill="var(--color-accent)"
-              fillOpacity={0.15}
-              stroke="var(--color-accent)"
-              strokeOpacity={0.4}
+            <Scatter
+              name="Best of week"
+              data={bestPoints}
+              fill={GOLD}
+              isAnimationActive={false}
+              cursor="pointer"
+              onClick={goToActivity}
             />
-          )}
-        </BarChart>
-      </ResponsiveContainer>
+            <Scatter
+              name="Races"
+              data={racePoints}
+              fill={RACE}
+              isAnimationActive={false}
+              cursor="pointer"
+              onClick={goToActivity}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+
+        <ChartLegend
+          center
+          items={[
+            { label: "Best of week", color: GOLD },
+            { label: "Races", color: RACE },
+            { label: "Other runs", color: GREY },
+          ]}
+        />
+
+        <p className="chart-note">
+          Duration of each run -- always the full history. Click once to start a period, move the
+          mouse, click again to finish; the trend chart above zooms to match.
+        </p>
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart
+            data={durationData}
+            margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
+            onClick={handleChartClick}
+            onMouseMove={handleChartMouseMove}
+            style={{ cursor: "crosshair", userSelect: "none" }}
+          >
+            <XAxis dataKey="ts" type="number" scale="time" domain={["dataMin", "dataMax"]} hide />
+            <YAxis
+              dataKey="hours"
+              type="number"
+              domain={[0, (dataMax: number) => Math.ceil(dataMax)]}
+              stroke="var(--color-text-muted)"
+              fontSize={11}
+              width={32}
+              unit="h"
+            />
+            <Tooltip
+              formatter={(value) => [value == null ? "No data" : `${value} h`, "Duration"]}
+              labelFormatter={() => ""}
+              contentStyle={{
+                background: "var(--color-surface-raised)",
+                border: "1px solid var(--color-border)",
+              }}
+            />
+            <Bar dataKey="hours" fill="var(--color-text-faint)" isAnimationActive={false} />
+            {highlightStartIndex != null && highlightEndIndex != null && (
+              <ReferenceArea
+                x1={durationData[highlightStartIndex]!.ts}
+                x2={durationData[highlightEndIndex]!.ts}
+                fill="var(--color-accent)"
+                fillOpacity={0.15}
+                stroke="var(--color-accent)"
+                strokeOpacity={0.4}
+              />
+            )}
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartFullscreen>
     </section>
   );
 }

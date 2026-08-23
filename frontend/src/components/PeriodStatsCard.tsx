@@ -18,6 +18,7 @@ import {
   weekdayStats,
 } from "../runningStats";
 import { Icon } from "./Icon";
+import { Modal } from "./Modal";
 import { StatTile } from "./StatTile";
 import {
   activityTypeCounts,
@@ -92,6 +93,13 @@ export function PeriodStatsCard({
   // Declared before the early return below -- React's rules of hooks require every hook to run
   // on every render, and this component bails out early when there's nothing to show.
   const [typeMetric, setTypeMetric] = useState<"count" | "time">("count");
+  // Wired up by hand rather than through ChartFullscreen (used everywhere else a chart title
+  // needs this) -- that component's heading and children always render immediately adjacent,
+  // but here the toggle buttons sit between them in .type-breakdown__header's own flex row
+  // (space-between, heading left / toggle right), which ChartFullscreen's fixed layout can't
+  // represent without either dropping the toggle from the fullscreen view or restructuring the
+  // header row it's built for. Reuses the same .chart-fullscreen-* CSS classes and Modal.
+  const [typeChartOpen, setTypeChartOpen] = useState(false);
 
   if (activities.length === 0) return null;
 
@@ -157,12 +165,7 @@ export function PeriodStatsCard({
             tone="cadence"
           />
         )}
-        <StatTile
-          label="Active days"
-          value={activeDates.length}
-          icon="calendar"
-          tone="elevation"
-        />
+        <StatTile label="Active days" value={activeDates.length} icon="calendar" tone="elevation" />
         {longest && (
           <StatTile
             label="Longest activity"
@@ -234,7 +237,19 @@ export function PeriodStatsCard({
       {typeCounts.length > 0 && (
         <>
           <div className="type-breakdown__header">
-            <h3>Activities by type</h3>
+            <h3 className="chart-fullscreen-heading">
+              <button
+                type="button"
+                className="chart-fullscreen-trigger"
+                onClick={() => setTypeChartOpen(true)}
+              >
+                Activities by type
+                <Icon name="expand" className="chart-fullscreen-icon" />
+              </button>
+              <span className="chart-fullscreen-static-title" aria-hidden="true">
+                Activities by type
+              </span>
+            </h3>
             {/* Count and time can rank sports differently -- a single 4-hour ride outweighs
                 a dozen 15-minute yoga sessions on the clock but not on the tally, and the
                 pie's own proportions are the whole point of showing this at all. */}
@@ -258,44 +273,57 @@ export function PeriodStatsCard({
           {/* No legend -- with up to a dozen-plus sports, a legend list ends up several times
               the pie's own size for very little reading value; hovering a slice already answers
               "which sport, how much" directly on the shape it's asking about. */}
-          <div className="type-breakdown">
-            <ResponsiveContainer width={220} height={220}>
-              <PieChart>
-                <Pie
-                  data={typeCounts}
-                  dataKey={typeMetric === "count" ? "count" : "durationS"}
-                  nameKey="sport"
-                  innerRadius={56}
-                  outerRadius={104}
-                  paddingAngle={typeCounts.length > 1 ? 2 : 0}
-                  isAnimationActive={false}
-                  label={renderTypeSliceIcon}
-                  labelLine={false}
-                >
-                  {typeCounts.map((t) => (
-                    <Cell key={t.sport} fill={toneColor(sportStyle(t.sport).tone)} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  // Pie tooltips have no natural axis label (unlike Cartesian charts), so
-                  // `labelFormatter` never fires here -- the sport name has to come through
-                  // `formatter`'s own second argument (from `nameKey="sport"` above) instead,
-                  // reformatted into the same display form used everywhere else a sport name
-                  // is shown ("rock_climbing" -> "rock climbing").
-                  formatter={(value, name) => [
-                    typeMetric === "count" ? String(value) : formatDurationHM(Number(value)),
-                    String(name).replace(/_/g, " "),
-                  ]}
-                  contentStyle={{
-                    background: "var(--color-surface-raised)",
-                    border: "1px solid var(--color-border)",
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          <div className="type-breakdown">{renderTypeBreakdownChart(220)}</div>
+          <Modal
+            open={typeChartOpen}
+            onClose={() => setTypeChartOpen(false)}
+            title="Activities by type"
+          >
+            <div className="chart-fullscreen-modal-body type-breakdown">
+              {renderTypeBreakdownChart(320)}
+            </div>
+          </Modal>
         </>
       )}
     </section>
   );
+
+  function renderTypeBreakdownChart(size: number) {
+    return (
+      <ResponsiveContainer width={size} height={size}>
+        <PieChart>
+          <Pie
+            data={typeCounts}
+            dataKey={typeMetric === "count" ? "count" : "durationS"}
+            nameKey="sport"
+            innerRadius={(size / 220) * 56}
+            outerRadius={(size / 220) * 104}
+            paddingAngle={typeCounts.length > 1 ? 2 : 0}
+            isAnimationActive={false}
+            label={renderTypeSliceIcon}
+            labelLine={false}
+          >
+            {typeCounts.map((t) => (
+              <Cell key={t.sport} fill={toneColor(sportStyle(t.sport).tone)} />
+            ))}
+          </Pie>
+          <Tooltip
+            // Pie tooltips have no natural axis label (unlike Cartesian charts), so
+            // `labelFormatter` never fires here -- the sport name has to come through
+            // `formatter`'s own second argument (from `nameKey="sport"` above) instead,
+            // reformatted into the same display form used everywhere else a sport name
+            // is shown ("rock_climbing" -> "rock climbing").
+            formatter={(value, name) => [
+              typeMetric === "count" ? String(value) : formatDurationHM(Number(value)),
+              String(name).replace(/_/g, " "),
+            ]}
+            contentStyle={{
+              background: "var(--color-surface-raised)",
+              border: "1px solid var(--color-border)",
+            }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
 }

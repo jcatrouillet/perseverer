@@ -5,11 +5,15 @@
 // endpoint HealthTrendChart doesn't read, so it gets its own small bar chart here.
 import type { HealthDashboardMetricOut, SleepSessionOut } from "../api/types";
 import { eachDate } from "../dateUtils";
+import { ChartFullscreen } from "./ChartFullscreen";
 import { HealthTrendChart } from "./HealthTrendChart";
 import { SleepDurationChart } from "./SleepDurationChart";
 
 function formatDayTick(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "short",
+    timeZone: "UTC",
+  });
 }
 
 function hasDailyData(metric: HealthDashboardMetricOut | undefined): boolean {
@@ -39,7 +43,10 @@ export function WeekWellnessCharts({
     const session = sleepSessions.find((s) => s.local_date === d);
     return {
       local_date: d,
-      hours: session?.total_sleep_s != null ? Math.round((session.total_sleep_s / 3600) * 10) / 10 : null,
+      hours:
+        session?.total_sleep_s != null
+          ? Math.round((session.total_sleep_s / 3600) * 10) / 10
+          : null,
     };
   });
 
@@ -56,41 +63,39 @@ export function WeekWellnessCharts({
       <h2>Wellness</h2>
 
       {hasRestingHr && (
-        <>
-          <h3>Resting heart rate</h3>
+        <ChartFullscreen as="h3" title="Resting heart rate">
           <HealthTrendChart metrics={metrics} keys={["resting_heart_rate"]} />
-        </>
+        </ChartFullscreen>
       )}
 
       {hasStress && (
-        <>
-          <h3>Stress</h3>
+        <ChartFullscreen as="h3" title="Stress">
           <HealthTrendChart metrics={metrics} keys={["stress_average"]} />
-        </>
+        </ChartFullscreen>
       )}
 
       {hasSleepData && (
-        <>
-          <h3>Sleep duration</h3>
+        <ChartFullscreen as="h3" title="Sleep duration">
           <SleepDurationChart
             data={sleepData.map((p) => ({ x: p.local_date, hours: p.hours }))}
             tickFormatter={formatDayTick}
           />
-        </>
+        </ChartFullscreen>
       )}
 
       {hasRespiration && (
-        <>
-          <h3>Respiration (sleep vs waking)</h3>
-          <HealthTrendChart metrics={metrics} keys={["sleep_respiration_rate", "waking_respiration_rate"]} />
-        </>
+        <ChartFullscreen as="h3" title="Respiration (sleep vs waking)">
+          <HealthTrendChart
+            metrics={metrics}
+            keys={["sleep_respiration_rate", "waking_respiration_rate"]}
+          />
+        </ChartFullscreen>
       )}
 
       {hasWeight && (
-        <>
-          <h3>Weight</h3>
+        <ChartFullscreen as="h3" title="Weight">
           <HealthTrendChart metrics={metrics} keys={["weight_kg"]} />
-        </>
+        </ChartFullscreen>
       )}
     </section>
   );

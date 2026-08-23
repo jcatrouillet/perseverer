@@ -53,14 +53,22 @@ function mockBoth(opts: {
 describe("TrainingBandsChart", () => {
   it("shows a loading state while either fetch is in flight", () => {
     mockUsePaceBands.mockReturnValue({ data: undefined, isLoading: true, isError: false });
-    mockUsePaceBandsByActivity.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+    mockUsePaceBandsByActivity.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    });
     render(<TrainingBandsChart />);
     expect(screen.getByText("Loading…")).toBeInTheDocument();
   });
 
   it("shows an error message when either fetch fails", () => {
     mockUsePaceBands.mockReturnValue({ data: undefined, isLoading: false, isError: false });
-    mockUsePaceBandsByActivity.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    mockUsePaceBandsByActivity.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
     render(<TrainingBandsChart />);
     expect(screen.getByRole("alert")).toHaveTextContent("Could not load training bands.");
   });
@@ -74,18 +82,25 @@ describe("TrainingBandsChart", () => {
   it("renders the aggregate chart even with no per-run data, and no composition/duration charts", () => {
     mockBoth({ aggregate: aggregateWithData({ "5:00-5:30": 1800 }), byActivity: [] });
     render(<TrainingBandsChart />);
-    expect(screen.getByText("Training bands")).toBeInTheDocument();
+    // getByRole, not getByText: ChartFullscreen's mobile tap-to-expand affordance renders the
+    // title twice (a real button plus an aria-hidden static span, CSS-toggled) -- getByRole's
+    // accessible-name computation correctly excludes the aria-hidden copy.
+    expect(screen.getByRole("heading", { name: "Training bands" })).toBeInTheDocument();
     expect(screen.getByText(/Total time spent at each pace/)).toBeInTheDocument();
     expect(screen.queryByText(/Every run as its own bar/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Duration of each run -- always the full history.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Duration of each run -- always the full history."),
+    ).not.toBeInTheDocument();
   });
 
   it("renders the composition and duration charts even with no aggregate data", () => {
     mockBoth({ aggregate: ALL_ZERO, byActivity: ONE_RUN });
     render(<TrainingBandsChart />);
-    expect(screen.getByText("Training bands")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Training bands" })).toBeInTheDocument();
     expect(screen.getByText(/Every run as its own bar/)).toBeInTheDocument();
-    expect(screen.getByText("Duration of each run -- always the full history.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Duration of each run -- always the full history."),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Total time spent at each pace/)).not.toBeInTheDocument();
   });
 
@@ -94,7 +109,9 @@ describe("TrainingBandsChart", () => {
     render(<TrainingBandsChart />);
     expect(screen.getByText(/Every run as its own bar/)).toBeInTheDocument();
     expect(screen.getByText(/Total time spent at each pace/)).toBeInTheDocument();
-    expect(screen.getByText("Duration of each run -- always the full history.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Duration of each run -- always the full history."),
+    ).toBeInTheDocument();
   });
 
   it("uses the same full-bleed width treatment as Pace trends", () => {
@@ -107,7 +124,9 @@ describe("TrainingBandsChart", () => {
     mockBoth({ aggregate: aggregateWithData({ "5:00-5:30": 1800 }), byActivity: ONE_RUN });
     const { container } = render(<TrainingBandsChart />);
 
-    expect(screen.getByText(/Click a pace in the chart below to isolate it here/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Click a pace in the chart below to isolate it here/),
+    ).toBeInTheDocument();
 
     // Three charts render top to bottom (composition, aggregate, duration) -- the aggregate
     // chart's own wrapper is the second one. Recharts doesn't render a rectangle at all for a
@@ -123,6 +142,8 @@ describe("TrainingBandsChart", () => {
 
     fireEvent.click(screen.getByText("Show every pace"));
 
-    expect(screen.getByText(/Click a pace in the chart below to isolate it here/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Click a pace in the chart below to isolate it here/),
+    ).toBeInTheDocument();
   });
 });

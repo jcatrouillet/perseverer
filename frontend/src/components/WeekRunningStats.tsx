@@ -18,6 +18,7 @@ import {
 import { useLocation } from "wouter";
 
 import type { ActivitySummary } from "../api/types";
+import { ChartFullscreen } from "./ChartFullscreen";
 import { Icon } from "./Icon";
 import {
   effectiveDurationS,
@@ -230,130 +231,153 @@ export function WeekRunningStats({
 
       <div className="running-stats__charts">
         <div>
-          <h3>Weekly distance</h3>
-          <ResponsiveContainer width="100%" height={140}>
-            <BarChart data={weeklySeries}>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="weekStart"
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                tickFormatter={formatWeekTick}
-                interval={Math.max(0, Math.ceil(weeklySeries.length / 8) - 1)}
-              />
-              <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} />
-              <Tooltip
-                labelFormatter={(v) => `Week of ${formatWeekTick(String(v))}`}
-                formatter={(value) => [`${value} km`, "Distance"]}
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <Bar dataKey="km" isAnimationActive={false}>
-                {weeklySeries.map((p) => (
-                  <Cell
-                    key={p.weekStart}
-                    fill={p.weekStart === weekStart ? "var(--color-pace)" : "var(--color-text-faint)"}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartFullscreen as="h3" title="Weekly distance">
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={weeklySeries}>
+                <CartesianGrid
+                  stroke="var(--color-border)"
+                  strokeDasharray="3 3"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="weekStart"
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  tickFormatter={formatWeekTick}
+                  interval={Math.max(0, Math.ceil(weeklySeries.length / 8) - 1)}
+                />
+                <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} />
+                <Tooltip
+                  labelFormatter={(v) => `Week of ${formatWeekTick(String(v))}`}
+                  formatter={(value) => [`${value} km`, "Distance"]}
+                  contentStyle={{
+                    background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                />
+                <Bar dataKey="km" isAnimationActive={false}>
+                  {weeklySeries.map((p) => (
+                    <Cell
+                      key={p.weekStart}
+                      fill={
+                        p.weekStart === weekStart ? "var(--color-pace)" : "var(--color-text-faint)"
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFullscreen>
         </div>
 
         <div>
-          <h3>Weekly best VDOT</h3>
-          <ResponsiveContainer width="100%" height={140}>
-            <BarChart data={vdotWeeklySeries}>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="weekStart"
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                tickFormatter={formatWeekTick}
-                interval={Math.max(0, Math.ceil(vdotWeeklySeries.length / 8) - 1)}
-              />
-              <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} domain={["dataMin - 2", "dataMax + 2"]} />
-              <Tooltip
-                labelFormatter={(v) => `Week of ${formatWeekTick(String(v))}`}
-                formatter={(value) => [value == null ? "No run" : `${value} VDOT`, "Best VDOT"]}
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <Bar
-                dataKey="vdot"
-                isAnimationActive={false}
-                cursor="pointer"
-                onClick={(point: { payload?: { activityId: string | null } }) => {
-                  if (point.payload?.activityId) setLocation(`/activities/${point.payload.activityId}`);
-                }}
-              >
-                {vdotWeeklySeries.map((p) => (
-                  <Cell
-                    key={p.weekStart}
-                    fill={p.weekStart === weekStart ? "var(--color-pace)" : "var(--color-text-faint)"}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartFullscreen as="h3" title="Weekly best VDOT">
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={vdotWeeklySeries}>
+                <CartesianGrid
+                  stroke="var(--color-border)"
+                  strokeDasharray="3 3"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="weekStart"
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  tickFormatter={formatWeekTick}
+                  interval={Math.max(0, Math.ceil(vdotWeeklySeries.length / 8) - 1)}
+                />
+                <YAxis
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  width={32}
+                  domain={["dataMin - 2", "dataMax + 2"]}
+                />
+                <Tooltip
+                  labelFormatter={(v) => `Week of ${formatWeekTick(String(v))}`}
+                  formatter={(value) => [value == null ? "No run" : `${value} VDOT`, "Best VDOT"]}
+                  contentStyle={{
+                    background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                />
+                <Bar
+                  dataKey="vdot"
+                  isAnimationActive={false}
+                  cursor="pointer"
+                  onClick={(point: { payload?: { activityId: string | null } }) => {
+                    if (point.payload?.activityId)
+                      setLocation(`/activities/${point.payload.activityId}`);
+                  }}
+                >
+                  {vdotWeeklySeries.map((p) => (
+                    <Cell
+                      key={p.weekStart}
+                      fill={
+                        p.weekStart === weekStart ? "var(--color-pace)" : "var(--color-text-faint)"
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFullscreen>
         </div>
 
         <div>
-          <h3>Pace vs distance</h3>
-          <ResponsiveContainer width="100%" height={140}>
-            <ScatterChart>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="km"
-                type="number"
-                name="Distance"
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-              />
-              <YAxis
-                dataKey="pace"
-                type="number"
-                name="Pace"
-                stroke="var(--color-text-muted)"
-                fontSize={11}
-                width={40}
-                reversed
-                domain={["dataMin - 0.3", "dataMax + 0.3"]}
-                tickFormatter={(v: number) => formatMinPerKm(v)}
-              />
-              <ZAxis range={[36, 90]} />
-              <Tooltip
-                cursor={{ strokeDasharray: "3 3" }}
-                formatter={(value, name) =>
-                  name === "Pace" ? [`${formatMinPerKm(Number(value))} /km`, name] : [`${value} km`, name]
-                }
-                contentStyle={{
-                  background: "var(--color-surface-raised)",
-                  border: "1px solid var(--color-border)",
-                }}
-              />
-              <Scatter
-                data={scatterPoints}
-                isAnimationActive={false}
-                cursor="pointer"
-                onClick={(point: { payload?: { id: string } }) => {
-                  if (point.payload) setLocation(`/activities/${point.payload.id}`);
-                }}
-              >
-                {scatterPoints.map((p) => (
-                  <Cell
-                    key={p.id}
-                    fill={p.isThisWeek ? "var(--color-pace)" : "var(--color-text-faint)"}
-                    fillOpacity={p.isThisWeek ? 1 : 0.35}
-                  />
-                ))}
-              </Scatter>
-            </ScatterChart>
-          </ResponsiveContainer>
+          <ChartFullscreen as="h3" title="Pace vs distance">
+            <ResponsiveContainer width="100%" height={140}>
+              <ScatterChart>
+                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="km"
+                  type="number"
+                  name="Distance"
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                />
+                <YAxis
+                  dataKey="pace"
+                  type="number"
+                  name="Pace"
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  width={40}
+                  reversed
+                  domain={["dataMin - 0.3", "dataMax + 0.3"]}
+                  tickFormatter={(v: number) => formatMinPerKm(v)}
+                />
+                <ZAxis range={[36, 90]} />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  formatter={(value, name) =>
+                    name === "Pace"
+                      ? [`${formatMinPerKm(Number(value))} /km`, name]
+                      : [`${value} km`, name]
+                  }
+                  contentStyle={{
+                    background: "var(--color-surface-raised)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                />
+                <Scatter
+                  data={scatterPoints}
+                  isAnimationActive={false}
+                  cursor="pointer"
+                  onClick={(point: { payload?: { id: string } }) => {
+                    if (point.payload) setLocation(`/activities/${point.payload.id}`);
+                  }}
+                >
+                  {scatterPoints.map((p) => (
+                    <Cell
+                      key={p.id}
+                      fill={p.isThisWeek ? "var(--color-pace)" : "var(--color-text-faint)"}
+                      fillOpacity={p.isThisWeek ? 1 : 0.35}
+                    />
+                  ))}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </ChartFullscreen>
         </div>
       </div>
     </section>

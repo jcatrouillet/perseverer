@@ -58,7 +58,10 @@ describe("WeekWellnessCharts", () => {
         weekEnd="2025-06-08"
       />,
     );
-    expect(screen.getByText("Resting heart rate")).toBeInTheDocument();
+    // getByRole, not getByText: ChartFullscreen's mobile tap-to-expand affordance renders the
+    // title twice (a real button plus an aria-hidden static span, CSS-toggled) -- getByRole's
+    // accessible-name computation correctly excludes the aria-hidden copy, getByText doesn't.
+    expect(screen.getByRole("heading", { name: "Resting heart rate" })).toBeInTheDocument();
     expect(screen.queryByText("Stress")).not.toBeInTheDocument();
     expect(screen.queryByText("Sleep duration")).not.toBeInTheDocument();
     expect(screen.queryByText("Respiration (sleep vs waking)")).not.toBeInTheDocument();
@@ -73,7 +76,7 @@ describe("WeekWellnessCharts", () => {
         weekEnd="2025-06-08"
       />,
     );
-    expect(screen.getByText("Sleep duration")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sleep duration" })).toBeInTheDocument();
   });
 
   it("shows the respiration section when either sleep or waking respiration has data", () => {
@@ -87,6 +90,8 @@ describe("WeekWellnessCharts", () => {
         weekEnd="2025-06-08"
       />,
     );
-    expect(screen.getByText("Respiration (sleep vs waking)")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Respiration (sleep vs waking)" }),
+    ).toBeInTheDocument();
   });
 });

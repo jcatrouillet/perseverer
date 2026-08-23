@@ -16,11 +16,14 @@ import {
 } from "recharts";
 
 import type { ActivityContextOut } from "../api/types";
+import { ChartFullscreen } from "./ChartFullscreen";
 import { toneColor } from "../metricStyle";
 import { formatMinPerKm, isPaceSport } from "../runningStats";
 
 function avgPaceOrSpeedValue(sport: string, durationS: number, distanceM: number): number {
-  return isPaceSport(sport) ? durationS / 60 / (distanceM / 1000) : distanceM / 1000 / (durationS / 3600);
+  return isPaceSport(sport)
+    ? durationS / 60 / (distanceM / 1000)
+    : distanceM / 1000 / (durationS / 3600);
 }
 
 interface ContextPoint {
@@ -82,17 +85,27 @@ export function ActivityContextStrip({
 
   const color = toneColor("pace");
 
+  const headline = context.percentile_rank != null && (
+    <p className="activity-context__headline">
+      Faster than <strong>{context.percentile_rank.toFixed(0)}%</strong> of{" "}
+      {context.comparable_count} similar {sport.replace(/_/g, " ")} effort
+      {context.comparable_count === 1 ? "" : "s"} within 15% distance.
+    </p>
+  );
+
+  if (points.length < 2) {
+    return (
+      <section className="card activity-context">
+        <h2>Recent efforts</h2>
+        {headline}
+      </section>
+    );
+  }
+
   return (
     <section className="card activity-context">
-      <h2>Recent efforts</h2>
-      {context.percentile_rank != null && (
-        <p className="activity-context__headline">
-          Faster than <strong>{context.percentile_rank.toFixed(0)}%</strong> of{" "}
-          {context.comparable_count} similar {sport.replace(/_/g, " ")} effort
-          {context.comparable_count === 1 ? "" : "s"} within 15% distance.
-        </p>
-      )}
-      {points.length >= 2 && (
+      <ChartFullscreen as="h2" title="Recent efforts">
+        {headline}
         <ResponsiveContainer width="100%" height={140}>
           <ScatterChart margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
             <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -129,7 +142,7 @@ export function ActivityContextStrip({
             </Scatter>
           </ScatterChart>
         </ResponsiveContainer>
-      )}
+      </ChartFullscreen>
     </section>
   );
 }

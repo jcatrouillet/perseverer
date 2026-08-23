@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useFitness, useHealthObservations } from "../api/queries";
+import { ChartFullscreen } from "../components/ChartFullscreen";
 import { FitnessChart } from "../components/FitnessChart";
 import { isoDate } from "../dateUtils";
 
@@ -53,7 +54,16 @@ export function FitnessPage() {
 
       {fitness.isLoading && <p>Loading…</p>}
       {fitness.isError && <p role="alert">Could not load Fitness &amp; Form.</p>}
-      {fitness.data && <FitnessChart series={fitness.data} />}
+      {fitness.data && (
+        // Unlike this same chart's other call sites (AllTimeView/MonthView/YearView, each
+        // inside its own "Fitness & Form" card with an h2 above it), this page never had a
+        // per-chart heading of its own -- only the page's own <h1> above. Added one here so
+        // there's something for ChartFullscreen's mobile tap-to-expand affordance to attach
+        // to, matching every other chart in the app.
+        <ChartFullscreen as="h2" title="Fitness & Form">
+          <FitnessChart series={fitness.data} />
+        </ChartFullscreen>
+      )}
 
       <section>
         <h2>Compared against Garmin&rsquo;s own signals</h2>

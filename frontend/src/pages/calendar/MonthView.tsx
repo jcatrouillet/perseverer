@@ -11,6 +11,7 @@ import {
   useHealthDashboard,
   useSleep,
 } from "../../api/queries";
+import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
 import { GoalButton } from "../../components/GoalButton";
@@ -135,10 +136,15 @@ export function MonthView({ year, month }: { year: number; month: number }) {
       {hikes.data && <HikeStatsCard activities={hikes.data.items} />}
 
       <section className="card">
-        <h2>Fitness &amp; Form</h2>
+        {fitness.data ? (
+          <ChartFullscreen as="h2" title="Fitness & Form">
+            <FitnessChart series={fitness.data} />
+          </ChartFullscreen>
+        ) : (
+          <h2>Fitness &amp; Form</h2>
+        )}
         {fitness.isLoading && <p>Loading…</p>}
         {fitness.isError && <p role="alert">Could not load Fitness &amp; Form.</p>}
-        {fitness.data && <FitnessChart series={fitness.data} />}
       </section>
 
       <section className="card">
@@ -150,36 +156,57 @@ export function MonthView({ year, month }: { year: number; month: number }) {
             <h3>Core daily summary — average over {periodLabel}</h3>
             <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
 
-            <h3>Sleep duration — over {periodLabel}</h3>
-            <SleepDurationChart
-              data={eachDate(start, end).map((d) => {
-                const session = sleep.data?.find((s) => s.local_date === d);
-                return {
-                  x: d,
-                  hours:
-                    session?.total_sleep_s != null
-                      ? Math.round((session.total_sleep_s / 3600) * 10) / 10
-                      : null,
-                };
-              })}
-              tickFormatter={formatMonthDayTick}
-              interval={2}
-            />
+            <ChartFullscreen as="h3" title={`Sleep duration — over ${periodLabel}`}>
+              <SleepDurationChart
+                data={eachDate(start, end).map((d) => {
+                  const session = sleep.data?.find((s) => s.local_date === d);
+                  return {
+                    x: d,
+                    hours:
+                      session?.total_sleep_s != null
+                        ? Math.round((session.total_sleep_s / 3600) * 10) / 10
+                        : null,
+                  };
+                })}
+                tickFormatter={formatMonthDayTick}
+                interval={2}
+              />
+            </ChartFullscreen>
 
-            <h3>HRV / SpO2 / Stress — over {periodLabel}</h3>
-            <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />
+            <ChartFullscreen as="h3" title={`HRV / SpO2 / Stress — over ${periodLabel}`}>
+              <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />
+            </ChartFullscreen>
 
-            <h3>Weight &amp; muscle mass — over {periodLabel}</h3>
-            <HealthTrendChart metrics={health.data.metrics} keys={BODY_COMPOSITION_MASS_METRICS} />
+            <ChartFullscreen as="h3" title={`Weight & muscle mass — over ${periodLabel}`}>
+              <HealthTrendChart
+                metrics={health.data.metrics}
+                keys={BODY_COMPOSITION_MASS_METRICS}
+              />
+            </ChartFullscreen>
 
-            <h3>Body composition % — over {periodLabel}</h3>
-            <HealthTrendChart metrics={health.data.metrics} keys={BODY_COMPOSITION_PERCENT_METRICS} />
+            <ChartFullscreen as="h3" title={`Body composition % — over ${periodLabel}`}>
+              <HealthTrendChart
+                metrics={health.data.metrics}
+                keys={BODY_COMPOSITION_PERCENT_METRICS}
+              />
+            </ChartFullscreen>
 
-            <h3>BMI, bone mass, visceral fat &amp; metabolic age — over {periodLabel}</h3>
-            <HealthTrendChart metrics={health.data.metrics} keys={BODY_COMPOSITION_INDEX_METRICS} />
+            <ChartFullscreen
+              as="h3"
+              title={`BMI, bone mass, visceral fat & metabolic age — over ${periodLabel}`}
+            >
+              <HealthTrendChart
+                metrics={health.data.metrics}
+                keys={BODY_COMPOSITION_INDEX_METRICS}
+              />
+            </ChartFullscreen>
 
-            <h3>BMR — over {periodLabel}</h3>
-            <HealthTrendChart metrics={health.data.metrics} keys={BODY_COMPOSITION_ENERGY_METRICS} />
+            <ChartFullscreen as="h3" title={`BMR — over ${periodLabel}`}>
+              <HealthTrendChart
+                metrics={health.data.metrics}
+                keys={BODY_COMPOSITION_ENERGY_METRICS}
+              />
+            </ChartFullscreen>
           </>
         )}
       </section>

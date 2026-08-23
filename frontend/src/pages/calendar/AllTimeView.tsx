@@ -5,6 +5,7 @@
 // already use -- the one difference is pagination, since "all time" can exceed a single
 // request's 500-row cap in a way a single year never does yet.
 import { useAllActivities, useFitness, useHealthDashboard, useSleep } from "../../api/queries";
+import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
@@ -69,7 +70,11 @@ export function AllTimeView() {
   const sleepDates = (sleep.data ?? []).map((s) => s.local_date).sort();
   const monthlySleep =
     sleepDates.length > 0
-      ? monthlyAverageSleepHours(sleep.data ?? [], sleepDates[0]!, sleepDates[sleepDates.length - 1]!)
+      ? monthlyAverageSleepHours(
+          sleep.data ?? [],
+          sleepDates[0]!,
+          sleepDates[sleepDates.length - 1]!,
+        )
       : [];
   const runs = all.filter((a) => a.sport === "running");
   const hikes = all.filter((a) => a.sport === "hiking");
@@ -102,10 +107,15 @@ export function AllTimeView() {
       <HikeStatsCard activities={hikes} />
 
       <section className="card">
-        <h2>Fitness &amp; Form</h2>
+        {fitness.data ? (
+          <ChartFullscreen as="h2" title="Fitness & Form">
+            <FitnessChart series={fitness.data} />
+          </ChartFullscreen>
+        ) : (
+          <h2>Fitness &amp; Form</h2>
+        )}
         {fitness.isLoading && <p>Loading…</p>}
         {fitness.isError && <p role="alert">Could not load Fitness &amp; Form.</p>}
-        {fitness.data && <FitnessChart series={fitness.data} />}
       </section>
 
       <section className="card">
@@ -117,43 +127,52 @@ export function AllTimeView() {
             <h3>Core daily summary — average over all time</h3>
             <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
 
-            <h3>Average monthly sleep — over all time</h3>
-            <SleepDurationChart
-              data={monthlySleep.map((p) => ({ x: p.month, hours: p.avgHours }))}
-              tickFormatter={formatMonthTick}
-              interval={Math.max(0, Math.ceil(monthlySleep.length / 10) - 1)}
-            />
+            <ChartFullscreen as="h3" title="Average monthly sleep — over all time">
+              <SleepDurationChart
+                data={monthlySleep.map((p) => ({ x: p.month, hours: p.avgHours }))}
+                tickFormatter={formatMonthTick}
+                interval={Math.max(0, Math.ceil(monthlySleep.length / 10) - 1)}
+              />
+            </ChartFullscreen>
 
-            <h3>HRV / SpO2 / Stress — over all time</h3>
-            <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />
+            <ChartFullscreen as="h3" title="HRV / SpO2 / Stress — over all time">
+              <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />
+            </ChartFullscreen>
 
-            <h3>Weight &amp; muscle mass — over all time</h3>
-            <HealthTrendChart
-              metrics={health.data.metrics}
-              keys={BODY_COMPOSITION_MASS_METRICS}
-              tickGranularity="month"
-            />
+            <ChartFullscreen as="h3" title="Weight & muscle mass — over all time">
+              <HealthTrendChart
+                metrics={health.data.metrics}
+                keys={BODY_COMPOSITION_MASS_METRICS}
+                tickGranularity="month"
+              />
+            </ChartFullscreen>
 
-            <h3>Body composition % — over all time</h3>
-            <HealthTrendChart
-              metrics={health.data.metrics}
-              keys={BODY_COMPOSITION_PERCENT_METRICS}
-              tickGranularity="month"
-            />
+            <ChartFullscreen as="h3" title="Body composition % — over all time">
+              <HealthTrendChart
+                metrics={health.data.metrics}
+                keys={BODY_COMPOSITION_PERCENT_METRICS}
+                tickGranularity="month"
+              />
+            </ChartFullscreen>
 
-            <h3>BMI, bone mass, visceral fat &amp; metabolic age — over all time</h3>
-            <HealthTrendChart
-              metrics={health.data.metrics}
-              keys={BODY_COMPOSITION_INDEX_METRICS}
-              tickGranularity="month"
-            />
+            <ChartFullscreen
+              as="h3"
+              title="BMI, bone mass, visceral fat & metabolic age — over all time"
+            >
+              <HealthTrendChart
+                metrics={health.data.metrics}
+                keys={BODY_COMPOSITION_INDEX_METRICS}
+                tickGranularity="month"
+              />
+            </ChartFullscreen>
 
-            <h3>BMR — over all time</h3>
-            <HealthTrendChart
-              metrics={health.data.metrics}
-              keys={BODY_COMPOSITION_ENERGY_METRICS}
-              tickGranularity="month"
-            />
+            <ChartFullscreen as="h3" title="BMR — over all time">
+              <HealthTrendChart
+                metrics={health.data.metrics}
+                keys={BODY_COMPOSITION_ENERGY_METRICS}
+                tickGranularity="month"
+              />
+            </ChartFullscreen>
           </>
         )}
       </section>
