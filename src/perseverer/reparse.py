@@ -6,12 +6,16 @@ raw content after a human says two sources were wrongly merged together (see ADR
 
 Every `raw_object.kind` an `activity_source_link` can actually point at is handled: `"fit"` (the
 one shared kind every FIT-producing adapter -- fit_folder/garmin_export/garmin_connect/
-strava_export -- archives under, via `ingest_dispatch.FIT_KIND`), and strava_export's own
-`"strava_export_gpx"`/`"strava_export_tcx"`/`"strava_export_manual_entry"` (the last is a raw
-CSV row, not a stream file -- reconstructed the same way `strava_export.py`'s own ingest path
-does, via `_activity_from_csv_only`). A kind this function doesn't recognize returns
-`CanonicalBatch(kind="unrecognized", ...)` rather than raising -- callers must handle that, not
-assume every source link's raw_object is necessarily re-parseable in isolation (e.g. a
+strava_export -- archives under, via `ingest_dispatch.FIT_KIND`), `"fit_activity"` (the Phase 1
+kind predating that unification, still real in this athlete's own archive for anything ingested
+before it -- same `parse_fit`, same rebuild.py `row.kind.startswith("fit")` precedent this
+mirrors; missing here until a real `activity_trim.py::clear_activity_trim` call against one such
+activity failed with "raw bytes no longer parse as an activity" despite the bytes being fine),
+and strava_export's own `"strava_export_gpx"`/`"strava_export_tcx"`/`"strava_export_manual_entry"`
+(the last is a raw CSV row, not a stream file -- reconstructed the same way `strava_export.py`'s
+own ingest path does, via `_activity_from_csv_only`). A kind this function doesn't recognize
+returns `CanonicalBatch(kind="unrecognized", ...)` rather than raising -- callers must handle
+that, not assume every source link's raw_object is necessarily re-parseable in isolation (e.g. a
 `strava_export_csv_row` raw_object is provenance-only, never itself a split source).
 """
 
@@ -28,6 +32,7 @@ from perseverer.tcx.parser import parse_tcx
 
 _PARSERS = {
     FIT_KIND: parse_fit,
+    "fit_activity": parse_fit,
     "strava_export_gpx": parse_gpx,
     "strava_export_tcx": parse_tcx,
 }

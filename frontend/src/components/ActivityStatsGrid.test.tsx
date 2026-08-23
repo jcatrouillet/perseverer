@@ -60,6 +60,8 @@ function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
     estimated_sweat_loss_ml: null,
     carbohydrates_g: null,
     sodium_mg: null,
+    transport_mix_flag: null,
+    has_trim: false,
     ...overrides,
   };
 }

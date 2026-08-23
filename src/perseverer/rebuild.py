@@ -5,8 +5,10 @@ derived tables are wiped, because parsing is a pure function over the archive.
 
 from pathlib import Path
 
+import duckdb
 from sqlalchemy import Connection, delete, select
 
+from perseverer.activity_trim import apply_activity_trim_overrides
 from perseverer.adapters.garmin_export import report_kind_from_filename
 from perseverer.adapters.strava_export import (
     csv_row_from_raw_json,
@@ -313,6 +315,15 @@ def rebuild_database(
     # apply_sport_overrides above, for the athlete's own bouldering route-status corrections and
     # manually-added routes -- see bouldering_overrides.py's own docstring.
     apply_bouldering_route_overrides(conn, athlete_id=athlete_id)
+
+    # Same durable-correction shape again, for the athlete's own car-travel trims -- see
+    # activity_trim.py's own docstring. No SQLite attachment needed (unlike the API's shared
+    # duckdb connection), just enough to read_parquet() the activity's own stream, so a bare
+    # in-memory connection is created here rather than threading api/duckdb_conn.py's
+    # heavier setup through the CLI rebuild path.
+    apply_activity_trim_overrides(
+        conn, duckdb.connect(":memory:"), parquet_dir, athlete_id=athlete_id
+    )
 
     # Re-derives Garmin's own sport/name corrections from summarizedActivitiesExport (see
     # garmin_activity_summary.py's own docstring) -- the replay above just re-parsed every

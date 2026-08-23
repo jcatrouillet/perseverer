@@ -18,6 +18,7 @@ import {
   useActivityWeather,
   useActivityWorkout,
   useAddClimbRoute,
+  useClearActivityTrim,
   useDeleteClimbRoute,
   useHrZoneConfig,
   useSetClimbRouteStatus,
@@ -26,6 +27,7 @@ import {
   useSetRaceOverride,
   useSetSportOverride,
   useSplitActivitySource,
+  useTrimActivity,
 } from "../api/queries";
 import { ActivityCharts } from "../components/ActivityCharts";
 import { ActivityComparisonTable } from "../components/ActivityComparisonTable";
@@ -41,6 +43,7 @@ import {
   ActivityStatsGridPrimary,
   ActivityStatsGridSecondary,
 } from "../components/ActivityStatsGrid";
+import { ActivityTrimControls } from "../components/ActivityTrimControls";
 import { ActivityWeather } from "../components/ActivityWeather";
 import { BoulderingRoutesTable } from "../components/BoulderingRoutesTable";
 import { ChartFullscreen } from "../components/ChartFullscreen";
@@ -76,6 +79,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   // ActivityCharts panel -- mirrors SplitsTable/ActivityRouteMap's existing hover-highlight
   // pattern for per-km splits, just for laps instead.
   const [hoveredLapIndex, setHoveredLapIndex] = useState<number | null>(null);
+  const [isTrimming, setIsTrimming] = useState(false);
   const activity = useActivity(id);
   const stream = useActivityStream(id, activity.data?.stream_available ?? false, "medium");
   // A separate, higher-resolution fetch just for the route map + per-km splits below -- those
@@ -95,6 +99,12 @@ export function ActivityDetailPage({ id }: { id: string }) {
     const segments = computeSplitsAtInterval(route.distanceM, route.elapsedS, 100);
     return computePaceVariability(segments);
   }, [routeStream.data, activity.data]);
+  // The trim UI's own live preview reuses this same high-tier stream (see
+  // ActivityTrimControls.tsx's own docstring for why that needs no new backend endpoint).
+  const trimRoute = useMemo(
+    () => (routeStream.data ? buildRouteData(routeStream.data) : null),
+    [routeStream.data],
+  );
   const context = useActivityContext(id);
   const runInsights = useActivityInsights(
     id,
@@ -121,6 +131,8 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const setClimbRouteStatus = useSetClimbRouteStatus(id);
   const addClimbRoute = useAddClimbRoute(id);
   const deleteClimbRoute = useDeleteClimbRoute(id);
+  const trimActivity = useTrimActivity(id);
+  const clearActivityTrim = useClearActivityTrim(id);
 
   if (activity.isLoading) return <p>Loading…</p>;
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
@@ -273,7 +285,72 @@ export function ActivityDetailPage({ id }: { id: string }) {
         )}
       </div>
 
-      {routeStream.data && <ActivityRoute stream={routeStream.data} sport={sport} />}
+      {!isTrimming && a.transport_mix_flag && !a.has_trim && (
+        <section className="card activity-trim-banner">
+          <p className="activity-trim-banner__text">
+            This recording looks like it includes car travel
+            {a.transport_mix_flag.at_start && a.transport_mix_flag.at_end
+              ? " at the start and end"
+              : a.transport_mix_flag.at_start
+                ? " at the start"
+                : " at the end"}
+            . Want to trim it?
+          </p>
+          <div className="activity-trim-banner__actions">
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={() => setIsTrimming(true)}
+            >
+              Trim this activity
+            </button>
+          </div>
+        </section>
+      )}
+
+      {!isTrimming && a.has_trim && (
+        <section className="card activity-trim-banner">
+          <p className="activity-trim-banner__text">This recording has been trimmed.</p>
+          <div className="activity-trim-banner__actions">
+            <button
+              type="button"
+              className="button"
+              onClick={() => setIsTrimming(true)}
+            >
+              Adjust trim
+            </button>
+            <button
+              type="button"
+              className="button"
+              disabled={clearActivityTrim.isPending}
+              onClick={() => clearActivityTrim.mutate()}
+            >
+              {clearActivityTrim.isPending ? "Restoring…" : "Undo trim"}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {isTrimming && trimRoute && (
+        <ActivityTrimControls
+          route={trimRoute}
+          laps={a.laps}
+          activityStartTimeUtc={a.start_time_utc}
+          suggestedTrimStartS={a.transport_mix_flag?.suggested_trim_start_s ?? null}
+          suggestedTrimEndS={a.transport_mix_flag?.suggested_trim_end_s ?? null}
+          onCommit={(trimStartS, trimEndS) =>
+            trimActivity.mutate(
+              { trim_start_s: trimStartS, trim_end_s: trimEndS },
+              { onSuccess: () => setIsTrimming(false) },
+            )
+          }
+          onCancel={() => setIsTrimming(false)}
+          isSaving={trimActivity.isPending}
+          isError={trimActivity.isError}
+        />
+      )}
+
+      {!isTrimming && routeStream.data && <ActivityRoute stream={routeStream.data} sport={sport} />}
 
       <div className="activity-detail__layout">
         <div className="activity-detail__main-col">

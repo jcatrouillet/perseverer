@@ -287,6 +287,30 @@ bouldering_manual_route = Table(
     ),
 )
 
+# The athlete's own correction for a recording that includes a stretch of car travel it never
+# should have (forgot to stop tracking before/after driving to/from a hike) -- see
+# activity_trim.py's own docstring for why this can't be a destructive edit to the Parquet stream
+# or a bare UPDATE on `activity`: `sync rebuild` re-derives `activity`/`lap`/`route_geom` from raw
+# bytes on every run, so this durable record (never wiped -- see rebuild.py's
+# `_REBUILDABLE_TABLES`) is what makes the correction survive, re-applied by
+# apply_activity_trim_overrides. Offsets are elapsed seconds from the activity's own recorded
+# start -- stable across a rebuild the same way activity_start_time_utc itself is, since both are
+# parsed from the same archived bytes every time. Either offset may be null (trim only one side).
+activity_trim_override = Table(
+    "activity_trim_override",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("activity_start_time_utc", DateTime(), nullable=False),
+    Column("trim_start_s", Float, nullable=True),
+    Column("trim_end_s", Float, nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id", "activity_start_time_utc", name="uq_activity_trim_override_identity"
+    ),
+)
+
 activity_source_link = Table(
     "activity_source_link",
     metadata,

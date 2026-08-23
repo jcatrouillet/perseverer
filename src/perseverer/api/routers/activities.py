@@ -12,6 +12,7 @@ import duckdb
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import Connection, Engine, Row, case, func, select
 
+from perseverer.activity_trim import clear_activity_trim, set_activity_trim
 from perseverer.adapters.fit_folder import _local_date, _upsert_device, insert_new_activity
 from perseverer.adapters.strava_export import _overlay_csv_totals
 from perseverer.api.dependencies import get_conn, get_duckdb, get_engine, require_api_key
@@ -38,6 +39,7 @@ from perseverer.api.schemas.activities import (
     ActivitySportOverrideIn,
     ActivitySportOverrideOut,
     ActivitySummary,
+    ActivityTrimIn,
     ActivityWeatherOut,
     ActivityWorkoutOut,
     ActivityWorkoutStepOut,
@@ -51,6 +53,7 @@ from perseverer.api.schemas.activities import (
     LapOut,
     RouteOut,
     SplitOut,
+    TransportMixFlagOut,
 )
 from perseverer.api.schemas.common import Page, to_utc
 from perseverer.api.schemas.insights import InsightOut
@@ -67,6 +70,7 @@ from perseverer.db.schema import (
     activity_metric,
     activity_source_link,
     activity_stream,
+    activity_trim_override,
     activity_workout,
     activity_workout_step,
     health_observation,
@@ -77,9 +81,10 @@ from perseverer.db.schema import (
 )
 from perseverer.db.schema import device as device_table
 from perseverer.db.schema import split as split_table
+from perseverer.fitness import refresh_fitness_rollup
 from perseverer.gap import AVG_GAP_METRIC_KEY
 from perseverer.geocoding import get_or_fetch_activity_location, read_cached_location
-from perseverer.insights.engine import load_insight_activities
+from perseverer.insights.engine import load_insight_activities, refresh_insights
 from perseverer.insights.rules_activity import compute_activity_insights
 from perseverer.performance import VDOT_METRIC_KEY
 from perseverer.reparse import reparse_raw_object
@@ -91,6 +96,7 @@ from perseverer.sport_override import (
     set_sport_override,
 )
 from perseverer.stream_query import downsample
+from perseverer.transport_mix import ELIGIBLE_SPORTS, detect_transport_mix
 from perseverer.weather import get_or_fetch_activity_weather
 
 router = APIRouter()
@@ -574,6 +580,8 @@ def get_activity(
     activity_id: str,
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
+    con: duckdb.DuckDBPyConnection = Depends(get_duckdb),
+    settings: Settings = Depends(get_settings),
 ) -> ActivityDetail:
     row = conn.execute(
         select(activity).where(
@@ -586,10 +594,34 @@ def get_activity(
         raise HTTPException(status_code=404, detail="activity not found")
 
     stream_row = conn.execute(
-        select(activity_stream.c.activity_id).where(
+        select(activity_stream.c.parquet_path).where(
             activity_stream.c.activity_id == activity_id
         )
     ).fetchone()
+
+    # Detail-page-only, computed fresh every request rather than stored -- see
+    # TransportMixFlagOut's own docstring for why this never runs list-wide.
+    transport_mix_flag = None
+    if stream_row is not None and row.sport in ELIGIBLE_SPORTS:
+        result = detect_transport_mix(
+            con, settings.parquet_dir / stream_row.parquet_path, sport=row.sport
+        )
+        if result is not None:
+            transport_mix_flag = TransportMixFlagOut(
+                at_start=result.at_start,
+                at_end=result.at_end,
+                suggested_trim_start_s=result.suggested_trim_start_s,
+                suggested_trim_end_s=result.suggested_trim_end_s,
+            )
+    has_trim = (
+        conn.execute(
+            select(activity_trim_override.c.id).where(
+                activity_trim_override.c.athlete_id == athlete_id,
+                activity_trim_override.c.activity_start_time_utc == row.start_time_utc,
+            )
+        ).fetchone()
+        is not None
+    )
 
     device_row = None
     if row.device_id is not None:
@@ -654,6 +686,8 @@ def get_activity(
         estimated_sweat_loss_ml=estimated_sweat_loss_ml,
         carbohydrates_g=row.carbohydrates_g,
         sodium_mg=row.sodium_mg,
+        transport_mix_flag=transport_mix_flag,
+        has_trim=has_trim,
         device=(
             DeviceOut(
                 manufacturer=device_row.manufacturer,
@@ -1710,6 +1744,96 @@ def override_activity_fueling(
     return ActivityFuelingOut(carbohydrates_g=body.carbohydrates_g, sodium_mg=body.sodium_mg)
 
 
+def _refresh_after_trim_change(
+    conn: Connection, *, athlete_id: str, local_date: str | None
+) -> None:
+    """The rollup/fitness/insights cascade a trim commit or undo needs -- the first PATCH/POST-
+    style correction endpoint in this router to need it, since every other correction here
+    (sport/race/name/fueling, bouldering route status, source split) leaves distance/duration/
+    training_load untouched. Every ingest entry point (fit_folder, garmin_export, garmin_connect,
+    rebuild) already runs this exact three-call sequence after touching a date -- see e.g.
+    rebuild.py's own tail."""
+    if local_date is None:
+        return
+    refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates={local_date})
+    refresh_fitness_rollup(conn, athlete_id=athlete_id)
+    refresh_insights(conn, athlete_id=athlete_id)
+
+
+@router.post("/activities/{activity_id}/trim")
+def post_activity_trim(
+    activity_id: str,
+    body: ActivityTrimIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    con: duckdb.DuckDBPyConnection = Depends(get_duckdb),
+    settings: Settings = Depends(get_settings),
+) -> ActivityDetail:
+    """Trims a stretch of car travel from the start and/or end of a hiking/walking recording --
+    see activity_trim.py's own docstring for exactly what gets recomputed (distance, duration,
+    elevation, heart rate, route, laps) versus cleared (calories, training load, neither
+    honestly re-derivable from just the kept window)."""
+    if body.trim_start_s is None and body.trim_end_s is None:
+        raise HTTPException(
+            status_code=422, detail="at least one of trim_start_s/trim_end_s is required"
+        )
+    activity_row = conn.execute(
+        select(activity.c.local_date).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if activity_row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+    try:
+        set_activity_trim(
+            conn,
+            con,
+            settings.parquet_dir,
+            athlete_id=athlete_id,
+            activity_id=activity_id,
+            trim_start_s=body.trim_start_s,
+            trim_end_s=body.trim_end_s,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    _refresh_after_trim_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
+    conn.commit()
+    return get_activity(activity_id, athlete_id, conn=conn, con=con, settings=settings)
+
+
+@router.delete("/activities/{activity_id}/trim")
+def delete_activity_trim(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    con: duckdb.DuckDBPyConnection = Depends(get_duckdb),
+    settings: Settings = Depends(get_settings),
+) -> ActivityDetail:
+    """Undoes a trim, restoring the pristine pre-trim state -- see activity_trim.py's own
+    docstring for why this reparses the original raw bytes rather than recomputing with no
+    window (which could never bring calories/training load back)."""
+    activity_row = conn.execute(
+        select(activity.c.local_date).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if activity_row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+    try:
+        clear_activity_trim(
+            conn, settings.raw_archive_dir, athlete_id=athlete_id, activity_id=activity_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    _refresh_after_trim_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
+    conn.commit()
+    return get_activity(activity_id, athlete_id, conn=conn, con=con, settings=settings)
+
+
 @router.get("/activities/{activity_id}/stream")
 def get_activity_stream(
     activity_id: str,
@@ -1721,7 +1845,7 @@ def get_activity_stream(
     settings: Settings = Depends(get_settings),
 ) -> StreamResponse:
     activity_row = conn.execute(
-        select(activity.c.duration_s).where(
+        select(activity.c.duration_s, activity.c.start_time_utc).where(
             activity.c.id == activity_id,
             activity.c.athlete_id == athlete_id,
             activity.c.deleted_at.is_(None),
@@ -1743,6 +1867,22 @@ def get_activity_stream(
     available_channels = frozenset(json.loads(stream_row.channels))
     requested = channels or []
 
+    # An active trim means the Parquet file itself still holds the full original recording (see
+    # activity_trim.py's own "never destructive" docstring) -- every chart/map/mini-map should
+    # still only ever see the kept window, so this filters at read time rather than trusting
+    # every caller to already know about the trim.
+    trim_row = conn.execute(
+        select(
+            activity_trim_override.c.trim_start_s, activity_trim_override.c.trim_end_s
+        ).where(
+            activity_trim_override.c.athlete_id == athlete_id,
+            activity_trim_override.c.activity_start_time_utc == activity_row.start_time_utc,
+        )
+    ).fetchone()
+    window = None
+    if trim_row is not None:
+        window = (trim_row.trim_start_s or 0.0, trim_row.trim_end_s or float("inf"))
+
     try:
         result = downsample(
             con,
@@ -1752,6 +1892,7 @@ def get_activity_stream(
             available_channels=available_channels,
             duration_s=activity_row.duration_s or 0.0,
             n_samples=stream_row.n_samples,
+            window=window,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

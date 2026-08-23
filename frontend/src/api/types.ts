@@ -114,6 +114,18 @@ export interface ActivityDetail extends ActivitySummary {
   // until entered via PATCH .../fueling (see sport_override.py's own docstring).
   carbohydrates_g: number | null;
   sodium_mg: number | null;
+  // Computed fresh from this activity's own Parquet stream (see transport_mix.py) -- null
+  // unless the sport is hiking/walking and a sustained fast segment touches either boundary.
+  transport_mix_flag: TransportMixFlagOut | null;
+  // True once a trim has been committed for this activity.
+  has_trim: boolean;
+}
+
+export interface TransportMixFlagOut {
+  at_start: boolean;
+  at_end: boolean;
+  suggested_trim_start_s: number | null;
+  suggested_trim_end_s: number | null;
 }
 
 export interface ActivityContextRecentOut {

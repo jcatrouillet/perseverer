@@ -144,3 +144,50 @@ def test_unrecognized_channel_raises(con: duckdb.DuckDBPyConnection, tmp_path: P
             duration_s=9.0,
             n_samples=10,
         )
+
+
+def test_window_filters_to_the_given_elapsed_range(
+    con: duckdb.DuckDBPyConnection, tmp_path: Path
+) -> None:
+    """window=(lo, hi) restricts to elapsed seconds from the file's own first sample -- the
+    mechanism a trimmed activity's /stream endpoint relies on to never serve the trimmed-away
+    portion, without the Parquet file itself ever being truncated (activity_trim.py)."""
+    path = tmp_path / "stream.parquet"
+    _write_fixture(path, n_samples=100)
+
+    result = downsample(
+        con,
+        path,
+        tier="low",  # 100 samples, well under the 200-point low-tier target: no bucketing
+        channels=["heart_rate"],
+        available_channels=frozenset({"heart_rate", "cadence"}),
+        duration_s=99.0,
+        n_samples=100,
+        window=(10.0, 20.0),
+    )
+
+    assert len(result.timestamps) == 11  # seconds 10..20 inclusive
+    assert result.timestamps[0] == datetime(2025, 6, 1, tzinfo=UTC) + timedelta(seconds=10)
+    assert result.timestamps[-1] == datetime(2025, 6, 1, tzinfo=UTC) + timedelta(seconds=20)
+
+
+def test_window_filters_when_bucketing_too(
+    con: duckdb.DuckDBPyConnection, tmp_path: Path
+) -> None:
+    path = tmp_path / "stream.parquet"
+    n_samples = 5000
+    _write_fixture(path, n_samples)
+
+    result = downsample(
+        con,
+        path,
+        tier="low",  # target 200, well below n_samples: exercises the bucketed branch
+        channels=["heart_rate"],
+        available_channels=frozenset({"heart_rate", "cadence"}),
+        duration_s=1000.0,
+        n_samples=n_samples,
+        window=(0.0, 999.0),  # first 1000 of the 5000 seconds
+    )
+
+    assert result.timestamps[0] == datetime(2025, 6, 1, tzinfo=UTC)
+    assert result.timestamps[-1] < datetime(2025, 6, 1, tzinfo=UTC) + timedelta(seconds=1000)

@@ -547,3 +547,111 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+/* The car-travel flag banner + trim UI (transport_mix.py / activity_trim.py) -- follows
+   .activity-detail__layout the same way .bouldering-routes-section/.activity-context do (see
+   those rules' own comments), since it can be the first card on the page whenever no "Recent
+   efforts"/Time-in-zone/Intervals card renders before it. */
+.activity-trim-banner {
+  margin-top: var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.activity-trim-banner__text {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.activity-trim-banner__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+.activity-trim {
+  margin-top: var(--space-5);
+}
+
+.activity-trim__hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  max-width: 65ch;
+}
+
+.activity-trim__map {
+  margin-top: var(--space-3);
+}
+
+.activity-trim__sliders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.activity-trim__slider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.activity-trim__slider-row > span:first-child {
+  flex: 0 0 110px;
+  font-size: var(--font-size-sm);
+}
+
+.activity-trim__slider-row input[type="range"] {
+  flex: 1 1 auto;
+}
+
+.activity-trim__slider-readout {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  min-width: 6ch;
+  text-align: right;
+}
+
+.activity-trim__summary {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.activity-trim__laps {
+  margin-top: var(--space-3);
+}
+
+.activity-trim__laps ul {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--font-size-sm);
+}
+
+.activity-trim__lap--dropped {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.activity-trim__error {
+  margin-top: var(--space-2);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.activity-trim__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}

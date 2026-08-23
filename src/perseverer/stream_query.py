@@ -40,6 +40,7 @@ def downsample(
     available_channels: frozenset[str],
     duration_s: float,
     n_samples: int,
+    window: tuple[float, float] | None = None,
 ) -> ColumnarStream:
     """Bucket-averages `channels` (defaulting to all `available_channels` when empty) from
     `parquet_path` into ~`_TIER_TARGET_POINTS[tier]` points.
@@ -50,6 +51,11 @@ def downsample(
     param and a SQL-identifier-injection-shaped bug: DuckDB's parameter binding covers values,
     not column identifiers, which get interpolated into the query text below. Raises
     `ValueError` for an unknown tier or an unrecognized channel.
+
+    `window`, when given, is `(trim_start_s, trim_end_s)` elapsed seconds from the *file's own*
+    first recorded sample -- the Parquet file is never truncated (see activity_trim.py's own
+    "never destructive" docstring), so a trimmed activity's stream is still served by filtering
+    the same full file down to the kept window at read time, not a second smaller file.
     """
     if tier not in _TIER_TARGET_POINTS:
         raise ValueError(f"unknown tier {tier!r}, expected one of {sorted(_TIER_TARGET_POINTS)}")
@@ -62,14 +68,24 @@ def downsample(
     col_list = ", ".join(quoted)
     target_points = _TIER_TARGET_POINTS[tier]
 
+    window_clause = ""
+    window_params: list[str | float] = []
+    if window is not None:
+        window_clause = (
+            " WHERE epoch(timestamp_utc) - (SELECT min(epoch(timestamp_utc)) "
+            "FROM read_parquet(?)) BETWEEN ? AND ?"
+        )
+        window_params = [str(parquet_path), window[0], window[1]]
+
     if n_samples <= target_points:
         # Already at or under the target -- no bucketing needed, just read it back sorted.
         query = f"""
             SELECT epoch(timestamp_utc) AS bucket_start, {col_list}
             FROM read_parquet(?)
+            {window_clause}
             ORDER BY timestamp_utc
         """
-        rows = con.execute(query, [str(parquet_path)]).fetchall()
+        rows = con.execute(query, [str(parquet_path), *window_params]).fetchall()
     else:
         bucket_width_s = max(1, math.ceil(duration_s / target_points))
         agg_list = ", ".join(f"avg({q}) AS {q}" for q in quoted)
@@ -77,6 +93,7 @@ def downsample(
             WITH src AS (
                 SELECT epoch(timestamp_utc) AS ts, {col_list}
                 FROM read_parquet(?)
+                {window_clause}
             )
             SELECT
                 min(ts) AS bucket_start,
@@ -85,7 +102,9 @@ def downsample(
             GROUP BY CAST((ts - (SELECT min(ts) FROM src)) / ? AS BIGINT)
             ORDER BY bucket_start
         """
-        rows = con.execute(query, [str(parquet_path), bucket_width_s]).fetchall()
+        rows = con.execute(
+            query, [str(parquet_path), *window_params, bucket_width_s]
+        ).fetchall()
 
     timestamps = [datetime.fromtimestamp(row[0], tz=UTC) for row in rows]
     series: dict[str, list[float | None]] = {

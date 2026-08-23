@@ -321,6 +321,40 @@ export function useDeleteClimbRoute(activityId: string) {
   });
 }
 
+/** Commits a trim (see activity_trim.py's own docstring for what's recomputed vs. cleared) --
+ * invalidates the activity detail (distance/duration/route/laps/calories all change), the
+ * activity-list/calendar caches (their own totals for this activity's date are now stale until
+ * the server's own rollup recompute lands and a refetch picks it up), and this activity's own
+ * stream (now served windowed to the kept range, see stream_query.py's own `window` param). */
+export function useTrimActivity(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { trim_start_s: number | null; trim_end_s: number | null }) =>
+      apiPost<ActivityDetail>(`/api/v1/activities/${activityId}/trim`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-stream", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+/** Undoes a trim, restoring the pristine pre-trim state -- same invalidation set as
+ * useTrimActivity, its own inverse. */
+export function useClearActivityTrim(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiDelete<ActivityDetail>(`/api/v1/activities/${activityId}/trim`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-stream", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
 /** Point-in-time insights for one activity (GET /activities/{id}/insights) -- always bounded to
  * that activity's own past, never anything after it. `enabled` should be gated on the activity's
  * sport (see ActivityDetailPage.tsx's `isRunningSport` check) rather than always-on like

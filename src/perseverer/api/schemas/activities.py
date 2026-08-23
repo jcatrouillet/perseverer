@@ -64,6 +64,13 @@ class ActivityMetricOut(BaseModel):
     source: str
 
 
+class TransportMixFlagOut(BaseModel):
+    at_start: bool
+    at_end: bool
+    suggested_trim_start_s: float | None
+    suggested_trim_end_s: float | None
+
+
 class ActivitySummary(BaseModel):
     id: str
     start_time_utc: datetime
@@ -135,6 +142,14 @@ class ActivityDetail(ActivitySummary):
     # PATCH .../fueling.
     carbohydrates_g: float | None
     sodium_mg: float | None
+    # Computed on-demand from this activity's own Parquet stream (see transport_mix.py) --
+    # None whenever the sport isn't hiking/walking or no sustained fast segment touches either
+    # boundary. Detail-page-only (not on ActivitySummary): scanning every activity's own Parquet
+    # file for a list view would violate this app's precomputed-rollups discipline (CLAUDE.md).
+    transport_mix_flag: TransportMixFlagOut | None
+    # True once an activity_trim_override row exists for this activity -- lets the frontend show
+    # "Adjust trim"/"Undo trim" instead of the initial flag banner.
+    has_trim: bool
 
 
 class ActivityContextRecentOut(BaseModel):
@@ -372,6 +387,13 @@ class ActivityFuelingIn(BaseModel):
 class ActivityFuelingOut(BaseModel):
     carbohydrates_g: float | None
     sodium_mg: float | None
+
+
+class ActivityTrimIn(BaseModel):
+    # Elapsed seconds from the activity's own recorded start. Either may be omitted (None) to
+    # leave that side untrimmed -- see activity_trim.py::set_activity_trim.
+    trim_start_s: float | None = None
+    trim_end_s: float | None = None
 
 
 class ClimbRouteStatusIn(BaseModel):
