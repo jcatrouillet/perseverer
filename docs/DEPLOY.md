@@ -246,6 +246,20 @@ regardless), only the API calls it makes afterward fail.
   every rollup table for every date/period it touched. Safe to re-run (idempotent: a
   database already on the offset-adjusted convention has nothing left to change). Not needed for
   a fresh install — new ingests already use the fixed convention.
+- **Perseverer rename VDOT/pace-band metric-key migration**: any database populated before the
+  sporthealth -> perseverer rename has its VDOT and pace-band `activity_metric` rows stored under
+  the old hardcoded key prefix (`sporthealth.performance.vdot`,
+  `sporthealth.performance.pace_band.*`) — the rename updated the Python string constants
+  (`VDOT_METRIC_KEY` etc.) everywhere in code, but never touched already-written rows, so every
+  read via the new key silently returned nothing until this ran. Discovered live: bercy's own
+  Training Bands/Pace Trends charts showed all-zero data post-migration, which looked exactly
+  like "no data" rather than "wrong key" until traced back. Fix: `uv run sync backfill-vdot &&
+  uv run sync backfill-pace-bands` (or the same two commands via `podman exec perseverer-api`
+  in production) — both already do a full delete-and-recompute under the *current* key, so this
+  is the same repair either way; only the stale rows under the dead old-key prefix need a manual
+  `DELETE FROM activity_metric WHERE metric_key LIKE 'sporthealth.%'` afterward (harmless to
+  skip — nothing reads that prefix anymore — but leaves 9700+ orphaned rows behind). Not needed
+  for a fresh install or any database created after the rename.
 
 ## Backups (Phase 9)
 
