@@ -128,7 +128,9 @@ follow the same shape.
    (`PERSEVERER_API_KEY`, `PERSEVERER_JWT_SECRET`, `PERSEVERER_CORS_ALLOWED_ORIGINS`,
    `PERSEVERER_API_BASE_URL`, Garmin/Eufy settings). Never commit this file. All three
    containers read it via `EnvironmentFile=` — each just ignores the keys it doesn't use.
-3. **GHCR auth**, if the packages are private:
+3. **GHCR auth** — not needed as of this writing: the three packages
+   (`perseverer-{api,worker,frontend}`) are public, so `podman pull` works with no credentials.
+   Only needed again if they're ever switched back to private:
    ```bash
    podman login ghcr.io -u <github-username>
    ```
@@ -138,13 +140,20 @@ follow the same shape.
      quadlet/perseverer-worker.container quadlet/perseverer-frontend.container
    systemctl --user enable --now perseverer-api perseverer-worker perseverer-frontend
    ```
-5. **Auto-update on new pushes.** Each unit sets `AutoUpdate=registry` (checks GHCR for a newer
+5. **Run migrations** — starting the units alone does not create or update the schema against
+   the bind-mounted database. `alembic.ini` and `alembic/` are baked into the api image
+   specifically so this can run against the live container, no separate host-side alembic
+   invocation needed:
+   ```bash
+   podman exec perseverer-api alembic upgrade head
+   ```
+6. **Auto-update on new pushes.** Each unit sets `AutoUpdate=registry` (checks GHCR for a newer
    digest under the same `:latest` tag and restarts in place) — this only actually runs on a
    schedule once the stock timer is enabled:
    ```bash
    systemctl --user enable --now podman-auto-update.timer
    ```
-6. **Survive logout / start on boot**, since this is a rootless *user* session with no one
+7. **Survive logout / start on boot**, since this is a rootless *user* session with no one
    permanently logged in:
    ```bash
    sudo loginctl enable-linger prez
@@ -189,13 +198,42 @@ real per-athlete authentication instead (password login issuing a JWT, or a stan
 API key; see ADR 0008). `sync athlete set-password` / `sync athlete create-key` provision an
 athlete's credentials.
 
-TODO (still open): document the exact reverse-proxy rule now pointing at bercy (hostname →
-`bercy:8080`/`bercy:8000`), the header-forwarding configuration, and the certificate path — this
-needs the user's actual proxy configuration, not something decidable from this repo alone. Also
-still open: there is currently no migration step for the containerized deploy's data volume in
-this runbook at all (starting the Quadlet units alone does not run `alembic upgrade head`
-against the bind-mounted database) — a gap this phase found but did not fix, since it predates
-Phase 5 and isn't specific to it.
+### The actual reverse-proxy configuration (confirmed live, not guessed)
+
+DSM's Reverse Proxy (Control Panel → Login Portal → Advanced, or Application Portal depending on
+DSM version) runs on `nas.catrouillet.net` (`192.168.1.98`), aliased as `perseverer.catrouillet.net`.
+Two rules, both HTTPS source → plain HTTP destination (bercy never terminates TLS itself):
+
+| Rule | Source | Destination |
+|---|---|---|
+| frontend | `https://perseverer.catrouillet.net:443` (+ `:80`) | `http://bercy.catrouillet.net:8080` |
+| api | `https://perseverer.catrouillet.net:444` (+ `:81`) | `http://bercy.catrouillet.net:8000` |
+
+**Gotcha that cost real debugging time:** each HTTPS reverse-proxy rule needs its own explicit
+certificate assignment in **Control Panel → Security → Certificate → Settings** (a separate tab
+from the certificate *list* itself, mapping services to certs). A rule with nothing bound
+doesn't error — DSM just silently drops the TLS handshake, which is indistinguishable from a
+network-level timeout/routing failure from the client side. If a new reverse-proxy rule "hangs"
+from outside the LAN with the port-forwarding and firewall both already confirmed fine, check
+this first.
+
+**Router (UniFi):** a single port-forward rule, WAN ports `80,443,81,444` (TCP) → `192.168.1.98`
+(the reverse-proxy device — not bercy directly). The WAN IP Address field showing a private
+(`192.168.0.x`) address with a warning icon looked like a second NAT layer needing its own
+separate forwarding rule, but isn't in this case — confirmed live that all fiber traffic already
+reaches this gateway directly.
+
+**Split-horizon DNS** (the actual fix for "works on my phone, not on my LAN"): a UniFi Local DNS
+Record (Settings → Networks → Advanced → Local DNS Record) maps `perseverer.catrouillet.net` →
+`192.168.1.98` for LAN queries only. Critically, this must point at the **reverse-proxy device's**
+LAN IP, not bercy's — bercy has no TLS listener at all (plain HTTP only, on 8000/8080), so a LAN
+client resolving straight to bercy over `https://` gets an immediate connection failure once
+split-horizon is wired, since there's nothing there to answer HTTPS at all. Without this override,
+`frontend/public/config.js`'s `apiBaseUrl` (necessarily the public hostname, since it must also
+work from outside the LAN) is simply unreachable from inside the house — same hairpin-NAT
+limitation as testing directly against the public IP, just discovered via "no data loads" instead
+of an obvious connection error, since the *page* still loads fine (nginx serves it locally
+regardless), only the API calls it makes afterward fail.
 
 ## One-time backfills
 
