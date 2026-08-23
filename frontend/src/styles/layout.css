@@ -609,11 +609,21 @@ tbody tr:last-child td {
   font-size: 0.75rem;
 }
 
+/* flex-wrap: nowrap + overflow-x: auto, not wrap -- on desktop `.date-nav`'s own width is
+   max-content (sized to fit every row without wrapping at all, so this never visibly does
+   anything there), but the max-width: 100% cap above forces a narrower width on a phone
+   screen, and wrap was the wrong response to that: confirmed live, the years row alone wrapped
+   to 4 lines, months to 2, for a navigation bar meant to be a slim strip pinned above every
+   calendar page. Scrolling within its own box (same pattern this session's other wide-content
+   fixes already use) keeps it a single dense line and still reaches every year/month by
+   swiping, rather than ballooning into a multi-line block that pushes the actual page content
+   down. */
 .date-nav__row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   line-height: 1.6;
 }
 
@@ -627,6 +637,15 @@ tbody tr:last-child td {
   margin-top: var(--space-1);
   padding-top: var(--space-1);
   border-top: 1px solid var(--color-border);
+}
+
+.date-nav__row a,
+.date-nav__row button,
+.date-nav__week-row a {
+  /* Without this, default flex-shrink lets each year/month squish narrower before the row's
+     own overflow-x: auto ever kicks in -- every item keeps its natural width instead, so
+     overflow (not shrinking) is what triggers the scroll. */
+  flex-shrink: 0;
 }
 
 .date-nav__row a,
