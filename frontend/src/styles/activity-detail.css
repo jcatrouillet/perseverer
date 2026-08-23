@@ -35,6 +35,19 @@
   min-width: 0;
 }
 
+/* Time & calories / Climb (bouldering only): each has just 2-3 tiles, far fewer than a typical
+   Distance & time column -- letting them each grow to fill half the row (like Heart rate/
+   Elevation's own even split, which genuinely needs the room) left the row's own `gap` looking
+   like a huge void between them, since .stat-grid's `auto-fill, minmax(150px, 1fr)` columns
+   were stretching to fill that unnecessary width instead of sizing to their own content. A fixed
+   320px (not `flex: 0 1 auto`, which shrank to a single 150px tile column and read as too
+   cramped/tall) keeps room for 2 tiles side by side while staying snug against the row's gap
+   instead of sprawling to half the row's own width. Still shrinks below 320px on a narrow
+   viewport, same as the plain `.activity-stats__col` case elsewhere. */
+.activity-stats__row--compact > .activity-stats__col {
+  flex: 0 1 320px;
+}
+
 /* "Fastest for this distance" as a narrow side column next to the whole stats grid (Distance &
    time through Hydration), not a full-width section below it -- the column's own height is
    whatever its row count needs, which may run longer or shorter than the stats grid beside it;

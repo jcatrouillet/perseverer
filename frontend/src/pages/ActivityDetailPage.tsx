@@ -482,6 +482,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
             onSetStatus={(splitIndex, result) =>
               setClimbRouteStatus.mutate({ splitIndex, result })
             }
+            onSetGrade={(splitIndex, grade) => setClimbRouteStatus.mutate({ splitIndex, grade })}
             onAddRoute={(grade, result) => addClimbRoute.mutate({ grade, result })}
             onDeleteRoute={(splitIndex) => deleteClimbRoute.mutate(splitIndex)}
             isSaving={

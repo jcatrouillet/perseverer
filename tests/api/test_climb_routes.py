@@ -80,6 +80,86 @@ class TestPatchClimbRouteStatus:
         )
         assert r.status_code == 404
 
+    def test_overrides_grade_and_returns_the_updated_split(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="a1", sport="rock_climbing", sub_sport="bouldering")
+        _add_split(engine, activity_id="a1", split_index=0, grade=2)
+
+        r = client.patch(
+            "/api/v1/activities/a1/climb-routes/0",
+            json={"grade": 5},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.json()["climb_grade"] == 5
+
+    def test_can_correct_grade_and_status_together(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="a1", sport="rock_climbing", sub_sport="bouldering")
+        _add_split(engine, activity_id="a1", split_index=0, grade=2, result="attempt")
+
+        r = client.patch(
+            "/api/v1/activities/a1/climb-routes/0",
+            json={"grade": 5, "result": "completed"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.json()["climb_grade"] == 5
+        assert r.json()["climb_result"] == "completed"
+
+    def test_422_when_neither_grade_nor_result_given(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="a1", sport="rock_climbing", sub_sport="bouldering")
+        _add_split(engine, activity_id="a1", split_index=0)
+
+        r = client.patch(
+            "/api/v1/activities/a1/climb-routes/0", json={}, headers=auth_headers,
+        )
+        assert r.status_code == 422
+
+    def test_404_for_a_negative_grade(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="a1", sport="rock_climbing", sub_sport="bouldering")
+        _add_split(engine, activity_id="a1", split_index=0)
+
+        r = client.patch(
+            "/api/v1/activities/a1/climb-routes/0",
+            json={"grade": -1},
+            headers=auth_headers,
+        )
+        assert r.status_code == 404
+
+    def test_grade_correction_updates_a_manually_added_route_too(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="a1", sport="rock_climbing", sub_sport="bouldering")
+
+        add_r = client.post(
+            "/api/v1/activities/a1/climb-routes",
+            json={"grade": 2, "result": "attempt"},
+            headers=auth_headers,
+        )
+        assert add_r.status_code == 200
+        split_index = add_r.json()["split_index"]
+
+        r = client.patch(
+            f"/api/v1/activities/a1/climb-routes/{split_index}",
+            json={"grade": 7},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.json()["climb_grade"] == 7
+        assert r.json()["climb_result"] == "attempt"
+
 
 class TestPostClimbRoute:
     def test_creates_a_manual_route(

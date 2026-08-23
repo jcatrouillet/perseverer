@@ -29,6 +29,7 @@ describe("BoulderingRoutesTable", () => {
       <BoulderingRoutesTable
         splits={[]}
         onSetStatus={noop}
+        onSetGrade={noop}
         onAddRoute={noop}
         onDeleteRoute={noop}
         isSaving={false}
@@ -48,6 +49,7 @@ describe("BoulderingRoutesTable", () => {
           split({ split_index: 2, climb_grade: 4, climb_result: "attempt", climb_avg_hr: 150 }),
         ]}
         onSetStatus={noop}
+        onSetGrade={noop}
         onAddRoute={noop}
         onDeleteRoute={noop}
         isSaving={false}
@@ -55,12 +57,15 @@ describe("BoulderingRoutesTable", () => {
       />,
     );
     const rows = screen.getAllByRole("row");
-    expect(within(rows[1]!).getByText("V2")).toBeInTheDocument();
-    expect(within(rows[2]!).getByText("V4")).toBeInTheDocument();
     expect(within(rows[2]!).getByText("150 bpm")).toBeInTheDocument();
-    // Status is an editable <select>, not plain text -- confirm via its current value instead.
-    expect(within(rows[1]!).getByRole("combobox")).toHaveValue("completed");
-    expect(within(rows[2]!).getByRole("combobox")).toHaveValue("attempt");
+    // Grade and status are both editable <select>s, not plain text -- confirm via their current
+    // values instead. Grade is the first combobox in the row, status the second.
+    const row1Selects = within(rows[1]!).getAllByRole("combobox");
+    const row2Selects = within(rows[2]!).getAllByRole("combobox");
+    expect(row1Selects[0]).toHaveValue("2");
+    expect(row1Selects[1]).toHaveValue("completed");
+    expect(row2Selects[0]).toHaveValue("4");
+    expect(row2Selects[1]).toHaveValue("attempt");
   });
 
   it("captions with the completed/total count", () => {
@@ -72,6 +77,7 @@ describe("BoulderingRoutesTable", () => {
           split({ split_index: 4, climb_result: "attempt" }),
         ]}
         onSetStatus={noop}
+        onSetGrade={noop}
         onAddRoute={noop}
         onDeleteRoute={noop}
         isSaving={false}
@@ -86,6 +92,7 @@ describe("BoulderingRoutesTable", () => {
       <BoulderingRoutesTable
         splits={[split({ climb_avg_hr: null })]}
         onSetStatus={noop}
+        onSetGrade={noop}
         onAddRoute={noop}
         onDeleteRoute={noop}
         isSaving={false}
@@ -102,6 +109,26 @@ describe("BoulderingRoutesTable", () => {
       <BoulderingRoutesTable
         splits={[split({ split_index: 5, climb_result: "attempt" })]}
         onSetStatus={onSetStatus}
+        onSetGrade={noop}
+        onAddRoute={noop}
+        onDeleteRoute={noop}
+        isSaving={false}
+        isError={false}
+      />,
+    );
+    // Grade is the first combobox in the row, status the second.
+    const select = screen.getAllByRole("combobox")[1]!;
+    fireEvent.change(select, { target: { value: "completed" } });
+    expect(onSetStatus).toHaveBeenCalledWith(5, "completed");
+  });
+
+  it("calls onSetGrade with the route's own split_index when its grade is changed", () => {
+    const onSetGrade = vi.fn();
+    render(
+      <BoulderingRoutesTable
+        splits={[split({ split_index: 5, climb_grade: 2 })]}
+        onSetStatus={noop}
+        onSetGrade={onSetGrade}
         onAddRoute={noop}
         onDeleteRoute={noop}
         isSaving={false}
@@ -109,8 +136,8 @@ describe("BoulderingRoutesTable", () => {
       />,
     );
     const select = screen.getAllByRole("combobox")[0]!;
-    fireEvent.change(select, { target: { value: "completed" } });
-    expect(onSetStatus).toHaveBeenCalledWith(5, "completed");
+    fireEvent.change(select, { target: { value: "6" } });
+    expect(onSetGrade).toHaveBeenCalledWith(5, 6);
   });
 
   it("shows a delete button only for a manually-added route", () => {
@@ -121,6 +148,7 @@ describe("BoulderingRoutesTable", () => {
           split({ split_index: 1, is_manual: true }),
         ]}
         onSetStatus={noop}
+        onSetGrade={noop}
         onAddRoute={noop}
         onDeleteRoute={noop}
         isSaving={false}
@@ -136,6 +164,7 @@ describe("BoulderingRoutesTable", () => {
       <BoulderingRoutesTable
         splits={[split({ split_index: 3, is_manual: true })]}
         onSetStatus={noop}
+        onSetGrade={noop}
         onAddRoute={noop}
         onDeleteRoute={onDeleteRoute}
         isSaving={false}
@@ -152,6 +181,7 @@ describe("BoulderingRoutesTable", () => {
       <BoulderingRoutesTable
         splits={[]}
         onSetStatus={noop}
+        onSetGrade={noop}
         onAddRoute={onAddRoute}
         onDeleteRoute={noop}
         isSaving={false}
@@ -168,6 +198,7 @@ describe("BoulderingRoutesTable", () => {
       <BoulderingRoutesTable
         splits={[]}
         onSetStatus={noop}
+        onSetGrade={noop}
         onAddRoute={noop}
         onDeleteRoute={noop}
         isSaving={false}

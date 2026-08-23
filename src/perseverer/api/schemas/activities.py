@@ -397,9 +397,12 @@ class ActivityTrimIn(BaseModel):
 
 
 class ClimbRouteStatusIn(BaseModel):
-    # Matches bouldering_overrides.py::VALID_RESULTS exactly -- validated there, not re-declared
-    # as a Literal here, so the two can't quietly drift apart.
-    result: str
+    # Both optional -- send just one to correct only that field, leaving any separately-recorded
+    # correction on this same route untouched (see bouldering_overrides.py's own docstring).
+    # `result` matches bouldering_overrides.py::VALID_RESULTS exactly -- validated there, not
+    # re-declared as a Literal here, so the two can't quietly drift apart.
+    result: str | None = None
+    grade: int | None = None
 
 
 class ClimbRouteAddIn(BaseModel):

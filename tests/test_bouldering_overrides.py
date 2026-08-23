@@ -14,6 +14,7 @@ from perseverer.bouldering_overrides import (
     add_manual_route,
     apply_bouldering_route_overrides,
     delete_manual_route,
+    set_route_grade_override,
     set_route_status_override,
 )
 from perseverer.db.engine import make_engine
@@ -329,4 +330,175 @@ class TestDeleteManualRoute:
             with pytest.raises(ValueError, match="no manually-added route"):
                 delete_manual_route(
                     conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0,
+                )
+
+
+class TestSetRouteGradeOverride:
+    def test_overrides_the_live_split_immediately_for_a_fit_derived_route(
+        self, tmp_path: Path
+    ) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1")
+            _add_split(conn, activity_id="a1", split_index=0, grade=2)
+            conn.commit()
+
+            set_route_grade_override(
+                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0, grade=5,
+            )
+            conn.commit()
+
+            row = conn.execute(select(split.c.climb_grade)).one()
+        assert row.climb_grade == 5
+
+    def test_survives_a_simulated_rebuild_for_a_fit_derived_route(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1")
+            _add_split(conn, activity_id="a1", split_index=0, grade=2)
+            conn.commit()
+            set_route_grade_override(
+                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0, grade=5,
+            )
+            conn.commit()
+
+            # "Rebuild": wipe and re-derive the split fresh from raw bytes (grade back to what
+            # the FIT file itself says), then re-apply the durable correction.
+            conn.execute(delete(split))
+            _add_split(conn, activity_id="a1", split_index=0, grade=2)
+            conn.commit()
+
+            changed = apply_bouldering_route_overrides(conn, athlete_id=DEFAULT_ATHLETE_ID)
+            conn.commit()
+
+            row = conn.execute(select(split.c.climb_grade)).one()
+        assert changed == 1
+        assert row.climb_grade == 5
+
+    def test_grade_and_status_corrections_on_the_same_route_dont_clobber_each_other(
+        self, tmp_path: Path
+    ) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1")
+            _add_split(conn, activity_id="a1", split_index=0, grade=2, result="attempt")
+            conn.commit()
+
+            set_route_status_override(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=0,
+                result="completed",
+            )
+            conn.commit()
+            set_route_grade_override(
+                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0, grade=5,
+            )
+            conn.commit()
+
+            row = conn.execute(
+                select(split.c.climb_grade, split.c.climb_result)
+            ).one()
+        assert (row.climb_grade, row.climb_result) == (5, "completed")
+
+        # Both corrections -- recorded independently on the same override row -- survive a
+        # rebuild together.
+        with engine.connect() as conn:
+            conn.execute(delete(split))
+            _add_split(conn, activity_id="a1", split_index=0, grade=2, result="attempt")
+            conn.commit()
+            apply_bouldering_route_overrides(conn, athlete_id=DEFAULT_ATHLETE_ID)
+            conn.commit()
+            row = conn.execute(
+                select(split.c.climb_grade, split.c.climb_result)
+            ).one()
+        assert (row.climb_grade, row.climb_result) == (5, "completed")
+
+    def test_updates_bouldering_manual_route_for_a_manually_added_route(
+        self, tmp_path: Path
+    ) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1")
+            conn.commit()
+            split_index = add_manual_route(
+                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=2, result="attempt",
+            )
+            conn.commit()
+
+            set_route_grade_override(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=split_index,
+                grade=7,
+            )
+            conn.commit()
+
+            row = conn.execute(select(split.c.climb_grade, split.c.climb_result)).one()
+        assert (row.climb_grade, row.climb_result) == (7, "attempt")
+
+    def test_manual_route_grade_correction_survives_a_simulated_rebuild(
+        self, tmp_path: Path
+    ) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1")
+            conn.commit()
+            split_index = add_manual_route(
+                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=2, result="attempt",
+            )
+            conn.commit()
+            set_route_grade_override(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=split_index,
+                grade=7,
+            )
+            conn.commit()
+
+            # "Rebuild": wipe the live split entirely (a manual route has no FIT bytes to
+            # re-derive from -- apply_bouldering_route_overrides must recreate it from scratch).
+            conn.execute(delete(split))
+            conn.commit()
+
+            changed = apply_bouldering_route_overrides(conn, athlete_id=DEFAULT_ATHLETE_ID)
+            conn.commit()
+
+            row = conn.execute(select(split.c.climb_grade, split.c.climb_result)).one()
+        assert changed == 1
+        assert (row.climb_grade, row.climb_result) == (7, "attempt")
+
+    def test_rejects_a_negative_grade(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1")
+            _add_split(conn, activity_id="a1", split_index=0)
+            conn.commit()
+
+            with pytest.raises(ValueError, match="non-negative"):
+                set_route_grade_override(
+                    conn,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    split_index=0,
+                    grade=-1,
+                )
+
+    def test_404s_for_a_rest_split(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1")
+            _add_split(conn, activity_id="a1", split_index=0, split_type="climb_rest", grade=None)
+            conn.commit()
+
+            with pytest.raises(ValueError, match="no climb_active route"):
+                set_route_grade_override(
+                    conn,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    split_index=0,
+                    grade=3,
                 )

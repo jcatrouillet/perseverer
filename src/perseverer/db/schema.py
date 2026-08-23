@@ -249,7 +249,11 @@ bouldering_route_status_override = Table(
     Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
     Column("activity_start_time_utc", DateTime(), nullable=False),
     Column("split_index", Integer, nullable=False),
-    Column("result", String, nullable=False),
+    # Both nullable, set independently -- a correction row may fix just the status, just the
+    # grade, or both, same "only the columns actually recorded are written" contract as
+    # sport_override.py's activity_sport_override. See bouldering_overrides.py's own docstring.
+    Column("result", String, nullable=True),
+    Column("grade", Integer, nullable=True),
     Column("created_at", DateTime(), nullable=False),
     UniqueConstraint(
         "athlete_id",

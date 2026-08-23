@@ -104,6 +104,76 @@ def set_route_status_override(
     )
 
 
+def set_route_grade_override(
+    conn: Connection, *, athlete_id: str, activity_id: str, split_index: int, grade: int
+) -> None:
+    """Corrects a route's grade -- for a FIT-derived route this is the same durable-override
+    shape as `set_route_status_override` (upserting just the `grade` column, leaving any
+    separately-recorded status correction on that same row untouched). For a manually-added
+    route there's no separate override table to write: `bouldering_manual_route` is already that
+    route's own durable record, so this updates its `grade` column directly instead -- the next
+    `apply_bouldering_route_overrides` picks up the corrected value for free, through the same
+    manual-route reinsertion it already does, no separate reapply path needed. Raises
+    `ValueError` if grade is negative or split_index doesn't identify a real climb_active route.
+    """
+    if grade < 0:
+        raise ValueError(f"grade must be non-negative, got {grade!r}")
+    start_time_utc = _start_time_for(conn, athlete_id=athlete_id, activity_id=activity_id)
+
+    split_row = conn.execute(
+        select(split.c.split_type, split.c.is_manual).where(
+            split.c.athlete_id == athlete_id,
+            split.c.activity_id == activity_id,
+            split.c.split_index == split_index,
+        )
+    ).fetchone()
+    if split_row is None or split_row.split_type != "climb_active":
+        raise ValueError(
+            f"activity {activity_id!r} has no climb_active route at split_index {split_index}"
+        )
+
+    if split_row.is_manual:
+        result = conn.execute(
+            bouldering_manual_route.update()
+            .where(
+                bouldering_manual_route.c.athlete_id == athlete_id,
+                bouldering_manual_route.c.activity_start_time_utc == start_time_utc,
+                bouldering_manual_route.c.split_index == split_index,
+            )
+            .values(grade=grade)
+        )
+        if result.rowcount == 0:
+            raise ValueError(
+                f"activity {activity_id!r} has no manual-route record at split_index "
+                f"{split_index}"
+            )
+    else:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        stmt = sqlite_insert(bouldering_route_status_override).values(
+            athlete_id=athlete_id,
+            activity_start_time_utc=start_time_utc,
+            split_index=split_index,
+            grade=grade,
+            created_at=now,
+        )
+        conn.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["athlete_id", "activity_start_time_utc", "split_index"],
+                set_={"grade": grade, "created_at": now},
+            )
+        )
+
+    conn.execute(
+        split.update()
+        .where(
+            split.c.athlete_id == athlete_id,
+            split.c.activity_id == activity_id,
+            split.c.split_index == split_index,
+        )
+        .values(climb_grade=grade)
+    )
+
+
 def _next_split_index(conn: Connection, *, athlete_id: str, activity_id: str) -> int:
     return cast(
         int,
@@ -189,13 +259,16 @@ def delete_manual_route(
 
 
 def apply_bouldering_route_overrides(conn: Connection, *, athlete_id: str) -> int:
-    """Re-applies every recorded route-status correction and re-inserts every manually-added
-    route -- called at the end of `sync rebuild` so both survive a full wipe-and-replay. Status
-    overrides match by exact `(start_time_utc, split_index)` equality (both sides come from the
-    same archived bytes, identical down to the second). Manual routes are re-appended in
-    `manual_order` sequence, exactly as `add_manual_route` inserts them the first time -- each
-    one's freshly (re-)computed live `split_index` is written back onto its own durable row, so a
-    later delete can still find it directly. Returns the number of splits corrected or added.
+    """Re-applies every recorded route-status/grade correction and re-inserts every manually-
+    added route -- called at the end of `sync rebuild` so all three survive a full wipe-and-
+    replay. Corrections match by exact `(start_time_utc, split_index)` equality (both sides come
+    from the same archived bytes, identical down to the second) -- only the columns actually
+    recorded on a given override row are written, same as `apply_sport_overrides`, so a grade-
+    only correction never overwrites a separately-recorded status back to null and vice versa.
+    Manual routes are re-appended in `manual_order` sequence, exactly as `add_manual_route`
+    inserts them the first time -- each one's freshly (re-)computed live `split_index` is written
+    back onto its own durable row, so a later delete/grade-edit can still find it directly.
+    Returns the number of splits corrected or added.
     """
     changed = 0
 
@@ -204,9 +277,12 @@ def apply_bouldering_route_overrides(conn: Connection, *, athlete_id: str) -> in
             bouldering_route_status_override.c.activity_start_time_utc,
             bouldering_route_status_override.c.split_index,
             bouldering_route_status_override.c.result,
+            bouldering_route_status_override.c.grade,
         ).where(bouldering_route_status_override.c.athlete_id == athlete_id)
     ).fetchall()
     for o in status_overrides:
+        if o.result is None and o.grade is None:
+            continue
         activity_row = conn.execute(
             select(activity.c.id).where(
                 activity.c.athlete_id == athlete_id,
@@ -216,6 +292,11 @@ def apply_bouldering_route_overrides(conn: Connection, *, athlete_id: str) -> in
         ).fetchone()
         if activity_row is None:
             continue
+        values: dict[str, object] = {}
+        if o.result is not None:
+            values["climb_result"] = o.result
+        if o.grade is not None:
+            values["climb_grade"] = o.grade
         result = conn.execute(
             split.update()
             .where(
@@ -224,7 +305,7 @@ def apply_bouldering_route_overrides(conn: Connection, *, athlete_id: str) -> in
                 split.c.split_index == o.split_index,
                 split.c.split_type == "climb_active",
             )
-            .values(climb_result=o.result)
+            .values(**values)
         )
         changed += result.rowcount
 

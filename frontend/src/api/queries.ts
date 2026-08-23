@@ -266,16 +266,25 @@ export function useClimbingSummary(startDate: string, endDate: string) {
   });
 }
 
-/** A manual "I logged the wrong status" correction for one route (see
- * bouldering_overrides.py's own docstring) -- invalidates the activity detail query so the
- * corrected split flows straight back through the same `splits` array everything else here
- * already reads. */
+/** A manual "I logged the wrong status/grade" correction for one route (see
+ * bouldering_overrides.py's own docstring) -- either or both may be sent in one call.
+ * Invalidates the activity detail query so the corrected split flows straight back through the
+ * same `splits` array everything else here already reads. */
 export function useSetClimbRouteStatus(activityId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ splitIndex, result }: { splitIndex: number; result: string }) =>
+    mutationFn: ({
+      splitIndex,
+      result,
+      grade,
+    }: {
+      splitIndex: number;
+      result?: string;
+      grade?: number;
+    }) =>
       apiPatch<SplitOut>(`/api/v1/activities/${activityId}/climb-routes/${splitIndex}`, {
         result,
+        grade,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });

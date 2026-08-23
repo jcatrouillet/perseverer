@@ -33,6 +33,7 @@ const GRADE_OPTIONS = Array.from({ length: 10 }, (_, i) => i);
 export function BoulderingRoutesTable({
   splits,
   onSetStatus,
+  onSetGrade,
   onAddRoute,
   onDeleteRoute,
   isSaving,
@@ -40,6 +41,7 @@ export function BoulderingRoutesTable({
 }: {
   splits: SplitOut[];
   onSetStatus: (splitIndex: number, result: string) => void;
+  onSetGrade: (splitIndex: number, grade: number) => void;
   onAddRoute: (grade: number, result: string) => void;
   onDeleteRoute: (splitIndex: number) => void;
   isSaving: boolean;
@@ -82,7 +84,24 @@ export function BoulderingRoutesTable({
                 }
               >
                 <td>{r.routeNumber}</td>
-                <td>{formatGrade(r.grade)}</td>
+                <td>
+                  <select
+                    value={r.grade}
+                    disabled={isSaving}
+                    onChange={(e) => onSetGrade(r.splitIndex, Number(e.target.value))}
+                  >
+                    {!GRADE_OPTIONS.includes(r.grade) && (
+                      <option value={r.grade} disabled>
+                        {formatGrade(r.grade)}
+                      </option>
+                    )}
+                    {GRADE_OPTIONS.map((g) => (
+                      <option key={g} value={g}>
+                        {formatGrade(g)}
+                      </option>
+                    ))}
+                  </select>
+                </td>
                 <td>
                   <select
                     value={r.result}

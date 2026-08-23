@@ -42,7 +42,11 @@ export function ActivityStatsGridPrimary({
 
   return (
     <div className="activity-stats">
-      <div className="activity-stats__row">
+      <div
+        className={
+          isBouldering ? "activity-stats__row activity-stats__row--compact" : "activity-stats__row"
+        }
+      >
         <div className="activity-stats__col">
           <h3>{isBouldering ? "Time & calories" : "Distance & time"}</h3>
           <div className="stat-grid">

@@ -62,6 +62,7 @@ from perseverer.archive import read_raw_bytes
 from perseverer.bouldering_overrides import (
     add_manual_route,
     delete_manual_route,
+    set_route_grade_override,
     set_route_status_override,
 )
 from perseverer.config import Settings, get_settings
@@ -1166,17 +1167,30 @@ def patch_climb_route_status(
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
 ) -> SplitOut:
-    """A manual "I logged the wrong status" correction for one route -- see
-    bouldering_overrides.py's own docstring for why this is a durable, rebuild-safe correction
-    table rather than a one-off column mutation."""
+    """A manual "I logged the wrong status/grade" correction for one route -- either or both may
+    be sent in one request. See bouldering_overrides.py's own docstring for why this is a
+    durable, rebuild-safe correction rather than a one-off column mutation, and for why a grade
+    correction on a manually-added route updates a different table than one on a FIT-derived
+    route."""
+    if body.result is None and body.grade is None:
+        raise HTTPException(status_code=422, detail="at least one of result/grade is required")
     try:
-        set_route_status_override(
-            conn,
-            athlete_id=athlete_id,
-            activity_id=activity_id,
-            split_index=split_index,
-            result=body.result,
-        )
+        if body.result is not None:
+            set_route_status_override(
+                conn,
+                athlete_id=athlete_id,
+                activity_id=activity_id,
+                split_index=split_index,
+                result=body.result,
+            )
+        if body.grade is not None:
+            set_route_grade_override(
+                conn,
+                athlete_id=athlete_id,
+                activity_id=activity_id,
+                split_index=split_index,
+                grade=body.grade,
+            )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     conn.commit()
