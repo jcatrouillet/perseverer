@@ -26,12 +26,17 @@
   margin-top: var(--space-5);
 }
 
-/* No horizontal scroll, ever: every week column is a fractional share of the grid's own width
-   (not a fixed px), so a full year (52-53 weeks) always fits a desktop viewport -- cells just
-   shrink instead of the grid overflowing behind a slider. The grid's own max-width is capped to
-   roughly week-count * 20px (~18px cell + 2px gap), so a short range (a month's ~5-6 weeks)
-   renders cells at the same ~18px size as a year view instead of stretching those few columns
-   to fill the whole card. */
+/* On a desktop-width card, every week column is a fractional share of the grid's own width (not
+   a fixed px), so a full year (52-53 weeks) fits without scrolling -- cells just shrink instead
+   of the grid overflowing behind a slider. The grid's own max-width is capped to roughly
+   week-count * 20px (~18px cell + 2px gap), so a short range (a month's ~5-6 weeks) renders
+   cells at the same ~18px size as a year view instead of stretching those few columns to fill
+   the whole card. minmax(12px, 1fr) on the row below is what makes this actually hold on a
+   narrow viewport too -- without a floor, confirmed live that 53 unlabelled 1fr cells squeezed
+   into a ~293px-wide phone screen shrink to ~5px each, an indistinguishable blur rather than a
+   heatmap. Below that floor, the shared .table-scroll wrapper (same one the Intervals/Splits/
+   Personal-records tables and the daily-distance strip already use) lets the row scroll
+   horizontally instead of continuing to squeeze past legibility. */
 .running-heatmap__grid {
   display: flex;
   flex-direction: column;
@@ -42,19 +47,27 @@
 
 .running-heatmap__row {
   display: grid;
-  grid-template-columns: 28px repeat(var(--week-count, 53), 1fr);
+  grid-template-columns: 28px repeat(var(--week-count, 53), minmax(12px, 1fr));
   align-items: center;
   gap: 2px;
 }
 
+/* Sticky, not just left-aligned: once the row scrolls horizontally (narrow viewport), the
+   label -- the one thing that says which year/weekday this row even is -- would otherwise be
+   the first thing to scroll out of view, leaving an unlabelled strip of colour. The background
+   (not transparent) is what makes it actually cover the cells scrolling underneath rather than
+   just floating in front of them with the colours showing through. */
 .running-heatmap__row-label {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
 }
 
 /* A 4-digit year label needs more room than a 3-letter weekday abbreviation. */
 .running-heatmap__grid--years .running-heatmap__row {
-  grid-template-columns: 34px repeat(var(--week-count, 53), 1fr);
+  grid-template-columns: 34px repeat(var(--week-count, 53), minmax(12px, 1fr));
 }
 
 /* A month (or shorter) fits on one line -- every day side by side with its day number
