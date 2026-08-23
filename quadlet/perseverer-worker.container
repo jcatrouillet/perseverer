@@ -11,6 +11,13 @@ ContainerName=perseverer-worker
 AutoUpdate=registry
 EnvironmentFile=%h/.config/containers/systemd/perseverer.env
 Environment=PERSEVERER_DATA_DIR=/data
+# worker/main.py schedules the daily sync at PERSEVERER_SCHEDULE_HOUR/MINUTE "local" time --
+# the python:3.12-slim base image's clock is UTC with no TZ set otherwise (confirmed live: a
+# default container reports UTC for `date`), which silently turned "04:15 local" into 04:15 UTC
+# == 9:15pm Pacific the evening before, well before a late workout or that day's sleep data
+# would even exist yet. tzdata is already present in the base image, just unset -- TZ alone is
+# enough, no package install needed.
+Environment=TZ=America/Los_Angeles
 Volume=/home/prez/perseverer/data:/data
 # Ingestion must never starve the API or the host -- matches compose.nas.yml's own cap.
 PodmanArgs=--cpus=1.0 --memory=512m
