@@ -10,6 +10,7 @@ import {
   monthRange,
   parseIsoDate,
 } from "../dateUtils";
+import { useIsMobile } from "../useIsMobile";
 
 const YEARS_PER_WINDOW = 7;
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -33,6 +34,7 @@ export function DateNavigator({
   selectedWeekStart?: string;
 }) {
   const [location] = useLocation();
+  const isMobile = useIsMobile();
   const activityYears = useActivityYears();
   const availableYears = (() => {
     const years = new Set<number>();
@@ -62,8 +64,16 @@ export function DateNavigator({
   // Descending, most recent first (left) to oldest last (right) -- so "‹ newer" sits next to
   // the most recent year shown and "older ›" sits next to the oldest one, each arrow pointing
   // in the direction it actually moves the window.
-  const years = availableYears.slice(windowIndex, windowIndex + YEARS_PER_WINDOW);
-  const { start: monthStart, end: monthEnd } = month ? monthRange(year, month) : { start: "", end: "" };
+  //
+  // Mobile shows every available year with no paging arrows at all, rather than a 7-year window
+  // -- the years row already scrolls horizontally there (layout.css), so paging buttons next to
+  // a swipeable strip are redundant, not a second way to reach the same years.
+  const years = isMobile
+    ? availableYears
+    : availableYears.slice(windowIndex, windowIndex + YEARS_PER_WINDOW);
+  const { start: monthStart, end: monthEnd } = month
+    ? monthRange(year, month)
+    : { start: "", end: "" };
   const weeks = month ? monthGridWeeks(year, month) : [];
 
   return (
@@ -75,15 +85,17 @@ export function DateNavigator({
         >
           All
         </Link>
-        <button
-          type="button"
-          className="date-nav__page"
-          onClick={() => setWindowIndex((i) => Math.max(0, i - YEARS_PER_WINDOW))}
-          disabled={windowIndex === 0}
-          aria-label="Show newer years"
-        >
-          ‹
-        </button>
+        {!isMobile && (
+          <button
+            type="button"
+            className="date-nav__page"
+            onClick={() => setWindowIndex((i) => Math.max(0, i - YEARS_PER_WINDOW))}
+            disabled={windowIndex === 0}
+            aria-label="Show newer years"
+          >
+            ‹
+          </button>
+        )}
         {years.map((y) => (
           <Link
             key={y}
@@ -93,17 +105,24 @@ export function DateNavigator({
             {y}
           </Link>
         ))}
-        <button
-          type="button"
-          className="date-nav__page"
-          onClick={() =>
-            setWindowIndex((i) => Math.min(Math.max(0, availableYears.length - YEARS_PER_WINDOW), i + YEARS_PER_WINDOW))
-          }
-          disabled={windowIndex + YEARS_PER_WINDOW >= availableYears.length}
-          aria-label="Show older years"
-        >
-          ›
-        </button>
+        {!isMobile && (
+          <button
+            type="button"
+            className="date-nav__page"
+            onClick={() =>
+              setWindowIndex((i) =>
+                Math.min(
+                  Math.max(0, availableYears.length - YEARS_PER_WINDOW),
+                  i + YEARS_PER_WINDOW,
+                ),
+              )
+            }
+            disabled={windowIndex + YEARS_PER_WINDOW >= availableYears.length}
+            aria-label="Show older years"
+          >
+            ›
+          </button>
+        )}
       </div>
 
       <div className="date-nav__row date-nav__row--months">
@@ -137,8 +156,7 @@ export function DateNavigator({
                       key={date}
                       href={`/day/${date}`}
                       className={
-                        (date === selectedDate ? "is-active " : "") +
-                        (inMonth ? "" : "is-outside")
+                        (date === selectedDate ? "is-active " : "") + (inMonth ? "" : "is-outside")
                       }
                     >
                       {parseIsoDate(date).getUTCDate()}
