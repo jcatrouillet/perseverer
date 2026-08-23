@@ -12,12 +12,14 @@ from pathlib import Path
 
 from sqlalchemy import Connection, Engine, select
 
+from perseverer.archive import archive_raw_bytes
 from perseverer.db.engine import make_engine
-from perseverer.db.schema import activity, athlete, metadata
+from perseverer.db.schema import activity, athlete, metadata, raw_object
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.garmin_activity_summary import (
     CorrectionResult,
     GarminActivitySummaryEntry,
+    backfill_activity_corrections,
     correct_activities_from_summary,
     parse_summarized_activities_json,
 )
@@ -362,3 +364,140 @@ class TestCorrectActivitiesFromSummary:
 
         assert row is not None
         assert row.name == "Garmin's Name"
+
+
+def _archive_summary_json(
+    conn: Connection,
+    archive_root: Path,
+    *,
+    export_entries: list[dict[str, object]],
+    fetched_at: dt.datetime,
+    locator: str,
+) -> None:
+    """Archives one `*_summarizedActivities.json` blob (real shape: a list of blocks, each with
+    its own `summarizedActivitiesExport` list) and backdates its `fetched_at` to a specific,
+    controlled value -- `archive_raw_bytes` always stamps `datetime.now(UTC)`, which two calls
+    made microseconds apart in a test can't reliably order on its own."""
+    content = json.dumps([{"summarizedActivitiesExport": export_entries}]).encode("utf-8")
+    raw_id = archive_raw_bytes(
+        conn,
+        archive_root,
+        athlete_id=DEFAULT_ATHLETE_ID,
+        source="garmin_export",
+        kind="garmin_export_json",
+        content=content,
+        locator=locator,
+    )
+    conn.execute(
+        raw_object.update().where(raw_object.c.id == raw_id).values(fetched_at=fetched_at)
+    )
+    conn.commit()
+
+
+class TestBackfillActivityCorrectionsOrdering:
+    """Regression tests for a real, confirmed bug: an athlete can have more than one
+    `*_summarizedActivities.json` archived (e.g. two separate GDPR export requests taken months
+    apart) that disagree about one activity's own auto-generated name -- both Garmin's own
+    generic auto-template, not a real athlete-given title, so neither is inherently "more
+    correct". `backfill_activity_corrections` used to read the archived blobs via an unordered
+    SQL query, so which snapshot's name survived depended on SQLite's unspecified row order --
+    confirmed live: repeated runs against the same real archive flip-flopped one activity's name
+    between two values. Fixed by ordering the underlying query by `fetched_at` (then `id` as a
+    tiebreak), so the newest snapshot's entries are always parsed last and always win."""
+
+    def test_the_newer_snapshots_name_wins_regardless_of_which_was_archived_first(
+        self, tmp_path: Path
+    ) -> None:
+        archive_root = tmp_path / "archive"
+        engine = _engine(tmp_path)
+        start = dt.datetime(2026, 4, 16, 21, 23, 17)
+        begin_ms = int(start.replace(tzinfo=dt.UTC).timestamp() * 1000)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1", start_time_utc=start, sport="hiking")
+
+            _archive_summary_json(
+                conn,
+                archive_root,
+                export_entries=[
+                    {
+                        "activityId": 1,
+                        "name": "Monterey County Hiking",
+                        "activityType": "hiking",
+                        "beginTimestamp": begin_ms,
+                    }
+                ],
+                fetched_at=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                locator="older_summarizedActivities.json",
+            )
+            _archive_summary_json(
+                conn,
+                archive_root,
+                export_entries=[
+                    {
+                        "activityId": 1,
+                        "name": "Monterey County Other",
+                        "activityType": "hiking",
+                        "beginTimestamp": begin_ms,
+                    }
+                ],
+                fetched_at=dt.datetime(2026, 6, 1, tzinfo=dt.UTC),
+                locator="newer_summarizedActivities.json",
+            )
+
+            # Run several times -- before the fix, this alternated between the two names
+            # depending on SQLite's unordered row return; after it, every run converges on the
+            # same, deterministic result.
+            names = []
+            for _ in range(4):
+                backfill_activity_corrections(conn, archive_root, athlete_id=DEFAULT_ATHLETE_ID)
+                conn.commit()
+                names.append(conn.execute(select(activity.c.name)).scalar_one())
+
+        assert names == ["Monterey County Other"] * 4
+
+    def test_the_newer_snapshots_name_wins_even_when_archived_first(
+        self, tmp_path: Path
+    ) -> None:
+        """Same as above, but the *older* snapshot (by fetched_at) happens to be archived
+        second -- proves the ordering is driven by fetched_at, not by insertion/call order."""
+        archive_root = tmp_path / "archive"
+        engine = _engine(tmp_path)
+        start = dt.datetime(2026, 4, 16, 21, 23, 17)
+        begin_ms = int(start.replace(tzinfo=dt.UTC).timestamp() * 1000)
+        with engine.connect() as conn:
+            _add_activity(conn, activity_id="a1", start_time_utc=start, sport="hiking")
+
+            _archive_summary_json(
+                conn,
+                archive_root,
+                export_entries=[
+                    {
+                        "activityId": 1,
+                        "name": "Monterey County Other",
+                        "activityType": "hiking",
+                        "beginTimestamp": begin_ms,
+                    }
+                ],
+                fetched_at=dt.datetime(2026, 6, 1, tzinfo=dt.UTC),
+                locator="newer_summarizedActivities.json",
+            )
+            _archive_summary_json(
+                conn,
+                archive_root,
+                export_entries=[
+                    {
+                        "activityId": 1,
+                        "name": "Monterey County Hiking",
+                        "activityType": "hiking",
+                        "beginTimestamp": begin_ms,
+                    }
+                ],
+                fetched_at=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+                locator="older_summarizedActivities.json",
+            )
+
+            backfill_activity_corrections(conn, archive_root, athlete_id=DEFAULT_ATHLETE_ID)
+            conn.commit()
+            name = conn.execute(select(activity.c.name)).scalar_one()
+
+        assert name == "Monterey County Other"

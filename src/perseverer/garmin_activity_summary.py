@@ -146,7 +146,19 @@ def correct_activities_from_summary(
     replaces an already-more-specific stored name like "Morning Run" with a less informative
     one), but the athlete has chosen to always prefer whatever Garmin Connect itself shows
     regardless. Never touches an activity with no matching entry, and never invents a mapping
-    for an unrecognized `activity_type`."""
+    for an unrecognized `activity_type`.
+
+    When more than one entry in `entries` matches the same activity (e.g. two archived export
+    snapshots both cover it, possibly disagreeing -- see `backfill_activity_corrections`'s own
+    docstring for a real example), only the *last* one in `entries`' own order governs that
+    activity, resolved in a first pass before any update is applied. This is what makes a
+    matched activity's outcome depend only on that single winning entry compared against its own
+    original stored row -- a real, confirmed bug otherwise: applying each matching entry's
+    update immediately, one at a time, made a later entry's own comparison run against whatever
+    an *earlier* entry in the same call had just written, so a later entry whose name happened to
+    already equal that intermediate value looked like a no-op and got silently skipped, instead
+    of being correctly recognized as the entry that should win.
+    """
     rows = conn.execute(
         select(
             activity.c.id,
@@ -164,8 +176,8 @@ def correct_activities_from_summary(
         return result
 
     starts = [r.start_time_utc for r in rows]
-    now = datetime.now(UTC).replace(tzinfo=None)
 
+    winning_entry_by_idx: dict[int, GarminActivitySummaryEntry] = {}
     for entry in entries:
         target = entry.begin_timestamp_utc
         idx = bisect.bisect_left(starts, target)
@@ -177,7 +189,12 @@ def correct_activities_from_summary(
         if abs((starts[best_idx] - target).total_seconds()) > _MATCH_TOLERANCE_S:
             result.unmatched_entries += 1
             continue
+        # Plain reassignment -- iterating `entries` in order means the last entry to match this
+        # index is the one left standing once the loop finishes.
+        winning_entry_by_idx[best_idx] = entry
 
+    now = datetime.now(UTC).replace(tzinfo=None)
+    for best_idx, entry in winning_entry_by_idx.items():
         row = rows[best_idx]
         mapped = (
             GARMIN_ACTIVITY_TYPE_MAP.get(entry.activity_type) if entry.activity_type else None
@@ -225,13 +242,29 @@ def backfill_activity_corrections(
     already in this athlete's raw archive -- works standalone as a one-off backfill for
     already-ingested data (no need to re-run a full garmin-export import), and is what
     `import_garmin_export` itself calls after each run so future imports self-correct too.
+
+    An athlete can have more than one `*_summarizedActivities.json` archived (e.g. two separate
+    GDPR export requests taken months apart), and they can genuinely disagree about one
+    activity's own auto-generated name (confirmed live: one real activity had "Monterey County
+    Hiking" in an older snapshot and "Monterey County Other" in a newer one -- both Garmin's own
+    generic location+type auto-template, not a real athlete-given title, so neither is "more
+    correct" on its own terms). `correct_activities_from_summary` below applies every matching
+    entry it's given in order and lets the last one win, so which snapshot's name survives used
+    to depend on SQLite's unspecified row order for an unordered query -- a real, confirmed bug:
+    repeated runs of `sync correct-garmin-activities` against the same archive flip-flopped that
+    one activity's name between the two values. Ordering by `fetched_at` (oldest first, with
+    `id` as a tiebreak for two rows archived in the same instant) makes the newest snapshot's
+    entries always get parsed last, so its name deterministically wins ties -- the newest export
+    is the best available signal for "Garmin's name for this activity as of now".
     """
     rows = conn.execute(
-        select(raw_object.c.storage_path).where(
+        select(raw_object.c.storage_path)
+        .where(
             raw_object.c.athlete_id == athlete_id,
             raw_object.c.source == "garmin_export",
             raw_object.c.source_locator.ilike("%summarizedActivities.json"),
         )
+        .order_by(raw_object.c.fetched_at.asc(), raw_object.c.id.asc())
     ).fetchall()
 
     entries: list[GarminActivitySummaryEntry] = []
