@@ -44,6 +44,7 @@ def _seed_garmin_activity(
     external_id: str = "24067233886",
     name: str | None = "Run",
     sport: str = "running",
+    sub_sport: str | None = None,
     activity_name: str | None = "Santa Clara - W12 Fri . [Consolidation] Easy",
     start: dt.datetime = dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC),
 ) -> None:
@@ -55,6 +56,7 @@ def _seed_garmin_activity(
             utc_offset_s=0,
             local_date=start.date().isoformat(),
             sport=sport,
+            sub_sport=sub_sport,
             name=name,
             duration_s=1800.0,
             distance_m=5000.0,
@@ -158,6 +160,61 @@ class TestBackfillGarminActivityNames:
         with engine.connect() as conn:
             _seed_garmin_activity(
                 conn, tmp_path / "raw", activity_id="a1", name="Ride", sport="cycling"
+            )
+
+        with engine.connect() as conn:
+            changes = backfill_garmin_activity_names(
+                conn, tmp_path / "raw", athlete_id=DEFAULT_ATHLETE_ID
+            )
+
+        assert changes == []
+
+    def test_replaces_the_bare_yoga_default_via_the_sub_sport_keyed_lookup(
+        self, tmp_path: Path
+    ) -> None:
+        """Regression test for a real, confirmed gap found live: "training" has no single
+        dominant default (unlike running/walking/...), so it's absent from
+        _GENERIC_DEFAULT_NAME_BY_SPORT -- but "yoga" specifically does have one ("Yoga"), which
+        3 real garmin_connect-sourced activities were stuck showing verbatim even though Garmin's
+        own activityName was genuinely richer ("Foundation Yoga")."""
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _seed_garmin_activity(
+                conn,
+                tmp_path / "raw",
+                activity_id="a1",
+                name="Yoga",
+                sport="training",
+                sub_sport="yoga",
+                activity_name="Foundation Yoga",
+            )
+
+        with engine.connect() as conn:
+            changes = backfill_garmin_activity_names(
+                conn, tmp_path / "raw", athlete_id=DEFAULT_ATHLETE_ID
+            )
+
+        assert changes == [("a1", "Yoga", "Foundation Yoga")]
+        with engine.connect() as conn:
+            row = conn.execute(select(activity.c.name).where(activity.c.id == "a1")).one()
+            assert row.name == "Foundation Yoga"
+
+    def test_a_training_sub_sport_with_no_recognized_default_is_left_alone(
+        self, tmp_path: Path
+    ) -> None:
+        """strength_training's own real device default ("Strength") isn't in
+        _GENERIC_DEFAULT_NAME_BY_SPORT_SUB_SPORT (only yoga has confirmed live evidence) --
+        never touched, same as any other unrecognized generic default."""
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _seed_garmin_activity(
+                conn,
+                tmp_path / "raw",
+                activity_id="a1",
+                name="Strength",
+                sport="training",
+                sub_sport="strength_training",
+                activity_name="Alpine Fit",
             )
 
         with engine.connect() as conn:

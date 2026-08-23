@@ -59,6 +59,22 @@ _GENERIC_DEFAULT_NAME_BY_SPORT: dict[str, str] = {
     "snowshoeing": "Snowshoe",
 }
 
+# "training" itself has no single dominant default -- yoga/strength_training/breathing each get
+# a different device placeholder ("Yoga"/"Strength"/"Relax and Focus"), so it's deliberately
+# absent from the sport-keyed dict above (same reasoning as its own comment). Keyed by
+# (sport, sub_sport) instead, so only a specifically confirmed generic default is recognized.
+# Real, confirmed gap found auditing this athlete's real archive (verified against Garmin's own
+# archived activityName directly, not assumed): 3 real garmin_connect-sourced yoga activities
+# were stuck showing the bare "Yoga" placeholder while Garmin's own name was genuinely richer
+# ("Foundation Yoga", "Flow") -- undetected until now purely because "training" wasn't in the
+# dict above at all. Only "yoga" is added here (not strength_training/breathing) since that's
+# the only sub_sport this audit actually found a real mismatch for -- adding the others
+# speculatively, without confirmed evidence they're ever auto-generated placeholders rather than
+# already-real titles, isn't worth the risk of a wrong match.
+_GENERIC_DEFAULT_NAME_BY_SPORT_SUB_SPORT: dict[tuple[str, str], str] = {
+    ("training", "yoga"): "Yoga",
+}
+
 
 def backfill_garmin_activity_names(
     conn: Connection, archive_root: Path, *, athlete_id: str, dry_run: bool = False
@@ -91,6 +107,7 @@ def backfill_garmin_activity_names(
             activity.c.id,
             activity.c.name,
             activity.c.sport,
+            activity.c.sub_sport,
             raw_object.c.storage_path,
         )
         .select_from(
@@ -114,7 +131,9 @@ def backfill_garmin_activity_names(
         current_name = row.name
         if current_name is None:
             continue
-        generic_default = _GENERIC_DEFAULT_NAME_BY_SPORT.get(row.sport)
+        generic_default = _GENERIC_DEFAULT_NAME_BY_SPORT.get(
+            row.sport
+        ) or _GENERIC_DEFAULT_NAME_BY_SPORT_SUB_SPORT.get((row.sport, row.sub_sport))
         if generic_default is None:
             continue
 
