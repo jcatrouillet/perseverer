@@ -22,6 +22,8 @@ import type {
   ActivityWeatherOut,
   ActivityWorkoutOut,
   CalendarResponse,
+  ClimbComparisonsOut,
+  ClimbingSummaryOut,
   FitnessDailyRollupOut,
   GoalOut,
   GoalProgressOut,
@@ -36,6 +38,7 @@ import type {
   Page,
   PeriodCalendarResponse,
   SleepSessionOut,
+  SplitOut,
   StreamResponse,
 } from "./types";
 
@@ -233,6 +236,88 @@ export function useActivityComparisons(activityId: string, enabled: boolean) {
     queryFn: () =>
       apiGet<ActivityComparisonsOut>(`/api/v1/activities/${activityId}/comparisons`),
     enabled,
+  });
+}
+
+/** The 10 most recent bouldering sessions of about the same total duration
+ * (GET /activities/{id}/climb-comparisons) -- `enabled` should be gated on
+ * `isBoulderingActivity`, same reasoning as `useActivityComparisons` above being running-only. */
+export function useActivityClimbComparisons(activityId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["activity-climb-comparisons", activityId],
+    queryFn: () =>
+      apiGet<ClimbComparisonsOut>(`/api/v1/activities/${activityId}/climb-comparisons`),
+    enabled,
+  });
+}
+
+/** The weekly/monthly/yearly/all-time "Climbing" section's own aggregate
+ * (GET /activities/climbing-summary) -- a real server-side aggregate, not a client-side
+ * reduction over `ActivitySummary[]` the way `HikeStatsCard` works, since the per-grade
+ * attempted/completed chart needs the full distribution across however many sessions fall in
+ * the period, not just a few scalar totals. */
+export function useClimbingSummary(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["climbing-summary", startDate, endDate],
+    queryFn: () =>
+      apiGet<ClimbingSummaryOut>(
+        `/api/v1/activities/climbing-summary${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+/** A manual "I logged the wrong status" correction for one route (see
+ * bouldering_overrides.py's own docstring) -- invalidates the activity detail query so the
+ * corrected split flows straight back through the same `splits` array everything else here
+ * already reads. */
+export function useSetClimbRouteStatus(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ splitIndex, result }: { splitIndex: number; result: string }) =>
+      apiPatch<SplitOut>(`/api/v1/activities/${activityId}/climb-routes/${splitIndex}`, {
+        result,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-climb-comparisons", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["climbing-summary"] });
+    },
+  });
+}
+
+/** A route the device never tracked at all (see bouldering_overrides.py::add_manual_route's own
+ * docstring) -- same invalidation set as useSetClimbRouteStatus, since an added route changes
+ * the same route count/max grade/climb time everything else here reads. */
+export function useAddClimbRoute(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { grade: number; result: string }) =>
+      apiPost<SplitOut>(`/api/v1/activities/${activityId}/climb-routes`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-climb-comparisons", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["climbing-summary"] });
+    },
+  });
+}
+
+/** Removes a manually-added route -- never a FIT-derived one (see
+ * bouldering_overrides.py::delete_manual_route's own docstring). Same invalidation set as
+ * useAddClimbRoute, its own inverse. */
+export function useDeleteClimbRoute(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (splitIndex: number) =>
+      apiDelete<void>(`/api/v1/activities/${activityId}/climb-routes/${splitIndex}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-climb-comparisons", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["climbing-summary"] });
+    },
   });
 }
 

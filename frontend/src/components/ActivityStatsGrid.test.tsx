@@ -1,11 +1,28 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { ActivityDetail, ActivityMetricOut } from "../api/types";
+import type { ActivityDetail, ActivityMetricOut, SplitOut } from "../api/types";
 import { ActivityStatsGrid } from "./ActivityStatsGrid";
 
 function metric(metric_key: string, value_num: number): ActivityMetricOut {
   return { metric_key, value_num, value_text: null, unit: null, source: "test" };
+}
+
+function climbSplit(overrides: Partial<SplitOut> = {}): SplitOut {
+  return {
+    split_index: 0,
+    split_type: "climb_active",
+    start_time_utc: null,
+    end_time_utc: null,
+    duration_s: 60,
+    distance_m: null,
+    climb_grade: 2,
+    climb_result: "completed",
+    climb_avg_hr: 100,
+    climb_max_hr: 120,
+    is_manual: null,
+    ...overrides,
+  };
 }
 
 function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
@@ -32,6 +49,9 @@ function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
     workout_name: null,
     primary_source: "test",
     stream_available: false,
+    climb_route_count: null,
+    climb_max_completed_grade: null,
+    climb_time_s: null,
     device: null,
     laps: [],
     splits: [],
@@ -183,5 +203,44 @@ describe("ActivityStatsGrid", () => {
     expect(tempIndex).toBeGreaterThanOrEqual(0);
     expect(slotIndex).toBeGreaterThan(tempIndex);
     expect(hydrationIndex).toBeGreaterThan(slotIndex);
+  });
+
+  it("renames Distance & time to Time & calories for a bouldering activity", () => {
+    render(
+      <ActivityStatsGrid
+        activity={activity({
+          sport: "rock_climbing",
+          sub_sport: "bouldering",
+          distance_m: null,
+          splits: [climbSplit()],
+        })}
+      />,
+    );
+    expect(screen.getByText("Time & calories")).toBeInTheDocument();
+    expect(screen.queryByText("Distance & time")).not.toBeInTheDocument();
+  });
+
+  it("shows a Climb section with max completed grade, route count, and climb time", () => {
+    render(
+      <ActivityStatsGrid
+        activity={activity({
+          sport: "rock_climbing",
+          sub_sport: "bouldering",
+          distance_m: null,
+          splits: [
+            climbSplit({ split_index: 0, climb_grade: 2, climb_result: "completed", duration_s: 60 }),
+            climbSplit({ split_index: 2, climb_grade: 4, climb_result: "attempt", duration_s: 90 }),
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByText("Climb")).toBeInTheDocument();
+    expect(screen.getByText("V2")).toBeInTheDocument(); // max *completed* grade, not the V4 attempt
+    expect(screen.getByText("2")).toBeInTheDocument(); // route count
+  });
+
+  it("shows no Climb section for a non-bouldering activity", () => {
+    render(<ActivityStatsGrid activity={activity()} />);
+    expect(screen.queryByText("Climb")).not.toBeInTheDocument();
   });
 });

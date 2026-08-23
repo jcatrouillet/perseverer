@@ -82,8 +82,9 @@ def seed_activity(
     activity_id: str = "act1",
     local_date: str = "2025-06-01",
     sport: str = "running",
+    sub_sport: str | None = None,
     duration_s: float = 1800.0,
-    distance_m: float = 5000.0,
+    distance_m: float | None = 5000.0,
     moving_duration_s: float | None = None,
     is_race: bool | None = None,
 ) -> None:
@@ -96,6 +97,7 @@ def seed_activity(
             utc_offset_s=0,
             local_date=local_date,
             sport=sport,
+            sub_sport=sub_sport,
             is_race=is_race,
             duration_s=duration_s,
             moving_duration_s=(

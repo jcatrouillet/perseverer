@@ -4,12 +4,19 @@
 // than a new backend endpoint, matching the client-aggregation pattern YearView/MonthView
 // already use -- the one difference is pagination, since "all time" can exceed a single
 // request's 500-row cap in a way a single year never does yet.
-import { useAllActivities, useFitness, useHealthDashboard, useSleep } from "../../api/queries";
+import {
+  useAllActivities,
+  useClimbingSummary,
+  useFitness,
+  useHealthDashboard,
+  useSleep,
+} from "../../api/queries";
 import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
+import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
@@ -63,6 +70,7 @@ export function AllTimeView() {
   const fitness = useFitness(start, end);
   const health = useHealthDashboard(start, end);
   const sleep = useSleep(start, end);
+  const climbing = useClimbingSummary(start, end);
   // Bounded to when sleep data actually starts, not the full activity history range above --
   // this athlete's activities go back to 2016 but sleep tracking (a wearable, arriving years
   // later) doesn't, so padding from `start` would produce years of leading empty months with
@@ -105,6 +113,7 @@ export function AllTimeView() {
       )}
 
       <HikeStatsCard activities={hikes} />
+      <ClimbingStatsCard summary={climbing.data} />
 
       <section className="card">
         {fitness.data ? (

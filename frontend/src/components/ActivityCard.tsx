@@ -12,6 +12,7 @@
 import { Link } from "wouter";
 
 import type { ActivitySummary } from "../api/types";
+import { formatGrade } from "../boulderingRoutes";
 import { sportStyle, toneColor } from "../metricStyle";
 import {
   effectiveDurationS,
@@ -109,6 +110,23 @@ export function ActivityCard({
           )}
           {activity.avg_hr_bpm != null && (
             <MetricChip label={`${Math.round(activity.avg_hr_bpm)} bpm`} icon="heart" tone="hr" />
+          )}
+          {activity.climb_route_count != null && (
+            <MetricChip
+              label={`${activity.climb_route_count} route${activity.climb_route_count === 1 ? "" : "s"}`}
+              icon="route"
+              tone="pace"
+            />
+          )}
+          {activity.climb_max_completed_grade != null && (
+            <MetricChip
+              label={formatGrade(activity.climb_max_completed_grade)}
+              icon="mountain"
+              tone="elevation"
+            />
+          )}
+          {activity.climb_time_s != null && (
+            <MetricChip label={formatDurationHM(activity.climb_time_s)} icon="clock" tone="cadence" />
           )}
           {activity.training_load != null && (
             <MetricChip

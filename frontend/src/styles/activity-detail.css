@@ -368,8 +368,32 @@
 }
 
 .bouldering-routes-table__row--completed td:nth-child(3) {
-  color: var(--color-load);
+  color: var(--color-success);
   font-weight: 600;
+}
+
+.bouldering-routes-table__delete-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-faint);
+  font-size: 1.1em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 var(--space-1);
+}
+
+.bouldering-routes-table__delete-btn:hover {
+  color: var(--color-danger);
+}
+
+.bouldering-routes-table__add-row td {
+  color: var(--color-text-muted);
+}
+
+.bouldering-routes__error {
+  margin: var(--space-2) 0 0;
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
 }
 
 /* Follows .activity-detail__layout (the stats + fastest-table row, ending in Hydration), which

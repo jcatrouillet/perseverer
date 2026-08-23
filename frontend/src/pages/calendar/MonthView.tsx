@@ -7,6 +7,7 @@ import {
   useCalendar,
   useCalendarMonths,
   useCalendarWeeks,
+  useClimbingSummary,
   useFitness,
   useHealthDashboard,
   useSleep,
@@ -17,6 +18,7 @@ import { FitnessChart } from "../../components/FitnessChart";
 import { GoalButton } from "../../components/GoalButton";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
+import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { NotesPanel } from "../../components/NotesPanel";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
@@ -60,6 +62,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   const fitness = useFitness(start, end);
   const health = useHealthDashboard(start, end);
   const sleep = useSleep(start, end);
+  const climbing = useClimbingSummary(start, end);
   const allActivities = useActivities({ startDate: start, endDate: end, limit: 500 });
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
   const hikes = useActivities({ sport: "hiking", startDate: start, endDate: end, limit: 500 });
@@ -134,6 +137,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
       )}
 
       {hikes.data && <HikeStatsCard activities={hikes.data.items} />}
+      <ClimbingStatsCard summary={climbing.data} />
 
       <section className="card">
         {fitness.data ? (

@@ -28,6 +28,9 @@ function activity(overrides: Partial<ActivitySummary> = {}): ActivitySummary {
     workout_name: null,
     primary_source: "test",
     stream_available: false,
+    climb_route_count: null,
+    climb_max_completed_grade: null,
+    climb_time_s: null,
     ...overrides,
   };
 }
@@ -119,5 +122,28 @@ describe("ActivityCard", () => {
 
     rerender(<ActivityCard activity={activity()} iconSize="large" />);
     expect(container.querySelector(".icon-chip--lg")).toBeInTheDocument();
+  });
+
+  it("shows the bouldering pill (routes, max grade, climb time) when present", () => {
+    render(
+      <ActivityCard
+        activity={activity({
+          sport: "rock_climbing",
+          sub_sport: "bouldering",
+          distance_m: null,
+          climb_route_count: 19,
+          climb_max_completed_grade: 4,
+          climb_time_s: 3600,
+        })}
+      />,
+    );
+    expect(screen.getByText("19 routes")).toBeInTheDocument();
+    expect(screen.getByText("V4")).toBeInTheDocument();
+    expect(screen.getByText("1h 0m")).toBeInTheDocument();
+  });
+
+  it("shows no bouldering pill for a non-bouldering activity", () => {
+    render(<ActivityCard activity={activity()} />);
+    expect(screen.queryByText(/routes?$/)).not.toBeInTheDocument();
   });
 });

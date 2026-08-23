@@ -40,6 +40,9 @@ export interface SplitOut {
   // Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
   climb_avg_hr: number | null;
   climb_max_hr: number | null;
+  // True only for a route the athlete added by hand -- never set for a FIT-derived row. Only
+  // these are ever offered a delete affordance in the UI.
+  is_manual: boolean | null;
 }
 
 export interface RouteOut {
@@ -92,6 +95,12 @@ export interface ActivitySummary {
   workout_name: string | null;
   primary_source: string;
   stream_available: boolean;
+  /** Bouldering only, all three null for any other activity -- see boulderingRoutes.ts. Exposed
+   * here (not just on the detail page's full `splits`) so the activity-card/day-view pill can
+   * show them without a second per-activity fetch. */
+  climb_route_count: number | null;
+  climb_max_completed_grade: number | null;
+  climb_time_s: number | null;
 }
 
 export interface ActivityDetail extends ActivitySummary {
@@ -138,6 +147,35 @@ export interface ActivityComparisonsOut {
   distance_band_fraction: number;
   matched_count: number;
   rows: ActivityComparisonRowOut[];
+}
+
+export interface ClimbComparisonRowOut {
+  id: string;
+  local_date: string | null;
+  duration_s: number;
+  route_count: number;
+  max_completed_grade: number | null;
+  climb_time_s: number | null;
+}
+
+export interface ClimbComparisonsOut {
+  duration_band_fraction: number;
+  matched_count: number;
+  rows: ClimbComparisonRowOut[];
+}
+
+export interface ClimbGradeBreakdownOut {
+  grade: number;
+  attempted: number;
+  completed: number;
+}
+
+export interface ClimbingSummaryOut {
+  session_count: number;
+  total_climb_time_s: number;
+  total_routes: number;
+  max_completed_grade: number | null;
+  grade_breakdown: ClimbGradeBreakdownOut[];
 }
 
 export interface ActivityMapPointOut {

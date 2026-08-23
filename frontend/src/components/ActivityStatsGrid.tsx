@@ -6,6 +6,7 @@
 // has no Running Dynamics section. Nothing here is estimated or backfilled.
 import type { ActivityDetail } from "../api/types";
 import { metricValue, metricValueAliased } from "../activityMetrics";
+import { boulderingRoutes, climbSummary, formatGrade, isBoulderingActivity } from "../boulderingRoutes";
 import { effectiveDurationS, formatDurationHM, formatPaceMinPerKm, isPaceSport } from "../runningStats";
 import { StatTile } from "./StatTile";
 
@@ -33,40 +34,73 @@ export function ActivityStatsGridPrimary({
   ]);
   const hasHeartRate = activity.avg_hr_bpm != null || activity.max_hr_bpm != null;
   const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
+  const isBouldering = isBoulderingActivity(activity.sport, activity.sub_sport);
+  // Bouldering has no distance/pace at all -- the tiles below already skip both via their own
+  // `distance_m != null` guards, so the only bouldering-specific change needed here is the
+  // heading text itself (there's genuinely no "distance" in this card once that's true).
+  const climb = isBouldering ? climbSummary(boulderingRoutes(activity.splits)) : null;
 
   return (
     <div className="activity-stats">
-      <h3>Distance &amp; time</h3>
-      <div className="stat-grid">
-        {activity.distance_m != null && (
-          <StatTile
-            label="Distance"
-            value={(activity.distance_m / 1000).toFixed(2)}
-            unit="km"
-            icon="route"
-            tone="pace"
-            hero
-          />
-        )}
-        {durationS != null && (
-          <StatTile label="Moving time" value={formatDurationHM(durationS)} icon="clock" tone="cadence" hero />
-        )}
-        {/* distance_m > 0, not just non-null -- see ActivityCard's identical guard. */}
-        {activity.distance_m != null && activity.distance_m > 0 && durationS != null && durationS > 0 && (
-          <StatTile
-            label={paceSport ? "Avg pace" : "Avg speed"}
-            value={
-              paceSport
-                ? formatPaceMinPerKm(durationS, activity.distance_m)
-                : (activity.distance_m / 1000 / (durationS / 3600)).toFixed(1)
-            }
-            unit={paceSport ? "/km" : "km/h"}
-            icon="gauge"
-            tone="pace"
-          />
-        )}
-        {activity.calories != null && (
-          <StatTile label="Calories" value={activity.calories.toFixed(0)} unit="kcal" icon="flame" tone="load" />
+      <div className="activity-stats__row">
+        <div className="activity-stats__col">
+          <h3>{isBouldering ? "Time & calories" : "Distance & time"}</h3>
+          <div className="stat-grid">
+            {activity.distance_m != null && (
+              <StatTile
+                label="Distance"
+                value={(activity.distance_m / 1000).toFixed(2)}
+                unit="km"
+                icon="route"
+                tone="pace"
+                hero
+              />
+            )}
+            {durationS != null && (
+              <StatTile label="Moving time" value={formatDurationHM(durationS)} icon="clock" tone="cadence" hero />
+            )}
+            {/* distance_m > 0, not just non-null -- see ActivityCard's identical guard. */}
+            {activity.distance_m != null && activity.distance_m > 0 && durationS != null && durationS > 0 && (
+              <StatTile
+                label={paceSport ? "Avg pace" : "Avg speed"}
+                value={
+                  paceSport
+                    ? formatPaceMinPerKm(durationS, activity.distance_m)
+                    : (activity.distance_m / 1000 / (durationS / 3600)).toFixed(1)
+                }
+                unit={paceSport ? "/km" : "km/h"}
+                icon="gauge"
+                tone="pace"
+              />
+            )}
+            {activity.calories != null && (
+              <StatTile label="Calories" value={activity.calories.toFixed(0)} unit="kcal" icon="flame" tone="load" />
+            )}
+          </div>
+        </div>
+
+        {climb && (
+          <div className="activity-stats__col">
+            <h3>Climb</h3>
+            <div className="stat-grid">
+              <StatTile
+                label="Max completed grade"
+                value={climb.maxCompletedGrade != null ? formatGrade(climb.maxCompletedGrade) : "—"}
+                icon="mountain"
+                tone="elevation"
+                hero
+              />
+              <StatTile label="Routes" value={climb.routeCount} icon="route" tone="pace" hero />
+              {climb.climbTimeS != null && (
+                <StatTile
+                  label="Climb time"
+                  value={formatDurationHM(climb.climbTimeS)}
+                  icon="clock"
+                  tone="cadence"
+                />
+              )}
+            </div>
+          </div>
         )}
       </div>
 

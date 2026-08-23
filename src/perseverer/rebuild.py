@@ -14,6 +14,7 @@ from perseverer.adapters.strava_export import (
     ingest_manual_entry_content,
 )
 from perseverer.archive import read_raw_bytes, restore_raw_object_table
+from perseverer.bouldering_overrides import apply_bouldering_route_overrides
 from perseverer.db.schema import (
     activity,
     activity_metric,
@@ -307,6 +308,11 @@ def rebuild_database(
     # and forgets -- the replay just wiped it back to whatever the raw bytes say). Before the
     # rollup/insight refresh below so those see the corrected sport, not the raw one.
     apply_sport_overrides(conn, athlete_id=athlete_id)
+
+    # Same "durable, never-wiped correction re-applied after every rebuild" shape as
+    # apply_sport_overrides above, for the athlete's own bouldering route-status corrections and
+    # manually-added routes -- see bouldering_overrides.py's own docstring.
+    apply_bouldering_route_overrides(conn, athlete_id=athlete_id)
 
     # Re-derives Garmin's own sport/name corrections from summarizedActivitiesExport (see
     # garmin_activity_summary.py's own docstring) -- the replay above just re-parsed every

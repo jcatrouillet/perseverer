@@ -38,6 +38,10 @@ class SplitOut(BaseModel):
     # Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
     climb_avg_hr: float | None
     climb_max_hr: float | None
+    # True only for a route the athlete added by hand (bouldering_overrides.py::add_manual_route)
+    # -- never set for a FIT-derived row. Lets the frontend offer a delete affordance only where
+    # it's actually safe (see split.is_manual's own comment in db/schema.py).
+    is_manual: bool | None
 
 
 class RouteOut(BaseModel):
@@ -103,6 +107,15 @@ class ActivitySummary(BaseModel):
     workout_name: str | None
     primary_source: str
     stream_available: bool
+    # Bouldering only, all three None for any other activity -- computed from this activity's
+    # own `split` rows (climb_route_count: how many climb_active rows have a grade at all;
+    # climb_max_completed_grade: the highest grade with result="completed"; climb_time_s: total
+    # duration_s summed across climb_active rows, i.e. time actually climbing, excluding rest).
+    # Exposed here (not just on the detail page's full `splits`) so the activity-card/day-view
+    # pill can show them without a second per-activity fetch.
+    climb_route_count: int | None
+    climb_max_completed_grade: int | None
+    climb_time_s: float | None
 
 
 class ActivityDetail(ActivitySummary):
@@ -180,6 +193,37 @@ class ActivityComparisonsOut(BaseModel):
     # frontend say "10 of 34 matching runs" rather than implying 10 is the whole story.
     matched_count: int
     rows: list[ActivityComparisonRowOut]
+
+
+class ClimbComparisonRowOut(BaseModel):
+    id: str
+    local_date: str | None
+    duration_s: float
+    route_count: int
+    max_completed_grade: int | None
+    climb_time_s: float | None
+
+
+class ClimbComparisonsOut(BaseModel):
+    duration_band_fraction: float
+    matched_count: int
+    rows: list[ClimbComparisonRowOut]
+
+
+class ClimbGradeBreakdownOut(BaseModel):
+    grade: int
+    # result == "attempt", or an unconfirmed "unknown_<n>" raw value (see fit/parser.py) --
+    # counted conservatively as an attempt rather than assumed completed.
+    attempted: int
+    completed: int
+
+
+class ClimbingSummaryOut(BaseModel):
+    session_count: int
+    total_climb_time_s: float
+    total_routes: int
+    max_completed_grade: int | None
+    grade_breakdown: list[ClimbGradeBreakdownOut]
 
 
 class ActivityWeatherOut(BaseModel):
@@ -328,3 +372,14 @@ class ActivityFuelingIn(BaseModel):
 class ActivityFuelingOut(BaseModel):
     carbohydrates_g: float | None
     sodium_mg: float | None
+
+
+class ClimbRouteStatusIn(BaseModel):
+    # Matches bouldering_overrides.py::VALID_RESULTS exactly -- validated there, not re-declared
+    # as a Literal here, so the two can't quietly drift apart.
+    result: str
+
+
+class ClimbRouteAddIn(BaseModel):
+    grade: int
+    result: str

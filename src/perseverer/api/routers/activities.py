@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from math import asin, cos, radians, sin, sqrt
-from typing import Annotated
+from typing import Annotated, Any
 
 import duckdb
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import Connection, Engine, case, func, select
+from sqlalchemy import Connection, Engine, Row, case, func, select
 
 from perseverer.adapters.fit_folder import _local_date, _upsert_device, insert_new_activity
 from perseverer.adapters.strava_export import _overlay_csv_totals
@@ -40,6 +41,12 @@ from perseverer.api.schemas.activities import (
     ActivityWeatherOut,
     ActivityWorkoutOut,
     ActivityWorkoutStepOut,
+    ClimbComparisonRowOut,
+    ClimbComparisonsOut,
+    ClimbGradeBreakdownOut,
+    ClimbingSummaryOut,
+    ClimbRouteAddIn,
+    ClimbRouteStatusIn,
     DeviceOut,
     LapOut,
     RouteOut,
@@ -49,6 +56,11 @@ from perseverer.api.schemas.common import Page, to_utc
 from perseverer.api.schemas.insights import InsightOut
 from perseverer.api.schemas.streams import StreamResponse
 from perseverer.archive import read_raw_bytes
+from perseverer.bouldering_overrides import (
+    add_manual_route,
+    delete_manual_route,
+    set_route_status_override,
+)
 from perseverer.config import Settings, get_settings
 from perseverer.db.schema import (
     activity,
@@ -165,6 +177,22 @@ def _estimated_sweat_loss_ml(
     return row.value_num if row is not None else None
 
 
+def _climb_summary_from_splits(
+    splits: Sequence[Row[Any]],
+) -> tuple[int | None, int | None, float | None]:
+    """Bouldering-only summary derived from an already-fetched list of split rows -- used by
+    `get_activity`, which already has the full `splits` list in hand, so there's no reason to
+    issue a second query the way `list_activities`' own three subqueries (§ below) have to.
+    Returns (route_count, max_completed_grade, climb_time_s), all None when this activity has no
+    climb_active splits at all (i.e. isn't a bouldering activity)."""
+    climbs = [s for s in splits if s.climb_grade is not None]
+    if not climbs:
+        return None, None, None
+    completed_grades = [c.climb_grade for c in climbs if c.climb_result == "completed"]
+    climb_time_s = sum(c.duration_s for c in climbs if c.duration_s is not None) or None
+    return len(climbs), (max(completed_grades) if completed_grades else None), climb_time_s
+
+
 @router.get("/activities")
 def list_activities(
     athlete_id: Annotated[str, Depends(require_api_key)],
@@ -245,6 +273,35 @@ def list_activities(
         .limit(1)
         .scalar_subquery()
     )
+    # Bouldering-only summary fields, for the activity-card/day-view pill (see ActivitySummary's
+    # own docstring) -- same correlated-scalar-subquery shape as everything else above, against
+    # `split` rather than `activity_metric`. All three come back None for a non-bouldering
+    # activity, since no split row matches `climb_grade IS NOT NULL` at all.
+    climb_route_count_subq = (
+        select(func.count())
+        .select_from(split_table)
+        .where(
+            split_table.c.activity_id == activity.c.id,
+            split_table.c.climb_grade.is_not(None),
+        )
+        .scalar_subquery()
+    )
+    climb_max_completed_grade_subq = (
+        select(func.max(split_table.c.climb_grade))
+        .where(
+            split_table.c.activity_id == activity.c.id,
+            split_table.c.climb_result == "completed",
+        )
+        .scalar_subquery()
+    )
+    climb_time_s_subq = (
+        select(func.sum(split_table.c.duration_s))
+        .where(
+            split_table.c.activity_id == activity.c.id,
+            split_table.c.split_type == "climb_active",
+        )
+        .scalar_subquery()
+    )
     query = select(
         activity.c.id,
         activity.c.start_time_utc,
@@ -268,6 +325,9 @@ def list_activities(
         weight_subq.label("weight_kg"),
         vdot_subq.label("vdot"),
         workout_name_subq.label("workout_name"),
+        climb_route_count_subq.label("climb_route_count"),
+        climb_max_completed_grade_subq.label("climb_max_completed_grade"),
+        climb_time_s_subq.label("climb_time_s"),
     ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
 
     if start_date is not None:
@@ -319,6 +379,13 @@ def list_activities(
             workout_name=r.workout_name,
             primary_source=r.primary_source,
             stream_available=bool(r.stream_available),
+            # COUNT() returns 0 (not NULL) when no split matches, unlike the MAX()/SUM()
+            # subqueries above (both naturally NULL over zero rows) -- `or None` normalizes
+            # that 0 to the same "not a bouldering activity" None the other two fields already
+            # report, rather than a bouldering pill reading "0 routes" for a run.
+            climb_route_count=r.climb_route_count or None,
+            climb_max_completed_grade=r.climb_max_completed_grade,
+            climb_time_s=r.climb_time_s,
         )
         for r in rows
     ]
@@ -440,6 +507,68 @@ def list_activity_routes(
     ]
 
 
+# Registered before /activities/{activity_id} -- same reason as list_activity_years above:
+# "climbing-summary" would otherwise be swallowed as activity_id="climbing-summary".
+@router.get("/activities/climbing-summary")
+def get_climbing_summary(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    start_date: date | None = Query(None),
+    end_date: date | None = Query(None),
+) -> ClimbingSummaryOut:
+    """One bounded aggregate query over every bouldering session's own splits in
+    `[start_date, end_date]` -- the weekly/monthly/yearly/all-time summary pages' "Climbing"
+    section needs a true aggregate across however many sessions fall in the period (unlike
+    `HikeStatsCard`'s client-side reduction over an already-fetched `ActivitySummary[]`, which
+    works because every field it needs is already on that list response) plus the full per-grade
+    attempted/completed distribution for the chart, which isn't a scalar summary at all.
+    """
+    where_clauses = [
+        activity.c.athlete_id == athlete_id,
+        activity.c.deleted_at.is_(None),
+        activity.c.sub_sport == "bouldering",
+    ]
+    if start_date is not None:
+        where_clauses.append(activity.c.local_date >= start_date.isoformat())
+    if end_date is not None:
+        where_clauses.append(activity.c.local_date <= end_date.isoformat())
+
+    session_count = conn.execute(
+        select(func.count()).select_from(activity).where(*where_clauses)
+    ).scalar_one()
+
+    climb_splits = conn.execute(
+        select(
+            split_table.c.climb_grade,
+            split_table.c.climb_result,
+            split_table.c.duration_s,
+        )
+        .select_from(split_table.join(activity, activity.c.id == split_table.c.activity_id))
+        .where(*where_clauses, split_table.c.climb_grade.is_not(None))
+    ).fetchall()
+
+    total_climb_time_s = sum(s.duration_s for s in climb_splits if s.duration_s is not None)
+    completed_grades = [s.climb_grade for s in climb_splits if s.climb_result == "completed"]
+
+    breakdown_by_grade: dict[int, dict[str, int]] = {}
+    for s in climb_splits:
+        bucket = breakdown_by_grade.setdefault(s.climb_grade, {"attempted": 0, "completed": 0})
+        # An unconfirmed "unknown_<n>" raw value (see fit/parser.py) is counted conservatively as
+        # an attempt, never assumed completed.
+        bucket["completed" if s.climb_result == "completed" else "attempted"] += 1
+
+    return ClimbingSummaryOut(
+        session_count=session_count,
+        total_climb_time_s=total_climb_time_s,
+        total_routes=len(climb_splits),
+        max_completed_grade=max(completed_grades) if completed_grades else None,
+        grade_breakdown=[
+            ClimbGradeBreakdownOut(grade=grade, attempted=b["attempted"], completed=b["completed"])
+            for grade, b in sorted(breakdown_by_grade.items())
+        ],
+    )
+
+
 @router.get("/activities/{activity_id}")
 def get_activity(
     activity_id: str,
@@ -492,6 +621,10 @@ def get_activity(
         activity_end = row.start_time_utc + timedelta(seconds=row.duration_s)
         estimated_sweat_loss_ml = _estimated_sweat_loss_ml(conn, athlete_id, activity_end)
 
+    climb_route_count, climb_max_completed_grade, climb_time_s = _climb_summary_from_splits(
+        splits
+    )
+
     return ActivityDetail(
         id=row.id,
         start_time_utc=to_utc(row.start_time_utc),
@@ -514,6 +647,9 @@ def get_activity(
         workout_name=workout_name_row.name if workout_name_row is not None else None,
         primary_source=row.primary_source,
         stream_available=stream_row is not None,
+        climb_route_count=climb_route_count,
+        climb_max_completed_grade=climb_max_completed_grade,
+        climb_time_s=climb_time_s,
         moving_duration_s=row.moving_duration_s,
         estimated_sweat_loss_ml=estimated_sweat_loss_ml,
         carbohydrates_g=row.carbohydrates_g,
@@ -554,6 +690,7 @@ def get_activity(
                 climb_result=split_row.climb_result,
                 climb_avg_hr=split_row.climb_avg_hr,
                 climb_max_hr=split_row.climb_max_hr,
+                is_manual=split_row.is_manual,
             )
             for split_row in splits
         ],
@@ -879,6 +1016,213 @@ def get_activity_comparisons(
         distance_band_fraction=_COMPARISON_DISTANCE_BAND_FRACTION,
         matched_count=matched_count,
         rows=rows,
+    )
+
+
+# Same +/-15% tolerance convention as _COMPARISON_DISTANCE_BAND_FRACTION above, applied to total
+# activity duration (climb + rest) instead of distance -- bouldering has no distance at all, and
+# "how long the gym session ran" is the natural analogue of "how far the run was" here. No
+# location matching: unlike an outdoor run, a bouldering session is already implicitly "at the
+# gym", so there's no separate signal to match on the way GPS start point was for running.
+_CLIMB_COMPARISON_DURATION_BAND_FRACTION = 0.15
+_CLIMB_COMPARISON_LIMIT = 10
+
+
+@router.get("/activities/{activity_id}/climb-comparisons")
+def get_activity_climb_comparisons(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ClimbComparisonsOut:
+    """The 10 most recent *other* bouldering sessions within +/-15% of this one's own total
+    duration (climb + rest) -- e.g. "how did today's ~2hr session compare to my last 10 sessions
+    of about the same length." Same honest-comparison posture as `get_activity_comparisons`: real
+    per-session numbers (route count, max completed grade, climb time), no fabricated score.
+    Empty `rows` (with `matched_count == 0`) whenever this activity has no duration recorded, or
+    genuinely no other session of a similar length yet.
+    """
+    row = conn.execute(
+        select(activity.c.sub_sport, activity.c.duration_s).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+
+    rows: list[ClimbComparisonRowOut] = []
+    matched_count = 0
+    if row.duration_s is not None and row.duration_s > 0:
+        low = row.duration_s * (1 - _CLIMB_COMPARISON_DURATION_BAND_FRACTION)
+        high = row.duration_s * (1 + _CLIMB_COMPARISON_DURATION_BAND_FRACTION)
+        route_count_subq = (
+            select(func.count())
+            .select_from(split_table)
+            .where(
+                split_table.c.activity_id == activity.c.id,
+                split_table.c.climb_grade.is_not(None),
+            )
+            .scalar_subquery()
+        )
+        max_completed_grade_subq = (
+            select(func.max(split_table.c.climb_grade))
+            .where(
+                split_table.c.activity_id == activity.c.id,
+                split_table.c.climb_result == "completed",
+            )
+            .scalar_subquery()
+        )
+        climb_time_s_subq = (
+            select(func.sum(split_table.c.duration_s))
+            .where(
+                split_table.c.activity_id == activity.c.id,
+                split_table.c.split_type == "climb_active",
+            )
+            .scalar_subquery()
+        )
+        candidate_rows = conn.execute(
+            select(
+                activity.c.id,
+                activity.c.local_date,
+                activity.c.start_time_utc,
+                activity.c.duration_s,
+                route_count_subq.label("route_count"),
+                max_completed_grade_subq.label("max_completed_grade"),
+                climb_time_s_subq.label("climb_time_s"),
+            ).where(
+                activity.c.athlete_id == athlete_id,
+                activity.c.deleted_at.is_(None),
+                activity.c.sub_sport == row.sub_sport,
+                activity.c.id != activity_id,
+                activity.c.duration_s >= low,
+                activity.c.duration_s <= high,
+            )
+        ).fetchall()
+
+        matched_count = len(candidate_rows)
+        # Most recent first -- start_time_utc as the tie-break for same-local_date activities.
+        ordered = sorted(
+            candidate_rows, key=lambda r: (r.local_date or "", r.start_time_utc), reverse=True
+        )
+        rows = [
+            ClimbComparisonRowOut(
+                id=r.id,
+                local_date=r.local_date,
+                duration_s=r.duration_s,
+                route_count=r.route_count,
+                max_completed_grade=r.max_completed_grade,
+                climb_time_s=r.climb_time_s,
+            )
+            for r in ordered[:_CLIMB_COMPARISON_LIMIT]
+        ]
+
+    return ClimbComparisonsOut(
+        duration_band_fraction=_CLIMB_COMPARISON_DURATION_BAND_FRACTION,
+        matched_count=matched_count,
+        rows=rows,
+    )
+
+
+@router.patch("/activities/{activity_id}/climb-routes/{split_index}")
+def patch_climb_route_status(
+    activity_id: str,
+    split_index: int,
+    body: ClimbRouteStatusIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> SplitOut:
+    """A manual "I logged the wrong status" correction for one route -- see
+    bouldering_overrides.py's own docstring for why this is a durable, rebuild-safe correction
+    table rather than a one-off column mutation."""
+    try:
+        set_route_status_override(
+            conn,
+            athlete_id=athlete_id,
+            activity_id=activity_id,
+            split_index=split_index,
+            result=body.result,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    conn.commit()
+    return _get_split_out(
+        conn, athlete_id=athlete_id, activity_id=activity_id, split_index=split_index
+    )
+
+
+@router.post("/activities/{activity_id}/climb-routes")
+def post_climb_route(
+    activity_id: str,
+    body: ClimbRouteAddIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> SplitOut:
+    """A route the device never tracked at all -- forgotten to start/stop tracking, climbed
+    after the watch was already stopped, etc. See bouldering_overrides.py's own docstring for
+    why this is a durable, rebuild-safe record rather than a one-off row insert."""
+    if body.result not in {"attempt", "completed"}:
+        raise HTTPException(
+            status_code=422, detail="result must be one of ['attempt', 'completed']"
+        )
+    try:
+        split_index = add_manual_route(
+            conn,
+            athlete_id=athlete_id,
+            activity_id=activity_id,
+            grade=body.grade,
+            result=body.result,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    conn.commit()
+    return _get_split_out(
+        conn, athlete_id=athlete_id, activity_id=activity_id, split_index=split_index
+    )
+
+
+@router.delete("/activities/{activity_id}/climb-routes/{split_index}", status_code=204)
+def delete_climb_route(
+    activity_id: str,
+    split_index: int,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> None:
+    """Removes a manually-added route -- never a FIT-derived one (see
+    bouldering_overrides.py::delete_manual_route's own docstring for why that's never allowed:
+    it would just be re-derived by the next ingest/rebuild regardless)."""
+    try:
+        delete_manual_route(
+            conn, athlete_id=athlete_id, activity_id=activity_id, split_index=split_index
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    conn.commit()
+
+
+def _get_split_out(
+    conn: Connection, *, athlete_id: str, activity_id: str, split_index: int
+) -> SplitOut:
+    row = conn.execute(
+        select(split_table).where(
+            split_table.c.athlete_id == athlete_id,
+            split_table.c.activity_id == activity_id,
+            split_table.c.split_index == split_index,
+        )
+    ).fetchone()
+    assert row is not None  # the caller just wrote this exact row
+    return SplitOut(
+        split_index=row.split_index,
+        split_type=row.split_type,
+        start_time_utc=to_utc(row.start_time_utc) if row.start_time_utc else None,
+        end_time_utc=to_utc(row.end_time_utc) if row.end_time_utc else None,
+        duration_s=row.duration_s,
+        distance_m=row.distance_m,
+        climb_grade=row.climb_grade,
+        climb_result=row.climb_result,
+        climb_avg_hr=row.climb_avg_hr,
+        climb_max_hr=row.climb_max_hr,
+        is_manual=row.is_manual,
     )
 
 

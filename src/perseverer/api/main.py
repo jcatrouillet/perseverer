@@ -46,8 +46,11 @@ if _settings.cors_origins_list:
         # PATCH added for the manual activity-correction endpoints (sport/race overrides,
         # ADR 0012/this session) -- missing originally, which silently broke both from any real
         # browser tab (curl bypasses CORS preflight entirely, which is why this went unnoticed).
-        # PUT added for the settings/hr-zones endpoint, same class of bug if omitted.
-        allow_methods=["GET", "POST", "PATCH", "PUT"],
+        # PUT added for the settings/hr-zones endpoint, same class of bug if omitted. DELETE
+        # added for the bouldering manual-route endpoint (ADR 0012 bouldering-view redesign) --
+        # same bug again, caught this time by exercising the delete affordance in a real browser
+        # tab rather than trusting curl/pytest alone.
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         # Authorization added in Phase 5 for JWT bearer-token login (ADR 0008) -- X-API-Key
         # and Content-Type predate it (ADR 0006 decision 8).
         allow_headers=["X-API-Key", "Authorization", "Content-Type"],

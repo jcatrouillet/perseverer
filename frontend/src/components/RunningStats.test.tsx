@@ -33,6 +33,9 @@ function activity(id: string, local_date: string, overrides: Partial<ActivitySum
     workout_name: null,
     primary_source: "test",
     stream_available: false,
+    climb_route_count: null,
+    climb_max_completed_grade: null,
+    climb_time_s: null,
     ...overrides,
   };
 }

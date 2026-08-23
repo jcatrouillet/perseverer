@@ -8,6 +8,7 @@ import { Link } from "wouter";
 import { extractHrZones } from "../activityMetrics";
 import {
   useActivity,
+  useActivityClimbComparisons,
   useActivityComparisons,
   useActivityContext,
   useActivityInsights,
@@ -16,7 +17,10 @@ import {
   useActivityStream,
   useActivityWeather,
   useActivityWorkout,
+  useAddClimbRoute,
+  useDeleteClimbRoute,
   useHrZoneConfig,
+  useSetClimbRouteStatus,
   useSetFuelingOverride,
   useSetNameOverride,
   useSetRaceOverride,
@@ -40,10 +44,13 @@ import {
 import { ActivityWeather } from "../components/ActivityWeather";
 import { BoulderingRoutesTable } from "../components/BoulderingRoutesTable";
 import { ChartFullscreen } from "../components/ChartFullscreen";
+import { ClimbComparisonTable } from "../components/ClimbComparisonTable";
+import { ClimbGradeChart } from "../components/ClimbGradeChart";
 import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
 import { PaceVariabilityChart } from "../components/PaceVariabilityChart";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
+import { boulderingRoutes, gradeBreakdownFromRoutes, isBoulderingActivity } from "../boulderingRoutes";
 import { sportStyle } from "../metricStyle";
 import { computePaceVariability } from "../paceVariability";
 import {
@@ -97,6 +104,10 @@ export function ActivityDetailPage({ id }: { id: string }) {
     id,
     activity.data != null && isRunningSport(activity.data.sport),
   );
+  const climbComparisons = useActivityClimbComparisons(
+    id,
+    activity.data != null && isBoulderingActivity(activity.data.sport, activity.data.sub_sport),
+  );
   const weather = useActivityWeather(id, activity.data?.route?.start_lat != null);
   const location = useActivityLocation(id, activity.data?.route?.start_lat != null);
   const workout = useActivityWorkout(id);
@@ -107,6 +118,9 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const raceOverride = useSetRaceOverride(id);
   const nameOverride = useSetNameOverride(id);
   const fuelingOverride = useSetFuelingOverride(id);
+  const setClimbRouteStatus = useSetClimbRouteStatus(id);
+  const addClimbRoute = useAddClimbRoute(id);
+  const deleteClimbRoute = useDeleteClimbRoute(id);
 
   if (activity.isLoading) return <p>Loading…</p>;
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
@@ -292,7 +306,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
         </section>
       )}
 
-      {a.laps.length > 0 && (
+      {a.laps.length > 0 && !isBoulderingActivity(a.sport, a.sub_sport) && (
         <section className="card">
           <h2>Intervals</h2>
           <div className="table-scroll">
@@ -384,7 +398,33 @@ export function ActivityDetailPage({ id }: { id: string }) {
         </section>
       )}
 
-      <BoulderingRoutesTable splits={a.splits} />
+      {isBoulderingActivity(a.sport, a.sub_sport) && (
+        <>
+          <BoulderingRoutesTable
+            splits={a.splits}
+            onSetStatus={(splitIndex, result) =>
+              setClimbRouteStatus.mutate({ splitIndex, result })
+            }
+            onAddRoute={(grade, result) => addClimbRoute.mutate({ grade, result })}
+            onDeleteRoute={(splitIndex) => deleteClimbRoute.mutate(splitIndex)}
+            isSaving={
+              setClimbRouteStatus.isPending || addClimbRoute.isPending || deleteClimbRoute.isPending
+            }
+            isError={
+              setClimbRouteStatus.isError || addClimbRoute.isError || deleteClimbRoute.isError
+            }
+          />
+          {a.splits.length > 0 && (
+            <section className="card">
+              <h2>Routes Climbed</h2>
+              <ClimbGradeChart gradeBreakdown={gradeBreakdownFromRoutes(boulderingRoutes(a.splits))} />
+            </section>
+          )}
+          {climbComparisons.data && (
+            <ClimbComparisonTable activity={a} comparisons={climbComparisons.data} />
+          )}
+        </>
+      )}
 
       {a.stream_available && (
         <section>

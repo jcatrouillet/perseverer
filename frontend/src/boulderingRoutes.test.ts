@@ -15,6 +15,7 @@ function split(overrides: Partial<SplitOut> = {}): SplitOut {
     climb_result: "completed",
     climb_avg_hr: 99,
     climb_max_hr: 132,
+    is_manual: null,
     ...overrides,
   };
 }

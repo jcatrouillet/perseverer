@@ -5,12 +5,14 @@ import {
   useAllActivities,
   useCalendar,
   useCalendarWeeks,
+  useClimbingSummary,
   useFitness,
   useHealthDashboard,
   useSleep,
 } from "../../api/queries";
 import { ActivityCard } from "../../components/ActivityCard";
 import { DateNavigator } from "../../components/DateNavigator";
+import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { NotesPanel } from "../../components/NotesPanel";
 import { MetricChip, StatTile } from "../../components/StatTile";
@@ -66,6 +68,7 @@ export function WeekView({ date }: { date: string }) {
   const fitness = useFitness(priorWeekStart, end);
   const health = useHealthDashboard(start, end);
   const sleep = useSleep(start, end);
+  const climbing = useClimbingSummary(start, end);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const weekTotal = weeks.data?.periods.find((p) => p.period_start === start);
   const priorWeekTotal = weeks.data?.periods.find((p) => p.period_start === priorWeekStart);
@@ -201,6 +204,7 @@ export function WeekView({ date }: { date: string }) {
       )}
 
       <HikeStatsCard activities={hikes} />
+      <ClimbingStatsCard summary={climbing.data} />
 
       {health.data && (
         <WeekWellnessCharts

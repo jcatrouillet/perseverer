@@ -237,6 +237,56 @@ activity_sport_override = Table(
     ),
 )
 
+# Same "durable, never wiped by sync rebuild" shape as activity_sport_override above -- see
+# bouldering_overrides.py's own docstring. Keyed by (athlete_id, activity_start_time_utc,
+# split_index), not activity_id: split rows (like activity rows) are wiped and re-derived with a
+# fresh identity on every rebuild, but a FIT-derived split's own split_index (its position in
+# file order) is stable across replays of the same archived bytes.
+bouldering_route_status_override = Table(
+    "bouldering_route_status_override",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("activity_start_time_utc", DateTime(), nullable=False),
+    Column("split_index", Integer, nullable=False),
+    Column("result", String, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id",
+        "activity_start_time_utc",
+        "split_index",
+        name="uq_bouldering_route_status_override_identity",
+    ),
+)
+
+# A route the athlete logged by hand (the device never recorded it at all) -- has no FIT-derived
+# split_index to key off of, so it gets its own independent, athlete-assigned ordering
+# (manual_order) instead. Also durable/never wiped -- re-applied after every rebuild by
+# re-appending each manual route's own live `split` row in manual_order sequence.
+bouldering_manual_route = Table(
+    "bouldering_manual_route",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("activity_start_time_utc", DateTime(), nullable=False),
+    Column("manual_order", Integer, nullable=False),
+    Column("grade", Integer, nullable=False),
+    Column("result", String, nullable=False),
+    # The live split row's own current split_index, kept in sync by bouldering_overrides.py
+    # every time it (re-)inserts that row -- once at creation, again after every rebuild. This is
+    # what lets a delete find its live row directly (a plain WHERE, not a positional guess),
+    # even though the live split_index itself isn't stable across a rebuild the way manual_order
+    # (this row's own real identity) is.
+    Column("split_index", Integer, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id",
+        "activity_start_time_utc",
+        "manual_order",
+        name="uq_bouldering_manual_route_identity",
+    ),
+)
+
 activity_source_link = Table(
     "activity_source_link",
     metadata,
@@ -338,6 +388,14 @@ split = Table(
     # plausible bpm range against the athlete's own recorded resting HR. See fit/parser.py.
     Column("climb_avg_hr", Float, nullable=True),
     Column("climb_max_hr", Float, nullable=True),
+    # True only for a row bouldering_overrides.py::add_manual_route created (the athlete logging
+    # a route the device never recorded at all) -- never set (stays NULL, read as "not manual")
+    # for a FIT-derived row. Nullable rather than NOT NULL + a default so adding this column to
+    # an already-populated table is a plain ALTER TABLE, no backfill required. This is what lets
+    # the frontend offer a delete affordance only where it's actually safe: deleting a real
+    # FIT-derived split would just come back on the next ingest/rebuild anyway, but a manual row
+    # has no such backing and really would be gone for good.
+    Column("is_manual", Boolean, nullable=True),
     UniqueConstraint("athlete_id", "activity_id", "split_index", name="uq_split_identity"),
 )
 
