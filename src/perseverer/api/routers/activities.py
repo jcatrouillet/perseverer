@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime, timedelta
+from math import asin, cos, radians, sin, sqrt
 from typing import Annotated
 
 import duckdb
@@ -14,6 +15,8 @@ from perseverer.adapters.fit_folder import _local_date, _upsert_device, insert_n
 from perseverer.adapters.strava_export import _overlay_csv_totals
 from perseverer.api.dependencies import get_conn, get_duckdb, get_engine, require_api_key
 from perseverer.api.schemas.activities import (
+    ActivityComparisonRowOut,
+    ActivityComparisonsOut,
     ActivityContextOut,
     ActivityContextRecentOut,
     ActivityDetail,
@@ -62,6 +65,7 @@ from perseverer.db.schema import (
 )
 from perseverer.db.schema import device as device_table
 from perseverer.db.schema import split as split_table
+from perseverer.gap import AVG_GAP_METRIC_KEY
 from perseverer.geocoding import get_or_fetch_activity_location, read_cached_location
 from perseverer.insights.engine import load_insight_activities
 from perseverer.insights.rules_activity import compute_activity_insights
@@ -86,6 +90,14 @@ router = APIRouter()
 # shape as api/routers/health.py::LOGICAL_METRICS -- see ADR 0013.
 AVG_HR_METRIC_KEYS = ("fit.session.avg_heart_rate", "strava.session.avg_heart_rate")
 MAX_HR_METRIC_KEYS = ("fit.session.max_heart_rate", "strava.session.max_heart_rate")
+
+# A single FIT-only key, no strava.* alias -- unlike heart rate, GPX/TCX-sourced Strava
+# activities carry no cadence field for the CSV-totals overlay to fill in at all, so there's
+# nothing to alias against. Same key insights/engine.py already uses for the identical field.
+# Its value is a single-foot rate; doubled to strides/min at the point of use below, matching
+# frontend/src/components/ActivityStatsGrid.tsx's own convention (confirmed against real data:
+# session values of ~75-88 correspond to the conventional 150-176 spm runners actually see).
+CADENCE_METRIC_KEY = "fit.session.avg_running_cadence"
 
 
 def _aliased_metric_subquery(keys: tuple[str, ...]):  # type: ignore[no-untyped-def]
@@ -734,6 +746,135 @@ def get_activity_context(
         comparable_count=comparable_count,
         recent=recent,
         fastest=fastest,
+    )
+
+
+_COMPARISON_DISTANCE_BAND_FRACTION = 0.15  # same tolerance get_activity_context's own band uses
+# Calibrated against this project's real archive (983 running activities with a recorded GPS
+# start point), not picked arbitrarily: for every sampled activity, the same-location cluster
+# saturates by ~200-300m (adding at most a handful more matches out to 500m) and then a real gap
+# opens up before the next-nearest distinct location, first appearing between roughly 500m and
+# 1000m away. 300m sits comfortably inside that gap -- loose enough to tolerate a slow GPS fix
+# at the very start of a run, tight enough not to fold in a genuinely different starting point.
+_COMPARISON_START_RADIUS_M = 300.0
+_COMPARISON_LIMIT = 10
+
+
+def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Great-circle distance in metres -- same formula as gpx/parser.py's own `_haversine_m`,
+    duplicated rather than imported since that one is GPX-parsing-private and takes a different
+    argument shape (lat/lon tuples); not worth a new shared module for one small function (see
+    CLAUDE.md's cross-language/cross-module small-algorithm duplication precedent)."""
+    p1, p2 = radians(lat1), radians(lat2)
+    dlat = p2 - p1
+    dlng = radians(lng2) - radians(lng1)
+    h = sin(dlat / 2) ** 2 + cos(p1) * cos(p2) * sin(dlng / 2) ** 2
+    return 2 * 6_371_000.0 * asin(sqrt(h))
+
+
+@router.get("/activities/{activity_id}/comparisons")
+def get_activity_comparisons(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityComparisonsOut:
+    """The 10 most recent *other* activities of the same sport, within +/-15% of this one's own
+    distance (same band `get_activity_context` uses) AND starting within 300m of this one's own
+    start point (`_COMPARISON_START_RADIUS_M`, calibrated against real data -- see its own
+    comment) -- e.g. "how did today's 10K from home compare to my last 10 10Ks from home."
+
+    Same "deliberately small, honest comparison view" posture as `get_activity_context` (see that
+    endpoint's own docstring): real per-activity numbers, no fabricated composite score. Empty
+    `rows` (with `matched_count == 0`) whenever this activity has no distance, no recorded GPS
+    start point (e.g. a treadmill run), or genuinely no location-and-distance match yet -- never
+    a fabricated comparison for a route run for the first time.
+    """
+    row = conn.execute(
+        select(
+            activity.c.sport,
+            activity.c.distance_m,
+            route_geom.c.start_lat,
+            route_geom.c.start_lng,
+        )
+        .select_from(activity.outerjoin(route_geom, route_geom.c.activity_id == activity.c.id))
+        .where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+
+    rows: list[ActivityComparisonRowOut] = []
+    matched_count = 0
+    if (
+        row.distance_m is not None
+        and row.distance_m > 0
+        and row.start_lat is not None
+        and row.start_lng is not None
+    ):
+        effective_duration_expr = func.coalesce(activity.c.moving_duration_s, activity.c.duration_s)
+        low = row.distance_m * (1 - _COMPARISON_DISTANCE_BAND_FRACTION)
+        high = row.distance_m * (1 + _COMPARISON_DISTANCE_BAND_FRACTION)
+        candidate_rows = conn.execute(
+            select(
+                activity.c.id,
+                activity.c.local_date,
+                activity.c.start_time_utc,
+                activity.c.distance_m,
+                effective_duration_expr.label("eff_s"),
+                route_geom.c.start_lat,
+                route_geom.c.start_lng,
+                _aliased_metric_subquery(AVG_HR_METRIC_KEYS).label("avg_hr"),
+                _aliased_metric_subquery((VDOT_METRIC_KEY,)).label("vdot"),
+                _aliased_metric_subquery((AVG_GAP_METRIC_KEY,)).label("avg_gap_speed_mps"),
+                _aliased_metric_subquery((CADENCE_METRIC_KEY,)).label("cadence_raw"),
+            )
+            .select_from(activity.join(route_geom, route_geom.c.activity_id == activity.c.id))
+            .where(
+                activity.c.athlete_id == athlete_id,
+                activity.c.deleted_at.is_(None),
+                activity.c.sport == row.sport,
+                activity.c.id != activity_id,
+                activity.c.distance_m >= low,
+                activity.c.distance_m <= high,
+                effective_duration_expr.is_not(None),
+                effective_duration_expr > 0,
+                route_geom.c.start_lat.is_not(None),
+                route_geom.c.start_lng.is_not(None),
+            )
+        ).fetchall()
+
+        nearby = [
+            r
+            for r in candidate_rows
+            if _haversine_m(row.start_lat, row.start_lng, r.start_lat, r.start_lng)
+            <= _COMPARISON_START_RADIUS_M
+        ]
+        matched_count = len(nearby)
+        # Most recent first -- start_time_utc as the tie-break for same-local_date activities,
+        # not just local_date alone.
+        nearby.sort(key=lambda r: (r.local_date or "", r.start_time_utc), reverse=True)
+        rows = [
+            ActivityComparisonRowOut(
+                id=r.id,
+                local_date=r.local_date,
+                distance_m=r.distance_m,
+                duration_s=r.eff_s,
+                vdot=r.vdot,
+                avg_gap_speed_mps=r.avg_gap_speed_mps,
+                avg_hr_bpm=r.avg_hr,
+                avg_cadence_spm=r.cadence_raw * 2 if r.cadence_raw is not None else None,
+            )
+            for r in nearby[:_COMPARISON_LIMIT]
+        ]
+
+    return ActivityComparisonsOut(
+        start_radius_m=_COMPARISON_START_RADIUS_M,
+        distance_band_fraction=_COMPARISON_DISTANCE_BAND_FRACTION,
+        matched_count=matched_count,
+        rows=rows,
     )
 
 

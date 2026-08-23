@@ -43,6 +43,7 @@ from perseverer.db.schema import (
     split as split_table,
 )
 from perseverer.fitness import refresh_fitness_rollup
+from perseverer.gap import refresh_avg_gap
 from perseverer.gpx.parser import parse_gpx
 from perseverer.health.eufy_parser import parse_eufy_scale_reading
 from perseverer.health.ingest import ingest_health_batch
@@ -312,6 +313,7 @@ def rebuild_database(
         refresh_insights(conn, athlete_id=athlete_id)
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
         # After apply_sport_overrides above, not before -- that call already restores any
         # previously-set emoji title from the durable override table, so this only ever does
         # real work for an activity that never had one to begin with.

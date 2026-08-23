@@ -30,6 +30,7 @@ from perseverer.adapters.fit_folder import IngestRunSummary
 from perseverer.archive import archive_raw_bytes
 from perseverer.db.schema import athlete, ingest_run
 from perseverer.fitness import refresh_fitness_rollup
+from perseverer.gap import refresh_avg_gap
 from perseverer.garmin_activity_summary import backfill_activity_corrections
 from perseverer.health.ingest import ingest_health_batch
 from perseverer.health.json_parser import parse_garmin_export_json
@@ -246,6 +247,7 @@ def import_garmin_export(
         refresh_insights(conn, athlete_id=athlete_id)
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
 
     # Corrects sport/name using Garmin's own reclassification from summarizedActivitiesExport

@@ -221,6 +221,17 @@ own date, not "today" — browsing an old activity shows its own contemporaries.
 
 **Responses:** `200` → `ActivityContextOut`. `404`.
 
+### `GET /activities/{activity_id}/comparisons`
+
+The 10 most recent *other* activities of the same sport, within ±15% of this one's own distance
+**and** starting within 300m of this one's own GPS start point — e.g. "how did today's 10K from
+home compare to my last 10 10Ks from home." Same honest-comparison posture as `.../context`
+above: real per-activity numbers (VDOT, average GAP speed, average HR, average cadence), no
+fabricated composite score. `rows` is empty (with `matched_count: 0`) whenever this activity has
+no distance, no recorded GPS start point (e.g. a treadmill run), or genuinely no match yet.
+
+**Responses:** `200` → `ActivityComparisonsOut`. `404`.
+
 ### `GET /activities/{activity_id}/insights`
 
 Point-in-time insights for one activity (e.g. "your fastest 10 km to date"), computed fresh at
@@ -724,6 +735,22 @@ with a GPS start point.
 
 `id`, `local_date` (nullable), `distance_m`, `duration_s` — required; `avg_hr_bpm` (number,
 nullable) — optional.
+
+### ActivityComparisonsOut
+
+| Field | Type | Description |
+|---|---|---|
+| `start_radius_m` | number | The GPS start-proximity threshold actually used (300m). |
+| `distance_band_fraction` | number | The distance-tolerance fraction actually used (0.15). |
+| `matched_count` | integer | How many activities matched before capping to the 10 most recent. |
+| `rows` | array\<`ActivityComparisonRowOut`\> | The 10 most recent matches, most recent first. |
+
+### ActivityComparisonRowOut
+
+`id`, `local_date` (nullable), `distance_m`, `duration_s` — required (`duration_s` is
+moving-preferred, same convention as `ActivityContextRecentOut`). `vdot`, `avg_gap_speed_mps`
+(m/s), `avg_hr_bpm`, `avg_cadence_spm` (number, nullable, each) — `avg_cadence_spm` is already
+doubled to strides/minute server-side (FIT's own field is a single-foot rate).
 
 ### ActivityWeatherOut
 

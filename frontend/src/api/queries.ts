@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
 import type {
+  ActivityComparisonsOut,
   ActivityContextOut,
   ActivityDetail,
   ActivityFuelingOut,
@@ -220,6 +221,18 @@ export function useActivityContext(activityId: string) {
   return useQuery({
     queryKey: ["activity-context", activityId],
     queryFn: () => apiGet<ActivityContextOut>(`/api/v1/activities/${activityId}/context`),
+  });
+}
+
+/** The 10 most recent same-distance, same-start-location runs (GET /activities/{id}/comparisons)
+ * -- `enabled` should be gated on the activity's sport the same way `useActivityInsights` below
+ * already is, since this comparison is deliberately running-specific. */
+export function useActivityComparisons(activityId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["activity-comparisons", activityId],
+    queryFn: () =>
+      apiGet<ActivityComparisonsOut>(`/api/v1/activities/${activityId}/comparisons`),
+    enabled,
   });
 }
 

@@ -147,6 +147,34 @@ class ActivityContextOut(BaseModel):
     fastest: list[ActivityContextRecentOut]
 
 
+class ActivityComparisonRowOut(BaseModel):
+    id: str
+    local_date: str | None
+    distance_m: float
+    # Moving-preferred effective duration, same convention as ActivityContextRecentOut.duration_s.
+    duration_s: float
+    vdot: float | None
+    # m/s, SI storage convention (CLAUDE.md principle 6) -- see gap.py. The presentation layer
+    # converts to a min/km "grade adjusted pace" the same way it already does for plain pace.
+    avg_gap_speed_mps: float | None
+    avg_hr_bpm: float | None
+    # Already doubled to strides/min -- see routers/activities.py::get_activity_comparisons for
+    # why (FIT's own avg_running_cadence field is a single-foot rate).
+    avg_cadence_spm: float | None
+
+
+class ActivityComparisonsOut(BaseModel):
+    # Echoed back so the frontend can phrase its own "within Nm of this run's start, +/-X%
+    # distance" caption from the same numbers the query actually used, rather than a second
+    # hardcoded copy of these thresholds.
+    start_radius_m: float
+    distance_band_fraction: float
+    # How many activities actually matched before capping to the 10 most recent -- lets the
+    # frontend say "10 of 34 matching runs" rather than implying 10 is the whole story.
+    matched_count: int
+    rows: list[ActivityComparisonRowOut]
+
+
 class ActivityWeatherOut(BaseModel):
     # False whenever there's nothing to show -- no GPS start point to query against, or the
     # Open-Meteo fetch failed/returned no usable data for this activity's time window. Never a

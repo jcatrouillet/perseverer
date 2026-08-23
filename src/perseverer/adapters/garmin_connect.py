@@ -47,6 +47,7 @@ from perseverer.archive import archive_raw_bytes
 from perseverer.db.schema import ingest_run
 from perseverer.fit.parser import parse_fit
 from perseverer.fitness import refresh_fitness_rollup
+from perseverer.gap import refresh_avg_gap
 from perseverer.garmin_connect_activity_name import backfill_garmin_activity_names
 from perseverer.health.ingest import HealthIngestResult, ingest_health_batch
 from perseverer.health.json_parser import (
@@ -747,6 +748,7 @@ def sync_garmin_connect(
     if touched_dates:
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
         # Must run before backfill_weather_titles: this corrects a still-generic-default name
         # (e.g. "Run") using Garmin's own richer activityName before the weather emoji is
         # prepended, so the emoji lands on the final title, not on the generic placeholder.

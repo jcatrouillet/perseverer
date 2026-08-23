@@ -41,6 +41,7 @@ from perseverer.db.schema import (
 from perseverer.fit.parser import parse_fit
 from perseverer.fit.types import CanonicalActivity, CanonicalBatch, ParsedDevice
 from perseverer.fitness import refresh_fitness_rollup
+from perseverer.gap import refresh_avg_gap
 from perseverer.health.ingest import ingest_health_batch
 from perseverer.health.json_parser import parse_daily_summary_json, parse_hydration_json
 from perseverer.insights.engine import refresh_insights
@@ -550,6 +551,7 @@ def import_from_folder(
         refresh_insights(conn, athlete_id=athlete_id)
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
         backfill_weather_titles(conn, archive_root, athlete_id=athlete_id)
     conn.commit()
 

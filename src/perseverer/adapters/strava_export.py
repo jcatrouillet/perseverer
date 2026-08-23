@@ -56,6 +56,7 @@ from perseverer.archive import archive_raw_bytes
 from perseverer.db.schema import ingest_run
 from perseverer.fit.types import CanonicalActivity, CanonicalBatch, ParsedMetric
 from perseverer.fitness import refresh_fitness_rollup
+from perseverer.gap import refresh_avg_gap
 from perseverer.gpx.parser import parse_gpx
 from perseverer.ingest_dispatch import ingest_fit_bytes
 from perseverer.insights.engine import refresh_insights
@@ -313,6 +314,7 @@ def import_strava_export(
         refresh_insights(conn, athlete_id=athlete_id)
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
         backfill_weather_titles(conn, archive_root, athlete_id=athlete_id)
     conn.commit()
 

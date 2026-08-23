@@ -482,6 +482,44 @@ re-processes full history, relying on `archive_raw_bytes`' content-addressing an
 batch`'s idempotent upsert to make a repeat run of already-seen readings a cheap no-op — same
 "full recompute, self-healing" precedent as `fitness.py`/the live wellness sync above.
 
+## Whole-activity average Grade Adjusted Pace, and the activity-comparisons endpoint
+
+New `activity_metric` key `perseverer.performance.avg_gap_speed_mps` (`source="perseverer"`,
+m/s — SI storage per CLAUDE.md principle 6) — a single whole-activity average grade-adjusted
+speed, computed for every `sport == "running"` activity whose Parquet stream has both
+`altitude_m` and `distance_m` channels (`gap.py::compute_avg_gap_speed_mps`). The Minetti
+energy-cost-of-running polynomial is duplicated from `frontend/src/gap.ts` (same cross-module
+duplication precedent as `weatherCode.ts`/`weather_code.py`), but the aggregation itself is new:
+each stream interval's grade-adjusted "equivalent flat time" (`dt_s * FLAT_COST/cost(grade)`) is
+summed and divided into total real distance, i.e. a distance-weighted average — chosen over a
+per-point unsmoothed series (too noisy for a single summary stat) and over a cruder net-
+elevation/total-distance approximation (would read as flat for a loop/out-and-back regardless of
+how hilly the middle was, exactly the routes most likely to match on "same start location"
+below). `gap.py::refresh_avg_gap` is a full delete-and-reinsert per athlete per run, same
+precedent as `performance.py::refresh_vdot`/`pace_bands.py::refresh_pace_bands` (called alongside
+both at every ingest entry point, and available standalone via `sync backfill-avg-gap`).
+
+`GET /activities/{id}/comparisons` (`api/routers/activities.py::get_activity_comparisons`) is a
+new endpoint for the activity detail page's "Similar runs from here" section: the 10 most recent
+*other* same-sport activities within ±15% of this one's own distance (`_COMPARISON_DISTANCE_
+BAND_FRACTION`, the same tolerance `.../context` already uses) **and** starting within 300m of
+this one's own `route_geom.start_lat`/`start_lng` (`_COMPARISON_START_RADIUS_M` — calibrated
+against the real archive: for a sampled activity's own location, the same-place cluster
+saturates by ~200-300m and a real gap opens before the next distinct location, first appearing
+between roughly 500m and 1000m away). Each matched row carries VDOT, average GAP speed, average
+HR (`AVG_HR_METRIC_KEYS` alias-merge, same as `.../context`), and average cadence
+(`fit.session.avg_running_cadence`, doubled server-side to strides/minute — FIT's own field is a
+single-foot rate, same doubling convention `insights/engine.py`/`ActivityStatsGrid.tsx` already
+use for the identical field). Empty `rows` (with `matched_count: 0`), never a fabricated
+comparison, whenever the activity has no distance, no recorded GPS start point (e.g. a treadmill
+run), or genuinely no match yet.
+
+Frontend: `ActivityComparisonTable.tsx`, rendered on `ActivityDetailPage.tsx` immediately after
+the Charts section, gated on `isRunningSport` like the existing per-activity insights panel. The
+current activity is shown as its own highlighted first row (its GAP/cadence read from the
+already-loaded `ActivityDetail.metrics` array, not a second request) so its own numbers sit
+directly alongside the 10 comparison runs.
+
 Each record's `scale_data` sub-object carries ~24 fields; the sibling project's own extraction only
 uses 9 of them. `parse_eufy_scale_reading` generically flattens **every** scalar `scale_data` field
 into an `eufy.scale.<field>` observation (`aggregation="instant"` — a weigh-in is a point-in-time

@@ -708,6 +708,22 @@ const SCHEMAS = [
       ["duration_s","number",""],
       ["avg_hr_bpm","number|null","optional — absent","opt"],
     ] },
+  { name: "ActivityComparisonsOut", note: "Returned by GET /activities/{id}/comparisons.", fields: [
+      ["start_radius_m","number","The GPS start-proximity threshold actually used (300m)."],
+      ["distance_band_fraction","number","The distance-tolerance fraction actually used (0.15)."],
+      ["matched_count","integer","How many activities matched before capping to the 10 most recent."],
+      ["rows","array<ActivityComparisonRowOut>","The 10 most recent matches, most recent first."],
+    ] },
+  { name: "ActivityComparisonRowOut", fields: [
+      ["id","string",""],
+      ["local_date","string(date)|null",""],
+      ["distance_m","number",""],
+      ["duration_s","number","Moving-preferred, same convention as ActivityContextRecentOut."],
+      ["vdot","number|null",""],
+      ["avg_gap_speed_mps","number|null","Grade Adjusted Pace, as a speed in m/s (SI storage)."],
+      ["avg_hr_bpm","number|null",""],
+      ["avg_cadence_spm","number|null","Already doubled to strides/minute — FIT's own field is a single-foot rate."],
+    ] },
   { name: "ActivityWeatherOut", note: "Returned by GET /activities/{id}/weather. See “available: false” in Conventions.", fields: [
       ["available","boolean","required"],
       ["temperature_min_c","number|null","null when available is false; a range across the activity's duration otherwise","opt"],
@@ -986,6 +1002,12 @@ const GROUPS = [
       description: "A deliberately honest comparison view — not a reproduction of any vendor's proprietary performance-condition model. percentile_rank is the share of this athlete's own same-sport activities within ±15% distance that this one beat or tied, by effective pace. null when there's nothing comparable yet. recent covers the 90 days up to and including this activity's own date, not \"today\" — browsing an old activity shows its own contemporaries.",
       params: [ ["activity_id","path","req","string","—",""] ],
       responses: [ { code: 200, ref: "ActivityContextOut" }, { code: 404, note: "" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/comparisons", summary: "The 10 most recent same-distance, same-start-location runs.",
+      description: "The 10 most recent other activities of the same sport, within ±15% of this one's own distance AND starting within 300m of this one's own GPS start point — e.g. \"how did today's 10K from home compare to my last 10 10Ks from home.\" Same honest-comparison posture as .../context above: real per-activity numbers (VDOT, average GAP speed, average HR, average cadence), no fabricated composite score. rows is empty (with matched_count: 0) whenever this activity has no distance, no recorded GPS start point (e.g. a treadmill run), or genuinely no match yet.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, ref: "ActivityComparisonsOut" }, { code: 404, note: "" } ],
       example: {}
     },
     { method: "GET", path: "/api/v1/activities/{activity_id}/insights", summary: "Point-in-time insights for one activity.",

@@ -8,6 +8,7 @@ import { Link } from "wouter";
 import { extractHrZones } from "../activityMetrics";
 import {
   useActivity,
+  useActivityComparisons,
   useActivityContext,
   useActivityInsights,
   useActivityLocation,
@@ -23,6 +24,7 @@ import {
   useSplitActivitySource,
 } from "../api/queries";
 import { ActivityCharts } from "../components/ActivityCharts";
+import { ActivityComparisonTable } from "../components/ActivityComparisonTable";
 import { ActivityContextStrip } from "../components/ActivityContextStrip";
 import { ActivityFastestTable } from "../components/ActivityFastestTable";
 import { ActivityFueling } from "../components/ActivityFueling";
@@ -87,6 +89,10 @@ export function ActivityDetailPage({ id }: { id: string }) {
   }, [routeStream.data, activity.data]);
   const context = useActivityContext(id);
   const runInsights = useActivityInsights(
+    id,
+    activity.data != null && isRunningSport(activity.data.sport),
+  );
+  const comparisons = useActivityComparisons(
     id,
     activity.data != null && isRunningSport(activity.data.sport),
   );
@@ -394,6 +400,14 @@ export function ActivityDetailPage({ id }: { id: string }) {
             />
           )}
         </section>
+      )}
+
+      {comparisons.data && (
+        <ActivityComparisonTable
+          activity={a}
+          comparisons={comparisons.data}
+          sport={sport}
+        />
       )}
 
       <section className="card">

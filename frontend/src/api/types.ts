@@ -115,6 +115,24 @@ export interface ActivityContextOut {
   fastest: ActivityContextRecentOut[];
 }
 
+export interface ActivityComparisonRowOut {
+  id: string;
+  local_date: string | null;
+  distance_m: number;
+  duration_s: number;
+  vdot: number | null;
+  avg_gap_speed_mps: number | null;
+  avg_hr_bpm: number | null;
+  avg_cadence_spm: number | null;
+}
+
+export interface ActivityComparisonsOut {
+  start_radius_m: number;
+  distance_band_fraction: number;
+  matched_count: number;
+  rows: ActivityComparisonRowOut[];
+}
+
 export interface ActivityMapPointOut {
   id: string;
   local_date: string | null;

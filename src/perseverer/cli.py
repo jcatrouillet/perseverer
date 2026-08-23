@@ -42,6 +42,7 @@ from perseverer.db.engine import make_engine
 from perseverer.db.schema import activity, activity_source_link
 from perseverer.db.schema import athlete as athlete_table
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.gap import refresh_avg_gap
 from perseverer.garmin_activity_summary import backfill_activity_corrections
 from perseverer.garmin_connect_activity_name import backfill_garmin_activity_names
 from perseverer.insights.engine import refresh_insights
@@ -491,6 +492,23 @@ def backfill_pace_bands_cmd() -> None:
         count = refresh_pace_bands(conn, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
         conn.commit()
     typer.echo(f"backfilled pace bands for {count} activity/band rows")
+
+
+@app.command("backfill-avg-gap")
+def backfill_avg_gap_cmd() -> None:
+    """Backfills perseverer.performance.avg_gap_speed_mps for already-ingested running
+    activities -- no full `sync rebuild` needed. Like backfill-vdot/backfill-pace-bands above,
+    reads only what's already in the database and each activity's already-written Parquet
+    stream (this time the altitude_m and distance_m channels); new ingests already compute
+    this automatically going forward (see gap.py's own docstring). This command is for
+    backfilling activities ingested before average GAP existed.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        count = refresh_avg_gap(conn, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+    typer.echo(f"backfilled average GAP for {count} activities")
 
 
 @app.command("backfill-weather-titles")

@@ -350,6 +350,17 @@
   background: color-mix(in srgb, var(--color-load) 16%, transparent);
 }
 
+.activity-comparison__caption {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.comparison-table__row--current td {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-pace) 16%, transparent);
+}
+
 /* Follows .activity-detail__layout (the stats + fastest-table row, ending in Hydration), which
    isn't itself a .card so the usual .card + .card sibling margin doesn't fire here. */
 .activity-context {
