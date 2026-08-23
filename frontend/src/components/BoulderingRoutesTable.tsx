@@ -52,7 +52,7 @@ export function BoulderingRoutesTable({
   const { totalRoutes, completedRoutes } = summarizeBoulderingRoutes(routes);
 
   return (
-    <section className="card">
+    <section className="card bouldering-routes-section">
       <h2>Routes</h2>
       {totalRoutes > 0 && (
         <p className="bouldering-routes__caption">

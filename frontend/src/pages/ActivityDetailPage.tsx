@@ -427,7 +427,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
       )}
 
       {a.stream_available && (
-        <section>
+        <section className="activity-charts-section">
           <h2>Charts</h2>
           {stream.isLoading && <p>Loading stream…</p>}
           {stream.isError && <p role="alert">Could not load stream data.</p>}

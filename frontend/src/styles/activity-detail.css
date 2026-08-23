@@ -402,6 +402,26 @@
   margin-top: var(--space-5);
 }
 
+/* Same problem as .activity-context above, for the Routes table specifically: a bouldering
+   activity has no distance, so ActivityContextStrip (Recent efforts) always returns null for it
+   (see its own points.length < 2 guard) and Time in zones / Intervals don't render either --
+   Routes ends up directly after .activity-detail__layout with no preceding .card, so
+   `.card + .card` never fires. Unconditional like .activity-context rather than a sibling-
+   combinator: when a .card *does* precede Routes (Recent efforts did have enough points), the
+   higher-specificity `.card + .card` rule still wins over this single-class one, so this only
+   ever supplies the margin when nothing else already did. */
+.bouldering-routes-section {
+  margin-top: var(--space-5);
+}
+
+/* The Charts section is a plain <section>, not a .card (no bordered box wanted around the
+   stream charts), so it can never be the second .card in a `.card + .card` pair regardless of
+   what precedes it -- true for every sport, not just bouldering, it's just more noticeable here
+   since Routes/Routes Climbed/Similar sessions stack several cards directly above it. */
+.activity-charts-section {
+  margin-top: var(--space-5);
+}
+
 .activity-context__headline {
   margin: 0 0 var(--space-2);
   font-size: var(--font-size-sm);
