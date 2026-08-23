@@ -59,10 +59,17 @@
 
 /* A month (or shorter) fits on one line -- every day side by side with its day number
    underneath, no week-wrapping and no month-label row (the page heading already says which
-   month this is). */
+   month this is). Unlike .running-heatmap__grid above, plain 1fr columns don't work here: a
+   week-count grid caps out around 53 columns with no per-column label text, but a 31-day strip
+   with a two-digit day number under every cell shrinks illegibly small on a narrow viewport --
+   confirmed live, cells rendered ~7px wide with day-number text spilling across neighbouring
+   cells rather than actually shrinking. minmax(28px, 1fr) keeps every cell at least as wide as
+   its own label; the shared .table-scroll utility (layout.css -- also used by the Intervals/
+   Splits/Personal-records tables) lets the whole strip scroll horizontally once 31 columns
+   times that minimum genuinely doesn't fit, rather than continuing to squeeze past legibility. */
 .running-heatmap__strip {
   display: grid;
-  grid-template-columns: repeat(var(--day-count, 31), 1fr);
+  grid-template-columns: repeat(var(--day-count, 31), minmax(28px, 1fr));
   gap: 4px;
 }
 

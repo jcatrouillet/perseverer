@@ -672,18 +672,20 @@ export function RunningStats({
       <div className="running-heatmap">
         <h3>{useYearRows ? "Weekly distance" : "Daily distance"}</h3>
         {useDailyBuckets ? (
-          <div
-            className="running-heatmap__strip"
-            style={{ "--day-count": days.length } as React.CSSProperties}
-          >
-            {days.map((day) => (
-              <div className="running-heatmap__strip-day" key={day.date}>
-                {renderHeatmapCell(day)}
-                <span className="running-heatmap__day-label">
-                  {parseIsoDate(day.date).getUTCDate()}
-                </span>
-              </div>
-            ))}
+          <div className="table-scroll">
+            <div
+              className="running-heatmap__strip"
+              style={{ "--day-count": days.length } as React.CSSProperties}
+            >
+              {days.map((day) => (
+                <div className="running-heatmap__strip-day" key={day.date}>
+                  {renderHeatmapCell(day)}
+                  <span className="running-heatmap__day-label">
+                    {parseIsoDate(day.date).getUTCDate()}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         ) : useYearRows ? (
           <div

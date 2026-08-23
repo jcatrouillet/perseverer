@@ -45,6 +45,11 @@
 
 .month-grid {
   width: 100%;
+  /* Without this, `auto` (the default) sizes columns from their content -- a day cell with a
+     real activity summary in it ("5.2 km" etc.) doesn't shrink to its 14.28% share, so the
+     whole table renders wider than its 100% and overflows the page instead of the day text
+     just wrapping within its own cell, which is what's actually wanted on a narrow viewport. */
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -90,4 +95,3 @@
 .week-summary strong {
   color: var(--color-text);
 }
-
