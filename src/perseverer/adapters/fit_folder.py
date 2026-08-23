@@ -320,6 +320,10 @@ def insert_new_activity(
                 end_time_utc=split_row.end_time_utc,
                 duration_s=split_row.duration_s,
                 distance_m=split_row.distance_m,
+                climb_grade=split_row.climb_grade,
+                climb_result=split_row.climb_result,
+                climb_avg_hr=split_row.climb_avg_hr,
+                climb_max_hr=split_row.climb_max_hr,
             )
         )
 

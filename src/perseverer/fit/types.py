@@ -47,6 +47,13 @@ class ParsedSplit:
     end_time_utc: datetime | None
     duration_s: float | None
     distance_m: float | None
+    # Bouldering only -- see fit/parser.py's own comment for how these were reverse-engineered.
+    climb_grade: int | None = None
+    climb_result: str | None = None
+    # Bouldering only, but set on both "climb_active" and "climb_rest" splits (unlike
+    # grade/result above, which only mean something for the climb itself).
+    climb_avg_hr: float | None = None
+    climb_max_hr: float | None = None
 
 
 @dataclass(frozen=True)

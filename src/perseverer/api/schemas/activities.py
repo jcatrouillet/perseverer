@@ -31,6 +31,13 @@ class SplitOut(BaseModel):
     end_time_utc: datetime | None
     duration_s: float | None
     distance_m: float | None
+    # Bouldering only, only ever set on a "climb_active" split -- see fit/parser.py's own
+    # comment for how these two undocumented FIT fields were reverse-engineered.
+    climb_grade: int | None
+    climb_result: str | None
+    # Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
+    climb_avg_hr: float | None
+    climb_max_hr: float | None
 
 
 class RouteOut(BaseModel):

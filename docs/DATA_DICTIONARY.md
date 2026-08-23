@@ -598,3 +598,49 @@ category axis -- which spaces every plotted point evenly by index regardless of 
 would make a month-long silence between two readings look identical to two consecutive days. Every
 chart built on `HealthTrendChart` (HRV/SpO2/Stress, respiration, body composition) inherits this,
 though only the sparse body-composition charts make the difference visible.
+
+## Bouldering per-route data (reverse-engineered, undocumented FIT fields)
+
+Bouldering activities (`sport="rock_climbing"`, `sub_sport="bouldering"`) encode one route per
+attempt as a pair of `split_mesgs` rows -- a `climb_active` split (the attempt itself) followed
+by a `climb_rest` split -- using field numbers the installed `garmin_fit_sdk`'s own profile has
+no name for at all (confirmed directly: `Profile["messages"][312]["fields"]` has no entry for
+any of them). Cracked, not looked up: decoded two real bouldering FIT files against the
+athlete's own logged route sequences (19 routes in one, 8 in the other) and paired each
+`climb_active` split, in order, against the logged grade+status for that route -- both matched
+on all 27 real routes with zero exceptions.
+
+- `70` -- V-scale grade, offset by +1 in the raw FIT value (V0=1, V1=2, ... -- `fit/parser.py`
+  de-offsets it before storage). A second, unsourced field list found afterward on the internet
+  claimed a wider "0-29, up to Font 9b" range for this same field; consistent with what's
+  verified here (only V0-V4 ever appears in the two files checked) but unconfirmed beyond that.
+- `71` -- result: `2` = "attempt", `3` = "completed". The same unsourced list independently
+  claimed this exact mapping, corroborating this project's own find. Any other raw value is
+  stored as a literal `"unknown_<n>"` string rather than dropped or guessed at.
+- `15`/`16` -- average/max heart rate for the split. Not from the original crack -- separately
+  confirmed before trusting it: `avg <= max` held on all 55 real splits across both files (never
+  once violated), and both fell in a plausible bpm range against the athlete's own recorded
+  resting heart rate in the same file. Unlike grade/result, these are real on *both*
+  `climb_active` and `climb_rest` splits (a rest interval still has a heart rate).
+- The unsourced list's claim for field `11` ("Temperature???", its own uncertainty markers) does
+  **not** hold up against real data: it's a hard-constant `31` across two entire files recorded
+  on different days -- a real sensor reading wouldn't stay bit-for-bit identical across separate
+  sessions. Left unmapped. Most of that same list's other claimed field numbers (`0`, `9`, `13`,
+  `26`, `27`, `28`, `32`, `33`, `34`, `72`, `73`) never appear in either real file at all --
+  likely describes a different FIT message (e.g. Garmin's `climb_pro`, used for outdoor/via-
+  ferrata climbing) rather than indoor bouldering's own `split_mesgs` encoding.
+
+New `split` table columns: `climb_grade` (integer, nullable), `climb_result` (string, nullable),
+`climb_avg_hr`/`climb_max_hr` (float, nullable) -- all four only ever populated for a bouldering
+activity, `climb_grade`/`climb_result` only on a `climb_active` row. `fit/parser.py::
+_climb_fields` is the one place that reads the raw field numbers; `ParsedSplit` carries the
+decoded values through to `adapters/fit_folder.py::insert_new_activity`, same insertion path
+every other source (garmin_export, garmin_connect, fit_folder) already shares for splits -- no
+per-adapter special-casing needed. Exposed on `SplitOut` (`GET /activities/{id}`), same as every
+other split field.
+
+Frontend: `boulderingRoutes.ts` turns the flat `SplitOut[]` into one row per route (filtering to
+`climb_active` splits with a grade present) and formats grade/result for display;
+`BoulderingRoutesTable.tsx` renders it as a new "Routes" section on the activity detail page,
+right after Intervals and before Charts -- self-gating (renders nothing) for any activity with
+no climb splits, so no explicit sport check is needed at the page level.

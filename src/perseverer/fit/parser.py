@@ -107,6 +107,67 @@ def _to_float(value: Any) -> float | None:
     return None
 
 
+# Bouldering's per-route data, reverse-engineered rather than looked up -- confirmed absent from
+# the installed garmin_fit_sdk's own profile for the "split" message (num 312; checked directly
+# against `garmin_fit_sdk.profile.Profile["messages"][312]["fields"]`, which has no entry for any
+# of these field numbers at all), and undocumented anywhere else. Cracked by decoding two real
+# bouldering FIT files against their own athlete-recorded route logs (19 routes in one, 8 in the
+# other) and pairing each "climb_active" split, in order, against the logged grade+status for
+# that route -- both fields matched on all 27 routes with zero exceptions. A second, unsourced
+# field list found afterward (elsewhere on the internet) claimed several more field numbers for
+# this same message; cross-checked directly against both real files' own raw field keys before
+# trusting any of it -- most of that list's claimed fields (0, 9, 13, 26, 27, 28, 32, 33, 34, 72,
+# 73) never appear in either file at all (likely describes a different message, e.g. Garmin's
+# `climb_pro`, used for outdoor/via-ferrata climbing, not indoor bouldering's own split_mesgs
+# encoding), so only the fields below reflect fields this project actually verified are real:
+#
+# - `70`: V-scale grade, offset by +1 (V0=1, V1=2, ... -- de-offset below). The unsourced list's
+#   broader "0-29, up to Font 9b" claim is consistent with what's verified here (only V0-V4 ever
+#   appears in the two files this was checked against) but unconfirmed beyond that range.
+# - `71`: result, confirmed only ever 2 ("Attempt") or 3 ("Completed") -- the unsourced list's
+#   claim for this field matched exactly, independent corroboration of this project's own find.
+# - `15`/`16`: avg/max heart rate for the split -- not from the original crack, but confirmed
+#   against real data before trusting it: field 15 <= field 16 held on all 55 real splits across
+#   both files (never once violated, exactly what avg <= max HR requires), and both fall in a
+#   plausible bpm range against the athlete's own recorded resting HR in the same file. Present
+#   on both "climb_active" and "climb_rest" splits (unlike grade/result, which only mean
+#   something for the climb itself) -- gated below to climbing splits specifically since these
+#   field numbers aren't confirmed to mean the same thing on a non-climbing split_type.
+# - The unsourced list's claim for field `11` ("Temperature???", its own uncertainty markers)
+#   does NOT hold up: it's a hard-constant 31 across both entire files, on two different days --
+#   a real sensor reading wouldn't stay bit-for-bit identical across separate sessions. Left
+#   unmapped rather than stored under a label this project couldn't actually verify.
+_CLIMB_RESULT_BY_RAW_VALUE = {2: "attempt", 3: "completed"}
+_CLIMB_SPLIT_TYPES = frozenset({"climb_active", "climb_rest"})
+
+
+def _climb_fields(
+    row: dict[Any, Any],
+) -> tuple[int | None, str | None, float | None, float | None]:
+    """Returns (grade, result, avg_hr, max_hr) -- grade/result are None on anything but a
+    "climb_active" split; avg_hr/max_hr are None on anything but a climbing split at all."""
+    split_type = row.get("split_type")
+    if split_type not in _CLIMB_SPLIT_TYPES:
+        return None, None, None, None
+
+    avg_hr = _to_float(row.get(15))
+    max_hr = _to_float(row.get(16))
+    if split_type != "climb_active":
+        return None, None, avg_hr, max_hr
+
+    raw_grade = row.get(70)
+    raw_result = row.get(71)
+    grade = raw_grade - 1 if isinstance(raw_grade, int) else None
+    if isinstance(raw_result, int):
+        # An unrecognized raw value is stored, not dropped (CLAUDE.md's "never drop an unknown
+        # field") -- only 2 and 3 have ever been confirmed, so a third value is real signal that
+        # this reverse-engineered mapping is incomplete, not something to silently discard.
+        result = _CLIMB_RESULT_BY_RAW_VALUE.get(raw_result, f"unknown_{raw_result}")
+    else:
+        result = None
+    return grade, result, avg_hr, max_hr
+
+
 def _to_int(value: Any) -> int | None:
     f = _to_float(value)
     return None if f is None else int(f)
@@ -524,6 +585,7 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
 
     splits = []
     for i, row in enumerate(messages.get("split_mesgs", [])):
+        climb_grade, climb_result, climb_avg_hr, climb_max_hr = _climb_fields(row)
         splits.append(
             ParsedSplit(
                 split_index=i,
@@ -532,6 +594,10 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
                 end_time_utc=row.get("end_time"),
                 duration_s=_to_float(row.get("total_elapsed_time")),
                 distance_m=_to_float(row.get("total_distance")),
+                climb_grade=climb_grade,
+                climb_result=climb_result,
+                climb_avg_hr=climb_avg_hr,
+                climb_max_hr=climb_max_hr,
             )
         )
 

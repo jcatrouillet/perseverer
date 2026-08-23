@@ -625,11 +625,15 @@ const F = {
   ],
   split: [
     ["split_index","integer","0-based."],
-    ["split_type","string|null","e.g. distance for an auto-lap kilometre/mile split."],
+    ["split_type","string|null","e.g. distance for an auto-lap kilometre/mile split, climb_active/climb_rest for bouldering."],
     ["start_time_utc","string(date-time)|null",""],
     ["end_time_utc","string(date-time)|null",""],
     ["duration_s","number|null",""],
     ["distance_m","number|null",""],
+    ["climb_grade","integer|null","Bouldering only, V-scale grade, only set on a climb_active split. Reverse-engineered from an undocumented FIT field — see the data dictionary."],
+    ["climb_result","string|null","Bouldering only, \"attempt\"/\"completed\" (or \"unknown_<n>\" for an unconfirmed raw value), only set on a climb_active split."],
+    ["climb_avg_hr","number|null","Bouldering only, set on both climb_active and climb_rest splits."],
+    ["climb_max_hr","number|null","Bouldering only, set on both climb_active and climb_rest splits."],
   ],
   route: [
     ["encoded_polyline","string|null","Google-encoded polyline of the full GPS track, when GPS is present."],

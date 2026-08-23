@@ -13,6 +13,7 @@ import fitdecode
 
 from perseverer.fit.parser import (
     FIT_EPOCH,
+    _climb_fields,
     _derive_utc_offset_s,
     _parse_workout,
     _time_in_zone_metrics,
@@ -82,6 +83,85 @@ def test_lap_moving_duration_uses_total_timer_time() -> None:
     lap = batch.activity.laps[0]
     assert lap.moving_duration_s == 300.0
     assert lap.moving_duration_s == lap.duration_s
+
+
+class TestClimbFields:
+    """Bouldering's per-route data -- undocumented FIT split fields, reverse-engineered by
+    decoding two real activities against their own logged route sequences (19 routes in one, 8
+    in the other) and pairing each "climb_active" split, in order, against the athlete's own
+    recorded grade+status. grade (70) and result (71) matched on all 27 real routes; avg/max HR
+    (15/16) were separately confirmed (avg <= max held on all 55 real splits across both files,
+    values fell in a plausible bpm range). These tests fix the exact mapping found there so it
+    can't silently drift."""
+
+    def test_maps_a_completed_route(self) -> None:
+        # Raw grade 3 -> V2 (offset by -1); raw result 3 -> "completed".
+        grade, result, avg_hr, max_hr = _climb_fields(
+            {"split_type": "climb_active", 70: 3, 71: 3, 15: 100, 16: 120}
+        )
+        assert grade == 2
+        assert result == "completed"
+        assert avg_hr == 100.0
+        assert max_hr == 120.0
+
+    def test_maps_an_attempted_route(self) -> None:
+        # Raw grade 5 -> V4; raw result 2 -> "attempt".
+        grade, result, _avg_hr, _max_hr = _climb_fields(
+            {"split_type": "climb_active", 70: 5, 71: 2}
+        )
+        assert grade == 4
+        assert result == "attempt"
+
+    def test_an_unrecognized_result_value_is_kept_not_dropped(self) -> None:
+        """Only 2 and 3 have ever been confirmed against real data -- a third value is real
+        signal the mapping is incomplete, so it must surface honestly, not silently vanish or
+        get guessed at as one of the two known outcomes."""
+        grade, result, _avg_hr, _max_hr = _climb_fields(
+            {"split_type": "climb_active", 70: 3, 71: 9}
+        )
+        assert grade == 2
+        assert result == "unknown_9"
+
+    def test_a_rest_split_never_carries_grade_or_result(self) -> None:
+        """Confirmed against real data: "climb_rest" splits never carry fields 70/71 at all --
+        but even if one somehow did, it must not be read as route data, since a rest interval
+        isn't a route."""
+        grade, result, _avg_hr, _max_hr = _climb_fields(
+            {"split_type": "climb_rest", 70: 3, 71: 3}
+        )
+        assert grade is None
+        assert result is None
+
+    def test_a_rest_split_still_carries_heart_rate(self) -> None:
+        """Unlike grade/result, avg/max HR are real on a "climb_rest" split too (confirmed
+        against real data) -- the rest interval between routes still has a heart rate."""
+        _grade, _result, avg_hr, max_hr = _climb_fields(
+            {"split_type": "climb_rest", 15: 90, 16: 95}
+        )
+        assert avg_hr == 90.0
+        assert max_hr == 95.0
+
+    def test_a_non_bouldering_split_has_no_climb_fields_at_all(self) -> None:
+        """Field numbers 15/16/70/71 aren't confirmed to mean the same thing outside a
+        climbing split_type -- a running activity's own interval split must not have its
+        unrelated fields misread as climb grade/result/HR."""
+        grade, result, avg_hr, max_hr = _climb_fields(
+            {"split_type": "interval_active", 15: 140, 16: 160}
+        )
+        assert grade is None
+        assert result is None
+        assert avg_hr is None
+        assert max_hr is None
+
+    def test_a_climb_active_split_missing_the_fields_entirely_is_not_a_climb_route(self) -> None:
+        """Real data confirms fields 70/71 are only ever present on a genuine bouldering
+        climb_active split -- a plain run's own climb_active-shaped split (if the field name
+        were ever reused for a non-climbing sport) must not fabricate a route."""
+        grade, result, avg_hr, max_hr = _climb_fields({"split_type": "climb_active"})
+        assert grade is None
+        assert result is None
+        assert avg_hr is None
+        assert max_hr is None
 
 
 def test_unhandled_but_valid_record_field_is_cataloged_not_dropped() -> None:

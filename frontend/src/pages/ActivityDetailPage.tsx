@@ -38,6 +38,7 @@ import {
   ActivityStatsGridSecondary,
 } from "../components/ActivityStatsGrid";
 import { ActivityWeather } from "../components/ActivityWeather";
+import { BoulderingRoutesTable } from "../components/BoulderingRoutesTable";
 import { ChartFullscreen } from "../components/ChartFullscreen";
 import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
@@ -382,6 +383,8 @@ export function ActivityDetailPage({ id }: { id: string }) {
           </div>
         </section>
       )}
+
+      <BoulderingRoutesTable splits={a.splits} />
 
       {a.stream_available && (
         <section>

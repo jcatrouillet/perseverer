@@ -361,6 +361,17 @@
   background: color-mix(in srgb, var(--color-pace) 16%, transparent);
 }
 
+.bouldering-routes__caption {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.bouldering-routes-table__row--completed td:nth-child(3) {
+  color: var(--color-load);
+  font-weight: 600;
+}
+
 /* Follows .activity-detail__layout (the stats + fastest-table row, ending in Hydration), which
    isn't itself a .card so the usual .card + .card sibling margin doesn't fire here. */
 .activity-context {

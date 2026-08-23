@@ -686,9 +686,12 @@ Returned by `GET /activities/{id}`.
 | Field | Type |
 |---|---|
 | `split_index` | integer (0-based) |
-| `split_type` | string, nullable — e.g. `distance` for an auto-lap km/mile split |
+| `split_type` | string, nullable — e.g. `distance` for an auto-lap km/mile split, `climb_active`/`climb_rest` for bouldering |
 | `start_time_utc`, `end_time_utc` | string (date-time), nullable |
 | `duration_s`, `distance_m` | number, nullable |
+| `climb_grade` | integer, nullable — bouldering only, V-scale grade, only set on a `climb_active` split. Reverse-engineered from an undocumented FIT field (see `docs/DATA_DICTIONARY.md`) |
+| `climb_result` | string, nullable — bouldering only, `"attempt"`/`"completed"` (or `"unknown_<n>"` for a raw value not yet confirmed), only set on a `climb_active` split |
+| `climb_avg_hr`, `climb_max_hr` | number, nullable — bouldering only, set on both `climb_active` and `climb_rest` splits |
 
 ### RouteOut
 

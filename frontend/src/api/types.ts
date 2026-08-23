@@ -33,6 +33,13 @@ export interface SplitOut {
   end_time_utc: string | null;
   duration_s: number | null;
   distance_m: number | null;
+  // Bouldering only, only ever set on a "climb_active" split -- see gap.ts-sibling reasoning in
+  // boulderingRoutes.ts for how these two undocumented FIT fields were reverse-engineered.
+  climb_grade: number | null;
+  climb_result: string | null;
+  // Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
+  climb_avg_hr: number | null;
+  climb_max_hr: number | null;
 }
 
 export interface RouteOut {

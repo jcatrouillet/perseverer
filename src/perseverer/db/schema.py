@@ -323,6 +323,21 @@ split = Table(
     Column("end_time_utc", DateTime(), nullable=True),
     Column("duration_s", Float, nullable=True),
     Column("distance_m", Float, nullable=True),
+    # Bouldering only, only ever populated on a "climb_active" split_type row -- see
+    # fit/parser.py's own comment for how these two undocumented FIT split fields were reverse-
+    # engineered (confirmed absent from the installed garmin_fit_sdk's own profile for the split
+    # message). climb_grade is the V-scale number (V0, V1, ...) already de-offset from the raw
+    # FIT encoding (grade+1); climb_result is "attempt"/"completed" for the two confirmed raw
+    # values (2/3), or "unknown_<n>" for any other raw value so a value this project hasn't seen
+    # yet is never silently discarded.
+    Column("climb_grade", Integer, nullable=True),
+    Column("climb_result", String, nullable=True),
+    # Also bouldering-only, but populated on both "climb_active" and "climb_rest" splits (unlike
+    # grade/result, which only mean something for the climb itself) -- confirmed against real
+    # data: field 15 <= field 16 held on all 55 real splits across two files, and both fall in a
+    # plausible bpm range against the athlete's own recorded resting HR. See fit/parser.py.
+    Column("climb_avg_hr", Float, nullable=True),
+    Column("climb_max_hr", Float, nullable=True),
     UniqueConstraint("athlete_id", "activity_id", "split_index", name="uq_split_identity"),
 )
 
