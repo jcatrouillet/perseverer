@@ -31,7 +31,10 @@ import { ActivityNameCorrection } from "../components/ActivityNameCorrection";
 import { ActivityRoute, buildRouteData } from "../components/ActivityRoute";
 import { ActivitySourcesPanel } from "../components/ActivitySourcesPanel";
 import { ActivitySportCorrection } from "../components/ActivitySportCorrection";
-import { ActivityStatsGridPrimary, ActivityStatsGridSecondary } from "../components/ActivityStatsGrid";
+import {
+  ActivityStatsGridPrimary,
+  ActivityStatsGridSecondary,
+} from "../components/ActivityStatsGrid";
 import { ActivityWeather } from "../components/ActivityWeather";
 import { Icon } from "../components/Icon";
 import { NotesPanel } from "../components/NotesPanel";
@@ -156,7 +159,10 @@ export function ActivityDetailPage({ id }: { id: string }) {
             {sport.replace(/_/g, " ")}
             {displayName ? ` — ${displayName}` : ""}
             {a.is_race && (
-              <span className="activity-detail__race-badge" title="Marked as a race in Garmin Connect">
+              <span
+                className="activity-detail__race-badge"
+                title="Marked as a race in Garmin Connect"
+              >
                 <Icon name="trophy" /> Race
               </span>
             )}
@@ -200,7 +206,9 @@ export function ActivityDetailPage({ id }: { id: string }) {
         {location.data?.available && location.data.location_name && (
           <> · {location.data.location_name}</>
         )}
-        {a.device && a.device.manufacturer && ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
+        {a.device &&
+          a.device.manufacturer &&
+          ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
       </p>
       {((weather.data && weather.data.available) || paceVariability) && (
         <div className="activity-detail__weather-pace-row">
@@ -246,12 +254,18 @@ export function ActivityDetailPage({ id }: { id: string }) {
         </div>
         {context.data && (
           <div className="activity-detail__fastest-col">
-            <ActivityFastestTable fastest={context.data.fastest} sport={sport} currentActivityId={id} />
+            <ActivityFastestTable
+              fastest={context.data.fastest}
+              sport={sport}
+              currentActivityId={id}
+            />
           </div>
         )}
       </div>
 
-      {context.data && <ActivityContextStrip context={context.data} sport={sport} currentActivityId={id} />}
+      {context.data && (
+        <ActivityContextStrip context={context.data} sport={sport} currentActivityId={id} />
+      )}
 
       {showTimeInZone && (
         <section className="card">
@@ -268,78 +282,92 @@ export function ActivityDetailPage({ id }: { id: string }) {
       {a.laps.length > 0 && (
         <section className="card">
           <h2>Intervals</h2>
-          <table className="intervals-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                {showExpectedColumns && <th>Interval</th>}
-                <th>Duration</th>
-                {showExpectedColumns && (
-                  <th>
-                    Exp. duration
-                    <br />
-                    or distance
-                  </th>
-                )}
-                <th>Distance</th>
-                <th>{paceSport ? "Pace" : "Speed"}</th>
-                {showExpectedColumns && <th>Expected pace</th>}
-                <th>Avg HR</th>
-                <th>Max HR</th>
-              </tr>
-            </thead>
-            <tbody>
-              {a.laps.map((lap, i) => {
-                // moving_duration_s (FIT's total_timer_time) excludes any device pause within
-                // the lap; duration_s (total_elapsed_time) doesn't. A lap paused mid-interval
-                // otherwise shows a hugely inflated duration and a nonsense pace -- confirmed
-                // against a real recovery lap: 1008s elapsed vs 90s timer across a genuine
-                // ~15min pause. Falls back to duration_s for laps backfilled before this field
-                // existed (or a source, like TCX, with no separate pause-excluded field at all).
-                const effectiveLapDuration = lap.moving_duration_s ?? lap.duration_s;
-                // The device creates one lap per executed workout step, aligned by position
-                // (see ActivityCharts.tsx's own workoutBands for the same convention, confirmed
-                // against a real structured-workout FIT file) -- expandedWorkoutSteps[i] is this
-                // lap's own planned step, if the activity has a workout at all.
-                const expectedStep = expandedWorkoutSteps[i];
-                // formatStepDurationLabel already fills in whichever the step's own planned
-                // constraint actually is -- "15m"/"75s" for a time-based step, "1km" for a
-                // distance-based one (see its own docstring) -- so one column covers both
-                // rather than a duration column that's blank for every distance-based rep.
-                const expectedDurationOrDistance = expectedStep
-                  ? (formatStepDurationLabel(expectedStep) ?? "—")
-                  : "—";
-                const expectedPace = expectedStep ? (targetPaceRangeLabel(expectedStep, sport) ?? "—") : "—";
-                const intervalName = expectedStep ? labelForIntensity(expectedStep.intensity) : "—";
-                return (
-                  <tr
-                    key={lap.lap_index}
-                    className={hoveredLapIndex === i ? "intervals-table__row--hovered" : undefined}
-                    onMouseEnter={() => setHoveredLapIndex(i)}
-                    onMouseLeave={() => setHoveredLapIndex(null)}
-                  >
-                    <td>{lap.lap_index + 1}</td>
-                    {showExpectedColumns && <td>{intervalName}</td>}
-                    <td>
-                      {effectiveLapDuration != null ? formatClockDuration(effectiveLapDuration) : "—"}
-                    </td>
-                    {showExpectedColumns && <td>{expectedDurationOrDistance}</td>}
-                    <td>{lap.distance_m != null ? `${(lap.distance_m / 1000).toFixed(2)} km` : "—"}</td>
-                    <td>
-                      {effectiveLapDuration != null && lap.distance_m != null && lap.distance_m > 0
-                        ? paceSport
-                          ? `${formatPaceMinPerKm(effectiveLapDuration, lap.distance_m)} /km`
-                          : `${(lap.distance_m / 1000 / (effectiveLapDuration / 3600)).toFixed(1)} km/h`
-                        : "—"}
-                    </td>
-                    {showExpectedColumns && <td>{expectedPace}</td>}
-                    <td>{lap.avg_hr ?? "—"}</td>
-                    <td>{lap.max_hr ?? "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="intervals-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  {showExpectedColumns && <th>Interval</th>}
+                  <th>Duration</th>
+                  {showExpectedColumns && (
+                    <th>
+                      Exp. duration
+                      <br />
+                      or distance
+                    </th>
+                  )}
+                  <th>Distance</th>
+                  <th>{paceSport ? "Pace" : "Speed"}</th>
+                  {showExpectedColumns && <th>Expected pace</th>}
+                  <th>Avg HR</th>
+                  <th>Max HR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {a.laps.map((lap, i) => {
+                  // moving_duration_s (FIT's total_timer_time) excludes any device pause within
+                  // the lap; duration_s (total_elapsed_time) doesn't. A lap paused mid-interval
+                  // otherwise shows a hugely inflated duration and a nonsense pace -- confirmed
+                  // against a real recovery lap: 1008s elapsed vs 90s timer across a genuine
+                  // ~15min pause. Falls back to duration_s for laps backfilled before this field
+                  // existed (or a source, like TCX, with no separate pause-excluded field at all).
+                  const effectiveLapDuration = lap.moving_duration_s ?? lap.duration_s;
+                  // The device creates one lap per executed workout step, aligned by position
+                  // (see ActivityCharts.tsx's own workoutBands for the same convention, confirmed
+                  // against a real structured-workout FIT file) -- expandedWorkoutSteps[i] is this
+                  // lap's own planned step, if the activity has a workout at all.
+                  const expectedStep = expandedWorkoutSteps[i];
+                  // formatStepDurationLabel already fills in whichever the step's own planned
+                  // constraint actually is -- "15m"/"75s" for a time-based step, "1km" for a
+                  // distance-based one (see its own docstring) -- so one column covers both
+                  // rather than a duration column that's blank for every distance-based rep.
+                  const expectedDurationOrDistance = expectedStep
+                    ? (formatStepDurationLabel(expectedStep) ?? "—")
+                    : "—";
+                  const expectedPace = expectedStep
+                    ? (targetPaceRangeLabel(expectedStep, sport) ?? "—")
+                    : "—";
+                  const intervalName = expectedStep
+                    ? labelForIntensity(expectedStep.intensity)
+                    : "—";
+                  return (
+                    <tr
+                      key={lap.lap_index}
+                      className={
+                        hoveredLapIndex === i ? "intervals-table__row--hovered" : undefined
+                      }
+                      onMouseEnter={() => setHoveredLapIndex(i)}
+                      onMouseLeave={() => setHoveredLapIndex(null)}
+                    >
+                      <td>{lap.lap_index + 1}</td>
+                      {showExpectedColumns && <td>{intervalName}</td>}
+                      <td>
+                        {effectiveLapDuration != null
+                          ? formatClockDuration(effectiveLapDuration)
+                          : "—"}
+                      </td>
+                      {showExpectedColumns && <td>{expectedDurationOrDistance}</td>}
+                      <td>
+                        {lap.distance_m != null ? `${(lap.distance_m / 1000).toFixed(2)} km` : "—"}
+                      </td>
+                      <td>
+                        {effectiveLapDuration != null &&
+                        lap.distance_m != null &&
+                        lap.distance_m > 0
+                          ? paceSport
+                            ? `${formatPaceMinPerKm(effectiveLapDuration, lap.distance_m)} /km`
+                            : `${(lap.distance_m / 1000 / (effectiveLapDuration / 3600)).toFixed(1)} km/h`
+                          : "—"}
+                      </td>
+                      {showExpectedColumns && <td>{expectedPace}</td>}
+                      <td>{lap.avg_hr ?? "—"}</td>
+                      <td>{lap.max_hr ?? "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

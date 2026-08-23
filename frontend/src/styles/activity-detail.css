@@ -41,6 +41,12 @@
    it isn't clipped or scroll-boxed to match. */
 .activity-detail__layout {
   display: flex;
+  /* Missing on this row specifically (unlike .activity-stats__row's own identical desktop-
+     side-by-side/mobile-stacked pattern above) -- without it, .activity-detail__insights-col's
+     fixed 320px basis has nowhere to go on a narrow viewport but squeeze into the same line as
+     the stats grid, which reads as the insights card floating on top of the stats instead of
+     stacking below them. */
+  flex-wrap: wrap;
   gap: var(--space-4);
   align-items: flex-start;
   margin-top: var(--space-5);
@@ -53,6 +59,10 @@
 
 .activity-detail__fastest-col {
   flex: 0 0 200px;
+  /* Once wrapped onto its own line on a narrow viewport, the fixed flex-basis above would still
+     force this wider than the line actually is (flex-shrink:0 never applies to a basis, only to
+     resolving multiple items sharing one line) -- caps it at the line's real width instead. */
+  max-width: 100%;
 }
 
 /* "Run insights" beside Distance & time / Heart rate only -- the map is rendered as its own
@@ -63,6 +73,7 @@
    text were larger. */
 .activity-detail__insights-col {
   flex: 0 0 320px;
+  max-width: 100%;
 }
 
 /* The route map used to be nested inside .activity-stats (afterHeartRate slot); now it's a

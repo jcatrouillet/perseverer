@@ -74,7 +74,9 @@ function formatShortDate(iso: string): string {
 
 function formatDateRange(start: string | null, end: string | null): string | null {
   if (!start || !end) return null;
-  return start === end ? formatShortDate(start) : `${formatShortDate(start)} – ${formatShortDate(end)}`;
+  return start === end
+    ? formatShortDate(start)
+    : `${formatShortDate(start)} – ${formatShortDate(end)}`;
 }
 
 function formatHeatmapDate(iso: string): string {
@@ -175,9 +177,9 @@ export function RunningStats({
   // A month (or shorter) has too few distinct months to bucket a bar chart by, so it buckets by
   // day instead; a year keeps the coarser per-month buckets. Same threshold governs the trailing
   // chart's tick strategy below.
-  const spanDays = Math.round(
-    (parseIsoDate(endDate).getTime() - parseIsoDate(startDate).getTime()) / MS_PER_DAY,
-  ) + 1;
+  const spanDays =
+    Math.round((parseIsoDate(endDate).getTime() - parseIsoDate(startDate).getTime()) / MS_PER_DAY) +
+    1;
   const useDailyBuckets = spanDays <= 31;
   // A range longer than a year (the all-time view) has too many individual days for a
   // day-per-square heatmap to stay readable -- one square per week instead, one row per year.
@@ -222,7 +224,9 @@ export function RunningStats({
           label: monthName(i + 1).slice(0, 3),
           km: Math.round(m / 100) / 10,
         }));
-  const bucketTickInterval = useDailyBuckets ? Math.max(0, Math.ceil(bucketData.length / 8) - 1) : 0;
+  const bucketTickInterval = useDailyBuckets
+    ? Math.max(0, Math.ceil(bucketData.length / 8) - 1)
+    : 0;
   const rollingData = rollingDistanceKm(activities, startDate, endDate, trailingWindowDays).map(
     (p) => ({
       local_date: p.local_date,
@@ -299,7 +303,10 @@ export function RunningStats({
   // slightly year to year.
   const yearRows: { year: number; weeks: HeatmapWeek[] }[] = [];
   if (useYearRows) {
-    const weeklyTotals = new Map<string, { distanceM: number; durationS: number; elevationM: number }>();
+    const weeklyTotals = new Map<
+      string,
+      { distanceM: number; durationS: number; elevationM: number }
+    >();
     for (const a of activities) {
       if (!a.local_date) continue;
       const monday = isoDate(mondayOf(parseIsoDate(a.local_date)));
@@ -362,7 +369,9 @@ export function RunningStats({
         href={href}
         className={`running-heatmap__cell${extraClassName}${hoverClass}`}
         style={
-          { "--heat-pct": `${long ? 0 : shortRunHeatPct(km, heatmapScale)}%` } as React.CSSProperties
+          {
+            "--heat-pct": `${long ? 0 : shortRunHeatPct(km, heatmapScale)}%`,
+          } as React.CSSProperties
         }
       >
         {long && (
@@ -516,7 +525,11 @@ export function RunningStats({
       <div className="running-stats__charts">
         <div>
           <h3>
-            {useDailyBuckets ? "Distance per day" : useYearRows ? "Distance per year" : "Distance per month"}
+            {useDailyBuckets
+              ? "Distance per day"
+              : useYearRows
+                ? "Distance per year"
+                : "Distance per month"}
           </h3>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={bucketData}>
@@ -595,7 +608,9 @@ export function RunningStats({
               <Tooltip
                 cursor={{ strokeDasharray: "3 3" }}
                 formatter={(value, name) =>
-                  name === "Pace" ? [`${formatMinPerKm(Number(value))} /km`, name] : [`${value} km`, name]
+                  name === "Pace"
+                    ? [`${formatMinPerKm(Number(value))} /km`, name]
+                    : [`${value} km`, name]
                 }
                 contentStyle={{
                   background: "var(--color-surface-raised)",
@@ -664,7 +679,9 @@ export function RunningStats({
             {days.map((day) => (
               <div className="running-heatmap__strip-day" key={day.date}>
                 {renderHeatmapCell(day)}
-                <span className="running-heatmap__day-label">{parseIsoDate(day.date).getUTCDate()}</span>
+                <span className="running-heatmap__day-label">
+                  {parseIsoDate(day.date).getUTCDate()}
+                </span>
               </div>
             ))}
           </div>
@@ -725,7 +742,10 @@ export function RunningStats({
             className="running-heatmap__legend-item"
             onMouseEnter={() => setHoveredLegendKm("none")}
           >
-            <span className="running-heatmap__cell" style={{ "--heat-pct": "0%" } as React.CSSProperties} />
+            <span
+              className="running-heatmap__cell"
+              style={{ "--heat-pct": "0%" } as React.CSSProperties}
+            />
             <span>No run</span>
           </span>
           {heatmapScale.gradientLegendKm.map((km) => (
@@ -736,7 +756,9 @@ export function RunningStats({
             >
               <span
                 className="running-heatmap__cell"
-                style={{ "--heat-pct": `${shortRunHeatPct(km, heatmapScale)}%` } as React.CSSProperties}
+                style={
+                  { "--heat-pct": `${shortRunHeatPct(km, heatmapScale)}%` } as React.CSSProperties
+                }
               />
               <span>{km}km</span>
             </span>
@@ -750,7 +772,9 @@ export function RunningStats({
               <span className="running-heatmap__cell">
                 <span
                   className="running-heatmap__pie"
-                  style={{ "--pie-deg": `${longRunPieDeg(km, heatmapScale)}deg` } as React.CSSProperties}
+                  style={
+                    { "--pie-deg": `${longRunPieDeg(km, heatmapScale)}deg` } as React.CSSProperties
+                  }
                 />
               </span>
               <span>{km}km</span>
@@ -775,48 +799,50 @@ export function RunningStats({
               {newPrsThisPeriod.map((r) => r.label).join(", ")}
             </p>
           )}
-          <table className="running-records__table">
-            <thead>
-              <tr>
-                <th>Distance</th>
-                <th>Date</th>
-                <th>Pace</th>
-                <th>Speed</th>
-                <th>Distance run</th>
-                <th>Time</th>
-                <th>Runs</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r) => {
-                const isAllTimePr = newPrLabels.has(r.label);
-                return (
-                  <tr
-                    key={r.label}
-                    className={`running-records__row${hoveredRecordLabel === r.label ? " is-hovered" : ""}`}
-                    onMouseEnter={() => setHoveredRecordLabel(r.label)}
-                    onMouseLeave={() => setHoveredRecordLabel(null)}
-                    onClick={() => setLocation(`/activities/${r.activityId}`)}
-                  >
-                    <td>{r.label}</td>
-                    <td>
-                      {r.date}
-                      {isAllTimePr && (
-                        <span className="running-records__pr-badge" title="All-time PR">
-                          <Icon name="trophy" />
-                        </span>
-                      )}
-                    </td>
-                    <td>{formatMinPerKm(r.paceMinPerKm)} /km</td>
-                    <td>{r.speedKmh.toFixed(2)} km/h</td>
-                    <td>{(r.actualDistanceM / 1000).toFixed(2)} km</td>
-                    <td>{formatDuration(r.durationS)}</td>
-                    <td>{r.eligibleCount}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="running-records__table">
+              <thead>
+                <tr>
+                  <th>Distance</th>
+                  <th>Date</th>
+                  <th>Pace</th>
+                  <th>Speed</th>
+                  <th>Distance run</th>
+                  <th>Time</th>
+                  <th>Runs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {records.map((r) => {
+                  const isAllTimePr = newPrLabels.has(r.label);
+                  return (
+                    <tr
+                      key={r.label}
+                      className={`running-records__row${hoveredRecordLabel === r.label ? " is-hovered" : ""}`}
+                      onMouseEnter={() => setHoveredRecordLabel(r.label)}
+                      onMouseLeave={() => setHoveredRecordLabel(null)}
+                      onClick={() => setLocation(`/activities/${r.activityId}`)}
+                    >
+                      <td>{r.label}</td>
+                      <td>
+                        {r.date}
+                        {isAllTimePr && (
+                          <span className="running-records__pr-badge" title="All-time PR">
+                            <Icon name="trophy" />
+                          </span>
+                        )}
+                      </td>
+                      <td>{formatMinPerKm(r.paceMinPerKm)} /km</td>
+                      <td>{r.speedKmh.toFixed(2)} km/h</td>
+                      <td>{(r.actualDistanceM / 1000).toFixed(2)} km</td>
+                      <td>{formatDuration(r.durationS)}</td>
+                      <td>{r.eligibleCount}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </section>

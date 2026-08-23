@@ -120,6 +120,16 @@ select {
 
 /* Shared building blocks */
 
+/* Wraps any wide table (more columns than a narrow viewport can show at readable size) so it
+   scrolls within its own box instead of forcing the whole page body wider than the viewport --
+   which is what silently made everything ELSE on a page look like it wasn't using the full
+   screen width (the page really was that wide, just because of one wide table further down).
+   -webkit-overflow-scrolling isn't needed on current iOS Safari (momentum scroll is the default
+   for any overflow:auto region now), kept out rather than added speculatively. */
+.table-scroll {
+  overflow-x: auto;
+}
+
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

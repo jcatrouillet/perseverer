@@ -12,7 +12,9 @@ function formatElev(elevChangeM: number | null): string {
 }
 
 function formatPaceOrSpeed(paceMinPerKm: number, paceSport: boolean): string {
-  return paceSport ? `${formatMinPerKm(paceMinPerKm)} /km` : `${(60 / paceMinPerKm).toFixed(1)} km/h`;
+  return paceSport
+    ? `${formatMinPerKm(paceMinPerKm)} /km`
+    : `${(60 / paceMinPerKm).toFixed(1)} km/h`;
 }
 
 export function SplitsTable({
@@ -32,32 +34,38 @@ export function SplitsTable({
   if (splits.length === 0) return null;
 
   return (
-    <table className="splits-table">
-      <thead>
-        <tr>
-          <th>KM</th>
-          <th>{paceSport ? "Pace" : "Speed"}</th>
-          {paceSport && <th>GAP</th>}
-          <th>Elev</th>
-        </tr>
-      </thead>
-      <tbody>
-        {splits.map((split) => (
-          <tr
-            key={split.km}
-            className={hoveredKm === split.km ? "splits-table__row--hovered" : ""}
-            onMouseEnter={() => onHoverKm(split.km)}
-            onMouseLeave={() => onHoverKm(null)}
-          >
-            <td>{split.km}</td>
-            <td>{formatPaceOrSpeed(split.paceMinPerKm, paceSport)}</td>
-            {paceSport && (
-              <td>{split.gapMinPerKm != null ? formatPaceOrSpeed(split.gapMinPerKm, paceSport) : "—"}</td>
-            )}
-            <td>{formatElev(split.elevChangeM)}</td>
+    <div className="table-scroll">
+      <table className="splits-table">
+        <thead>
+          <tr>
+            <th>KM</th>
+            <th>{paceSport ? "Pace" : "Speed"}</th>
+            {paceSport && <th>GAP</th>}
+            <th>Elev</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {splits.map((split) => (
+            <tr
+              key={split.km}
+              className={hoveredKm === split.km ? "splits-table__row--hovered" : ""}
+              onMouseEnter={() => onHoverKm(split.km)}
+              onMouseLeave={() => onHoverKm(null)}
+            >
+              <td>{split.km}</td>
+              <td>{formatPaceOrSpeed(split.paceMinPerKm, paceSport)}</td>
+              {paceSport && (
+                <td>
+                  {split.gapMinPerKm != null
+                    ? formatPaceOrSpeed(split.gapMinPerKm, paceSport)
+                    : "—"}
+                </td>
+              )}
+              <td>{formatElev(split.elevChangeM)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
