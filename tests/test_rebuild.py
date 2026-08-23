@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import shutil
 from pathlib import Path
 
 import httpx
@@ -701,3 +702,69 @@ def test_rebuild_on_a_db_with_existing_insight_rows_does_not_fk_crash(
 
     assert after == before
     assert ("hiking", "Bryce Canyon hike") in after
+
+
+_GARMIN_EXPORT_FIXTURE = Path(__file__).parent / "fixtures" / "fit" / "synthetic_run.fit"
+
+
+def test_rebuild_reapplies_the_garmin_activity_name_correction(tmp_path: Path) -> None:
+    """Regression test for a real, confirmed bug found live against production data (1719
+    activities affected on the real athlete archive): `sync rebuild` never called
+    `garmin_activity_summary.py::backfill_activity_corrections`, so it silently reverted every
+    garmin_export activity's name back to its generic FIT-derived default on every rebuild --
+    discarding Garmin's own corrected title, which `import_garmin_export` itself already applies
+    at ingest time. Unlike `backfill_garmin_activity_names` (the sibling garmin_connect
+    correction, which writes through the durable `sport_override` table and so already survives
+    a rebuild for free -- see that module's own docstring), this correction mutates
+    `activity.name` directly, so it must be re-run explicitly on every rebuild."""
+    fitness_dir = tmp_path / "src" / "DI_CONNECT" / "DI-Connect-Fitness" / "2024"
+    fitness_dir.mkdir(parents=True)
+    shutil.copy(_GARMIN_EXPORT_FIXTURE, fitness_dir / "55501234_ACTIVITY.fit")
+    # The fixture's own recorded start (2024-06-01T08:00:00Z, confirmed by direct FIT parse) as
+    # epoch milliseconds, matching real GDPR-export summarizedActivitiesExport JSON shape.
+    summary_json = json.dumps(
+        [
+            {
+                "summarizedActivitiesExport": [
+                    {
+                        "activityId": 55501234,
+                        "name": "Santa Clara - W1 Fri . Tempo",
+                        "activityType": "running",
+                        "eventTypeId": 9,
+                        "beginTimestamp": 1717228800000,
+                    }
+                ]
+            }
+        ]
+    )
+    (fitness_dir / "2024_summarizedActivities.json").write_text(summary_json, encoding="utf-8")
+
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        import_garmin_export(
+            conn,
+            archive_root,
+            parquet_dir,
+            tmp_path / "extract",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            path=tmp_path / "src",
+        )
+        name_after_import = conn.execute(select(activity.c.name)).scalar_one()
+    # Sanity check: the correction really did apply at ingest time, same as production.
+    assert name_after_import == "Santa Clara - W1 Fri . Tempo"
+
+    # Rebuild into a fresh database, purely from the raw archive -- this is what silently lost
+    # the correction before the fix (reverting to the FIT file's own generic default instead).
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        name_after_rebuild = conn.execute(select(activity.c.name)).scalar_one()
+
+    assert name_after_rebuild == "Santa Clara - W1 Fri . Tempo"

@@ -44,6 +44,7 @@ from perseverer.db.schema import (
 )
 from perseverer.fitness import refresh_fitness_rollup
 from perseverer.gap import refresh_avg_gap
+from perseverer.garmin_activity_summary import backfill_activity_corrections
 from perseverer.gpx.parser import parse_gpx
 from perseverer.health.eufy_parser import parse_eufy_scale_reading
 from perseverer.health.ingest import ingest_health_batch
@@ -306,6 +307,18 @@ def rebuild_database(
     # and forgets -- the replay just wiped it back to whatever the raw bytes say). Before the
     # rollup/insight refresh below so those see the corrected sport, not the raw one.
     apply_sport_overrides(conn, athlete_id=athlete_id)
+
+    # Re-derives Garmin's own sport/name corrections from summarizedActivitiesExport (see
+    # garmin_activity_summary.py's own docstring) -- the replay above just re-parsed every
+    # activity from its raw FIT bytes alone, which never carry Garmin Connect's own corrected
+    # title (that correction only ever exists in Garmin's cloud record). Missing here until now
+    # was a real, confirmed bug: every `sync rebuild` silently reverted every garmin_export
+    # activity's name back to its generic FIT-derived default, discarding a correction
+    # `import_garmin_export` itself already applies. Before backfill_weather_titles below (same
+    # ordering `import_garmin_export` uses) since Garmin's own corrected name can already carry
+    # its own weather emoji, and backfill_weather_titles skips a title that already starts with
+    # one.
+    backfill_activity_corrections(conn, archive_root, athlete_id=athlete_id)
 
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
     if touched_dates:
