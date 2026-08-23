@@ -682,123 +682,126 @@ export function RunningStats({
       </div>
 
       <div className="running-heatmap">
-        <h3>{useYearRows ? "Weekly distance" : "Daily distance"}</h3>
-        {useDailyBuckets ? (
-          <div className="table-scroll">
-            <div
-              className="running-heatmap__strip"
-              style={{ "--day-count": days.length } as React.CSSProperties}
-            >
-              {days.map((day) => (
-                <div className="running-heatmap__strip-day" key={day.date}>
-                  {renderHeatmapCell(day)}
-                  <span className="running-heatmap__day-label">
-                    {parseIsoDate(day.date).getUTCDate()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : useYearRows ? (
-          <div className="table-scroll">
-            <div
-              className="running-heatmap__grid running-heatmap__grid--years"
-              style={
-                {
-                  "--week-count": Math.max(0, ...yearRows.map((r) => r.weeks.length)),
-                } as React.CSSProperties
-              }
-            >
-              {yearRows.map((row) => (
-                <div className="running-heatmap__row" key={row.year}>
-                  <span className="running-heatmap__row-label">{row.year}</span>
-                  {row.weeks.map((week) => renderHeatmapWeekCell(week))}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="table-scroll">
-            <div
-              className="running-heatmap__grid"
-              style={{ "--week-count": weeks.length } as React.CSSProperties}
-            >
-              <div className="running-heatmap__row running-heatmap__row--months">
-                <span className="running-heatmap__row-label" />
-                {weeks.map((week, i) => {
-                  const label = monthLabelFor(week, weeks[i - 1], startDate, endDate);
-                  return (
-                    <span key={week[0]!.date} className="running-heatmap__month-label">
-                      {label}
+        <ChartFullscreen as="h3" title={useYearRows ? "Weekly distance" : "Daily distance"}>
+          {useDailyBuckets ? (
+            <div className="table-scroll">
+              <div
+                className="running-heatmap__strip"
+                style={{ "--day-count": days.length } as React.CSSProperties}
+              >
+                {days.map((day) => (
+                  <div className="running-heatmap__strip-day" key={day.date}>
+                    {renderHeatmapCell(day)}
+                    <span className="running-heatmap__day-label">
+                      {parseIsoDate(day.date).getUTCDate()}
                     </span>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
-              {WEEKDAY_ROWS.map((label, row) => (
-                <div className="running-heatmap__row" key={label}>
-                  <span className="running-heatmap__row-label">{label}</span>
+            </div>
+          ) : useYearRows ? (
+            <div className="table-scroll">
+              <div
+                className="running-heatmap__grid running-heatmap__grid--years"
+                style={
+                  {
+                    "--week-count": Math.max(0, ...yearRows.map((r) => r.weeks.length)),
+                  } as React.CSSProperties
+                }
+              >
+                {yearRows.map((row) => (
+                  <div className="running-heatmap__row" key={row.year}>
+                    <span className="running-heatmap__row-label">{row.year}</span>
+                    {row.weeks.map((week) => renderHeatmapWeekCell(week))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="table-scroll">
+              <div
+                className="running-heatmap__grid"
+                style={{ "--week-count": weeks.length } as React.CSSProperties}
+              >
+                <div className="running-heatmap__row running-heatmap__row--months">
+                  <span className="running-heatmap__row-label" />
                   {weeks.map((week, i) => {
-                    const monthEnd = isMonthEndWeek(week, weeks[i + 1], startDate, endDate);
-                    const cell = week[row];
-                    if (!cell || !inRange(cell.date, startDate, endDate)) {
-                      return (
-                        <span
-                          key={week[0]!.date}
-                          className={`running-heatmap__cell is-empty${monthEnd ? " is-month-end" : ""}`}
-                        />
-                      );
-                    }
-                    return renderHeatmapCell(cell, monthEnd ? " is-month-end" : "");
+                    const label = monthLabelFor(week, weeks[i - 1], startDate, endDate);
+                    return (
+                      <span key={week[0]!.date} className="running-heatmap__month-label">
+                        {label}
+                      </span>
+                    );
                   })}
                 </div>
-              ))}
+                {WEEKDAY_ROWS.map((label, row) => (
+                  <div className="running-heatmap__row" key={label}>
+                    <span className="running-heatmap__row-label">{label}</span>
+                    {weeks.map((week, i) => {
+                      const monthEnd = isMonthEndWeek(week, weeks[i + 1], startDate, endDate);
+                      const cell = week[row];
+                      if (!cell || !inRange(cell.date, startDate, endDate)) {
+                        return (
+                          <span
+                            key={week[0]!.date}
+                            className={`running-heatmap__cell is-empty${monthEnd ? " is-month-end" : ""}`}
+                          />
+                        );
+                      }
+                      return renderHeatmapCell(cell, monthEnd ? " is-month-end" : "");
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-        <div className="running-heatmap__legend" onMouseLeave={() => setHoveredLegendKm(null)}>
-          <span
-            className="running-heatmap__legend-item"
-            onMouseEnter={() => setHoveredLegendKm("none")}
-          >
+          )}
+          <div className="running-heatmap__legend" onMouseLeave={() => setHoveredLegendKm(null)}>
             <span
-              className="running-heatmap__cell"
-              style={{ "--heat-pct": "0%" } as React.CSSProperties}
-            />
-            <span>No run</span>
-          </span>
-          {heatmapScale.gradientLegendKm.map((km) => (
-            <span
-              key={km}
               className="running-heatmap__legend-item"
-              onMouseEnter={() => setHoveredLegendKm(km)}
+              onMouseEnter={() => setHoveredLegendKm("none")}
             >
               <span
                 className="running-heatmap__cell"
-                style={
-                  { "--heat-pct": `${shortRunHeatPct(km, heatmapScale)}%` } as React.CSSProperties
-                }
+                style={{ "--heat-pct": "0%" } as React.CSSProperties}
               />
-              <span>{km}km</span>
+              <span>No run</span>
             </span>
-          ))}
-          {heatmapScale.pieLegendKm.map((km) => (
-            <span
-              key={km}
-              className="running-heatmap__legend-item"
-              onMouseEnter={() => setHoveredLegendKm(km)}
-            >
-              <span className="running-heatmap__cell">
+            {heatmapScale.gradientLegendKm.map((km) => (
+              <span
+                key={km}
+                className="running-heatmap__legend-item"
+                onMouseEnter={() => setHoveredLegendKm(km)}
+              >
                 <span
-                  className="running-heatmap__pie"
+                  className="running-heatmap__cell"
                   style={
-                    { "--pie-deg": `${longRunPieDeg(km, heatmapScale)}deg` } as React.CSSProperties
+                    { "--heat-pct": `${shortRunHeatPct(km, heatmapScale)}%` } as React.CSSProperties
                   }
                 />
+                <span>{km}km</span>
               </span>
-              <span>{km}km</span>
-            </span>
-          ))}
-        </div>
+            ))}
+            {heatmapScale.pieLegendKm.map((km) => (
+              <span
+                key={km}
+                className="running-heatmap__legend-item"
+                onMouseEnter={() => setHoveredLegendKm(km)}
+              >
+                <span className="running-heatmap__cell">
+                  <span
+                    className="running-heatmap__pie"
+                    style={
+                      {
+                        "--pie-deg": `${longRunPieDeg(km, heatmapScale)}deg`,
+                      } as React.CSSProperties
+                    }
+                  />
+                </span>
+                <span>{km}km</span>
+              </span>
+            ))}
+          </div>
+        </ChartFullscreen>
       </div>
 
       {records.length > 0 && (
