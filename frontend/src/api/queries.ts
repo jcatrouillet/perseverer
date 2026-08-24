@@ -223,10 +223,14 @@ export function useActivityRoutes(ids: string[]) {
   });
 }
 
-export function useActivityContext(activityId: string) {
+/** `enabled` should be gated off for hiking (see ActivityDetailPage.tsx) -- "fastest for this
+ * distance"/"recent efforts" reads as a running-style comparison, and only some hikes even have
+ * enough same-sport peers to populate it, making its presence inconsistent from hike to hike. */
+export function useActivityContext(activityId: string, enabled: boolean = true) {
   return useQuery({
     queryKey: ["activity-context", activityId],
     queryFn: () => apiGet<ActivityContextOut>(`/api/v1/activities/${activityId}/context`),
+    enabled,
   });
 }
 

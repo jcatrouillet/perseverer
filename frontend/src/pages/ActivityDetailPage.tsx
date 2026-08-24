@@ -109,7 +109,10 @@ export function ActivityDetailPage({ id }: { id: string }) {
     () => (routeStream.data ? buildRouteData(routeStream.data) : null),
     [routeStream.data],
   );
-  const context = useActivityContext(id);
+  const context = useActivityContext(
+    id,
+    activity.data != null && activity.data.sport !== "hiking",
+  );
   const runInsights = useActivityInsights(
     id,
     activity.data != null && isRunningSport(activity.data.sport),
@@ -389,7 +392,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
         </section>
       )}
 
-      {a.laps.length > 0 && !isBoulderingActivity(a.sport, a.sub_sport) && (
+      {a.laps.length > 0 && !isBoulderingActivity(a.sport, a.sub_sport) && a.sport !== "hiking" && (
         <section className="card">
           <h2>Intervals</h2>
           <div className="table-scroll">
