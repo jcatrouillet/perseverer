@@ -8,6 +8,7 @@ from pathlib import Path
 import duckdb
 from sqlalchemy import Connection, delete, select
 
+from perseverer.activity_merge import apply_activity_merge_overrides
 from perseverer.activity_trim import apply_activity_trim_overrides
 from perseverer.adapters.garmin_export import report_kind_from_filename
 from perseverer.adapters.strava_export import (
@@ -324,6 +325,14 @@ def rebuild_database(
     apply_activity_trim_overrides(
         conn, duckdb.connect(":memory:"), parquet_dir, athlete_id=athlete_id
     )
+
+    # Same durable-correction shape again, for the athlete's own manual "these two activities
+    # are the same" merges -- see activity_merge.py's own docstring. Natural merge-matching
+    # (_find_merge_match, run for each activity during the replay above) may have already
+    # caught some of these on its own this time (e.g. the hike/walk merge-family leniency now
+    # catches cases it didn't before) -- apply_activity_merge_overrides skips a durable row once
+    # both its anchors already resolve to the same activity_id, so this is a no-op for those.
+    apply_activity_merge_overrides(conn, athlete_id=athlete_id)
 
     # Re-derives Garmin's own sport/name corrections from summarizedActivitiesExport (see
     # garmin_activity_summary.py's own docstring) -- the replay above just re-parsed every

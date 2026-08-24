@@ -12,6 +12,11 @@ import duckdb
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import Connection, Engine, Row, case, func, select
 
+from perseverer.activity_merge import (
+    build_merge_preview,
+    find_duplicate_candidates,
+    merge_activities_and_record,
+)
 from perseverer.activity_trim import clear_activity_trim, set_activity_trim
 from perseverer.adapters.fit_folder import _local_date, _upsert_device, insert_new_activity
 from perseverer.adapters.strava_export import _overlay_csv_totals
@@ -27,6 +32,8 @@ from perseverer.api.schemas.activities import (
     ActivityLocationOut,
     ActivityMapPointOut,
     ActivityMergeDecisionOut,
+    ActivityMergeIn,
+    ActivityMergePreviewOut,
     ActivityMetricOut,
     ActivityNameOverrideIn,
     ActivityNameOverrideOut,
@@ -50,6 +57,8 @@ from perseverer.api.schemas.activities import (
     ClimbRouteAddIn,
     ClimbRouteStatusIn,
     DeviceOut,
+    DuplicateCandidateOut,
+    FieldComparisonOut,
     LapOut,
     RouteOut,
     SplitOut,
@@ -624,6 +633,18 @@ def get_activity(
         is not None
     )
 
+    duplicate_candidates = [
+        DuplicateCandidateOut(
+            id=c.id,
+            name=c.name,
+            primary_source=c.primary_source,
+            start_time_utc=to_utc(c.start_time_utc),
+            distance_m=c.distance_m,
+            duration_s=c.duration_s,
+        )
+        for c in find_duplicate_candidates(conn, athlete_id=athlete_id, activity_id=activity_id)
+    ]
+
     device_row = None
     if row.device_id is not None:
         device_row = conn.execute(
@@ -689,6 +710,7 @@ def get_activity(
         sodium_mg=row.sodium_mg,
         transport_mix_flag=transport_mix_flag,
         has_trim=has_trim,
+        duplicate_candidates=duplicate_candidates,
         device=(
             DeviceOut(
                 manufacturer=device_row.manufacturer,
@@ -1758,11 +1780,11 @@ def override_activity_fueling(
     return ActivityFuelingOut(carbohydrates_g=body.carbohydrates_g, sodium_mg=body.sodium_mg)
 
 
-def _refresh_after_trim_change(
+def _refresh_after_activity_change(
     conn: Connection, *, athlete_id: str, local_date: str | None
 ) -> None:
-    """The rollup/fitness/insights cascade a trim commit or undo needs -- the first PATCH/POST-
-    style correction endpoint in this router to need it, since every other correction here
+    """The rollup/fitness/insights cascade a trim or merge commit/undo needs -- the first PATCH/
+    POST-style correction endpoints in this router to need it, since every other correction here
     (sport/race/name/fueling, bouldering route status, source split) leaves distance/duration/
     training_load untouched. Every ingest entry point (fit_folder, garmin_export, garmin_connect,
     rebuild) already runs this exact three-call sequence after touching a date -- see e.g.
@@ -1812,7 +1834,7 @@ def post_activity_trim(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    _refresh_after_trim_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
+    _refresh_after_activity_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
     conn.commit()
     return get_activity(activity_id, athlete_id, conn=conn, con=con, settings=settings)
 
@@ -1843,7 +1865,68 @@ def delete_activity_trim(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    _refresh_after_trim_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
+    _refresh_after_activity_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
+    conn.commit()
+    return get_activity(activity_id, athlete_id, conn=conn, con=con, settings=settings)
+
+
+@router.get("/activities/{activity_id}/merge-preview/{other_id}")
+def get_activity_merge_preview(
+    activity_id: str,
+    other_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityMergePreviewOut:
+    """Side by side field comparison for the merge UI -- see activity_merge.py's own docstring
+    for exactly which fields are comparable and how a collection field (route/laps/splits/
+    stream) is represented (a whole-side choice, not per-item)."""
+    try:
+        comparisons = build_merge_preview(
+            conn, athlete_id=athlete_id, self_id=activity_id, other_id=other_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    return ActivityMergePreviewOut(
+        fields=[
+            FieldComparisonOut(field=c.field, self_value=c.self_value, other_value=c.other_value)
+            for c in comparisons
+        ]
+    )
+
+
+@router.post("/activities/{activity_id}/merge")
+def post_activity_merge(
+    activity_id: str,
+    body: ActivityMergeIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    con: duckdb.DuckDBPyConnection = Depends(get_duckdb),
+    settings: Settings = Depends(get_settings),
+) -> ActivityDetail:
+    """Merges `body.other_activity_id` into this activity -- this activity is always the
+    survivor. Only fields in `body.field_choices` valued `"other"` change anything; everything
+    else keeps this activity's own current value. See activity_merge.py's own docstring for the
+    durable, rebuild-safe correction this records."""
+    activity_row = conn.execute(
+        select(activity.c.local_date).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchone()
+    if activity_row is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+    try:
+        merge_activities_and_record(
+            conn,
+            athlete_id=athlete_id,
+            self_id=activity_id,
+            other_id=body.other_activity_id,
+            field_choices=body.field_choices,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    _refresh_after_activity_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
     conn.commit()
     return get_activity(activity_id, athlete_id, conn=conn, con=con, settings=settings)
 

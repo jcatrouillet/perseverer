@@ -57,6 +57,26 @@ def test_different_sport_families_never_match() -> None:
     assert not is_same_activity(a, b).is_match
 
 
+def test_hiking_and_walking_are_merge_compatible() -> None:
+    """Real-data-confirmed gap: several of this athlete's own casual hikes are classified
+    "Hike" by Garmin/FIT but "Walk" by Strava's own auto-detection for the exact same
+    recording -- strict family equality left these unmerged even with identical start time
+    and duration. hike/walk are the one family pair treated as interchangeable for matching."""
+    a = ActivityCandidate(BASE_TIME, 1800.0, "hiking")
+    b = ActivityCandidate(BASE_TIME, 1800.0, "walking")
+    assert is_same_activity(a, b).is_match
+    assert is_same_activity(b, a).is_match  # symmetric
+
+
+def test_hike_walk_leniency_does_not_extend_to_other_family_pairs() -> None:
+    a = ActivityCandidate(BASE_TIME, 1800.0, "hiking")
+    b = ActivityCandidate(BASE_TIME, 1800.0, "running")
+    assert not is_same_activity(a, b).is_match
+    c = ActivityCandidate(BASE_TIME, 1800.0, "walking")
+    d = ActivityCandidate(BASE_TIME, 1800.0, "cycling")
+    assert not is_same_activity(c, d).is_match
+
+
 def test_missing_duration_does_not_block_an_otherwise_good_match() -> None:
     a = ActivityCandidate(BASE_TIME, None, "running")
     b = ActivityCandidate(BASE_TIME, 1800.0, "running")

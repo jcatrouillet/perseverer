@@ -71,6 +71,18 @@ class TransportMixFlagOut(BaseModel):
     suggested_trim_end_s: float | None
 
 
+class DuplicateCandidateOut(BaseModel):
+    # Another activity find_duplicate_candidates (activity_merge.py) considers the same
+    # real-world activity as this one -- enough for the frontend's "possibly the same as X"
+    # banner without a second fetch.
+    id: str
+    name: str | None
+    primary_source: str
+    start_time_utc: datetime
+    distance_m: float | None
+    duration_s: float | None
+
+
 class ActivitySummary(BaseModel):
     id: str
     start_time_utc: datetime
@@ -150,6 +162,11 @@ class ActivityDetail(ActivitySummary):
     # True once an activity_trim_override row exists for this activity -- lets the frontend show
     # "Adjust trim"/"Undo trim" instead of the initial flag banner.
     has_trim: bool
+    # Other activities that look like the same real-world activity as this one (see
+    # activity_merge.py::find_duplicate_candidates) -- computed fresh per request the same way
+    # transport_mix_flag is, bounded to this one activity's own +/-1 day window, never a
+    # list-wide scan. Usually empty.
+    duplicate_candidates: list[DuplicateCandidateOut]
 
 
 class ActivityContextRecentOut(BaseModel):
@@ -394,6 +411,24 @@ class ActivityTrimIn(BaseModel):
     # leave that side untrimmed -- see activity_trim.py::set_activity_trim.
     trim_start_s: float | None = None
     trim_end_s: float | None = None
+
+
+class FieldComparisonOut(BaseModel):
+    field: str
+    self_value: float | str | None
+    other_value: float | str | None
+
+
+class ActivityMergePreviewOut(BaseModel):
+    fields: list[FieldComparisonOut]
+
+
+class ActivityMergeIn(BaseModel):
+    other_activity_id: str
+    # Only fields chosen "other" need to be sent -- everything else keeps this activity's own
+    # current value. See activity_merge.py::MERGEABLE_SCALAR_FIELDS/MERGEABLE_METRIC_FIELDS/
+    # MERGEABLE_COLLECTION_FIELDS for the full set of keys this dict may contain.
+    field_choices: dict[str, str] = {}
 
 
 class ClimbRouteStatusIn(BaseModel):

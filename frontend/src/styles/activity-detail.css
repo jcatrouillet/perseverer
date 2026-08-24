@@ -668,3 +668,60 @@
   gap: var(--space-2);
   margin-top: var(--space-4);
 }
+
+/* The manual "these two activities are the same" merge tool -- lives in the Sources area, same
+   home as the split feature it's the logical inverse of. */
+.activity-merge__candidate {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.activity-merge__candidate-text {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.activity-merge__review {
+  width: 100%;
+  margin-top: var(--space-3);
+}
+
+.activity-merge__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.activity-merge__table th {
+  text-align: left;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.activity-merge__table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.activity-merge__table label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.activity-merge__error {
+  margin-top: var(--space-2);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.activity-merge__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}

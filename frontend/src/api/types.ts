@@ -119,6 +119,10 @@ export interface ActivityDetail extends ActivitySummary {
   transport_mix_flag: TransportMixFlagOut | null;
   // True once a trim has been committed for this activity.
   has_trim: boolean;
+  // Other activities that look like the same real-world activity as this one (see
+  // activity_merge.py::find_duplicate_candidates) -- computed fresh per request, bounded to
+  // this activity's own +/-1 day window. Usually empty.
+  duplicate_candidates: DuplicateCandidateOut[];
 }
 
 export interface TransportMixFlagOut {
@@ -126,6 +130,25 @@ export interface TransportMixFlagOut {
   at_end: boolean;
   suggested_trim_start_s: number | null;
   suggested_trim_end_s: number | null;
+}
+
+export interface DuplicateCandidateOut {
+  id: string;
+  name: string | null;
+  primary_source: string;
+  start_time_utc: string;
+  distance_m: number | null;
+  duration_s: number | null;
+}
+
+export interface FieldComparisonOut {
+  field: string;
+  self_value: number | string | null;
+  other_value: number | string | null;
+}
+
+export interface ActivityMergePreviewOut {
+  fields: FieldComparisonOut[];
 }
 
 export interface ActivityContextRecentOut {

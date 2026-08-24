@@ -48,6 +48,21 @@ def sport_family(sport: str) -> str:
     return _SPORT_FAMILIES.get(sport.lower(), sport.lower())
 
 
+# Family pairs that count as the same activity for *merge-matching* purposes only, without
+# collapsing them into one family for anything else (insights/engine.py's own use of
+# sport_family() groups streaks/PBs by family, and a genuine walk shouldn't start counting
+# toward a hiking streak just because merge-matching got more lenient). Real-data-confirmed
+# gap: several of this athlete's own casual/easy hikes are classified "Hike" by Garmin/FIT but
+# "Walk" by Strava's own auto-detection for the exact same recording, so the strict family-
+# equality check below silently left cross-source duplicates unmerged even with byte-identical
+# start time and duration.
+_MERGE_COMPATIBLE_FAMILIES: frozenset[frozenset[str]] = frozenset({frozenset({"hike", "walk"})})
+
+
+def _sport_families_compatible(family_a: str, family_b: str) -> bool:
+    return family_a == family_b or frozenset({family_a, family_b}) in _MERGE_COMPATIBLE_FAMILIES
+
+
 @dataclass(frozen=True)
 class MergeThresholds:
     max_start_time_delta_s: float = 180.0
@@ -106,7 +121,7 @@ def is_same_activity(
 
     family_a = sport_family(a.sport)
     family_b = sport_family(b.sport)
-    sport_ok = family_a == family_b
+    sport_ok = _sport_families_compatible(family_a, family_b)
     reasons.append(
         f"sport family {family_a!r} vs {family_b!r}: {'match' if sport_ok else 'mismatch'}"
     )

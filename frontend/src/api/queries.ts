@@ -11,6 +11,7 @@ import type {
   ActivityFuelingOut,
   ActivityLocationOut,
   ActivityMapPointOut,
+  ActivityMergePreviewOut,
   ActivityNameOverrideOut,
   ActivityPaceBandsOut,
   ActivityRouteOut,
@@ -355,6 +356,37 @@ export function useClearActivityTrim(activityId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => apiDelete<ActivityDetail>(`/api/v1/activities/${activityId}/trim`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-stream", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+/** Side-by-side field comparison for the merge UI (GET .../merge-preview/{otherId}) -- see
+ * activity_merge.py's own docstring for exactly which fields are comparable. */
+export function useActivityMergePreview(activityId: string, otherId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["activity-merge-preview", activityId, otherId],
+    queryFn: () =>
+      apiGet<ActivityMergePreviewOut>(
+        `/api/v1/activities/${activityId}/merge-preview/${otherId}`,
+      ),
+    enabled,
+  });
+}
+
+/** Merges another activity into this one (POST .../merge) -- this activity is always the
+ * survivor. Same invalidation set as useTrimActivity: distance/duration/route/laps can all
+ * change, and the absorbed activity disappearing changes the activity-list/calendar totals for
+ * its date too. */
+export function useMergeActivity(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { other_activity_id: string; field_choices: Record<string, string> }) =>
+      apiPost<ActivityDetail>(`/api/v1/activities/${activityId}/merge`, body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
       void queryClient.invalidateQueries({ queryKey: ["activity-stream", activityId] });

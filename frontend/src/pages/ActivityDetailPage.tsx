@@ -13,6 +13,7 @@ import {
   useActivityContext,
   useActivityInsights,
   useActivityLocation,
+  useActivityMergePreview,
   useActivitySources,
   useActivityStream,
   useActivityWeather,
@@ -21,6 +22,7 @@ import {
   useClearActivityTrim,
   useDeleteClimbRoute,
   useHrZoneConfig,
+  useMergeActivity,
   useSetClimbRouteStatus,
   useSetFuelingOverride,
   useSetNameOverride,
@@ -35,6 +37,7 @@ import { ActivityContextStrip } from "../components/ActivityContextStrip";
 import { ActivityFastestTable } from "../components/ActivityFastestTable";
 import { ActivityFueling } from "../components/ActivityFueling";
 import { ActivityInsightsPanel } from "../components/ActivityInsightsPanel";
+import { ActivityMergePanel } from "../components/ActivityMergePanel";
 import { ActivityNameCorrection } from "../components/ActivityNameCorrection";
 import { ActivityRoute, buildRouteData } from "../components/ActivityRoute";
 import { ActivitySourcesPanel } from "../components/ActivitySourcesPanel";
@@ -80,6 +83,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   // pattern for per-km splits, just for laps instead.
   const [hoveredLapIndex, setHoveredLapIndex] = useState<number | null>(null);
   const [isTrimming, setIsTrimming] = useState(false);
+  const [mergeCandidateId, setMergeCandidateId] = useState<string | null>(null);
   const activity = useActivity(id);
   const stream = useActivityStream(id, activity.data?.stream_available ?? false, "medium");
   // A separate, higher-resolution fetch just for the route map + per-km splits below -- those
@@ -133,6 +137,8 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const deleteClimbRoute = useDeleteClimbRoute(id);
   const trimActivity = useTrimActivity(id);
   const clearActivityTrim = useClearActivityTrim(id);
+  const mergePreview = useActivityMergePreview(id, mergeCandidateId ?? "", mergeCandidateId != null);
+  const mergeActivity = useMergeActivity(id);
 
   if (activity.isLoading) return <p>Loading…</p>;
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
@@ -545,6 +551,22 @@ export function ActivityDetailPage({ id }: { id: string }) {
           splitSuccess={split.isSuccess}
         />
       )}
+
+      <ActivityMergePanel
+        candidates={a.duplicate_candidates}
+        expandedCandidateId={mergeCandidateId}
+        onExpandCandidate={setMergeCandidateId}
+        preview={mergePreview.data}
+        isPreviewLoading={mergePreview.isLoading}
+        onMerge={(otherActivityId, fieldChoices) =>
+          mergeActivity.mutate(
+            { other_activity_id: otherActivityId, field_choices: fieldChoices },
+            { onSuccess: () => setMergeCandidateId(null) },
+          )
+        }
+        isMerging={mergeActivity.isPending}
+        mergeError={mergeActivity.isError}
+      />
     </main>
   );
 }

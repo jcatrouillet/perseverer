@@ -333,6 +333,41 @@ activity_source_link = Table(
     Index("ix_activity_source_link_activity", "athlete_id", "activity_id"),
 )
 
+# The athlete's own manual "these two activities are the same, use this side's data for each
+# field" correction -- see activity_merge.py's own docstring for the full mechanism. Durable
+# (never wiped -- see rebuild.py's `_REBUILDABLE_TABLES`) for the same reason every other
+# override table here is: `sync rebuild` re-derives `activity`/`activity_source_link` from raw
+# bytes on every run, re-splitting the two activities right back apart if this correction
+# weren't reapplied afterward.
+#
+# Keyed by (source, external_id) pairs, not activity_id or start_time_utc -- activity_id is a
+# fresh ULID every rebuild, and two activities being merged share the same start_time_utc *by
+# definition* (that's why they're duplicates), so it alone can't tell which of two identically-
+# timestamped post-rebuild rows is "keep" and which is "absorbed". One row per absorbed *source
+# link* (not per absorbed activity) -- an activity being merged in may itself already carry
+# multiple source links (e.g. absorbing an already-multi-source-merged activity), and each needs
+# its own independently-reapplicable redirect record.
+activity_merge_override = Table(
+    "activity_merge_override",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("keep_source", String, nullable=False),
+    Column("keep_external_id", String, nullable=False),
+    Column("absorbed_source", String, nullable=False),
+    Column("absorbed_external_id", String, nullable=False),
+    # JSON object of only the fields chosen "other" (absorbed) -- everything else stays "self"
+    # (keep), same "only what's recorded is written" contract as sport_override.py.
+    Column("field_choices", Text, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id",
+        "absorbed_source",
+        "absorbed_external_id",
+        name="uq_activity_merge_override_absorbed_identity",
+    ),
+)
+
 activity_metric = Table(
     "activity_metric",
     metadata,

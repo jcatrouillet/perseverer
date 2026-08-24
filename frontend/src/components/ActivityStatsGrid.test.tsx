@@ -62,6 +62,7 @@ function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
     sodium_mg: null,
     transport_mix_flag: null,
     has_trim: false,
+    duplicate_candidates: [],
     ...overrides,
   };
 }
