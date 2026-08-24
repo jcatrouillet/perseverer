@@ -679,12 +679,42 @@ const SCHEMAS = [
       ["estimated_sweat_loss_ml","number|null","Computed estimate, not a device measurement."],
       ["carbohydrates_g","number|null","Athlete-logged fueling intake — no vendor source, null until set via PATCH .../fueling."],
       ["sodium_mg","number|null","Athlete-logged fueling intake — no vendor source, null until set via PATCH .../fueling."],
+      ["transport_mix_flag","TransportMixFlagOut|null","Computed fresh from this activity's own stream — null unless the sport is hiking/walking and a sustained fast segment (likely car travel) touches either boundary. Detail-page-only; never computed list-wide (see GET /activities/needs-trim for the one deliberate exception)."],
+      ["has_trim","boolean","true once a trim has been committed via POST .../trim."],
+      ["duplicate_candidates","array<DuplicateCandidateOut>","Other activities that look like the same real-world activity as this one, bounded to a ±1 day window. Usually empty."],
     ] },
   { name: "DeviceOut", fields: F.device },
   { name: "LapOut", fields: F.lap },
   { name: "SplitOut", fields: F.split },
   { name: "RouteOut", fields: F.route },
   { name: "ActivityMetricOut", fields: F.activityMetric },
+  { name: "TransportMixFlagOut", fields: [
+      ["at_start","boolean","A sustained fast (likely car-travel) segment touches the recording's start."],
+      ["at_end","boolean","Same, at the end."],
+      ["suggested_trim_start_s","number|null","Elapsed seconds from the activity's own start where the fast segment settles back to walking pace — a suggested trim_start_s for POST .../trim. null when at_start is false."],
+      ["suggested_trim_end_s","number|null","Same, for the end — a suggested trim_end_s. null when at_end is false."],
+    ] },
+  { name: "DuplicateCandidateOut", fields: [
+      ["id","string","The other activity's id."],
+      ["name","string|null",""],
+      ["primary_source","string",""],
+      ["start_time_utc","string(date-time)",""],
+      ["distance_m","number|null",""],
+      ["duration_s","number|null",""],
+    ] },
+  { name: "DuplicatePairOut", note: "One relationship from GET /activities/possible-duplicates.", fields: [
+      ["activity_a","DuplicateCandidateOut",""],
+      ["activity_b","DuplicateCandidateOut",""],
+    ] },
+  { name: "TrimCandidateOut", note: "Everything ActivityDetail.transport_mix_flag carries, plus enough activity identity to link straight to it from GET /activities/needs-trim's list.", fields: [
+      ["id","string",""],
+      ["name","string|null",""],
+      ["sport","string",""],
+      ["start_time_utc","string(date-time)",""],
+      ["distance_m","number|null",""],
+      ["duration_s","number|null",""],
+      ["flag","TransportMixFlagOut","Never null here — only activities that were flagged appear in this list at all."],
+    ] },
   { name: "Page&lt;ActivitySummary&gt;", note: "The pagination envelope described in Conventions, applied to ActivitySummary.", fields: page("ActivitySummary") },
   { name: "ActivityMapPointOut", note: "One GPS-bearing activity's start point — the reduced shape returned by GET /activities/map.", fields: [
       ["id","string",""],
@@ -727,6 +757,31 @@ const SCHEMAS = [
       ["avg_gap_speed_mps","number|null","Grade Adjusted Pace, as a speed in m/s (SI storage)."],
       ["avg_hr_bpm","number|null",""],
       ["avg_cadence_spm","number|null","Already doubled to strides/minute — FIT's own field is a single-foot rate."],
+    ] },
+  { name: "ClimbComparisonsOut", note: "Bouldering's own version of ActivityComparisonsOut, from GET .../climb-comparisons.", fields: [
+      ["duration_band_fraction","number","The duration-tolerance fraction actually used (0.15)."],
+      ["matched_count","integer","How many sessions matched before capping to the 10 most recent."],
+      ["rows","array<ClimbComparisonRowOut>","The 10 most recent matches, most recent first."],
+    ] },
+  { name: "ClimbComparisonRowOut", fields: [
+      ["id","string",""],
+      ["local_date","string(date)|null",""],
+      ["duration_s","number",""],
+      ["route_count","integer","How many splits in that session have a grade at all."],
+      ["max_completed_grade","integer|null",""],
+      ["climb_time_s","number|null","Total time actually climbing, excluding rest."],
+    ] },
+  { name: "ClimbingSummaryOut", note: "Returned by GET /activities/climbing-summary.", fields: [
+      ["session_count","integer","Bouldering sessions in the requested period."],
+      ["total_climb_time_s","number","Summed across every session's climb_active splits."],
+      ["total_routes","integer","Every split with a grade, across every session."],
+      ["max_completed_grade","integer|null","The best result: \"completed\" grade in the period."],
+      ["grade_breakdown","array<ClimbGradeBreakdownOut>","Attempted/completed counts, one row per grade actually seen."],
+    ] },
+  { name: "ClimbGradeBreakdownOut", fields: [
+      ["grade","integer",""],
+      ["attempted","integer","Includes any unconfirmed raw \"unknown_<n>\" result, counted conservatively rather than assumed completed."],
+      ["completed","integer",""],
     ] },
   { name: "ActivityWeatherOut", note: "Returned by GET /activities/{id}/weather. See “available: false” in Conventions.", fields: [
       ["available","boolean","required"],
@@ -777,6 +832,12 @@ const SCHEMAS = [
       ["decided_at","string(date-time)",""],
     ] },
   { name: "ActivitySplitOut", fields: [ ["new_activity_id","string","The freshly created activity the split source now belongs to."] ] },
+  { name: "ActivityMergePreviewOut", note: "Returned by GET .../merge-preview/{other_id}.", fields: [ ["fields","array<FieldComparisonOut>",""] ] },
+  { name: "FieldComparisonOut", fields: [
+      ["field","string","One of the keys POST .../merge's own field_choices accepts."],
+      ["self_value","number|string|null","This activity's own current value. For a collection field (route/laps/splits/stream), the literal string \"self\" rather than the collection's actual contents."],
+      ["other_value","number|string|null","The candidate's value, same convention."],
+    ] },
   { name: "ActivitySportOverrideOut", fields: [ ["sport","string",""], ["sub_sport","string|null",""] ] },
   { name: "ActivityRaceOverrideOut", fields: [ ["is_race","boolean",""] ] },
   { name: "ActivityNameOverrideOut", fields: [ ["name","string",""] ] },
@@ -996,6 +1057,25 @@ const GROUPS = [
       responses: [ { code: 200, ref: "array&lt;ActivityRouteOut&gt;" } ],
       example: { qs: `?ids=${EX.ACT},${EX.ACT2}` }
     },
+    { method: "GET", path: "/api/v1/activities/climbing-summary", summary: "Aggregate bouldering stats over a date range.",
+      description: "A true server-side aggregate across every bouldering session in the range — session count, total climb time, total routes, the best completed grade, and the full attempted/completed distribution per grade. Needed because the per-grade breakdown isn't a scalar any single activity carries, unlike the client-side reductions elsewhere in this app.",
+      params: [
+        ["start_date","query","opt","string(date)","—",""],
+        ["end_date","query","opt","string(date)","—",""],
+      ],
+      responses: [ { code: 200, ref: "ClimbingSummaryOut" } ],
+      example: { qs: "?start_date=2026-01-01&end_date=2026-12-31" }
+    },
+    { method: "GET", path: "/api/v1/activities/needs-trim", summary: "Settings page's list-wide scan for likely car-travel-tainted recordings.",
+      description: "Every hiking/walking activity likely to include a stretch of car travel (the same heuristic ActivityDetail.transport_mix_flag applies per-activity), excluding any that already has a trim recorded. A deliberate exception to this app's usual never-scan-list-wide rule — cheap enough (~0.9s over ~360 eligible activities) for a page visited occasionally rather than on every dashboard load.",
+      responses: [ { code: 200, ref: "array&lt;TrimCandidateOut&gt;", note: "most recent first" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/possible-duplicates", summary: "Settings page's list-wide scan for cross-source duplicates.",
+      description: "Every cross-source duplicate relationship never merged at ingest time — the same detection ActivityDetail.duplicate_candidates applies per-activity, deduplicated so each pair is reported once. Same never-scan-list-wide exception as .../needs-trim above (~0.5s over the full archive).",
+      responses: [ { code: 200, ref: "array&lt;DuplicatePairOut&gt;" } ],
+      example: {}
+    },
     { method: "GET", path: "/api/v1/activities/{activity_id}", summary: "Full detail for one activity.",
       description: "Laps, splits, route bounding box, attributed device, and every stored per-activity metric.",
       params: [ ["activity_id","path","req","string","—","ULID."] ],
@@ -1013,6 +1093,51 @@ const GROUPS = [
       params: [ ["activity_id","path","req","string","—",""] ],
       responses: [ { code: 200, ref: "ActivityComparisonsOut" }, { code: 404, note: "" } ],
       example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/climb-comparisons", summary: "Bouldering's own version of .../comparisons.",
+      description: "The 10 most recent other bouldering sessions within ±15% of this one's own total duration (climb + rest) — e.g. \"how did today's ~2hr session compare to my last 10 sessions of about the same length.\" Real per-session numbers (route count, max completed grade, climb time), no fabricated score. rows is empty (with matched_count: 0) whenever this activity has no duration, or genuinely no similar-length session yet.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, ref: "ClimbComparisonsOut" }, { code: 404, note: "" } ],
+      example: {}
+    },
+    { method: "PATCH", path: "/api/v1/activities/{activity_id}/climb-routes/{split_index}", summary: "Correct a bouldering route's logged result and/or grade.",
+      description: "For a route the watch misread (e.g. scored an attempt as completed). Durable, rebuild-safe override; updates a different underlying table than POST .../climb-routes below depending on whether split_index refers to a FIT-derived route or one added by hand. Send just one field to correct only that one, leaving any separately-recorded correction on the same route untouched.",
+      params: [ ["activity_id","path","req","string","—",""], ["split_index","path","req","integer","—",""] ],
+      body: { schema: "ClimbRouteStatusIn", fields: [
+        ["result","string|null","opt","","One of bouldering_overrides.py's VALID_RESULTS, e.g. attempt, completed."],
+        ["grade","integer|null","opt","",""],
+      ]},
+      responses: [
+        { code: 200, ref: "SplitOut" },
+        { code: 404, note: "activity or split not found" },
+        { code: 422, note: "neither result nor grade given" },
+      ],
+      example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/climb-routes/0 \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"result": "completed"}'` }
+    },
+    { method: "POST", path: "/api/v1/activities/{activity_id}/climb-routes", summary: "Add a route the device never tracked.",
+      description: "Forgotten to start/stop tracking, climbed after the watch was already stopped, etc. Durable, rebuild-safe record, not a one-off row insert.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { schema: "ClimbRouteAddIn", fields: [
+        ["grade","integer","req","",""],
+        ["result","string","req","","attempt or completed."],
+      ]},
+      responses: [
+        { code: 200, ref: "SplitOut" },
+        { code: 404, note: "activity not found" },
+        { code: 422, note: "result isn't one of attempt/completed" },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/activities/${EX.ACT}/climb-routes \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"grade": 4, "result": "completed"}'` }
+    },
+    { method: "DELETE", path: "/api/v1/activities/{activity_id}/climb-routes/{split_index}", summary: "Remove a manually-added route.",
+      description: "Never a FIT-derived one, which would just be re-derived by the next ingest/rebuild regardless.",
+      params: [ ["activity_id","path","req","string","—",""], ["split_index","path","req","integer","—",""] ],
+      responses: [ { code: 204, note: "" }, { code: 400, note: "this split isn't a manually-added route (or doesn't exist)" } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/activities/${EX.ACT}/climb-routes/0 \\
+  -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "GET", path: "/api/v1/activities/{activity_id}/insights", summary: "Point-in-time insights for one activity.",
       description: "e.g. \"your fastest 10 km to date.\" Computed fresh at request time (unlike GET /insights, which reads a precomputed table), and always bounded to activities at or before this one's own local_date — viewing an old activity never leaks knowledge of activities that hadn't happened yet.",
@@ -1096,6 +1221,59 @@ const GROUPS = [
       example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/fueling \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"carbohydrates_g": 60, "sodium_mg": 500}'` }
+    },
+    { method: "POST", path: "/api/v1/activities/{activity_id}/trim", summary: "Trim a stretch of car travel from a hiking/walking recording.",
+      description: "Distance, duration, elevation, heart rate, route, and laps are honestly recomputed from the kept window of the activity's own per-second stream; calories and training load are cleared to null rather than estimated, since neither is honestly re-derivable from a partial window (both are proprietary Firstbeat computations over the original full recording). Durable, rebuild-safe override. See GET /activities/needs-trim and ActivityDetail.transport_mix_flag for how a candidate is surfaced.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { schema: "ActivityTrimIn", fields: [
+        ["trim_start_s","number|null","opt","","Elapsed seconds from the activity's own recorded start. Omit to leave the start untrimmed."],
+        ["trim_end_s","number|null","opt","","Same, for the end."],
+      ]},
+      responses: [
+        { code: 200, ref: "ActivityDetail", note: "fields recomputed/cleared per above, has_trim: true" },
+        { code: 400, note: "neither bound resolves to an actual trim" },
+        { code: 404, note: "" },
+        { code: 422, note: "both fields omitted" },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/activities/${EX.ACT}/trim \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"trim_end_s": 1800}'` }
+    },
+    { method: "DELETE", path: "/api/v1/activities/{activity_id}/trim", summary: "Undo a trim.",
+      description: "Restores the pristine pre-trim state — re-parses the activity's own already-archived raw bytes rather than \"un-trimming\" numerically, since that could never bring back calories/training load (never recomputed from a window in the first place, only cleared).",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [
+        { code: 200, ref: "ActivityDetail", note: "original values restored, has_trim: false" },
+        { code: 400, note: "no trim is currently active" },
+        { code: 404, note: "" },
+      ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/activities/${EX.ACT}/trim \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/merge-preview/{other_id}", summary: "Side-by-side field comparison for the manual merge tool.",
+      description: "For the athlete's own \"these are the same activity\" correction, when automatic merge-matching failed to catch a cross-source duplicate at ingest time (see GET /activities/possible-duplicates and ActivityDetail.duplicate_candidates for how a candidate is surfaced). Distance, duration, elevation, calories, heart rate, and training load each show both sides' actual value; a collection field (route/laps/splits/stream) is a whole-side choice, represented as the literal strings \"self\"/\"other\" rather than the collection's own contents.",
+      params: [
+        ["activity_id","path","req","string","—","The activity that would survive the merge."],
+        ["other_id","path","req","string","—","The activity that would be absorbed."],
+      ],
+      responses: [ { code: 200, ref: "ActivityMergePreviewOut" }, { code: 404, note: "either activity not found" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/activities/${EX.ACT}/merge-preview/${EX.ACT2} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/activities/{activity_id}/merge", summary: "Merge another activity into this one.",
+      description: "This activity is always the survivor — the other is soft-deleted and every one of its raw sources is relinked onto the survivor. Only fields in field_choices valued \"other\" change anything; everything else keeps this activity's own current value (merging is opt-in per field, never a silent overwrite). Durable, rebuild-safe correction — sync rebuild re-derives both activities from raw bytes on every run and would otherwise re-split them apart.",
+      params: [ ["activity_id","path","req","string","—","The survivor."] ],
+      body: { schema: "ActivityMergeIn", fields: [
+        ["other_activity_id","string","req","","The activity to absorb."],
+        ["field_choices","object<string,string>","opt","{}","Keys from distance_m, duration_s, moving_duration_s, elevation_gain_m, calories, avg_hr_bpm, max_hr_bpm, training_load, route, laps, splits, stream; each value \"other\" (the only value that changes anything — omit a key, or send \"self\", to keep this activity's own current value)."],
+      ]},
+      responses: [
+        { code: 200, ref: "ActivityDetail", note: "the merged survivor" },
+        { code: 404, note: "either activity not found, or they're already the same activity" },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/activities/${EX.ACT}/merge \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"other_activity_id": "${EX.ACT2}", "field_choices": {"distance_m": "other"}}'` }
     },
     { method: "GET", path: "/api/v1/activities/{activity_id}/stream", summary: "Downsampled per-second sensor stream, for charting.",
       description: "Server-side bucket-averaged (DuckDB) to one of three point-count tiers, so a chart never has to fetch or render a full-resolution multi-hour stream.",

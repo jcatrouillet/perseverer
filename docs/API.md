@@ -200,6 +200,40 @@ thumbnail-map cards. Activities with no GPS route are simply omitted.
 
 **Response `200`:** `array<ActivityRouteOut>`.
 
+### `GET /activities/climbing-summary`
+
+A true aggregate across every bouldering session in `[start_date, end_date]` — session count,
+total climb time, total routes, the best completed grade, and the full attempted/completed
+distribution per grade. Unlike the client-side reductions elsewhere in this app, this is a real
+server-side aggregate, needed because the per-grade breakdown isn't a scalar any single activity
+carries.
+
+| Param | In | Required | Type | Default |
+|---|---|---|---|---|
+| `start_date` | query | optional | string (date) | — |
+| `end_date` | query | optional | string (date) | — |
+
+**Response `200`:** `ClimbingSummaryOut`.
+
+### `GET /activities/needs-trim`
+
+Settings page's list-wide scan for hiking/walking activities likely to include a stretch of car
+travel (see `TrimCandidateOut`'s own `flag`, the same heuristic `ActivityDetail.transport_mix_flag`
+uses per-activity). A deliberate exception to this app's usual never-scan-list-wide rule — cheap
+enough (~0.9s over ~360 eligible activities) for a page visited occasionally rather than on every
+dashboard load. Excludes any activity that already has a trim recorded.
+
+**Response `200`:** `array<TrimCandidateOut>`, most recent first.
+
+### `GET /activities/possible-duplicates`
+
+Settings page's list-wide scan for cross-source duplicate activities never merged at ingest time
+— every relationship `ActivityDetail.duplicate_candidates` would also independently flag from
+either side, deduplicated so each pair is reported once. Same never-scan-list-wide exception as
+`.../needs-trim` above (~0.5s over the full archive).
+
+**Response `200`:** `array<DuplicatePairOut>`.
+
 ### `GET /activities/{activity_id}`
 
 Full detail for one activity: laps, splits, route bounding box, attributed device, every stored
@@ -231,6 +265,69 @@ fabricated composite score. `rows` is empty (with `matched_count: 0`) whenever t
 no distance, no recorded GPS start point (e.g. a treadmill run), or genuinely no match yet.
 
 **Responses:** `200` → `ActivityComparisonsOut`. `404`.
+
+### `GET /activities/{activity_id}/climb-comparisons`
+
+Bouldering's own version of `.../comparisons` above: the 10 most recent *other* bouldering
+sessions within ±15% of this one's own total duration (climb + rest) — e.g. "how did today's
+~2hr session compare to my last 10 sessions of about the same length." Real per-session numbers
+(route count, max completed grade, climb time), no fabricated score. `rows` is empty (with
+`matched_count: 0`) whenever this activity has no duration, or genuinely no similar-length
+session yet.
+
+**Responses:** `200` → `ClimbComparisonsOut`. `404`.
+
+### `PATCH /activities/{activity_id}/climb-routes/{split_index}`
+
+Corrects a bouldering route's logged result and/or grade — for a route the watch misread (e.g.
+scored an attempt as completed). Durable, rebuild-safe override; updates a different underlying
+table than the manual-add endpoint below depending on whether `split_index` refers to a
+FIT-derived route or one added by hand.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `activity_id` | path | **required** | string |
+| `split_index` | path | **required** | integer |
+
+**Request body** (`ClimbRouteStatusIn`):
+
+| Field | Type | Required |
+|---|---|---|
+| `result` | string, nullable | optional — one of the values `bouldering_overrides.py`'s `VALID_RESULTS` allows, e.g. `attempt`, `completed`. |
+| `grade` | integer, nullable | optional |
+
+Send just one field to correct only that one, leaving any separately-recorded correction on the
+same route untouched.
+
+**Responses:** `200` → `SplitOut`. `404` → activity or split not found. `422` → neither `result`
+nor `grade` given.
+
+### `POST /activities/{activity_id}/climb-routes`
+
+Adds a route the device never tracked at all — forgotten to start/stop tracking, climbed after
+the watch was already stopped, etc. Durable, rebuild-safe record, not a one-off row insert.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `activity_id` | path | **required** | string |
+
+**Request body** (`ClimbRouteAddIn`): `grade` (integer, required), `result` (string, required —
+`attempt` or `completed`).
+
+**Responses:** `200` → `SplitOut`. `404` → activity not found. `422` → `result` isn't one of
+`attempt`/`completed`.
+
+### `DELETE /activities/{activity_id}/climb-routes/{split_index}`
+
+Removes a manually-added route — never a FIT-derived one, which would just be re-derived by the
+next ingest/rebuild regardless.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `activity_id` | path | **required** | string |
+| `split_index` | path | **required** | integer |
+
+**Responses:** `204`. `400` → this split isn't a manually-added route (or doesn't exist).
 
 ### `GET /activities/{activity_id}/insights`
 
@@ -340,6 +437,85 @@ one you're not changing, or it's cleared back to null.
 | `sodium_mg` | number, nullable | optional (omit or null to clear) |
 
 **Responses:** `200` → `ActivityFuelingOut`. `404`. `422` → a negative value.
+
+### `POST /activities/{activity_id}/trim`
+
+Trims a stretch of car travel from the start and/or end of a hiking/walking recording (see
+`ActivityDetail.transport_mix_flag`/`GET /activities/needs-trim` for how a candidate is
+surfaced). Distance, duration, elevation, heart rate, route, and laps are honestly recomputed
+from the kept window of the activity's own per-second stream; calories and training load are
+cleared to `null` rather than estimated, since neither is honestly re-derivable from a partial
+window (both are proprietary Firstbeat computations over the *original* full recording). Durable,
+rebuild-safe override.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `activity_id` | path | **required** | string |
+
+**Request body** (`ActivityTrimIn`):
+
+| Field | Type | Required |
+|---|---|---|
+| `trim_start_s` | number, nullable | optional — elapsed seconds from the activity's own recorded start. Omit to leave the start untrimmed. |
+| `trim_end_s` | number, nullable | optional — same, for the end. |
+
+At least one of the two is required.
+
+**Responses:** `200` → `ActivityDetail` (fields recomputed/cleared per above, `has_trim: true`).
+`400` → neither bound resolves to an actual trim. `404`. `422` → both fields omitted.
+
+### `DELETE /activities/{activity_id}/trim`
+
+Undoes a trim, restoring the pristine pre-trim state — re-parses the activity's own already-
+archived raw bytes rather than "un-trimming" numerically, since that could never bring back
+calories/training load (never recomputed from a window in the first place, only cleared).
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `activity_id` | path | **required** | string |
+
+**Responses:** `200` → `ActivityDetail` (original values restored, `has_trim: false`). `400` → no
+trim is currently active. `404`.
+
+### `GET /activities/{activity_id}/merge-preview/{other_id}`
+
+Side-by-side field comparison between this activity and `other_id`, for the manual "these are the
+same activity" merge tool — the athlete's own correction for a cross-source duplicate automatic
+merge-matching failed to catch at ingest time (see `ActivityDetail.duplicate_candidates`/
+`GET /activities/possible-duplicates` for how a candidate is surfaced). Distance, duration,
+elevation, calories, heart rate, and training load each show both sides' actual value; a
+collection field (route/laps/splits/stream) is a whole-side choice, represented as the literal
+strings `"self"`/`"other"` rather than the collection's own contents.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `activity_id` | path | **required** | string — the activity that would survive the merge. |
+| `other_id` | path | **required** | string — the activity that would be absorbed. |
+
+**Responses:** `200` → `ActivityMergePreviewOut`. `404` → either activity not found.
+
+### `POST /activities/{activity_id}/merge`
+
+Merges `body.other_activity_id` into this activity — this activity is always the survivor, the
+other is soft-deleted and every one of its raw sources is relinked onto the survivor. Only fields
+in `body.field_choices` valued `"other"` change anything; everything else keeps this activity's
+own current value (merging is opt-in per field, never a silent overwrite). Durable, rebuild-safe
+correction — `sync rebuild` re-derives both activities from raw bytes on every run and would
+otherwise re-split them apart.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `activity_id` | path | **required** | string — the survivor. |
+
+**Request body** (`ActivityMergeIn`):
+
+| Field | Type | Required | Description |
+|---|---|---|---|---|
+| `other_activity_id` | string | required | The activity to absorb. |
+| `field_choices` | object\<string, string\> | optional (default `{}`) | Keys from `distance_m`, `duration_s`, `moving_duration_s`, `elevation_gain_m`, `calories`, `avg_hr_bpm`, `max_hr_bpm`, `training_load`, `route`, `laps`, `splits`, `stream`; each value `"other"` (the only value that changes anything — omit a key, or send `"self"`, to keep this activity's own current value). |
+
+**Responses:** `200` → `ActivityDetail` (the merged survivor). `404` → either activity not found,
+or they're already the same activity.
 
 ### `GET /activities/{activity_id}/stream`
 
@@ -666,6 +842,9 @@ Everything in `ActivitySummary`, plus:
 | `estimated_sweat_loss_ml` | number, nullable | required | Computed estimate, not a device measurement. |
 | `carbohydrates_g` | number, nullable | required | Athlete-logged fueling intake — no vendor source, `null` until set via `PATCH .../fueling`. |
 | `sodium_mg` | number, nullable | required | Athlete-logged fueling intake — no vendor source, `null` until set via `PATCH .../fueling`. |
+| `transport_mix_flag` | `TransportMixFlagOut`, nullable | required | Computed fresh from this activity's own stream — `null` unless the sport is hiking/walking and a sustained fast segment (likely car travel) touches either boundary. Detail-page-only; never computed list-wide (see `GET /activities/needs-trim` for the one deliberate exception). |
+| `has_trim` | boolean | required | `true` once a trim has been committed via `POST .../trim`. |
+| `duplicate_candidates` | array\<`DuplicateCandidateOut`\> | required | Other activities that look like the same real-world activity as this one, bounded to a ±1 day window. Usually empty. |
 
 Returned by `GET /activities/{id}`.
 
@@ -708,6 +887,46 @@ Returned by `GET /activities/{id}`.
 | `value_text` | string, nullable | Present when the metric is text-valued instead. |
 | `unit` | string, nullable | |
 | `source` | string | Which adapter/vendor this specific field's value came from. |
+
+### TransportMixFlagOut
+
+| Field | Type | Description |
+|---|---|---|
+| `at_start` | boolean | A sustained fast (likely car-travel) segment touches the recording's start. |
+| `at_end` | boolean | Same, at the end. |
+| `suggested_trim_start_s` | number, nullable | Elapsed seconds from the activity's own start where the fast segment settles back to walking pace — a suggested `trim_start_s` for `POST .../trim`. `null` when `at_start` is `false`. |
+| `suggested_trim_end_s` | number, nullable | Same, for the end — a suggested `trim_end_s`. `null` when `at_end` is `false`. |
+
+### DuplicateCandidateOut
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | The other activity's id. |
+| `name` | string, nullable | |
+| `primary_source` | string | |
+| `start_time_utc` | string (date-time) | |
+| `distance_m` | number, nullable | |
+| `duration_s` | number, nullable | |
+
+### DuplicatePairOut
+
+`activity_a`, `activity_b` — both `DuplicateCandidateOut`, one relationship from
+`GET /activities/possible-duplicates`.
+
+### TrimCandidateOut
+
+Everything `ActivityDetail.transport_mix_flag` carries, plus enough activity identity to link
+straight to it from `GET /activities/needs-trim`'s list.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | |
+| `name` | string, nullable | |
+| `sport` | string | |
+| `start_time_utc` | string (date-time) | |
+| `distance_m` | number, nullable | |
+| `duration_s` | number, nullable | |
+| `flag` | `TransportMixFlagOut` | Never `null` here — only activities that *were* flagged appear in this list at all. |
 
 ### Page\<T\>
 
@@ -754,6 +973,39 @@ nullable) — optional.
 moving-preferred, same convention as `ActivityContextRecentOut`). `vdot`, `avg_gap_speed_mps`
 (m/s), `avg_hr_bpm`, `avg_cadence_spm` (number, nullable, each) — `avg_cadence_spm` is already
 doubled to strides/minute server-side (FIT's own field is a single-foot rate).
+
+### ClimbComparisonsOut
+
+Bouldering's own version of `ActivityComparisonsOut`, from `GET .../climb-comparisons`.
+
+| Field | Type | Description |
+|---|---|---|
+| `duration_band_fraction` | number | The duration-tolerance fraction actually used (0.15). |
+| `matched_count` | integer | How many sessions matched before capping to the 10 most recent. |
+| `rows` | array\<`ClimbComparisonRowOut`\> | The 10 most recent matches, most recent first. |
+
+### ClimbComparisonRowOut
+
+`id`, `local_date` (nullable), `duration_s` — required. `route_count` (integer — how many splits
+in that session have a grade at all), `max_completed_grade` (integer, nullable), `climb_time_s`
+(number, nullable — total time actually climbing, excluding rest).
+
+### ClimbingSummaryOut
+
+From `GET /activities/climbing-summary`.
+
+| Field | Type | Description |
+|---|---|---|
+| `session_count` | integer | Bouldering sessions in the requested period. |
+| `total_climb_time_s` | number | Summed across every session's `climb_active` splits. |
+| `total_routes` | integer | Every split with a grade, across every session. |
+| `max_completed_grade` | integer, nullable | The best `result: "completed"` grade in the period. |
+| `grade_breakdown` | array\<`ClimbGradeBreakdownOut`\> | Attempted/completed counts, one row per grade actually seen. |
+
+### ClimbGradeBreakdownOut
+
+`grade` (integer), `attempted` (integer — includes any unconfirmed raw `"unknown_<n>"` result,
+counted conservatively rather than assumed completed), `completed` (integer).
 
 ### ActivityWeatherOut
 
@@ -814,6 +1066,18 @@ step list, including repeat-block markers, not pre-flattened).
 ### ActivitySplitOut
 
 `new_activity_id` (string) — the freshly created activity the split source now belongs to.
+
+### ActivityMergePreviewOut
+
+`fields` — array\<`FieldComparisonOut`\>, from `GET .../merge-preview/{other_id}`.
+
+### FieldComparisonOut
+
+| Field | Type | Description |
+|---|---|---|
+| `field` | string | One of the keys `POST .../merge`'s own `field_choices` accepts. |
+| `self_value` | number, string, nullable | This activity's own current value. For a collection field (`route`/`laps`/`splits`/`stream`), the literal string `"self"` rather than the collection's actual contents. |
+| `other_value` | number, string, nullable | The candidate's value, same convention. |
 
 ### ActivitySportOverrideOut / ActivityRaceOverrideOut / ActivityNameOverrideOut / ActivityFuelingOut
 
