@@ -84,7 +84,7 @@ export function ActivityStatsGridPrimary({
         </div>
 
         {climb && (
-          <div className="activity-stats__col">
+          <div className="activity-stats__col activity-stats__col--wide">
             <h3>Climb</h3>
             <div className="stat-grid">
               <StatTile
@@ -109,7 +109,7 @@ export function ActivityStatsGridPrimary({
       </div>
 
       {(hasHeartRate || hasElevation) && (
-        <div className="activity-stats__row">
+        <div className="activity-stats__row activity-stats__row--compact">
           {hasHeartRate && (
             <div className="activity-stats__col">
               <h3>Heart rate</h3>

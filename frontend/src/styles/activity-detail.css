@@ -35,17 +35,25 @@
   min-width: 0;
 }
 
-/* Time & calories / Climb (bouldering only): each has just 2-3 tiles, far fewer than a typical
-   Distance & time column -- letting them each grow to fill half the row (like Heart rate/
-   Elevation's own even split, which genuinely needs the room) left the row's own `gap` looking
+/* Any row whose two columns hold only a handful of tiles each (Time & calories/Climb, Heart
+   rate/Elevation) -- letting them grow to fill half the row left the row's own `gap` looking
    like a huge void between them, since .stat-grid's `auto-fill, minmax(150px, 1fr)` columns
-   were stretching to fill that unnecessary width instead of sizing to their own content. A fixed
-   320px (not `flex: 0 1 auto`, which shrank to a single 150px tile column and read as too
-   cramped/tall) keeps room for 2 tiles side by side while staying snug against the row's gap
-   instead of sprawling to half the row's own width. Still shrinks below 320px on a narrow
-   viewport, same as the plain `.activity-stats__col` case elsewhere. */
+   were stretching to fill that unnecessary width instead of sizing to their own content. A
+   fixed basis (not `flex: 0 1 auto`, which shrank to a single 150px tile column and read as too
+   cramped/tall -- auto-fill can't size itself to its own content without *some* explicit width
+   to compute repetitions from) keeps same-row tiles together while staying snug against the
+   row's gap instead of sprawling to half the row's own width. Still shrinks below the basis on
+   a narrow viewport, same as the plain `.activity-stats__col` case elsewhere.
+
+   320px fits 2 tiles per line (Heart rate, Elevation, and Time & calories' own 2 once distance
+   is skipped for bouldering); Climb's own 3 tiles (Max completed grade/Routes/Climb time) need
+   the wider `--wide` modifier instead, or "Climb time" wraps to its own line. */
 .activity-stats__row--compact > .activity-stats__col {
   flex: 0 1 320px;
+}
+
+.activity-stats__row--compact > .activity-stats__col--wide {
+  flex: 0 1 500px;
 }
 
 /* "Fastest for this distance" as a narrow side column next to the whole stats grid (Distance &
