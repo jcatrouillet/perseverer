@@ -373,6 +373,89 @@ class TestMergeActivities:
         assert hr_row.value_num == pytest.approx(118.0)
         assert hr_row.source == "strava_export"  # provenance preserved, not just the number
 
+    def test_other_choice_clears_selfs_own_value_under_a_different_alias_key(
+        self, tmp_path: Path
+    ) -> None:
+        """Real bug, found live: avg_hr_bpm (and max_hr_bpm/training_load, same shape) can be
+        stored under either a fit.session.* or strava.session.* metric_key (see
+        _AVG_HR_METRIC_KEYS), and the display layer always prefers the fit.session.* one when
+        both exist. Choosing "other" for avg_hr_bpm when self *already has its own*
+        fit.session.avg_heart_rate row (unlike the no-prior-value case above) must clear that
+        stale row -- otherwise the athlete's explicit choice is silently masked at display time
+        even though the merge reported success."""
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(
+                conn,
+                activity_id="self1",
+                source="fit_folder",
+                external_id="fit-ext-1",
+                distance_m=9751.64,
+                duration_s=3618.58,
+            )
+            _add_activity(
+                conn,
+                activity_id="other1",
+                source="strava_export",
+                external_id="strava-ext-1",
+                distance_m=16997.0,
+                duration_s=6202.0,
+            )
+            now = dt.datetime.now(dt.UTC)
+            # self's own pre-existing value, under the fit.session.* alias _add_activity's own
+            # avg_hr/max_hr params always use -- not what's being tested here, so inserted
+            # directly to control the exact metric_key (the strava.session.* alias, from a
+            # Strava GPX/TCX CSV-totals overlay, is what a real strava_export activity uses).
+            get_or_register_metric(
+                conn, metric_key="fit.session.avg_heart_rate", source="fit_folder",
+                category="activity",
+            )
+            get_or_register_metric(
+                conn, metric_key="strava.session.avg_heart_rate", source="strava_export",
+                category="activity",
+            )
+            conn.execute(
+                activity_metric.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="self1",
+                    metric_key="fit.session.avg_heart_rate",
+                    value_num=134.0,
+                    source="fit_folder",
+                    created_at=now,
+                )
+            )
+            conn.execute(
+                activity_metric.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="other1",
+                    metric_key="strava.session.avg_heart_rate",
+                    value_num=135.0,
+                    source="strava_export",
+                    created_at=now,
+                )
+            )
+            conn.commit()
+            merge_activities(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                self_id="self1",
+                other_id="other1",
+                field_choices={"avg_hr_bpm": "other"},
+            )
+            conn.commit()
+            rows = conn.execute(
+                select(activity_metric).where(
+                    activity_metric.c.activity_id == "self1",
+                    activity_metric.c.metric_key.in_(
+                        ("fit.session.avg_heart_rate", "strava.session.avg_heart_rate")
+                    ),
+                )
+            ).fetchall()
+        # Exactly the copied row survives -- not both, and not the stale fit.session.* one.
+        assert len(rows) == 1
+        assert rows[0].metric_key == "strava.session.avg_heart_rate"
+        assert rows[0].value_num == pytest.approx(135.0)
+
     def test_collection_fields_swap_wholesale(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
         with engine.connect() as conn:

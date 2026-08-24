@@ -277,31 +277,32 @@ def _apply_field_choices(
         ).fetchone()
         if other_metric is None:
             continue
-        existing = conn.execute(
-            select(activity_metric.c.id).where(
+        # A logical field like avg_hr_bpm can live under more than one metric_key alias (see
+        # AVG_HR_METRIC_KEYS's own docstring -- fit.session.* vs strava.session.*), and the
+        # display layer (_first_metric) always prefers the FIT-namespaced key when both exist.
+        # If self already has its own row under a *different* key in this same alias group --
+        # its own pre-merge value, now superseded by the athlete's explicit "other" choice --
+        # that stale row would otherwise keep winning at display time even after copying other's
+        # value in under its own key. Clear every one of self's rows across the whole alias
+        # group first, so exactly one (the copied one) remains and nothing is masked.
+        conn.execute(
+            delete(activity_metric).where(
                 activity_metric.c.activity_id == self_id,
-                activity_metric.c.metric_key == other_metric.metric_key,
+                activity_metric.c.metric_key.in_(keys),
             )
-        ).fetchone()
-        if existing is not None:
-            conn.execute(
-                activity_metric.update()
-                .where(activity_metric.c.id == existing.id)
-                .values(value_num=other_metric.value_num, source=other_metric.source)
+        )
+        conn.execute(
+            activity_metric.insert().values(
+                athlete_id=athlete_id,
+                activity_id=self_id,
+                metric_key=other_metric.metric_key,
+                value_num=other_metric.value_num,
+                value_text=other_metric.value_text,
+                unit=other_metric.unit,
+                source=other_metric.source,
+                created_at=now,
             )
-        else:
-            conn.execute(
-                activity_metric.insert().values(
-                    athlete_id=athlete_id,
-                    activity_id=self_id,
-                    metric_key=other_metric.metric_key,
-                    value_num=other_metric.value_num,
-                    value_text=other_metric.value_text,
-                    unit=other_metric.unit,
-                    source=other_metric.source,
-                    created_at=now,
-                )
-            )
+        )
 
     if field_choices.get("route") == "other":
         other_route = conn.execute(
