@@ -4,10 +4,66 @@
 // own per-activity zone breakdown to zones computed from the raw HR stream against these three
 // reference values -- see ActivityDetailPage.tsx's own wiring.
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 
-import { useHrZoneConfig, useSetHrZoneConfig } from "../api/queries";
+import { useDuplicatePairs, useHrZoneConfig, useSetHrZoneConfig, useTrimCandidates } from "../api/queries";
+import type { DuplicateCandidateOut, TrimCandidateOut } from "../api/types";
 import { hrZoneRangeLabel } from "../activityMetrics";
+import { formatDurationHM } from "../runningStats";
 import "../styles/settings.css";
+
+const SOURCE_LABELS: Record<string, string> = {
+  fit_folder: "FIT file",
+  garmin_export: "Garmin export",
+  garmin_connect: "Garmin Connect",
+  strava_export: "Strava export",
+};
+
+function sourceLabel(source: string): string {
+  return SOURCE_LABELS[source] ?? source;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatDistanceKm(distanceM: number | null): string {
+  return distanceM == null ? "—" : `${(distanceM / 1000).toFixed(2)} km`;
+}
+
+export function TrimCandidateRow({ candidate }: { candidate: TrimCandidateOut }) {
+  const boundaries = [
+    candidate.flag.at_start && "start",
+    candidate.flag.at_end && "end",
+  ].filter(Boolean);
+  return (
+    <li className="settings-scan__row">
+      <Link href={`/activities/${candidate.id}`} className="settings-scan__link">
+        {candidate.name ?? "Untitled activity"}
+      </Link>
+      <span className="settings-scan__meta">
+        {formatDate(candidate.start_time_utc)} · {candidate.sport} ·{" "}
+        {formatDistanceKm(candidate.distance_m)}
+        {candidate.duration_s != null && ` · ${formatDurationHM(candidate.duration_s)}`}
+      </span>
+      <span className="settings-scan__flag">
+        Fast segment at the {boundaries.join(" and ")} of the recording
+      </span>
+    </li>
+  );
+}
+
+export function DuplicateSideLink({ activity }: { activity: DuplicateCandidateOut }) {
+  return (
+    <Link href={`/activities/${activity.id}`} className="settings-scan__link">
+      {activity.name ?? "Untitled activity"} ({sourceLabel(activity.primary_source)})
+    </Link>
+  );
+}
 
 function toInputValue(bpm: number | null): string {
   return bpm == null ? "" : String(bpm);
@@ -23,6 +79,8 @@ function parseField(value: string): number | null {
 export function SettingsPage() {
   const config = useHrZoneConfig();
   const mutation = useSetHrZoneConfig();
+  const trimCandidates = useTrimCandidates();
+  const duplicatePairs = useDuplicatePairs();
 
   const [maxHr, setMaxHr] = useState("");
   const [thresholdHr, setThresholdHr] = useState("");
@@ -168,6 +226,61 @@ export function SettingsPage() {
               ))}
             </tbody>
           </table>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Activities that may need trimming</h2>
+        <p className="chart-note">
+          Hiking/walking recordings with a sustained fast segment at the start or end -- usually
+          a stretch of car travel the recording was never stopped for. Open one to review and
+          trim it.
+        </p>
+        {trimCandidates.isLoading && <p>Loading…</p>}
+        {trimCandidates.isError && <p role="alert">Could not load.</p>}
+        {trimCandidates.data && trimCandidates.data.length === 0 && (
+          <p className="settings-scan__empty">Nothing flagged.</p>
+        )}
+        {trimCandidates.data && trimCandidates.data.length > 0 && (
+          <ul className="settings-scan__list">
+            {trimCandidates.data.map((candidate) => (
+              <TrimCandidateRow key={candidate.id} candidate={candidate} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Possible duplicate activities</h2>
+        <p className="chart-note">
+          Activities recorded by more than one source (e.g. a Garmin device and Strava's own
+          auto-detection) that were never merged into one record. Open either side to review and
+          merge.
+        </p>
+        {duplicatePairs.isLoading && <p>Loading…</p>}
+        {duplicatePairs.isError && <p role="alert">Could not load.</p>}
+        {duplicatePairs.data && duplicatePairs.data.length === 0 && (
+          <p className="settings-scan__empty">Nothing flagged.</p>
+        )}
+        {duplicatePairs.data && duplicatePairs.data.length > 0 && (
+          <ul className="settings-scan__list">
+            {duplicatePairs.data.map((pair) => (
+              <li
+                key={`${pair.activity_a.id}-${pair.activity_b.id}`}
+                className="settings-scan__row"
+              >
+                <span>
+                  <DuplicateSideLink activity={pair.activity_a} /> and{" "}
+                  <DuplicateSideLink activity={pair.activity_b} />
+                </span>
+                <span className="settings-scan__meta">
+                  {formatDate(pair.activity_a.start_time_utc)} ·{" "}
+                  {formatDistanceKm(pair.activity_a.distance_m)} vs.{" "}
+                  {formatDistanceKm(pair.activity_b.distance_m)}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
     </main>

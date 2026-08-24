@@ -16,6 +16,7 @@ from sqlalchemy import Connection, Engine, delete, select
 from perseverer.activity_merge import (
     apply_activity_merge_overrides,
     build_merge_preview,
+    find_all_duplicate_pairs,
     find_duplicate_candidates,
     merge_activities,
     merge_activities_and_record,
@@ -271,6 +272,40 @@ class TestFindDuplicateCandidates:
                 conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1"
             )
         assert candidates == []
+
+
+class TestFindAllDuplicatePairs:
+    def test_finds_the_pair_exactly_once(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _seed_pair(conn)
+            pairs = find_all_duplicate_pairs(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        assert len(pairs) == 1
+        ids = {pairs[0][0].id, pairs[0][1].id}
+        assert ids == {"self1", "other1"}
+
+    def test_empty_when_nothing_duplicates(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _add_activity(
+                conn,
+                activity_id="a1",
+                source="fit_folder",
+                external_id="e1",
+                start_time_utc=START,
+                sport="running",
+            )
+            _add_activity(
+                conn,
+                activity_id="a2",
+                source="strava_export",
+                external_id="e2",
+                start_time_utc=START + dt.timedelta(days=5),
+                sport="cycling",
+            )
+            conn.commit()
+            pairs = find_all_duplicate_pairs(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        assert pairs == []
 
 
 class TestBuildMergePreview:

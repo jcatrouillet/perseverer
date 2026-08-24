@@ -43,3 +43,43 @@
   color: var(--color-text-muted);
   font-weight: 500;
 }
+
+/* The "needs trim" / "possible duplicates" list-wide scans -- read-only rows that link out to
+   each activity's own detail page for the actual trim/merge action, rather than duplicating
+   those mutations here. */
+.settings-scan__list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.settings-scan__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-scan__row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.settings-scan__link {
+  font-weight: 500;
+}
+
+.settings-scan__meta,
+.settings-scan__flag {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.settings-scan__empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}

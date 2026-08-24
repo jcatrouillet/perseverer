@@ -83,6 +83,27 @@ class DuplicateCandidateOut(BaseModel):
     duration_s: float | None
 
 
+class DuplicatePairOut(BaseModel):
+    # One relationship from find_all_duplicate_pairs (activity_merge.py) -- the Settings page's
+    # list-wide duplicate scan. Both sides use the same shape as DuplicateCandidateOut so the
+    # frontend can link either one straight to its own activity detail page's merge tool.
+    activity_a: DuplicateCandidateOut
+    activity_b: DuplicateCandidateOut
+
+
+class TrimCandidateOut(BaseModel):
+    # One activity transport_mix.detect_transport_mix flagged, from the Settings page's
+    # list-wide scan -- everything the detail-page's own TransportMixFlagOut carries, plus
+    # enough activity identity for the Settings list to link straight to it.
+    id: str
+    name: str | None
+    sport: str
+    start_time_utc: datetime
+    distance_m: float | None
+    duration_s: float | None
+    flag: TransportMixFlagOut
+
+
 class ActivitySummary(BaseModel):
     id: str
     start_time_utc: datetime

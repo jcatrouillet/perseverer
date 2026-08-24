@@ -130,6 +130,44 @@ class TestDuplicateCandidatesOnGetActivity:
         assert r.json()["duplicate_candidates"] == []
 
 
+class TestListDuplicatePairs:
+    def test_lists_a_cross_source_pair_once(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        engine: Engine,
+        test_settings: Settings,
+    ) -> None:
+        _seed_pair(engine, test_settings)
+
+        r = client.get("/api/v1/activities/possible-duplicates", headers=auth_headers)
+        assert r.status_code == 200
+        pairs = r.json()
+        assert len(pairs) == 1
+        ids = {pairs[0]["activity_a"]["id"], pairs[0]["activity_b"]["id"]}
+        assert ids == {"self1", "other1"}
+
+    def test_empty_when_nothing_duplicates(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        engine: Engine,
+        test_settings: Settings,
+    ) -> None:
+        _seed_activity(
+            engine,
+            test_settings,
+            activity_id="solo1",
+            source="fit_folder",
+            content=b"solo-bytes",
+            distance_m=5000.0,
+        )
+
+        r = client.get("/api/v1/activities/possible-duplicates", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json() == []
+
+
 class TestGetActivityMergePreview:
     def test_lists_field_comparisons(
         self,

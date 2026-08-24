@@ -204,6 +204,120 @@ class TestGetActivityTransportMixFlag:
         assert r.json()["has_trim"] is False
 
 
+def _seed_flagged_hike(engine: Engine, settings: Settings, *, activity_id: str) -> None:
+    """Same fast-tail-speed pattern as TestGetActivityTransportMixFlag's own fixture, factored
+    out so the list-endpoint tests can seed more than one flagged activity."""
+    start = ACTIVITY_START + dt.timedelta(days=hash(activity_id) % 30)
+    with engine.connect() as conn:
+        content = FIXTURE.read_bytes()
+        raw_object_id = archive_raw_bytes(
+            conn,
+            settings.raw_archive_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="fit_folder",
+            kind=FIT_KIND,
+            content=content,
+        )
+        now = dt.datetime.now(dt.UTC)
+        conn.execute(
+            activity.insert().values(
+                id=activity_id,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=start,
+                utc_offset_s=0,
+                local_date=start.date().isoformat(),
+                sport="hiking",
+                sub_sport="generic",
+                name="Test hike",
+                duration_s=2000.0,
+                distance_m=20000.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            activity_source_link.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id=activity_id,
+                source="fit_folder",
+                external_id=f"{activity_id}-ext",
+                raw_object_id=raw_object_id,
+                ingested_at=now,
+            )
+        )
+        settings.parquet_dir.mkdir(parents=True, exist_ok=True)
+        parquet_path = settings.parquet_dir / f"{activity_id}.parquet"
+        timestamps = [start + dt.timedelta(seconds=i) for i in range(2000)]
+        speeds = [1.2] * 1700 + [15.0] * 300
+        table = pa.table(
+            {
+                "timestamp_utc": pa.array(timestamps, type=pa.timestamp("us", tz="UTC")),
+                "speed_mps": speeds,
+            }
+        )
+        pq.write_table(table, parquet_path)
+        conn.execute(
+            activity_stream.insert().values(
+                activity_id=activity_id,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                parquet_path=parquet_path.name,
+                n_samples=2000,
+                channels='["speed_mps"]',
+            )
+        )
+        conn.commit()
+
+
+class TestListTrimCandidates:
+    def test_lists_a_flagged_hike(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        engine: Engine,
+        test_settings: Settings,
+    ) -> None:
+        _seed_flagged_hike(engine, test_settings, activity_id="flagged1")
+
+        r = client.get("/api/v1/activities/needs-trim", headers=auth_headers)
+        assert r.status_code == 200
+        candidates = r.json()
+        assert [c["id"] for c in candidates] == ["flagged1"]
+        assert candidates[0]["flag"]["at_end"] is True
+
+    def test_excludes_an_already_trimmed_activity(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        engine: Engine,
+        test_settings: Settings,
+    ) -> None:
+        _seed_flagged_hike(engine, test_settings, activity_id="flagged2")
+        r = client.post(
+            "/api/v1/activities/flagged2/trim",
+            json={"trim_end_s": 1700.0},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+
+        r = client.get("/api/v1/activities/needs-trim", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json() == []
+
+    def test_excludes_a_plain_run(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        engine: Engine,
+        test_settings: Settings,
+    ) -> None:
+        _seed_trimmable_activity(engine, test_settings)  # a hike with constant, non-flagging speed
+
+        r = client.get("/api/v1/activities/needs-trim", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json() == []
+
+
 class TestPostActivityTrim:
     def test_commits_and_returns_updated_activity(
         self,

@@ -141,6 +141,25 @@ export interface DuplicateCandidateOut {
   duration_s: number | null;
 }
 
+// GET /activities/possible-duplicates -- the Settings page's list-wide duplicate scan, one row
+// per relationship (see activity_merge.py::find_all_duplicate_pairs -- reuses the same detection
+// as ActivityDetail.duplicate_candidates, deduplicated so each pair appears once).
+export interface DuplicatePairOut {
+  activity_a: DuplicateCandidateOut;
+  activity_b: DuplicateCandidateOut;
+}
+
+// GET /activities/needs-trim -- the Settings page's list-wide transport-mix scan.
+export interface TrimCandidateOut {
+  id: string;
+  name: string | null;
+  sport: string;
+  start_time_utc: string;
+  distance_m: number | null;
+  duration_s: number | null;
+  flag: TransportMixFlagOut;
+}
+
 export interface FieldComparisonOut {
   field: string;
   self_value: number | string | null;

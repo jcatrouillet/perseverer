@@ -14,6 +14,7 @@ from sqlalchemy import Connection, Engine, Row, case, func, select
 
 from perseverer.activity_merge import (
     build_merge_preview,
+    find_all_duplicate_pairs,
     find_duplicate_candidates,
     merge_activities_and_record,
 )
@@ -58,11 +59,13 @@ from perseverer.api.schemas.activities import (
     ClimbRouteStatusIn,
     DeviceOut,
     DuplicateCandidateOut,
+    DuplicatePairOut,
     FieldComparisonOut,
     LapOut,
     RouteOut,
     SplitOut,
     TransportMixFlagOut,
+    TrimCandidateOut,
 )
 from perseverer.api.schemas.common import Page, to_utc
 from perseverer.api.schemas.insights import InsightOut
@@ -583,6 +586,120 @@ def get_climbing_summary(
             for grade, b in sorted(breakdown_by_grade.items())
         ],
     )
+
+
+# Registered before /activities/{activity_id} -- same reason as list_activity_years above:
+# "needs-trim" would otherwise be swallowed as activity_id="needs-trim".
+@router.get("/activities/needs-trim")
+def list_trim_candidates(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    con: duckdb.DuckDBPyConnection = Depends(get_duckdb),
+    settings: Settings = Depends(get_settings),
+) -> list[TrimCandidateOut]:
+    """Settings page's list-wide scan for hiking/walking activities that `transport_mix.py`'s own
+    per-detail-page heuristic would flag as likely including a stretch of car travel -- see that
+    module's docstring for why the detection heuristic itself stays a pure per-activity function,
+    never run list-wide anywhere else. Benchmarked at ~0.9s over this athlete's ~360 eligible
+    activities -- acceptable for a page visited occasionally, unlike the calendar/activity list.
+
+    Excludes any activity that already has a trim recorded (`activity_trim_override`) -- already
+    fixed, so it shouldn't keep reappearing here.
+    """
+    rows = conn.execute(
+        select(
+            activity.c.id,
+            activity.c.name,
+            activity.c.sport,
+            activity.c.start_time_utc,
+            activity.c.distance_m,
+            activity.c.duration_s,
+            activity_stream.c.parquet_path,
+        )
+        .select_from(
+            activity.join(activity_stream, activity_stream.c.activity_id == activity.c.id)
+        )
+        .where(
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+            activity.c.sport.in_(ELIGIBLE_SPORTS),
+        )
+    ).fetchall()
+
+    trimmed_start_times = set(
+        conn.execute(
+            select(activity_trim_override.c.activity_start_time_utc).where(
+                activity_trim_override.c.athlete_id == athlete_id
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    candidates = []
+    for row in rows:
+        if row.start_time_utc in trimmed_start_times:
+            continue
+        result = detect_transport_mix(
+            con, settings.parquet_dir / row.parquet_path, sport=row.sport
+        )
+        if result is None:
+            continue
+        candidates.append(
+            TrimCandidateOut(
+                id=row.id,
+                name=row.name,
+                sport=row.sport,
+                start_time_utc=to_utc(row.start_time_utc),
+                distance_m=row.distance_m,
+                duration_s=row.duration_s,
+                flag=TransportMixFlagOut(
+                    at_start=result.at_start,
+                    at_end=result.at_end,
+                    suggested_trim_start_s=result.suggested_trim_start_s,
+                    suggested_trim_end_s=result.suggested_trim_end_s,
+                ),
+            )
+        )
+    candidates.sort(key=lambda c: c.start_time_utc, reverse=True)
+    return candidates
+
+
+# Registered before /activities/{activity_id} for the same route-ordering reason as
+# /activities/needs-trim above.
+@router.get("/activities/possible-duplicates")
+def list_duplicate_pairs(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> list[DuplicatePairOut]:
+    """Settings page's list-wide scan for cross-source duplicate activities that were never
+    merged at ingest time -- see `activity_merge.py::find_all_duplicate_pairs` for the detection/
+    dedup logic, reused as-is from the per-activity-detail-page "possible duplicate" banner so
+    the two can never disagree. Benchmarked at ~0.5s over this athlete's full ~1800-activity
+    archive.
+    """
+    pairs = find_all_duplicate_pairs(conn, athlete_id=athlete_id)
+    return [
+        DuplicatePairOut(
+            activity_a=DuplicateCandidateOut(
+                id=a.id,
+                name=a.name,
+                primary_source=a.primary_source,
+                start_time_utc=to_utc(a.start_time_utc),
+                distance_m=a.distance_m,
+                duration_s=a.duration_s,
+            ),
+            activity_b=DuplicateCandidateOut(
+                id=b.id,
+                name=b.name,
+                primary_source=b.primary_source,
+                start_time_utc=to_utc(b.start_time_utc),
+                distance_m=b.distance_m,
+                duration_s=b.duration_s,
+            ),
+        )
+        for a, b in pairs
+    ]
 
 
 @router.get("/activities/{activity_id}")

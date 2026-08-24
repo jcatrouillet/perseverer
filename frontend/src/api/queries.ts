@@ -25,6 +25,7 @@ import type {
   CalendarResponse,
   ClimbComparisonsOut,
   ClimbingSummaryOut,
+  DuplicatePairOut,
   FitnessDailyRollupOut,
   GoalOut,
   GoalProgressOut,
@@ -41,6 +42,7 @@ import type {
   SleepSessionOut,
   SplitOut,
   StreamResponse,
+  TrimCandidateOut,
 } from "./types";
 
 interface ActivityFilters {
@@ -393,6 +395,28 @@ export function useMergeActivity(activityId: string) {
       void queryClient.invalidateQueries({ queryKey: ["activities"] });
       void queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
+  });
+}
+
+/** The Settings page's list-wide "needs trim" scan (GET /activities/needs-trim) -- surfaces
+ * every hiking/walking activity transport_mix.py's own heuristic flags, so the athlete doesn't
+ * have to stumble onto each one individually via its own detail page. Actually trimming still
+ * happens on that activity's own detail page (ActivityTrimControls) -- this list only links
+ * there, it doesn't duplicate the trim mutation. */
+export function useTrimCandidates() {
+  return useQuery({
+    queryKey: ["trim-candidates"],
+    queryFn: () => apiGet<TrimCandidateOut[]>("/api/v1/activities/needs-trim"),
+  });
+}
+
+/** The Settings page's list-wide duplicate scan (GET /activities/possible-duplicates) -- same
+ * "surface it here, act on its own detail page" split as useTrimCandidates above. See
+ * activity_merge.py::find_all_duplicate_pairs for the detection/dedup logic. */
+export function useDuplicatePairs() {
+  return useQuery({
+    queryKey: ["duplicate-pairs"],
+    queryFn: () => apiGet<DuplicatePairOut[]>("/api/v1/activities/possible-duplicates"),
   });
 }
 

@@ -145,6 +145,48 @@ def find_duplicate_candidates(
     return candidates
 
 
+def find_all_duplicate_pairs(
+    conn: Connection, *, athlete_id: str
+) -> list[tuple[DuplicateCandidate, DuplicateCandidate]]:
+    """The Settings page's list-wide duplicate scan -- a deliberate, occasional-visit-only
+    exception to this app's usual never-scan-list-wide rule (every other list/calendar view
+    stays rollup-backed, see CLAUDE.md). Reuses `find_duplicate_candidates` per activity rather
+    than reimplementing the matching query, so the two entry points (single-activity-detail-page
+    banner, Settings list) can never disagree about what counts as a duplicate. Benchmarked at
+    ~0.5s over this athlete's full ~1800-activity archive -- each call is the same indexed
+    +/-1 day window query `find_duplicate_candidates` already pays for the detail-page case.
+
+    `is_same_activity` is symmetric, so naively scanning every activity would report each pair
+    twice (A matching B, then B matching A); each relationship is returned exactly once."""
+    rows = conn.execute(
+        select(activity).where(
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).fetchall()
+    self_by_id = {
+        row.id: DuplicateCandidate(
+            id=row.id,
+            name=row.name,
+            primary_source=row.primary_source,
+            start_time_utc=row.start_time_utc,
+            distance_m=row.distance_m,
+            duration_s=row.duration_s,
+        )
+        for row in rows
+    }
+    seen: set[frozenset[str]] = set()
+    pairs: list[tuple[DuplicateCandidate, DuplicateCandidate]] = []
+    for row in rows:
+        for other in find_duplicate_candidates(conn, athlete_id=athlete_id, activity_id=row.id):
+            key = frozenset((row.id, other.id))
+            if key in seen:
+                continue
+            seen.add(key)
+            pairs.append((self_by_id[row.id], other))
+    return pairs
+
+
 def _metric_value(
     conn: Connection, *, activity_id: str, metric_keys: tuple[str, ...]
 ) -> float | None:
