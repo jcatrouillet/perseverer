@@ -162,9 +162,15 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
   `mostRecentVO2Max.generic`/`mostRecentVO2Max.heatAltitudeAcclimation`/
   `mostRecentTrainingStatus.latestTrainingStatusData`, the last keyed by device ID with the
   first device's data taken since this athlete has only ever had one recording device); and
-  `garmin.daily_race_predictions.<field>` (`get_race_predictions`, the one exception to every
-  other live fetch's one-request-per-day shape — it accepts a date range and returns one record
-  per day in a *single* request per sync run). `garmin.hydration.<field>` gained a second
+  `garmin.daily_race_predictions.<field>` (`get_race_predictions`, one of two live fetches that
+  accept a date range and return one record per day in a *single* request per sync run, not
+  once per day — the other is `get_body_battery`/`garmin.daily_body_battery.<field>`, Phase 9,
+  added because no daily-summary or GDPR-export field carries body battery as a real per-minute
+  series, only 8 sparse named checkpoints; its own `bodyBatteryValuesArray` — `[timestamp_ms,
+  level]` pairs, read via the response's own `bodyBatteryValueDescriptorDTOList` column-index
+  map rather than a hardcoded position — becomes `HealthStreamPoint`s under
+  `garmin.daily_body_battery.level` in `health_stream` below, not `health_observation` rows like
+  every other field on that same response). `garmin.hydration.<field>` gained a second
   provenance the same way `garmin.daily_summary.*` already had two (`daily_summary_json` vs
   `garmin_connect_daily_summary_json`): `get_hydration_data`'s live JSON shape matches the
   *existing* `parse_hydration_json` exactly, so no new parser was needed, just a new
@@ -181,9 +187,21 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
   of Phase 6, ADR 0009 decision 8) — a known, documented inconsistency, not an oversight.
 - **`health_stream`** — Parquet-backed intraday time series, one row per `(metric_key,
   year_month)`: `heart_rate` (from `monitoring_mesgs`, `timestamp_16`-corrected — decision 1),
-  `stress_level`, `respiration_rate`, `spo2`, `hrv`. Unlike `activity_stream`, a month's file is
-  built up incrementally across many daily source files via `write_health_stream`'s
-  merge-by-timestamp (decision 10) — re-ingesting a day is idempotent, not a duplicate.
+  `stress_level`, `respiration_rate`, `spo2`, `hrv`, and (Phase 9) `garmin.daily_body_battery.
+  level` — the first `health_stream` producer that isn't a FIT parser (every other one comes
+  from `health/fit_parser.py`; this one from `health/json_parser.py::
+  parse_daily_body_battery_json`), and the first metric exposed to the frontend at all —
+  `GET /health/stream` (`api/routers/health.py`), read directly with pyarrow (no DuckDB
+  downsampling tier needed for one day's worth of readings), powers the day view's Body Battery
+  chart. Unlike `activity_stream`, a month's file is built up incrementally across many daily
+  source files via `write_health_stream`'s merge-by-timestamp (decision 10) — re-ingesting a day
+  is idempotent, not a duplicate. That merge normalizes every timestamp to naive before
+  comparing (a real bug, found building the body-battery feature: pyarrow round-trips a
+  `tz("UTC")` column back as tz-aware Python `datetime`s on read, while `HealthStreamPoint`
+  producers disagree with each other — `fit_parser.py`'s are tz-aware, `json_parser.py`'s are
+  naive per this project's own naive-implicitly-UTC convention — so a second write to an
+  already-populated month's file raised `TypeError: can't compare offset-naive and
+  offset-aware datetimes` before this fix, on every metric, not just body battery).
 - **`sleep_session`** — one row per night. From a FIT file (`fit_folder`/`garmin_export`),
   `start_time_utc`/`end_time_utc` are derived from `sleep_level_mesgs`' stage-change timestamps
   (not from Garmin's own sleep-duration field, which can differ slightly by excluding brief wake

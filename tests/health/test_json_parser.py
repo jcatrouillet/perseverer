@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import pytest
 
 from perseverer.health.json_parser import (
+    parse_daily_body_battery_json,
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
@@ -630,3 +631,80 @@ def test_daily_race_predictions_record_missing_calendar_date_is_skipped_not_fata
 def test_daily_race_predictions_non_list_top_level_produces_empty_batch() -> None:
     batch = parse_daily_race_predictions_json(_bytes({"time5K": 1320}))
     assert batch.observations == []
+
+
+# --- parse_daily_body_battery_json: garmin_connect's live get_body_battery() shape -- another
+# range call, one record per day. Field names/shape confirmed against the real account
+# (docs/adr/0003-phase-2-garmin-adapters.md decision 1-2), values below are synthetic. ---------
+
+DAILY_BODY_BATTERY: list[dict[str, object]] = [
+    {
+        "date": "2025-06-01",
+        "charged": 69,
+        "drained": 68,
+        "startTimestampGMT": "2025-06-01T07:00:00.0",
+        "endTimestampGMT": "2025-06-02T07:00:00.0",
+        "startTimestampLocal": "2025-06-01T00:00:00.0",
+        "endTimestampLocal": "2025-06-02T00:00:00.0",
+        "bodyBatteryValuesArray": [
+            [1748761200000, 19],
+            [1748789280000, 82],
+            [1748792880000, 88],
+        ],
+        "bodyBatteryValueDescriptorDTOList": [
+            {"bodyBatteryValueDescriptorIndex": 0, "bodyBatteryValueDescriptorKey": "timestamp"},
+            {
+                "bodyBatteryValueDescriptorIndex": 1,
+                "bodyBatteryValueDescriptorKey": "bodyBatteryLevel",
+            },
+        ],
+        "bodyBatteryDynamicFeedbackEvent": {
+            "eventTimestampGmt": "2025-06-02T06:58:56.0",
+            "bodyBatteryLevel": "MODERATE",
+        },
+        "bodyBatteryActivityEvent": [
+            {"eventType": "SLEEP", "bodyBatteryImpact": 69},
+        ],
+    },
+]
+
+
+def test_daily_body_battery_scalar_fields_become_observations() -> None:
+    batch = parse_daily_body_battery_json(_list_bytes(DAILY_BODY_BATTERY))
+    values = {o.metric_key: o.value_num for o in batch.observations}
+    assert values["garmin.daily_body_battery.charged"] == 69.0
+    assert values["garmin.daily_body_battery.drained"] == 68.0
+
+
+def test_daily_body_battery_values_array_becomes_stream_points() -> None:
+    batch = parse_daily_body_battery_json(_list_bytes(DAILY_BODY_BATTERY))
+    points = [p for p in batch.stream_points if p.metric_key == "garmin.daily_body_battery.level"]
+    assert len(points) == 3
+    assert {p.value for p in points} == {19.0, 82.0, 88.0}
+    # 1748761200000 ms -> a real UTC instant, not the epoch or a truncated value.
+    first = next(p for p in points if p.value == 19.0)
+    assert first.timestamp_utc == datetime(2025, 6, 1, 7, 0, 0)
+
+
+def test_daily_body_battery_nested_events_are_cataloged_not_dropped() -> None:
+    batch = parse_daily_body_battery_json(_list_bytes(DAILY_BODY_BATTERY))
+    keys = batch.unrecognized_field_keys
+    assert "garmin.daily_body_battery.bodyBatteryDynamicFeedbackEvent" in keys
+    assert "garmin.daily_body_battery.bodyBatteryActivityEvent" in keys
+    # The array this parser exists to handle is consumed, not re-cataloged as unrecognized too.
+    assert "garmin.daily_body_battery.bodyBatteryValuesArray" not in keys
+
+
+def test_daily_body_battery_record_missing_date_is_skipped_not_fatal() -> None:
+    extra_record: dict[str, object] = {"charged": 50, "bodyBatteryValuesArray": []}
+    records: list[dict[str, object]] = [*DAILY_BODY_BATTERY, extra_record]
+    batch = parse_daily_body_battery_json(_list_bytes(records))
+    charged_key = "garmin.daily_body_battery.charged"
+    values = {o.value_num for o in batch.observations if o.metric_key == charged_key}
+    assert values == {69.0}
+
+
+def test_daily_body_battery_non_list_top_level_produces_empty_batch() -> None:
+    batch = parse_daily_body_battery_json(_bytes({"charged": 50}))
+    assert batch.observations == []
+    assert batch.stream_points == []

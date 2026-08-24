@@ -499,6 +499,16 @@ export interface HealthDashboardOut {
   metrics: HealthDashboardMetricOut[];
 }
 
+// GET /health/stream -- the intraday health_stream/Parquet series (currently only
+// garmin.daily_body_battery.level), distinct from HealthObservationOut's once-or-a-few-per-day
+// EAV rows.
+export interface HealthStreamResponse {
+  metric_key: string;
+  local_date: string;
+  timestamps: string[];
+  values: number[];
+}
+
 export type EntityType = "activity" | "day";
 
 export interface NoteOut {

@@ -151,6 +151,14 @@ because you don't recognize it — stop, that's the bug.
     sync kept reporting success. Two low-value report kinds (`healthStatusData` — internal
     data-quality metadata, `outliersCount` almost always 0; `AbnormalHrEvents` — only 2 events
     across ~4 years of real data) were deliberately left export-only rather than wired live.
+    A second *range* fetch (Phase 9): `get_body_battery` (`garmin.daily_body_battery.*`,
+    `HealthStreamPoint`s under `garmin.daily_body_battery.level` in `health_stream`/Parquet, not
+    `health_observation`) — added because no daily-summary or GDPR-export field carries a real
+    per-minute body-battery series, only 8 sparse named checkpoints (verified live against the
+    real account, not assumed — see `health/json_parser.py::parse_daily_body_battery_json`'s own
+    docstring). Surfaces as a real intraday chart on the day view (`GET /health/stream`, the
+    first endpoint to read `health_stream` at all), not the sparse connect-the-dots version that
+    data would otherwise produce.
   - `strava_export` (`adapters/strava_export.py`, Phase 8) — historical backfill from Strava's
     "export your data" archive, zero network calls. `.fit`/`.fit.gz` files go through the same
     `ingest_dispatch.ingest_fit_bytes` as every other source (often literally the same Garmin

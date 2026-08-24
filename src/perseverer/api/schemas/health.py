@@ -48,3 +48,15 @@ class HealthDashboardMetricOut(BaseModel):
 
 class HealthDashboardOut(BaseModel):
     metrics: list[HealthDashboardMetricOut]
+
+
+# --- GET /health/stream (Phase 9): the intraday `health_stream`/Parquet series a
+# health/json_parser.py stream-point producer writes -- distinct from health_observation's
+# once-or-a-few-per-day EAV rows. Single-channel per request (unlike ActivityDetail's
+# StreamResponse, which returns every channel an activity has at once) since a health stream is
+# already one metric_key per Parquet file, not a multi-channel file to select from.
+class HealthStreamResponse(BaseModel):
+    metric_key: str
+    local_date: str
+    timestamps: list[datetime]
+    values: list[float]

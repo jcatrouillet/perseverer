@@ -65,16 +65,24 @@ def write_health_stream(
     full_path = parquet_dir / relative_path
     full_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Every timestamp is normalized to naive here, regardless of which form it arrives in --
+    # pyarrow round-trips a tz("UTC") column back as tz-aware Python datetimes on read, while
+    # `HealthStreamPoint.timestamp_utc` producers disagree with each other (fit_parser.py's are
+    # tz-aware; health/json_parser.py's are naive, per this project's own naive-implicitly-UTC
+    # DateTime convention) -- without normalizing both sides the same way, a same-instant reading
+    # could land as two different dict keys, and `sorted()` raises outright if the mix includes
+    # both an aware and a naive key (a real bug: this merge path had never been exercised by more
+    # than one write to the same file before the day-2-onward case this fixes was found).
     merged: dict[object, float] = {}
     if full_path.exists():
         existing = pq.read_table(full_path)
         existing_ts = existing.column("timestamp_utc").to_pylist()
         existing_val = existing.column("value").to_pylist()
         for ts, value in zip(existing_ts, existing_val, strict=True):
-            merged[ts] = value
+            merged[ts.replace(tzinfo=None)] = value
 
     for point in points:
-        merged[point.timestamp_utc] = point.value
+        merged[point.timestamp_utc.replace(tzinfo=None)] = point.value
 
     ordered = sorted(merged.items())
     table = pa.table(

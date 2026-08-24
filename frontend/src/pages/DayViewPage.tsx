@@ -8,11 +8,13 @@
 // GET /health/observations, taking the day's *latest* reading rather than an average, since
 // several arrive per day and "today's readiness" conventionally means the freshest one.
 //
-// Body Battery: included because real data was confirmed present in the archive first (a
-// direct `SELECT DISTINCT metric_key ... LIKE '%body%batt%'` against the real DB, matching this
-// project's standing practice of verifying against the real catalog rather than assuming
-// Garmin's full widget set exists) -- it only actually covers Jan-Apr 2025 in this archive, so
-// the tile simply doesn't appear outside that range, same as any other absent metric.
+// Body Battery: a real per-reading chart, not a scalar tile -- GET /health/stream reads
+// garmin.daily_body_battery.level, fetched live from Garmin's own get_body_battery() endpoint
+// (see health/json_parser.py::parse_daily_body_battery_json's own docstring for why the
+// previously-available daily-summary scalars were deliberately never charted: only 8 sparse
+// named checkpoints, not a real curve). Only covers days from whenever this feature's own live
+// fetch first ran onward -- a day before that simply shows no chart, same as any other absent
+// metric.
 import { Link } from "wouter";
 
 import {
@@ -23,9 +25,11 @@ import {
   useFitness,
   useHealthDashboard,
   useHealthObservations,
+  useHealthStream,
   useSleep,
 } from "../api/queries";
 import { ActivityCard } from "../components/ActivityCard";
+import { BodyBatteryChart } from "../components/BodyBatteryChart";
 import { DateNavigator } from "../components/DateNavigator";
 import { DayViewActivityRoute } from "../components/DayViewActivityRoute";
 import { Icon } from "../components/Icon";
@@ -41,6 +45,7 @@ import "../styles/running-stats.css";
 
 const TRAINING_STATUS_KEY = "garmin.export.TrainingHistory.trainingStatus";
 const OBSERVATION_KEYS = [TRAINING_STATUS_KEY];
+const BODY_BATTERY_STREAM_KEY = "garmin.daily_body_battery.level";
 
 export function DayViewPage({ date }: { date: string }) {
   const calendar = useCalendar(date, date);
@@ -52,6 +57,7 @@ export function DayViewPage({ date }: { date: string }) {
   const health = useHealthDashboard(date, date);
   const sleep = useSleep(date, date);
   const observations = useHealthObservations(OBSERVATION_KEYS, date, date);
+  const bodyBatteryStream = useHealthStream(BODY_BATTERY_STREAM_KEY, date, true);
 
   const day = calendar.data?.days[0];
   const routes = useActivityRoutes((activities.data?.items ?? []).map((a) => a.id));
@@ -289,6 +295,18 @@ export function DayViewPage({ date }: { date: string }) {
               />
             )}
           </div>
+        </section>
+      )}
+
+      {bodyBatteryStream.data && bodyBatteryStream.data.timestamps.length > 0 && (
+        <section className="card">
+          <h2>Body Battery</h2>
+          <BodyBatteryChart
+            points={bodyBatteryStream.data.timestamps.map((timestamp, i) => ({
+              timestamp,
+              level: bodyBatteryStream.data!.values[i]!,
+            }))}
+          />
         </section>
       )}
 

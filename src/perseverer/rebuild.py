@@ -53,6 +53,7 @@ from perseverer.gpx.parser import parse_gpx
 from perseverer.health.eufy_parser import parse_eufy_scale_reading
 from perseverer.health.ingest import ingest_health_batch
 from perseverer.health.json_parser import (
+    parse_daily_body_battery_json,
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
@@ -225,6 +226,15 @@ def rebuild_database(
                 athlete_id=athlete_id,
                 source=row.source,
                 batch=parse_daily_race_predictions_json(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind == "garmin_connect_daily_body_battery_json":
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_daily_body_battery_json(content),
             )
             touched_dates |= health_result.affected_local_dates
         elif row.kind == "eufy_scale_reading_json":

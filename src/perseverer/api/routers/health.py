@@ -1,10 +1,11 @@
-"""GET /health/observations, GET /health/dashboard."""
+"""GET /health/observations, GET /health/dashboard, GET /health/stream."""
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
+import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Connection, func, select
 
@@ -15,8 +16,10 @@ from perseverer.api.schemas.health import (
     HealthDashboardMetricOut,
     HealthDashboardOut,
     HealthObservationOut,
+    HealthStreamResponse,
 )
-from perseverer.db.schema import health_metric_daily_rollup, health_observation
+from perseverer.config import Settings, get_settings
+from perseverer.db.schema import health_metric_daily_rollup, health_observation, health_stream
 
 router = APIRouter()
 
@@ -332,3 +335,58 @@ def get_health_dashboard(
         if merged is not None:
             metrics.append(merged.model_copy(update={"logical_metric": logical_metric}))
     return HealthDashboardOut(metrics=metrics)
+
+
+@router.get("/health/stream")
+def get_health_stream(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    metric_key: str = Query(...),
+    for_date: date = Query(..., alias="date"),
+    conn: Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> HealthStreamResponse:
+    """One day's worth of an intraday `health_stream` metric (currently only
+    `garmin.daily_body_battery.level`, see health/json_parser.py::parse_daily_body_battery_json)
+    -- read directly from Parquet with pyarrow, no DuckDB/downsampling needed since a single
+    day's readings are small. Empty arrays, not a 404, when there's no stream data for this
+    metric/day (a normal state -- e.g. any day before this feature's own live-fetch start date),
+    matching the "absent data is a normal state" convention used elsewhere (e.g.
+    ActivityWeatherOut.available). More than one matching `health_stream` row (different
+    sources writing the same metric_key/month) is merged rather than assumed impossible.
+    """
+    local_date = for_date.isoformat()
+    year_month = local_date[:7]
+    rows = conn.execute(
+        select(health_stream.c.parquet_path).where(
+            health_stream.c.athlete_id == athlete_id,
+            health_stream.c.metric_key == metric_key,
+            health_stream.c.year_month == year_month,
+        )
+    ).fetchall()
+    if not rows:
+        return HealthStreamResponse(
+            metric_key=metric_key, local_date=local_date, timestamps=[], values=[]
+        )
+
+    day_start = datetime(for_date.year, for_date.month, for_date.day, tzinfo=UTC)
+    day_end = day_start + timedelta(days=1)
+    merged: dict[datetime, float] = {}
+    for row in rows:
+        parquet_path = settings.parquet_dir / row.parquet_path
+        if not parquet_path.exists():
+            continue
+        table = pq.read_table(parquet_path)
+        for ts, value in zip(
+            table.column("timestamp_utc").to_pylist(), table.column("value").to_pylist(),
+            strict=True,
+        ):
+            if day_start <= ts < day_end:
+                merged[ts] = value
+
+    ordered = sorted(merged.items())
+    return HealthStreamResponse(
+        metric_key=metric_key,
+        local_date=local_date,
+        timestamps=[ts for ts, _ in ordered],
+        values=[v for _, v in ordered],
+    )

@@ -31,6 +31,7 @@ import type {
   GoalProgressOut,
   HealthDashboardOut,
   HealthObservationOut,
+  HealthStreamResponse,
   HrZoneConfigIn,
   HrZoneConfigOut,
   InsightOut,
@@ -124,6 +125,20 @@ export function useHealthDashboard(startDate: string, endDate: string) {
       apiGet<HealthDashboardOut>(
         `/api/v1/health/dashboard${buildQuery({ start_date: startDate, end_date: endDate })}`,
       ),
+  });
+}
+
+/** One day's intraday health_stream series (currently only garmin.daily_body_battery.level) --
+ * `enabled` should be gated the same way useActivityInsights/useActivityComparisons are, since
+ * most days before this feature's own live-fetch start date have nothing to show. */
+export function useHealthStream(metricKey: string, date: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["health-stream", metricKey, date],
+    queryFn: () =>
+      apiGet<HealthStreamResponse>(
+        `/api/v1/health/stream${buildQuery({ metric_key: metricKey, date })}`,
+      ),
+    enabled,
   });
 }
 

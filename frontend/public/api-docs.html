@@ -876,6 +876,12 @@ const SCHEMAS = [
       ["n_observations","integer",""],
       ["source_metric_key","string","Which underlying raw metric_key this day's value was drawn from (a logical metric can be backed by different raw keys on different days if the source device changed)."],
     ] },
+  { name: "HealthStreamResponse", note: "Returned by GET /health/stream.", fields: [
+      ["metric_key","string","Echoes the request's metric_key."],
+      ["local_date","string(date)","Echoes the request's date."],
+      ["timestamps","array<string(date-time)>","UTC, ordered ascending. Same length as values."],
+      ["values","array<number>",""],
+    ] },
   { name: "SleepSessionOut", note: "Returned by GET /sleep.", fields: [
       ["local_date","string(date)","The night this session is attributed to."],
       ["start_time_utc","string(date-time)",""],
@@ -1309,6 +1315,15 @@ const GROUPS = [
       params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
       responses: [ { code: 200, ref: "HealthDashboardOut" } ],
       example: { qs: "?start_date=2026-08-01&end_date=2026-08-19" }
+    },
+    { method: "GET", path: "/api/v1/health/stream", summary: "One day's intraday health_stream series.",
+      description: "Currently the only producer is garmin.daily_body_battery.level, a real per-reading body-battery curve fetched live from Garmin's own get_body_battery endpoint. Distinct from GET /health/observations, which returns once-or-a-few-per-day EAV rows -- health_stream is a genuine intraday series, one metric_key per Parquet file.",
+      params: [
+        ["metric_key","query","req","string","—","e.g. garmin.daily_body_battery.level."],
+        ["date","query","req","string(date)","—","A single local date -- this endpoint has no range form."],
+      ],
+      responses: [ { code: 200, ref: "HealthStreamResponse", note: "empty timestamps/values arrays, not a 404, when there's no stream data for that metric/day" } ],
+      example: { qs: "?metric_key=garmin.daily_body_battery.level&date=2026-08-22" }
     },
   ]},
 

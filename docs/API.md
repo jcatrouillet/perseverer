@@ -565,6 +565,23 @@ one series per human-meaningful `logical_metric` (`steps`, `resting_hr_bpm`, `we
 
 **Response `200`:** `HealthDashboardOut`.
 
+### `GET /health/stream`
+
+One day's intraday `health_stream` series — currently the only producer is
+`garmin.daily_body_battery.level`, a real per-reading body-battery curve fetched live from
+Garmin's own `get_body_battery` endpoint. Distinct from `GET /health/observations`, which
+returns once-or-a-few-per-day EAV rows — `health_stream` is a genuine intraday series, one
+metric_key per Parquet file.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `metric_key` | query | **required** | string | e.g. `garmin.daily_body_battery.level`. |
+| `date` | query | **required** | string (date) | A single local date — this endpoint has no range form. |
+
+**Response `200`:** `HealthStreamResponse`. No stream data for that metric/day → empty
+`timestamps`/`values` arrays, not a `404` — a normal state (e.g. any day before this endpoint's
+own live-fetch start date).
+
 ---
 
 ## Sleep
@@ -1114,6 +1131,17 @@ metric). Each has `logical_metric` (string), `last_observed` (string date-time, 
 `value_min`/`value_max`/`value_last` (number, nullable), `n_observations` (integer),
 `source_metric_key` (string — which underlying raw `metric_key` this day's value was drawn from;
 can differ day to day if the source device changed).
+
+### HealthStreamResponse
+
+Returned by `GET /health/stream`.
+
+| Field | Type | Description |
+|---|---|---|
+| `metric_key` | string | Echoes the request's `metric_key`. |
+| `local_date` | string (date) | Echoes the request's `date`. |
+| `timestamps` | array\<string (date-time)\> | UTC, ordered ascending. Same length as `values`. |
+| `values` | array\<number\> | |
 
 ### SleepSessionOut / SleepStageOut
 

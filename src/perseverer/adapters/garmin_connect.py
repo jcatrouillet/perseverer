@@ -51,6 +51,7 @@ from perseverer.gap import refresh_avg_gap
 from perseverer.garmin_connect_activity_name import backfill_garmin_activity_names
 from perseverer.health.ingest import HealthIngestResult, ingest_health_batch
 from perseverer.health.json_parser import (
+    parse_daily_body_battery_json,
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
@@ -505,6 +506,48 @@ class GarminConnectAdapter:
             batch=parse_daily_race_predictions_json(content),
         )
 
+    def fetch_and_ingest_daily_body_battery(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        since: datetime,
+        until: datetime,
+    ) -> HealthIngestResult:
+        """Body battery (`get_body_battery`) for the whole rolling window in *one* request --
+        same "this endpoint itself accepts a range" reasoning as `fetch_and_ingest_race_
+        predictions` above. See health/json_parser.py::parse_daily_body_battery_json for the
+        real per-minute-ish series (`bodyBatteryValuesArray`) this exists to capture -- no
+        daily-summary/export field carries that, only sparse named checkpoints."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        start_date = since.date().isoformat()
+        end_date = until.date().isoformat()
+        try:
+            data = self._client.get_body_battery(startdate=start_date, enddate=end_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted("429 from Garmin while fetching body battery") from e
+
+        content = json.dumps(data).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_daily_body_battery_json",
+            content=content,
+            locator=f"body-battery/{start_date}_{end_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_body_battery_json(content),
+        )
+
 
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
@@ -729,6 +772,23 @@ def sync_garmin_connect(
         except GarminRateLimitAborted as e:
             conn.rollback()
             summary.errors.append({"error": f"race predictions: {e}"})
+
+        # Body battery -- same one-range-request shape as race predictions above (see
+        # fetch_and_ingest_daily_body_battery's own docstring).
+        try:
+            body_battery_result = adapter.fetch_and_ingest_daily_body_battery(
+                conn,
+                archive_root,
+                parquet_dir,
+                athlete_id=athlete_id,
+                since=since,
+                until=started_at,
+            )
+            conn.commit()
+            touched_dates |= body_battery_result.affected_local_dates
+        except GarminRateLimitAborted as e:
+            conn.rollback()
+            summary.errors.append({"error": f"body battery: {e}"})
     except (GarminAuthRequired, GarminRateLimitAborted) as e:
         summary.errors.append({"error": str(e)})
 

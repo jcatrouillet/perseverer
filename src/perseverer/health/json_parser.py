@@ -21,6 +21,7 @@ from typing import Any
 from perseverer.health.types import (
     HealthBatch,
     HealthObservation,
+    HealthStreamPoint,
     ParsedSleepSession,
     ParsedSleepStage,
 )
@@ -454,6 +455,90 @@ def parse_daily_race_predictions_json(raw_bytes: bytes) -> HealthBatch:
         unrecognized.extend(unrec)
 
     return HealthBatch(observations=observations, unrecognized_field_keys=sorted(set(unrecognized)))
+
+
+# Only the two fields this parser itself consumes into stream points -- excluded from
+# _flatten_scalars's generic pass so the array isn't *also* reported as unrecognized once it's
+# actually been handled. Everything else nested (the activity-impact event list, the two
+# feedback-event dicts) deliberately is NOT excluded here -- _flatten_scalars's own dict/list
+# branch already catalogs an unexcluded nested field as unrecognized on its own (never drops
+# it), which is exactly the right outcome for data this parser doesn't otherwise use.
+_DAILY_BODY_BATTERY_ARRAY_FIELDS = frozenset(
+    {"bodyBatteryValuesArray", "bodyBatteryValueDescriptorDTOList"}
+)
+
+
+def parse_daily_body_battery_json(raw_bytes: bytes) -> HealthBatch:
+    """The whole-range response from `Garmin.get_body_battery(startdate, enddate)` -- verified
+    live against the real account (not recalled/guessed, see ADR 0003 decision 1-2), one record
+    per day in the range. `bodyBatteryValuesArray` is the real per-minute-ish series this was
+    built for -- `[timestamp_ms, level]` pairs, GMT epoch milliseconds -- read via its own
+    `bodyBatteryValueDescriptorDTOList` column-index map rather than a hardcoded [0]/[1]
+    position, in case Garmin ever reorders it. Everything else on the record (charged/drained
+    totals, the two feedback-event dicts, the activity-impact event list) is either a plain
+    scalar (flattened into observations the normal way) or cataloged as unrecognized -- this
+    parser's whole job is the one array `_flatten_scalars` can't handle, not those extras.
+    """
+    data: Any = json.loads(raw_bytes)
+    if not isinstance(data, list):
+        return HealthBatch()
+
+    observations: list[HealthObservation] = []
+    stream_points: list[HealthStreamPoint] = []
+    unrecognized: list[str] = []
+    for record in data:
+        if not isinstance(record, dict):
+            continue
+        local_date = record.get("date")
+        if not isinstance(local_date, str):
+            continue
+        anchor = datetime.fromisoformat(local_date)
+
+        obs, unrec = _flatten_scalars(
+            record,
+            key_prefix="garmin.daily_body_battery",
+            exclude_keys=_DAILY_BODY_BATTERY_ARRAY_FIELDS,
+            anchor=anchor,
+            local_date=local_date,
+        )
+        observations.extend(obs)
+        unrecognized.extend(unrec)
+
+        values_array = record.get("bodyBatteryValuesArray")
+        descriptors = record.get("bodyBatteryValueDescriptorDTOList")
+        if not isinstance(values_array, list) or not isinstance(descriptors, list):
+            continue
+        index_by_key = {
+            d["bodyBatteryValueDescriptorKey"]: d["bodyBatteryValueDescriptorIndex"]
+            for d in descriptors
+            if isinstance(d, dict)
+        }
+        ts_index = index_by_key.get("timestamp")
+        level_index = index_by_key.get("bodyBatteryLevel")
+        if ts_index is None or level_index is None:
+            unrecognized.append("garmin.daily_body_battery.bodyBatteryValuesArray")
+            continue
+        for row in values_array:
+            if not isinstance(row, list) or len(row) <= max(ts_index, level_index):
+                continue
+            ts_ms, level = row[ts_index], row[level_index]
+            if not isinstance(ts_ms, int | float) or not isinstance(level, int | float):
+                continue
+            stream_points.append(
+                HealthStreamPoint(
+                    metric_key="garmin.daily_body_battery.level",
+                    timestamp_utc=datetime.fromtimestamp(ts_ms / 1000, tz=UTC).replace(
+                        tzinfo=None
+                    ),
+                    value=float(level),
+                )
+            )
+
+    return HealthBatch(
+        observations=observations,
+        stream_points=stream_points,
+        unrecognized_field_keys=sorted(set(unrecognized)),
+    )
 
 
 # GDPR export health JSON (DI-Connect-Wellness/Metrics/Aggregator) — see
