@@ -413,6 +413,12 @@ select {
   line-height: 1.1;
   letter-spacing: -0.026em;
   font-variant-numeric: tabular-nums;
+  /* Most values are short numbers, but a few (e.g. Training status: "OVERREACHING") are a
+     single long word with no natural break point -- confirmed live to overflow its own
+     153px-wide tile by ~18px and paint into the next tile's space, since a bare span has no
+     wrap opportunity mid-word. break-word lets it wrap onto a second line inside its own tile
+     instead. */
+  overflow-wrap: break-word;
 }
 
 /* The unit rides inside the value but recedes, so the number itself carries the line. */

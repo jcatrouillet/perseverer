@@ -39,18 +39,8 @@ import "../styles/activity-list.css";
 import "../styles/calendar.css";
 import "../styles/running-stats.css";
 
-const READINESS_KEY = "garmin.export.TrainingReadinessDTO.score";
 const TRAINING_STATUS_KEY = "garmin.export.TrainingHistory.trainingStatus";
-const BODY_BATTERY_KEY = "garmin.daily_summary.bodyBatteryMostRecentValue";
-const BODY_BATTERY_HIGH_KEY = "garmin.daily_summary.bodyBatteryHighestValue";
-const BODY_BATTERY_LOW_KEY = "garmin.daily_summary.bodyBatteryLowestValue";
-const OBSERVATION_KEYS = [
-  READINESS_KEY,
-  TRAINING_STATUS_KEY,
-  BODY_BATTERY_KEY,
-  BODY_BATTERY_HIGH_KEY,
-  BODY_BATTERY_LOW_KEY,
-];
+const OBSERVATION_KEYS = [TRAINING_STATUS_KEY];
 
 export function DayViewPage({ date }: { date: string }) {
   const calendar = useCalendar(date, date);
@@ -82,8 +72,14 @@ export function DayViewPage({ date }: { date: string }) {
   const fitnessToday = fitness.data?.find((f) => f.local_date === date);
   const sleepToday = sleep.data?.find((s) => s.local_date === date);
 
+  // Steps and floors read here but rendered under Fitness & Form below, not Health -- both are
+  // daily-activity totals, not wellness/vitals signals, which is what the Health section is for.
   const steps = valueForDate(
     health.data?.metrics.find((m) => m.logical_metric === "steps"),
+    date,
+  );
+  const floors = valueForDate(
+    health.data?.metrics.find((m) => m.logical_metric === "floors_ascended"),
     date,
   );
   const restingHr = valueForDate(
@@ -92,10 +88,6 @@ export function DayViewPage({ date }: { date: string }) {
   );
   const hrv = valueForDate(
     health.data?.metrics.find((m) => m.logical_metric === "hrv_nightly_average"),
-    date,
-  );
-  const stress = valueForDate(
-    health.data?.metrics.find((m) => m.logical_metric === "stress_average"),
     date,
   );
   const weight = valueForDate(
@@ -108,32 +100,21 @@ export function DayViewPage({ date }: { date: string }) {
   );
 
   const items = observations.data?.items ?? [];
-  const readiness = latestObservation(items, READINESS_KEY);
   const trainingStatus = latestObservation(items, TRAINING_STATUS_KEY);
-  const bodyBattery = latestObservation(items, BODY_BATTERY_KEY);
-  const bodyBatteryHigh = latestObservation(items, BODY_BATTERY_HIGH_KEY);
-  const bodyBatteryLow = latestObservation(items, BODY_BATTERY_LOW_KEY);
-  const bodyBatteryRange =
-    bodyBatteryHigh?.value_num != null && bodyBatteryLow?.value_num != null
-      ? `${Math.round(bodyBatteryLow.value_num)}–${Math.round(bodyBatteryHigh.value_num)} range`
-      : null;
 
   const stepsStyle = healthMetricStyle("steps");
+  const floorsStyle = healthMetricStyle("floors_ascended");
   const restingHrStyle = healthMetricStyle("resting_heart_rate");
   const hrvStyle = healthMetricStyle("hrv_nightly_average");
-  const stressStyle = healthMetricStyle("stress_average");
   const weightStyle = healthMetricStyle("weight_kg");
   const bodyFatStyle = healthMetricStyle("body_fat_pct");
 
+  const hasFitnessTile = fitnessToday != null || steps != null || floors != null;
   const hasHealthTile =
-    steps != null ||
     restingHr != null ||
     hrv != null ||
-    stress != null ||
     sleepToday != null ||
-    readiness != null ||
     trainingStatus != null ||
-    bodyBattery != null ||
     weight != null ||
     bodyFat != null;
 
@@ -196,31 +177,52 @@ export function DayViewPage({ date }: { date: string }) {
         ))}
       </div>
 
-      {fitnessToday && (
+      {hasFitnessTile && (
         <section className="card">
           <h2>Fitness &amp; Form</h2>
           <div className="stat-grid">
-            <StatTile
-              label="Fitness (CTL)"
-              value={fitnessToday.ctl.toFixed(1)}
-              icon="trend"
-              tone="elevation"
-              hero
-            />
-            <StatTile
-              label="Fatigue (ATL)"
-              value={fitnessToday.atl.toFixed(1)}
-              icon="bolt"
-              tone="load"
-              hero
-            />
-            <StatTile
-              label="Form (TSB)"
-              value={fitnessToday.tsb.toFixed(1)}
-              icon="gauge"
-              tone="pace"
-              hero
-            />
+            {fitnessToday && (
+              <>
+                <StatTile
+                  label="Fitness (CTL)"
+                  value={fitnessToday.ctl.toFixed(1)}
+                  icon="trend"
+                  tone="elevation"
+                  hero
+                />
+                <StatTile
+                  label="Fatigue (ATL)"
+                  value={fitnessToday.atl.toFixed(1)}
+                  icon="bolt"
+                  tone="load"
+                  hero
+                />
+                <StatTile
+                  label="Form (TSB)"
+                  value={fitnessToday.tsb.toFixed(1)}
+                  icon="gauge"
+                  tone="pace"
+                  hero
+                />
+              </>
+            )}
+            {steps != null && (
+              <StatTile
+                label="Steps"
+                value={Math.round(steps).toLocaleString()}
+                icon={stepsStyle.icon}
+                tone={stepsStyle.tone}
+              />
+            )}
+            {floors != null && (
+              <StatTile
+                label="Floors"
+                value={floors.toFixed(0)}
+                unit="m"
+                icon={floorsStyle.icon}
+                tone={floorsStyle.tone}
+              />
+            )}
           </div>
         </section>
       )}
@@ -242,15 +244,6 @@ export function DayViewPage({ date }: { date: string }) {
             {sleepToday?.sleep_score != null && (
               <StatTile label="Sleep score" value={sleepToday.sleep_score} icon="moon" tone="cadence" />
             )}
-            {steps != null && (
-              <StatTile
-                label="Steps"
-                value={Math.round(steps).toLocaleString()}
-                icon={stepsStyle.icon}
-                tone={stepsStyle.tone}
-                hero
-              />
-            )}
             {restingHr != null && (
               <StatTile
                 label="Resting heart rate"
@@ -269,32 +262,12 @@ export function DayViewPage({ date }: { date: string }) {
                 tone={hrvStyle.tone}
               />
             )}
-            {stress != null && (
-              <StatTile label="Stress" value={stress.toFixed(0)} icon={stressStyle.icon} tone={stressStyle.tone} />
-            )}
-            {readiness?.value_num != null && (
-              <StatTile
-                label="Training readiness"
-                value={Math.round(readiness.value_num)}
-                icon="trend"
-                tone="power"
-              />
-            )}
             {trainingStatus?.value_text != null && (
               <StatTile
                 label="Training status"
                 value={trainingStatus.value_text.replace(/_/g, " ")}
                 icon="trend"
                 tone="power"
-              />
-            )}
-            {bodyBattery?.value_num != null && (
-              <StatTile
-                label="Body Battery"
-                value={Math.round(bodyBattery.value_num)}
-                meta={bodyBatteryRange}
-                icon="battery"
-                tone="cadence"
               />
             )}
             {weight != null && (
