@@ -39,6 +39,7 @@ function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
     moving_duration_s: 1800,
     distance_m: 5000,
     elevation_gain_m: null,
+    max_altitude_m: null,
     calories: null,
     avg_hr_bpm: null,
     max_hr_bpm: null,
@@ -172,6 +173,28 @@ describe("ActivityStatsGrid", () => {
     );
     expect(screen.getByText("Elevation")).toBeInTheDocument();
     expect(screen.getByText("Elevation loss")).toBeInTheDocument();
+  });
+
+  it("shows Max elevation with the peak altitude, alongside gain/loss", () => {
+    render(
+      <ActivityStatsGrid
+        activity={activity({
+          elevation_gain_m: 120,
+          max_altitude_m: 2690,
+          metrics: [metric("fit.session.total_descent", 90)],
+        })}
+      />,
+    );
+    expect(screen.getByText("Max elevation")).toBeInTheDocument();
+    expect(screen.getByText("2690")).toBeInTheDocument();
+  });
+
+  it("shows an elevation section from max_altitude_m alone, even with no gain/loss", () => {
+    render(<ActivityStatsGrid activity={activity({ max_altitude_m: 1500 })} />);
+    expect(screen.getByText("Elevation")).toBeInTheDocument();
+    expect(screen.getByText("Max elevation")).toBeInTheDocument();
+    expect(screen.queryByText("Elevation gain")).not.toBeInTheDocument();
+    expect(screen.queryByText("Elevation loss")).not.toBeInTheDocument();
   });
 
   it("gives Heart rate and Elevation their own separate headings, not a combined one", () => {

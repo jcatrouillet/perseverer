@@ -52,6 +52,30 @@ _TCX_NO_ACTIVITY = b"""<?xml version="1.0" encoding="UTF-8"?>
 </TrainingCenterDatabase>
 """
 
+_TCX_WITH_ALTITUDE = b"""<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">
+ <Activities>
+  <Activity Sport="Hiking">
+   <Id>2026-04-17T22:17:09Z</Id>
+   <Lap StartTime="2026-04-17T22:17:09Z">
+    <Track>
+     <Trackpoint>
+      <Time>2026-04-17T22:17:09Z</Time>
+      <Position><LatitudeDegrees>37.6656890</LatitudeDegrees><LongitudeDegrees>-112.1102740</LongitudeDegrees></Position>
+      <AltitudeMeters>2082.6</AltitudeMeters>
+     </Trackpoint>
+     <Trackpoint>
+      <Time>2026-04-17T22:17:19Z</Time>
+      <Position><LatitudeDegrees>37.6657130</LatitudeDegrees><LongitudeDegrees>-112.1102920</LongitudeDegrees></Position>
+      <AltitudeMeters>2085.0</AltitudeMeters>
+     </Trackpoint>
+    </Track>
+   </Lap>
+  </Activity>
+ </Activities>
+</TrainingCenterDatabase>
+"""
+
 
 def test_tcx_lap_and_trackpoints_are_parsed() -> None:
     batch = parse_tcx(_TCX_WITH_LAP)
@@ -71,6 +95,7 @@ def test_tcx_lap_and_trackpoints_are_parsed() -> None:
     assert a.stream[0].values["heart_rate"] == 140
     assert a.stream[0].values["lat"] == 37.3621217
     assert "altitude_m" not in a.stream[0].values  # device had no barometric altimeter
+    assert a.max_altitude_m is None
     assert a.stream[1].values["cadence"] == 88  # from the vendor-namespaced TPX extension
     # Speed derived from the file's own cumulative DistanceMeters, not fabricated: (50-0)/15s.
     assert "speed_mps" not in a.stream[0].values  # nothing to measure the first point against
@@ -81,6 +106,12 @@ def test_tcx_lap_and_trackpoints_are_parsed() -> None:
     assert a.duration_s == 15.0
     # No CSV overlay applied here -- the caller (adapters/strava_export.py) does that.
     assert a.distance_m is None
+
+
+def test_max_altitude_computed_from_altitude_meters() -> None:
+    batch = parse_tcx(_TCX_WITH_ALTITUDE)
+    assert batch.activity is not None
+    assert batch.activity.max_altitude_m == 2085.0  # the higher of the two AltitudeMeters values
 
 
 def test_tcx_with_no_activity_is_unrecognized() -> None:

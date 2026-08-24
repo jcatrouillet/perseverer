@@ -1,10 +1,11 @@
 // A Month/Year view section for hiking, mirroring RunningStats' own "special-cased sport gets a
 // dedicated section" precedent but at PeriodStatsCard's scale, not RunningStats' -- three summary
-// tiles plus up to three featured hikes (longest by distance, by time, and by elevation gain,
-// each skipped if it's the same activity as an already-featured one). Location comes from
-// GET /activities/{id}/location per featured hike (see useActivityLocation's own docstring: it's
-// a lazy, cached-forever, per-activity lookup -- there is no batch form), so exactly three calls
-// are made unconditionally, one per featured-hike slot, `enabled` only when that slot is filled.
+// tiles plus up to four featured hikes (longest by distance, by time, by elevation gain, and by
+// peak altitude reached, each skipped if it's the same activity as an already-featured one).
+// Location comes from GET /activities/{id}/location per featured hike (see useActivityLocation's
+// own docstring: it's a lazy, cached-forever, per-activity lookup -- there is no batch form), so
+// exactly four calls are made unconditionally, one per featured-hike slot, `enabled` only when
+// that slot is filled.
 import { Link } from "wouter";
 
 import { useActivityLocation } from "../api/queries";
@@ -59,6 +60,20 @@ function pickFeaturedHikes(activities: ActivitySummary[]): FeaturedHike[] {
     }
   }
 
+  // Genuinely independent of elevation_gain_m above -- a hike with modest total ascent can
+  // still summit a very high point (e.g. starting from an already-high trailhead), and vice
+  // versa, so this is its own criterion rather than derived from the "highest gain" pick.
+  const byMaxAltitude = activities.filter((a) => a.max_altitude_m != null);
+  if (byMaxAltitude.length > 0) {
+    const highest = byMaxAltitude.reduce((max, a) =>
+      a.max_altitude_m! > max.max_altitude_m! ? a : max,
+    );
+    if (!seen.has(highest.id)) {
+      featured.push({ label: "Highest point reached", activity: highest });
+      seen.add(highest.id);
+    }
+  }
+
   return featured;
 }
 
@@ -89,6 +104,8 @@ function FeaturedHikeCard({
         {activity.elevation_gain_m != null &&
           activity.elevation_gain_m > 0 &&
           ` · +${Math.round(activity.elevation_gain_m)} m`}
+        {activity.max_altitude_m != null &&
+          ` · ${Math.round(activity.max_altitude_m)} m peak`}
       </span>
     </Link>
   );
@@ -112,13 +129,14 @@ function hikeElevationStats(
 export function HikeStatsCard({ activities }: { activities: ActivitySummary[] }) {
   const featured = pickFeaturedHikes(activities);
 
-  // Fixed at exactly three hook calls regardless of how many featured slots are actually filled
+  // Fixed at exactly four hook calls regardless of how many featured slots are actually filled
   // (React's own rules-of-hooks -- the call count/order must never depend on data), gated by
   // `enabled` per slot. An empty id when a slot is unfilled never fires a request.
   const loc0 = useActivityLocation(featured[0]?.activity.id ?? "", featured[0] != null);
   const loc1 = useActivityLocation(featured[1]?.activity.id ?? "", featured[1] != null);
   const loc2 = useActivityLocation(featured[2]?.activity.id ?? "", featured[2] != null);
-  const locations = [loc0, loc1, loc2];
+  const loc3 = useActivityLocation(featured[3]?.activity.id ?? "", featured[3] != null);
+  const locations = [loc0, loc1, loc2, loc3];
 
   // No hikes at all this period -- the section simply doesn't appear, rather than a "no hikes"
   // placeholder card (unlike RunningStats, which every period has at least some of for this

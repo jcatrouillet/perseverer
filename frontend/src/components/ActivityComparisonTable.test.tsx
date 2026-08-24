@@ -22,6 +22,7 @@ function activity(overrides: Partial<ActivityDetail> = {}): ActivityDetail {
     moving_duration_s: 1500,
     distance_m: 5000,
     elevation_gain_m: null,
+    max_altitude_m: null,
     calories: null,
     avg_hr_bpm: 150,
     max_hr_bpm: null,

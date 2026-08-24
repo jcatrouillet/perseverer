@@ -228,6 +228,8 @@ def parse_tcx(content: bytes) -> CanonicalBatch:
     start_time = stream[0].timestamp_utc
     duration_s = (stream[-1].timestamp_utc - start_time).total_seconds()
     route_start, route_end, route_bbox = _route_endpoints(route_points)
+    altitudes = [p.values["altitude_m"] for p in stream if "altitude_m" in p.values]
+    max_altitude_m = max(altitudes) if altitudes else None
     # TCX carries no local-time field of its own either -- every <Time> is UTC -- same fix as
     # gpx/parser.py, see timezone_lookup.py.
     utc_offset_s, tz_name = (
@@ -247,6 +249,8 @@ def parse_tcx(content: bytes) -> CanonicalBatch:
         moving_duration_s=None,
         distance_m=None,
         elevation_gain_m=None,
+        # Same reasoning as gpx/parser.py's own comment -- no CSV-overlay equivalent to defer to.
+        max_altitude_m=max_altitude_m,
         calories=None,
         device=device,
         laps=laps,

@@ -127,6 +127,7 @@ def _batch_with_paused_lap() -> CanonicalBatch:
         moving_duration_s=2700.0,
         distance_m=10000.0,
         elevation_gain_m=None,
+        max_altitude_m=None,
         calories=None,
         device=None,
         laps=laps,
@@ -145,6 +146,7 @@ def _batch_with_no_laps() -> CanonicalBatch:
         moving_duration_s=2700.0,
         distance_m=10000.0,
         elevation_gain_m=None,
+        max_altitude_m=None,
         calories=None,
         device=None,
     )

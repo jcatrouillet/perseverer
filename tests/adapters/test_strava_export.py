@@ -357,6 +357,7 @@ def test_strava_activity_merges_into_existing_activity_from_another_source(
             moving_duration_s=None,
             distance_m=4800.0,
             elevation_gain_m=None,
+            max_altitude_m=None,
             calories=None,
             device=None,
         )

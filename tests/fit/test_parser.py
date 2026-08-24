@@ -34,6 +34,7 @@ def test_parses_synthetic_activity() -> None:
     assert a.distance_m == 1500.0
     assert a.calories == 80.0
     assert a.elevation_gain_m == 5.0
+    assert a.max_altitude_m == 12.0  # highest of the fixture's two altitude samples (10.0, 12.0)
     assert a.device is not None
     assert a.device.serial_number == "999888777"
     assert a.utc_offset_s == -28800  # baked into local_timestamp in the fixture

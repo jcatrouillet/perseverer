@@ -104,6 +104,26 @@ describe("ActivityMergePanel", () => {
     expect(radios[1]).not.toBeChecked();
   });
 
+  it("labels and formats a max_altitude_m field comparison in metres", () => {
+    render(
+      <ActivityMergePanel
+        candidates={[candidate()]}
+        expandedCandidateId="other1"
+        onExpandCandidate={noop}
+        preview={{
+          fields: [{ field: "max_altitude_m", self_value: 2690.3, other_value: 2685.0 }],
+        }}
+        isPreviewLoading={false}
+        onMerge={noop}
+        isMerging={false}
+        mergeError={false}
+      />,
+    );
+    expect(screen.getByText("Max elevation")).toBeInTheDocument();
+    expect(screen.getByText("2690 m")).toBeInTheDocument();
+    expect(screen.getByText("2685 m")).toBeInTheDocument();
+  });
+
   it("calls onMerge with the chosen fields when Confirm merge is clicked", () => {
     const onMerge = vi.fn();
     render(

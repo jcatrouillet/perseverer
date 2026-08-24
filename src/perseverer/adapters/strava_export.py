@@ -183,6 +183,9 @@ def _activity_from_csv_only(row: dict[str, str]) -> CanonicalActivity | None:
         moving_duration_s=_to_float(row.get("Moving Time")),
         distance_m=_to_float(row.get("Distance")),
         elevation_gain_m=_to_float(row.get("Elevation Gain")),
+        # No backing stream at all for a manually-logged (no file) Strava CSV row, and no CSV
+        # column carries this either -- genuinely unknown, not a 0.
+        max_altitude_m=None,
         calories=_to_float(row.get("Calories")),
         device=None,
         extra_metrics=_csv_extra_metrics(row),

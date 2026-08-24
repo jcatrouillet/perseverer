@@ -22,6 +22,7 @@ function activity(
     moving_duration_s: 1800,
     distance_m: 5000,
     elevation_gain_m: null,
+    max_altitude_m: null,
     calories: null,
     avg_hr_bpm: null,
     max_hr_bpm: null,

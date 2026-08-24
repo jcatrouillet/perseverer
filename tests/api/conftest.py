@@ -105,6 +105,7 @@ def seed_activity(
             ),
             distance_m=distance_m,
             elevation_gain_m=50.0,
+            max_altitude_m=1200.0,
             calories=300.0,
             primary_source="fit_folder",
             created_at=now,

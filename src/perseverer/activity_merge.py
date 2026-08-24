@@ -61,6 +61,7 @@ MERGEABLE_SCALAR_FIELDS = (
     "duration_s",
     "moving_duration_s",
     "elevation_gain_m",
+    "max_altitude_m",
     "calories",
 )
 # Copying the *whole* activity_metric row (value + its own `source`) when a metric field is

@@ -24,6 +24,7 @@ function hike(id: string, overrides: Partial<ActivitySummary> = {}): ActivitySum
     moving_duration_s: 7200,
     distance_m: 10000,
     elevation_gain_m: 400,
+    max_altitude_m: null,
     calories: null,
     avg_hr_bpm: null,
     max_hr_bpm: null,
@@ -145,5 +146,60 @@ describe("HikeStatsCard", () => {
     render(<HikeStatsCard activities={activities} />);
     expect(screen.queryByText("Average elevation gain")).not.toBeInTheDocument();
     expect(screen.queryByText("Max elevation gain")).not.toBeInTheDocument();
+  });
+
+  it("features the hike with the highest peak altitude, independent of elevation gain", () => {
+    // A dominant hike soaks up the distance/time slots, leaving distance_m/moving_duration_s
+    // tied (and thus neutral) between the other two -- isolating elevation gain vs. peak
+    // altitude as genuinely independent, separately-won criteria.
+    const activities = [
+      hike("dominant", { distance_m: 50000, moving_duration_s: 50000, elevation_gain_m: 1, max_altitude_m: 1 }),
+      hike("big-gain-low-peak", {
+        distance_m: 5000,
+        moving_duration_s: 3600,
+        elevation_gain_m: 2000,
+        max_altitude_m: 500,
+      }),
+      hike("small-gain-high-peak", {
+        distance_m: 5000,
+        moving_duration_s: 3600,
+        elevation_gain_m: 100,
+        max_altitude_m: 4000,
+      }),
+    ];
+    render(<HikeStatsCard activities={activities} />);
+    expect(screen.getByText("Highest elevation gain")).toBeInTheDocument();
+    expect(screen.getByText("Highest point reached")).toBeInTheDocument();
+    const gainLink = screen.getByText("Highest elevation gain").closest("a");
+    const peakLink = screen.getByText("Highest point reached").closest("a");
+    expect(gainLink).toHaveAttribute("href", "/activities/big-gain-low-peak");
+    expect(peakLink).toHaveAttribute("href", "/activities/small-gain-high-peak");
+  });
+
+  it("skips the peak-altitude card when the same hike already won another criterion", () => {
+    const activities = [
+      hike("dominant", {
+        distance_m: 20000,
+        moving_duration_s: 20000,
+        elevation_gain_m: 2000,
+        max_altitude_m: 4000,
+      }),
+      hike("other", { distance_m: 1000, moving_duration_s: 600, elevation_gain_m: 0, max_altitude_m: 100 }),
+    ];
+    render(<HikeStatsCard activities={activities} />);
+    expect(screen.getByText("Longest hike")).toBeInTheDocument();
+    expect(screen.queryByText("Highest point reached")).not.toBeInTheDocument();
+  });
+
+  it("omits the peak-altitude feature entirely when no hike has max_altitude_m data", () => {
+    const activities = [hike("h1", { max_altitude_m: null })];
+    render(<HikeStatsCard activities={activities} />);
+    expect(screen.queryByText("Highest point reached")).not.toBeInTheDocument();
+  });
+
+  it("shows the peak altitude number on the featured card", () => {
+    const activities = [hike("h1", { max_altitude_m: 3200, elevation_gain_m: null })];
+    render(<HikeStatsCard activities={activities} />);
+    expect(screen.getByText(/3200 m peak/)).toBeInTheDocument();
   });
 });

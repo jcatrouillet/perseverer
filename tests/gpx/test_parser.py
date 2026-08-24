@@ -62,6 +62,18 @@ _EMPTY_TRACK_GPX = b"""<?xml version="1.0" encoding="UTF-8"?>
 </gpx>
 """
 
+_NO_ELEVATION_GPX = b"""<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <trk>
+  <name>No elevation data</name>
+  <trkseg>
+   <trkpt lat="37.6656890" lon="-112.1102740"><time>2026-04-17T22:17:09Z</time></trkpt>
+   <trkpt lat="37.6657130" lon="-112.1102920"><time>2026-04-17T22:17:19Z</time></trkpt>
+  </trkseg>
+ </trk>
+</gpx>
+"""
+
 
 def test_bare_gpx_parses_geometry_only() -> None:
     batch = parse_gpx(_BARE_GPX)
@@ -79,6 +91,9 @@ def test_bare_gpx_parses_geometry_only() -> None:
     # No summary totals fabricated -- the caller overlays these from activities.csv.
     assert a.distance_m is None
     assert a.sport == "unknown"
+    # Unlike distance_m/elevation_gain_m above, computed directly here -- no CSV overlay
+    # equivalent exists for it (see the parser's own comment).
+    assert a.max_altitude_m == 2085.0  # the higher of the two <ele> samples
 
 
 def test_distance_and_speed_are_derived_via_haversine() -> None:
@@ -103,6 +118,12 @@ def test_extended_gpx_captures_hr_cadence_and_catalogs_unknown_extension() -> No
     assert a.stream[0].values["cadence"] == 88
     assert a.stream[1].values["heart_rate"] == 156
     assert "gpx.trackpointextension.mystery" in a.unrecognized_field_keys
+
+
+def test_max_altitude_is_none_when_no_trkpt_has_elevation() -> None:
+    batch = parse_gpx(_NO_ELEVATION_GPX)
+    assert batch.activity is not None
+    assert batch.activity.max_altitude_m is None
 
 
 def test_empty_track_is_unrecognized_not_a_fabricated_activity() -> None:

@@ -77,6 +77,9 @@ class _WindowSummary:
     duration_s: float | None
     elevation_gain_m: float | None
     elevation_loss_m: float | None
+    # Peak altitude within the kept window specifically -- a trim can cut the original peak out
+    # entirely, so this is never just carried over from the pre-trim activity row.
+    max_altitude_m: float | None
     avg_hr: float | None
     max_hr: float | None
     points: list[tuple[float, float]]  # (lat, lon), timestamp-ordered
@@ -110,12 +113,12 @@ def _recompute_window(
         [str(parquet_path)],
     ).fetchall()
     if not rows:
-        return _WindowSummary(None, None, None, None, None, None, [])
+        return _WindowSummary(None, None, None, None, None, None, None, [])
 
     t0 = rows[0][0]
     windowed = [r for r in rows if trim_start_s <= (r[0] - t0) <= trim_end_s]
     if not windowed:
-        return _WindowSummary(None, None, None, None, None, None, [])
+        return _WindowSummary(None, None, None, None, None, None, None, [])
 
     elapsed = [r[0] - t0 for r in windowed]
     duration_s = elapsed[-1] - elapsed[0]
@@ -129,6 +132,7 @@ def _recompute_window(
     if len(altitudes) >= 2:
         elevation_gain_m = sum(max(0.0, b - a) for a, b in pairwise(altitudes))
         elevation_loss_m = sum(max(0.0, a - b) for a, b in pairwise(altitudes))
+    max_altitude_m = max(altitudes) if altitudes else None
 
     hrs = [r[5] for r in windowed if r[5] is not None]
     avg_hr = (sum(hrs) / len(hrs)) if hrs else None
@@ -137,7 +141,14 @@ def _recompute_window(
     points = [(r[1], r[2]) for r in windowed if r[1] is not None and r[2] is not None]
 
     return _WindowSummary(
-        distance_m, duration_s, elevation_gain_m, elevation_loss_m, avg_hr, max_hr, points
+        distance_m,
+        duration_s,
+        elevation_gain_m,
+        elevation_loss_m,
+        max_altitude_m,
+        avg_hr,
+        max_hr,
+        points,
     )
 
 
@@ -180,6 +191,7 @@ def _write_window_to_activity(
             duration_s=window.duration_s,
             moving_duration_s=window.duration_s,
             elevation_gain_m=window.elevation_gain_m,
+            max_altitude_m=window.max_altitude_m,
             calories=None,
             updated_at=now,
         )
@@ -430,6 +442,7 @@ def _restore_from_parsed(
             duration_s=parsed.duration_s,
             moving_duration_s=parsed.moving_duration_s,
             elevation_gain_m=parsed.elevation_gain_m,
+            max_altitude_m=parsed.max_altitude_m,
             calories=parsed.calories,
             updated_at=now,
         )

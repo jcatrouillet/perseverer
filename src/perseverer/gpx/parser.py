@@ -162,6 +162,8 @@ def parse_gpx(content: bytes) -> CanonicalBatch:
             kind="unrecognized", activity=None, unrecognized_message_types=["gpx_empty_track"]
         )
     _add_distance_and_speed(stream, route_points)
+    altitudes = [p.values["altitude_m"] for p in stream if "altitude_m" in p.values]
+    max_altitude_m = max(altitudes) if altitudes else None
 
     start_time = stream[0].timestamp_utc
     duration_s = (stream[-1].timestamp_utc - start_time).total_seconds()
@@ -187,6 +189,11 @@ def parse_gpx(content: bytes) -> CanonicalBatch:
         moving_duration_s=None,
         distance_m=None,
         elevation_gain_m=None,
+        # Unlike elevation_gain_m/distance_m above, deliberately computed here rather than left
+        # for strava_export.py's CSV-totals overlay -- Strava's activities.csv export has no
+        # max-elevation column to overlay from, and _overlay_csv_totals's dataclasses.replace()
+        # only touches the fields it lists, so this survives that overlay untouched.
+        max_altitude_m=max_altitude_m,
         calories=None,
         device=None,
         stream=stream,

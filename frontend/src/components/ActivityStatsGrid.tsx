@@ -33,7 +33,16 @@ export function ActivityStatsGridPrimary({
     "strava.session.total_descent",
   ]);
   const hasHeartRate = activity.avg_hr_bpm != null || activity.max_hr_bpm != null;
-  const hasElevation = activity.elevation_gain_m != null || totalDescent != null;
+  // Determines whether the Elevation column needs the wider `--wide` modifier (see
+  // activity-detail.css's own comment on .activity-stats__row--compact) -- its default 320px
+  // basis only fits 2 tiles side by side; a 3rd (gain + loss + max elevation, common for any
+  // GPS hike with a barometric altimeter) wraps onto its own line without it.
+  const elevationTileCount = [
+    activity.elevation_gain_m != null,
+    totalDescent != null,
+    activity.max_altitude_m != null,
+  ].filter(Boolean).length;
+  const hasElevation = elevationTileCount > 0;
   const isBouldering = isBoulderingActivity(activity.sport, activity.sub_sport);
   // Bouldering has no distance/pace at all -- the tiles below already skip both via their own
   // `distance_m != null` guards, so the only bouldering-specific change needed here is the
@@ -132,7 +141,13 @@ export function ActivityStatsGridPrimary({
           )}
 
           {hasElevation && (
-            <div className="activity-stats__col">
+            <div
+              className={
+                elevationTileCount >= 3
+                  ? "activity-stats__col activity-stats__col--wide"
+                  : "activity-stats__col"
+              }
+            >
               <h3>Elevation</h3>
               <div className="stat-grid">
                 {activity.elevation_gain_m != null && (
@@ -140,6 +155,9 @@ export function ActivityStatsGridPrimary({
                 )}
                 {totalDescent != null && (
                   <StatTile label="Elevation loss" value={totalDescent.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
+                )}
+                {activity.max_altitude_m != null && (
+                  <StatTile label="Max elevation" value={activity.max_altitude_m.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
                 )}
               </div>
             </div>

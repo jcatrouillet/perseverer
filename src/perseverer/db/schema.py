@@ -184,6 +184,13 @@ activity = Table(
     Column("moving_duration_s", Float, nullable=True),
     Column("distance_m", Float, nullable=True),
     Column("elevation_gain_m", Float, nullable=True),
+    # Peak altitude reached, not cumulative ascent (elevation_gain_m above) -- a hike with modest
+    # total climb can still summit a very high point starting from an already-high trailhead, and
+    # vice versa. Computed once at parse time from the activity's own altitude stream (no FIT
+    # session field carries this directly for this athlete's real files -- confirmed by
+    # introspecting the live archive, no fit.session.max_altitude/enhanced_max_altitude metric_key
+    # exists at all), same shape as elevation_gain_m. Recomputed by a trim, restored on undo.
+    Column("max_altitude_m", Float, nullable=True),
     Column("calories", Float, nullable=True),
     Column("device_id", Integer, ForeignKey("device.id"), nullable=True),
     Column("primary_source", String, nullable=False),

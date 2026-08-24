@@ -127,6 +127,7 @@ def test_list_activities_paginates_and_filters_by_sport(
     body = r.json()
     assert body["total"] == 1
     assert body["items"][0]["id"] == "a2"
+    assert body["items"][0]["max_altitude_m"] == 1200.0
 
     r = client.get("/api/v1/activities?limit=1&offset=1", headers=auth_headers)
     body = r.json()
@@ -261,6 +262,7 @@ def test_get_activity_detail_returns_full_shape(
     assert body["laps"] == []
     assert body["device"] is None
     assert body["route"] is None
+    assert body["max_altitude_m"] == 1200.0
 
 
 def test_get_activity_detail_includes_nearby_sweat_loss_observation(

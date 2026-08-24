@@ -121,6 +121,10 @@ class ActivitySummary(BaseModel):
     moving_duration_s: float | None
     distance_m: float | None
     elevation_gain_m: float | None
+    # Peak altitude reached, not cumulative ascent (elevation_gain_m above) -- see
+    # db/schema.py::activity.max_altitude_m's own comment. None when the activity has no
+    # altitude stream data at all.
+    max_altitude_m: float | None
     calories: float | None
     avg_hr_bpm: float | None
     max_hr_bpm: float | None

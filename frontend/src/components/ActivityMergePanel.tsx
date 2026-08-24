@@ -28,6 +28,7 @@ const FIELD_LABELS: Record<string, string> = {
   duration_s: "Duration",
   moving_duration_s: "Moving time",
   elevation_gain_m: "Elevation gain",
+  max_altitude_m: "Max elevation",
   calories: "Calories",
   avg_hr_bpm: "Avg heart rate",
   max_hr_bpm: "Max heart rate",
@@ -51,6 +52,7 @@ function formatFieldValue(field: string, value: number | string | null): string 
     case "moving_duration_s":
       return formatDurationHM(value);
     case "elevation_gain_m":
+    case "max_altitude_m":
       return `${value.toFixed(0)} m`;
     case "calories":
       return `${value.toFixed(0)} kcal`;

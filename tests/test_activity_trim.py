@@ -232,6 +232,9 @@ def test_set_activity_trim_recomputes_distance_duration_elevation_hr(
         # altitude climbs 0.1/s monotonically -> gain over 100s window is exactly 100 * 0.1.
         assert row.elevation_gain_m == pytest.approx(10.0, abs=1)
         assert row.moving_duration_s == pytest.approx(100.0, abs=1)
+        # Peak within the kept window only, not the full recording's own max (119.9 at i=199) --
+        # altitude_m[150] = 100.0 + 150*0.1 = 115.0, the window's last (and highest) sample.
+        assert row.max_altitude_m == pytest.approx(115.0, abs=0.5)
 
 
 def test_set_activity_trim_clears_calories_and_training_load(
@@ -402,7 +405,13 @@ def test_apply_activity_trim_overrides_survives_simulated_rebuild(
         conn.execute(
             activity.update()
             .where(activity.c.id == ACTIVITY_ID)
-            .values(duration_s=99999.0, distance_m=99999.0, elevation_gain_m=999.0, calories=1234.0)
+            .values(
+                duration_s=99999.0,
+                distance_m=99999.0,
+                elevation_gain_m=999.0,
+                max_altitude_m=999.0,
+                calories=1234.0,
+            )
         )
         conn.commit()
 
@@ -415,6 +424,7 @@ def test_apply_activity_trim_overrides_survives_simulated_rebuild(
         row = conn.execute(select(activity).where(activity.c.id == ACTIVITY_ID)).fetchone()
         assert row is not None
         assert row.distance_m == pytest.approx(200.0, abs=1)
+        assert row.max_altitude_m == pytest.approx(115.0, abs=0.5)
         assert row.calories is None
 
 
@@ -459,6 +469,7 @@ def test_clear_activity_trim_restores_original_values(
         assert row.duration_s == pytest.approx(600.0)
         assert row.distance_m == pytest.approx(1500.0)
         assert row.elevation_gain_m == pytest.approx(5.0)
+        assert row.max_altitude_m == pytest.approx(12.0)
         assert row.calories == pytest.approx(80.0)
 
         laps = conn.execute(
@@ -551,6 +562,7 @@ def test_restore_from_parsed_reinstates_a_metric_a_trim_had_deleted(
             moving_duration_s=600.0,
             distance_m=1500.0,
             elevation_gain_m=5.0,
+            max_altitude_m=None,
             calories=80.0,
             device=None,
             extra_metrics=[ParsedMetric(key="fit.session.training_load_peak", value_num=42.0)],

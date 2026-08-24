@@ -78,6 +78,8 @@ export interface ActivitySummary {
   moving_duration_s: number | null;
   distance_m: number | null;
   elevation_gain_m: number | null;
+  // Peak altitude reached, not cumulative ascent (elevation_gain_m above).
+  max_altitude_m: number | null;
   calories: number | null;
   avg_hr_bpm: number | null;
   max_hr_bpm: number | null;

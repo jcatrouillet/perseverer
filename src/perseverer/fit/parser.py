@@ -645,6 +645,8 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
 
     device = _parse_device(file_id_row)
     route_start, route_end, route_bbox = _derive_route_endpoints(session, route_points)
+    altitudes = [p.values["altitude_m"] for p in stream_points if "altitude_m" in p.values]
+    max_altitude_m = max(altitudes) if altitudes else None
 
     activity = CanonicalActivity(
         start_time_utc=start_time,
@@ -656,6 +658,7 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
         moving_duration_s=_to_float(session.get("total_timer_time")),
         distance_m=_to_float(session.get("total_distance")),
         elevation_gain_m=_to_float(session.get("total_ascent")),
+        max_altitude_m=max_altitude_m,
         calories=_to_float(session.get("total_calories")),
         device=device,
         laps=laps,

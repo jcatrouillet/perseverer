@@ -23,6 +23,7 @@ function activity(id: string, local_date: string, overrides: Partial<ActivitySum
     moving_duration_s: 1500,
     distance_m: 5000,
     elevation_gain_m: null,
+    max_altitude_m: null,
     calories: 350,
     avg_hr_bpm: null,
     max_hr_bpm: null,

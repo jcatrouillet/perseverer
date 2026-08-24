@@ -260,6 +260,7 @@ def insert_new_activity(
             moving_duration_s=a.moving_duration_s,
             distance_m=a.distance_m,
             elevation_gain_m=a.elevation_gain_m,
+            max_altitude_m=a.max_altitude_m,
             calories=a.calories,
             device_id=device_id,
             primary_source=source,
