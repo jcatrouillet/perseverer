@@ -45,6 +45,7 @@ from perseverer.api.schemas.settings import (
 from perseverer.config import Settings, get_settings
 from perseverer.db.schema import athlete_hr_zone_config, ingest_run
 from perseverer.rebuild import rebuild_database_tracked
+from perseverer.staleness import check_garmin_connect_staleness
 
 router = APIRouter()
 
@@ -121,12 +122,17 @@ def get_garmin_status(
 ) -> GarminAuthStatusOut:
     present, age_days = token_store_status(settings.garmin_tokenstore_dir)
     latest = _latest_ingest_run(conn, athlete_id, "garmin_connect")
+    staleness = check_garmin_connect_staleness(
+        conn, athlete_id, escalate_after_days=settings.garmin_stale_escalate_days
+    )
     return GarminAuthStatusOut(
         token_store_present=present,
         token_store_age_days=age_days,
         last_sync_status=latest.status if latest else None,
         last_sync_at=(latest.finished_at or latest.started_at) if latest else None,
         last_sync_error=_first_error(latest.errors) if latest else None,
+        staleness_severity=staleness.severity if staleness else None,
+        staleness_message=staleness.message if staleness else None,
     )
 
 

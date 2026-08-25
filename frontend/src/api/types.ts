@@ -333,6 +333,11 @@ export interface GarminAuthStatusOut {
   last_sync_status: string | null;
   last_sync_at: string | null;
   last_sync_error: string | null;
+  // No real Garmin token expiry is readable client-side -- this is the practical substitute
+  // (staleness.py's own escalating warning/critical signal). Both null whenever the last sync
+  // succeeded.
+  staleness_severity: "warning" | "critical" | null;
+  staleness_message: string | null;
 }
 
 // POST /settings/garmin/login

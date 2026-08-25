@@ -22,6 +22,8 @@ const NOT_CONNECTED: GarminAuthStatusOut = {
   last_sync_status: null,
   last_sync_at: null,
   last_sync_error: null,
+  staleness_severity: null,
+  staleness_message: null,
 };
 
 const CONNECTED: GarminAuthStatusOut = {
@@ -30,6 +32,15 @@ const CONNECTED: GarminAuthStatusOut = {
   last_sync_status: "success",
   last_sync_at: "2026-08-20T00:00:00Z",
   last_sync_error: null,
+  staleness_severity: null,
+  staleness_message: null,
+};
+
+const STALE: GarminAuthStatusOut = {
+  ...CONNECTED,
+  last_sync_status: "failed",
+  staleness_severity: "warning",
+  staleness_message: "garmin_connect has been failing for 8 day(s) as of 2026-08-25.",
 };
 
 describe("GarminConnectCard", () => {
@@ -76,5 +87,19 @@ describe("GarminConnectCard", () => {
     fireEvent.click(screen.getByText("Sync now"));
 
     expect(mockSyncMutate).toHaveBeenCalled();
+  });
+
+  it("shows no staleness warning once the last sync succeeded", () => {
+    mockUseGarminStatus.mockReturnValue({ data: CONNECTED });
+    mockUseLatestJob.mockReturnValue({ data: undefined });
+    render(<GarminConnectCard />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows the staleness warning once syncs start failing", () => {
+    mockUseGarminStatus.mockReturnValue({ data: STALE });
+    mockUseLatestJob.mockReturnValue({ data: undefined });
+    render(<GarminConnectCard />);
+    expect(screen.getByRole("alert")).toHaveTextContent(STALE.staleness_message!);
   });
 });

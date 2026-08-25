@@ -790,11 +790,17 @@ the current values for the other two alongside it.
 ### `GET /settings/garmin/status`
 
 Garmin Connect connection status — a token store presence/age check (no network call to Garmin
-itself) plus the most recent `garmin_connect` sync result.
+itself) plus the most recent `garmin_connect` sync result. There is no real token expiry to
+report: Garmin exposes no readable expiry for the refresh token that actually determines session
+lifetime (the short-lived access token auto-refreshes silently and its own expiry isn't
+actionable) — `staleness_severity`/`staleness_message` are the practical substitute, an
+escalating warning/critical signal off how many days the last sync has been failing.
 
 **Response `200`:** `GarminAuthStatusOut` — `token_store_present` (bool), `token_store_age_days`
 (int, nullable), `last_sync_status` (`"running"|"success"|"failed"`, nullable — `null` means no
-sync has ever run), `last_sync_at` (datetime, nullable), `last_sync_error` (string, nullable).
+sync has ever run), `last_sync_at` (datetime, nullable), `last_sync_error` (string, nullable),
+`staleness_severity` (`"warning"|"critical"`, nullable — `null` whenever the last sync
+succeeded), `staleness_message` (string, nullable).
 
 ### `POST /settings/garmin/login`
 

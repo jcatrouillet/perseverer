@@ -74,6 +74,14 @@ class GarminAuthStatusOut(BaseModel):
     last_sync_status: str | None
     last_sync_at: datetime | None
     last_sync_error: str | None
+    # Garmin exposes no readable expiry for the token that actually matters (the long-lived
+    # refresh token -- the short-lived access token auto-refreshes silently and its own expiry
+    # isn't actionable), so there's no real "expires at" to show. This is the practical
+    # substitute: staleness.py::check_garmin_connect_staleness's own escalating warning/critical
+    # signal, already computed daily by the worker -- null/null whenever the last sync
+    # succeeded (nothing to warn about).
+    staleness_severity: str | None
+    staleness_message: str | None
 
 
 # POST /settings/garmin/login

@@ -109,6 +109,18 @@
   color: var(--color-text-muted);
 }
 
+/* No real Garmin token expiry is readable client-side (see GarminAuthStatusOut's own comment)
+   -- this is the practical substitute, staleness.py's own escalating warning/critical signal. */
+.settings-garmin__staleness--warning {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+.settings-garmin__staleness--critical {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
 .settings-garmin__login-form {
   display: flex;
   flex-direction: column;

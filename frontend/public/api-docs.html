@@ -1004,12 +1004,14 @@ const SCHEMAS = [
       ["zone4_high_bpm","number|null",""],
     ] },
   { name: "LoginResponse", fields: [ ["access_token","string","JWT — send as Authorization: Bearer <token>."], ["expires_at","string(date-time)",""] ] },
-  { name: "GarminAuthStatusOut", note: "Returned by GET /settings/garmin/status.", fields: [
+  { name: "GarminAuthStatusOut", note: "Returned by GET /settings/garmin/status. No real token expiry is reportable -- Garmin exposes no readable expiry for the refresh token that actually matters -- so staleness_severity/staleness_message (how many days the last sync has been failing) is the practical substitute.", fields: [
       ["token_store_present","boolean",""],
       ["token_store_age_days","integer|null",""],
       ["last_sync_status","string|null","running | success | failed; null means no sync has ever run."],
       ["last_sync_at","string(date-time)|null",""],
       ["last_sync_error","string|null",""],
+      ["staleness_severity","string|null","warning | critical; null whenever the last sync succeeded."],
+      ["staleness_message","string|null",""],
     ] },
   { name: "JobTriggerOut", note: "Returned by POST /settings/garmin/sync, /settings/rebuild, /settings/import/bulk-export.", fields: [
       ["triggered","boolean","Always true — a failure to trigger raises an HTTP error instead."],
@@ -1494,7 +1496,7 @@ const GROUPS = [
   -d '{"max_hr_bpm": 188, "threshold_hr_bpm": 172, "resting_hr_bpm": 46}'` }
     },
     { method: "GET", path: "/api/v1/settings/garmin/status", summary: "Garmin Connect connection status.",
-      description: "Token store presence/age (a filesystem check, no network call to Garmin) plus the most recent garmin_connect sync result.",
+      description: "Token store presence/age (a filesystem check, no network call to Garmin) plus the most recent garmin_connect sync result. No real token expiry is reportable -- Garmin exposes no readable expiry for the refresh token that actually matters -- so staleness_severity/staleness_message (an escalating warning/critical signal off how many days the last sync has been failing) is the practical substitute.",
       responses: [ { code: 200, ref: "GarminAuthStatusOut" } ],
       example: { curl: `curl https://your-perseverer-host/api/v1/settings/garmin/status \\
   -H "X-API-Key: YOUR_API_KEY"` }

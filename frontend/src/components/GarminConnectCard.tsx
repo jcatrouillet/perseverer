@@ -80,6 +80,18 @@ export function GarminConnectCard() {
                   ? `Last sync failed${status.data.last_sync_error ? `: ${status.data.last_sync_error}` : "."}`
                   : "A sync is currently running."}
           </li>
+          {status.data.staleness_severity && (
+            <li
+              role="alert"
+              className={
+                status.data.staleness_severity === "critical"
+                  ? "settings-garmin__staleness settings-garmin__staleness--critical"
+                  : "settings-garmin__staleness settings-garmin__staleness--warning"
+              }
+            >
+              ⚠ {status.data.staleness_message}
+            </li>
+          )}
         </ul>
       )}
 

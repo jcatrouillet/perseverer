@@ -160,6 +160,36 @@ def test_garmin_status_reports_token_store_age_and_last_sync(
     assert body["token_store_age_days"] == 0
     assert body["last_sync_status"] == "success"
     assert body["last_sync_error"] is None
+    assert body["staleness_severity"] is None  # last sync succeeded -- nothing to warn about
+    assert body["staleness_message"] is None
+
+
+def test_garmin_status_reports_staleness_once_syncs_start_failing(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """No real Garmin token expiry is readable client-side (see login_with_credentials's own
+    docstring) -- this staleness signal, already computed daily by the worker, is the practical
+    substitute: the first real sign a session needs re-establishing is the next sync failing."""
+    with engine.connect() as conn:
+        conn.execute(
+            ingest_run.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                source="garmin_connect",
+                started_at=dt.datetime(2026, 1, 1, 0, 0, 0),
+                finished_at=dt.datetime(2026, 1, 1, 0, 5, 0),
+                status="failed",
+                items_seen=0,
+                items_new=0,
+                errors=json.dumps([{"error": "GarminAuthRequired"}]),
+            )
+        )
+        conn.commit()
+
+    r = client.get("/api/v1/settings/garmin/status", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["staleness_severity"] == "warning"
+    assert body["staleness_message"]
 
 
 # --- POST /settings/garmin/login -- login_with_credentials is patched at the module level so
