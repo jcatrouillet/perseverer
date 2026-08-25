@@ -234,6 +234,22 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
     ts: p.ts,
     hours: p.durationS != null ? Math.round((p.durationS / 3600) * 100) / 100 : null,
   }));
+  // Ticked off `points`' own full-history range, not `visiblePoints`/`yearTicks` above -- this
+  // chart always shows the full history regardless of the trend chart's own zoom (see the note
+  // above it), so its axis ticks must stay independent of any zoom selection too.
+  const durationSpanDays =
+    points.length > 1 ? (points[points.length - 1]!.ts - points[0]!.ts) / MS_PER_DAY : 0;
+  const useDurationYearTicks = durationSpanDays > 540;
+  const durationYearTicks: number[] = [];
+  if (useDurationYearTicks && points.length > 0) {
+    for (
+      let year = new Date(points[0]!.ts).getUTCFullYear();
+      year <= new Date(points[points.length - 1]!.ts).getUTCFullYear();
+      year++
+    ) {
+      durationYearTicks.push(Date.UTC(year, 0, 1));
+    }
+  }
 
   const goToActivity = (point: { payload?: { id?: string } }) => {
     if (point.payload?.id) setLocation(`/activities/${point.payload.id}`);
@@ -391,15 +407,24 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
           Duration of each run -- always the full history. Click once to start a period, move the
           mouse, click again to finish; the trend chart above zooms to match.
         </p>
-        <ResponsiveContainer width="100%" height={180}>
+        <ResponsiveContainer width="100%" height={204}>
           <BarChart
             data={durationData}
-            margin={{ top: 0, right: 16, bottom: 8, left: 0 }}
+            margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
             onClick={handleChartClick}
             onMouseMove={handleChartMouseMove}
             style={{ cursor: "crosshair", userSelect: "none" }}
           >
-            <XAxis dataKey="ts" type="number" scale="time" domain={["dataMin", "dataMax"]} hide />
+            <XAxis
+              dataKey="ts"
+              type="number"
+              scale="time"
+              domain={["dataMin", "dataMax"]}
+              stroke="var(--color-text-muted)"
+              fontSize={11}
+              tickFormatter={useDurationYearTicks ? formatYearTick : formatMonthTick}
+              ticks={useDurationYearTicks ? durationYearTicks : undefined}
+            />
             <YAxis
               dataKey="hours"
               type="number"
