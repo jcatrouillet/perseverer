@@ -19,7 +19,9 @@ from perseverer.adapters.garmin_connect import (
     GarminRateLimitAborted,
     RateLimiter,
     RateLimitSettings,
+    login_with_credentials,
     sync_garmin_connect,
+    token_store_status,
 )
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
@@ -1209,3 +1211,161 @@ def test_body_battery_429_aborts_the_run_without_retrying(tmp_path: Path) -> Non
 
     assert summary.errors  # the 429 is recorded, not silently swallowed
     assert body_battery_kinds == []  # nothing archived for the fetch that 429'd
+
+
+# --- login_with_credentials / token_store_status -- the web-form (and, refactored, CLI) login
+# path, tested against a fake credentialed client so no real Garmin network access is needed. ---
+
+
+class FakeCredentialedInnerClient:
+    """Stands in for `Garmin.client` (the real `garminconnect.client.Client` instance) --
+    login_with_credentials calls `.dump(path)` on this directly, deliberately bypassing
+    `Garmin.login(tokenstore=...)`'s own convenience form (see login_with_credentials's own
+    docstring for why: that form silently reuses an existing valid token store instead of
+    validating the credentials just passed, confirmed live)."""
+
+    def dump(self, path: str) -> None:
+        Path(path, "token.json").write_text("{}")
+
+
+class FakeCredentialedClient:
+    """Stands in for `garminconnect.Garmin(username, password, prompt_mfa=...)` -- the
+    credentialed constructor shape login_with_credentials uses, distinct from FakeGarminClient
+    above (which stands in for the zero-argument, token-store-only shape the adapter itself
+    uses)."""
+
+    def __init__(
+        self,
+        username: str,
+        password: str,
+        prompt_mfa: Any = None,
+        *,
+        raise_error: Exception | None = None,
+        requires_mfa_without_prompt: bool = False,
+    ) -> None:
+        self.username = username
+        self.password = password
+        self.prompt_mfa = prompt_mfa
+        self._raise_error = raise_error
+        self._requires_mfa_without_prompt = requires_mfa_without_prompt
+        self.login_calls = 0
+        self.client = FakeCredentialedInnerClient()
+
+    def login(self) -> None:
+        if self._requires_mfa_without_prompt and self.prompt_mfa is None:
+            raise GarminConnectAuthenticationError(
+                "MFA Required but no prompt_mfa mechanism supplied"
+            )
+        if self._requires_mfa_without_prompt and self.prompt_mfa is not None:
+            self.prompt_mfa()  # exercises the CLI's own interactive path
+        if self._raise_error:
+            raise self._raise_error
+        self.login_calls += 1
+
+
+def test_login_with_credentials_writes_a_token_store(tmp_path: Path) -> None:
+    tokenstore_dir = tmp_path / "tokens"
+
+    def factory(username: str, password: str, prompt_mfa: Any = None) -> FakeCredentialedClient:
+        return FakeCredentialedClient(username, password, prompt_mfa)
+
+    login_with_credentials("me@example.com", "hunter2", tokenstore_dir, client_factory=factory)
+
+    assert (tokenstore_dir / "token.json").exists()
+
+
+def test_login_with_credentials_does_not_pass_tokenstore_to_login(tmp_path: Path) -> None:
+    """The real regression, found live: `Garmin.login(tokenstore=path)` tries to load and
+    reuse an *existing* valid token store first, silently ignoring wrong credentials whenever
+    one is already present (confirmed against the real account -- a deliberately wrong password
+    still reported success). login_with_credentials must call the bare `client.login()` (forcing
+    the real credentialed path every time) and persist via `client.client.dump(...)` itself,
+    never `client.login(tokenstore=...)`. FakeCredentialedClient.login only accepts zero
+    arguments, so this test fails with a TypeError if that contract regresses."""
+    calls = []
+
+    class StrictFakeClient(FakeCredentialedClient):
+        def login(self) -> None:
+            calls.append("login")
+            super().login()
+
+    def factory(username: str, password: str, prompt_mfa: Any = None) -> StrictFakeClient:
+        return StrictFakeClient(username, password, prompt_mfa)
+
+    login_with_credentials(
+        "me@example.com", "hunter2", tmp_path / "tokens", client_factory=factory
+    )
+
+    assert calls == ["login"]
+
+
+def test_login_with_credentials_propagates_wrong_password(tmp_path: Path) -> None:
+    def factory(username: str, password: str, prompt_mfa: Any = None) -> FakeCredentialedClient:
+        return FakeCredentialedClient(
+            username,
+            password,
+            prompt_mfa,
+            raise_error=GarminConnectAuthenticationError("Authentication failed"),
+        )
+
+    with pytest.raises(GarminConnectAuthenticationError):
+        login_with_credentials(
+            "me@example.com", "wrong", tmp_path / "tokens", client_factory=factory
+        )
+
+
+def test_login_with_credentials_mfa_required_without_prompt_raises_with_mfa_in_message(
+    tmp_path: Path,
+) -> None:
+    def factory(username: str, password: str, prompt_mfa: Any = None) -> FakeCredentialedClient:
+        return FakeCredentialedClient(
+            username, password, prompt_mfa, requires_mfa_without_prompt=True
+        )
+
+    with pytest.raises(GarminConnectAuthenticationError, match="MFA"):
+        login_with_credentials(
+            "me@example.com", "hunter2", tmp_path / "tokens", client_factory=factory
+        )
+
+
+def test_login_with_credentials_mfa_required_with_prompt_succeeds(tmp_path: Path) -> None:
+    """The refactored `sync auth login` (cli.py) path -- prompt_mfa is invoked and the login
+    proceeds, unlike the web-form case above."""
+    tokenstore_dir = tmp_path / "tokens"
+    prompt_calls: list[str] = []
+
+    def factory(username: str, password: str, prompt_mfa: Any = None) -> FakeCredentialedClient:
+        return FakeCredentialedClient(
+            username, password, prompt_mfa, requires_mfa_without_prompt=True
+        )
+
+    def prompt_mfa() -> str:
+        prompt_calls.append("123456")
+        return "123456"
+
+    login_with_credentials(
+        "me@example.com",
+        "hunter2",
+        tokenstore_dir,
+        prompt_mfa=prompt_mfa,
+        client_factory=factory,
+    )
+
+    assert prompt_calls == ["123456"]
+    assert (tokenstore_dir / "token.json").exists()
+
+
+def test_token_store_status_absent(tmp_path: Path) -> None:
+    present, age_days = token_store_status(tmp_path / "does-not-exist")
+    assert present is False
+    assert age_days is None
+
+
+def test_token_store_status_present(tmp_path: Path) -> None:
+    tokenstore_dir = tmp_path / "tokens"
+    tokenstore_dir.mkdir()
+    (tokenstore_dir / "token.json").write_text("{}")
+
+    present, age_days = token_store_status(tokenstore_dir)
+    assert present is True
+    assert age_days == 0

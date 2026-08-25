@@ -10,6 +10,9 @@ import { useDuplicatePairs, useHrZoneConfig, useSetHrZoneConfig, useTrimCandidat
 import type { DuplicateCandidateOut, TrimCandidateOut } from "../api/types";
 import { hrZoneRangeLabel } from "../activityMetrics";
 import { formatDurationHM } from "../runningStats";
+import { BulkImportCard } from "../components/BulkImportCard";
+import { GarminConnectCard } from "../components/GarminConnectCard";
+import { RebuildCard } from "../components/RebuildCard";
 import "../styles/settings.css";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -142,6 +145,10 @@ export function SettingsPage() {
     <main>
       <h1>Settings</h1>
 
+      <GarminConnectCard />
+      <RebuildCard />
+      <BulkImportCard />
+
       <section className="card">
         <h2>HR training zones</h2>
         <p className="chart-note">
@@ -242,11 +249,14 @@ export function SettingsPage() {
           <p className="settings-scan__empty">Nothing flagged.</p>
         )}
         {trimCandidates.data && trimCandidates.data.length > 0 && (
-          <ul className="settings-scan__list">
-            {trimCandidates.data.map((candidate) => (
-              <TrimCandidateRow key={candidate.id} candidate={candidate} />
-            ))}
-          </ul>
+          <details className="settings-scan__details">
+            <summary>{trimCandidates.data.length} flagged</summary>
+            <ul className="settings-scan__list">
+              {trimCandidates.data.map((candidate) => (
+                <TrimCandidateRow key={candidate.id} candidate={candidate} />
+              ))}
+            </ul>
+          </details>
         )}
       </section>
 
@@ -263,24 +273,27 @@ export function SettingsPage() {
           <p className="settings-scan__empty">Nothing flagged.</p>
         )}
         {duplicatePairs.data && duplicatePairs.data.length > 0 && (
-          <ul className="settings-scan__list">
-            {duplicatePairs.data.map((pair) => (
-              <li
-                key={`${pair.activity_a.id}-${pair.activity_b.id}`}
-                className="settings-scan__row"
-              >
-                <span>
-                  <DuplicateSideLink activity={pair.activity_a} /> and{" "}
-                  <DuplicateSideLink activity={pair.activity_b} />
-                </span>
-                <span className="settings-scan__meta">
-                  {formatDate(pair.activity_a.start_time_utc)} ·{" "}
-                  {formatDistanceKm(pair.activity_a.distance_m)} vs.{" "}
-                  {formatDistanceKm(pair.activity_b.distance_m)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <details className="settings-scan__details">
+            <summary>{duplicatePairs.data.length} flagged</summary>
+            <ul className="settings-scan__list">
+              {duplicatePairs.data.map((pair) => (
+                <li
+                  key={`${pair.activity_a.id}-${pair.activity_b.id}`}
+                  className="settings-scan__row"
+                >
+                  <span>
+                    <DuplicateSideLink activity={pair.activity_a} /> and{" "}
+                    <DuplicateSideLink activity={pair.activity_b} />
+                  </span>
+                  <span className="settings-scan__meta">
+                    {formatDate(pair.activity_a.start_time_utc)} ·{" "}
+                    {formatDistanceKm(pair.activity_a.distance_m)} vs.{" "}
+                    {formatDistanceKm(pair.activity_b.distance_m)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </section>
     </main>

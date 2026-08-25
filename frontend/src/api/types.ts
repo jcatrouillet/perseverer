@@ -326,6 +326,43 @@ export interface HrZoneConfigIn {
   resting_hr_bpm: number | null;
 }
 
+// GET /settings/garmin/status
+export interface GarminAuthStatusOut {
+  token_store_present: boolean;
+  token_store_age_days: number | null;
+  last_sync_status: string | null;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+}
+
+// POST /settings/garmin/login
+export interface GarminLoginIn {
+  username: string;
+  password: string;
+}
+export interface GarminLoginOut {
+  success: boolean;
+}
+
+// POST /settings/garmin/sync, POST /settings/rebuild, POST /settings/import/bulk-export
+export interface JobTriggerOut {
+  triggered: boolean;
+}
+
+// GET /settings/jobs/latest
+export type JobSource = "garmin_connect" | "rebuild" | "garmin_export" | "strava_export";
+
+export interface JobStatusOut {
+  source: string;
+  status: "running" | "success" | "failed";
+  started_at: string;
+  finished_at: string | null;
+  items_seen: number;
+  items_new: number;
+  error_count: number;
+  first_error: string | null;
+}
+
 export interface ActivityWorkoutStepOut {
   step_index: number;
   duration_type: string | null;

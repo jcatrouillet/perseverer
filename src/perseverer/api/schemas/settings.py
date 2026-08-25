@@ -7,6 +7,8 @@ not the four zone boundaries directly.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, model_validator
 
 from perseverer.hr_zones import compute_hr_zone_boundaries
@@ -63,3 +65,44 @@ class HrZoneConfigOut(BaseModel):
             zone3_high_bpm=boundaries[2] if boundaries else None,
             zone4_high_bpm=boundaries[3] if boundaries else None,
         )
+
+
+# GET /settings/garmin/status
+class GarminAuthStatusOut(BaseModel):
+    token_store_present: bool
+    token_store_age_days: int | None
+    last_sync_status: str | None
+    last_sync_at: datetime | None
+    last_sync_error: str | None
+
+
+# POST /settings/garmin/login
+class GarminLoginIn(BaseModel):
+    username: str
+    password: str
+
+
+# POST /settings/garmin/login response -- only ever returned with success=True; a failed
+# attempt raises HTTPException instead (see api/routers/settings.py).
+class GarminLoginOut(BaseModel):
+    success: bool
+
+
+# POST /settings/garmin/sync, POST /settings/rebuild, POST /settings/import/bulk-export -- all
+# three return this immediately (the real work runs via BackgroundTasks); progress is polled
+# via GET /settings/jobs/latest below.
+class JobTriggerOut(BaseModel):
+    triggered: bool
+
+
+# GET /settings/jobs/latest -- the latest ingest_run row for one `source`, shared by the sync/
+# rebuild/bulk-import triggers above rather than one status shape per action.
+class JobStatusOut(BaseModel):
+    source: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    items_seen: int
+    items_new: int
+    error_count: int
+    first_error: str | None

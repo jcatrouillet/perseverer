@@ -3,6 +3,8 @@ beyond `raw_object`. This is what proves the raw-first invariant: nothing is los
 derived tables are wiped, because parsing is a pure function over the archive.
 """
 
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -31,6 +33,7 @@ from perseverer.db.schema import (
     health_metric_period_rollup,
     health_observation,
     health_stream,
+    ingest_run,
     insight,
     lap,
     merge_decision,
@@ -382,4 +385,59 @@ def rebuild_database(
         backfill_weather_titles(conn, archive_root, athlete_id=athlete_id)
     conn.commit()
 
+    return replayed
+
+
+def rebuild_database_tracked(
+    conn: Connection, archive_root: Path, parquet_dir: Path, *, athlete_id: str
+) -> int:
+    """Same as rebuild_database above, wrapped with an `ingest_run` row (source="rebuild") so an
+    API-triggered rebuild (api/routers/settings.py) can be polled for status the same way
+    sync_garmin_connect's own run already can — mirrors that function's own try/except-and-
+    record pattern (adapters/garmin_connect.py). `sync rebuild` (cli.py) keeps calling the plain
+    rebuild_database directly; it already prints its result synchronously to the terminal, no
+    bookkeeping needed there.
+    """
+    started_at = datetime.now(UTC)
+    result = conn.execute(
+        ingest_run.insert().values(
+            athlete_id=athlete_id,
+            source="rebuild",
+            started_at=started_at,
+            status="running",
+            items_seen=0,
+            items_new=0,
+        )
+    )
+    assert result.inserted_primary_key is not None
+    run_id = result.inserted_primary_key[0]
+    assert isinstance(run_id, int)
+    conn.commit()
+
+    try:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=athlete_id)
+    except Exception as e:
+        conn.execute(
+            ingest_run.update()
+            .where(ingest_run.c.id == run_id)
+            .values(
+                finished_at=datetime.now(UTC),
+                status="failed",
+                errors=json.dumps([{"error": str(e)}]),
+            )
+        )
+        conn.commit()
+        raise
+
+    conn.execute(
+        ingest_run.update()
+        .where(ingest_run.c.id == run_id)
+        .values(
+            finished_at=datetime.now(UTC),
+            status="success",
+            items_seen=replayed,
+            items_new=replayed,
+        )
+    )
+    conn.commit()
     return replayed

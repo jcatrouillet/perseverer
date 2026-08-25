@@ -24,12 +24,16 @@ if sys.stdout.encoding is not None and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 if sys.stderr.encoding is not None and sys.stderr.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-from garminconnect import Garmin
 from sqlalchemy import func, select
 
 from perseverer.adapters.eufy import sync_eufy
 from perseverer.adapters.fit_folder import import_from_folder
-from perseverer.adapters.garmin_connect import RateLimitSettings, sync_garmin_connect
+from perseverer.adapters.garmin_connect import (
+    RateLimitSettings,
+    login_with_credentials,
+    sync_garmin_connect,
+    token_store_status,
+)
 from perseverer.adapters.garmin_export import import_garmin_export
 from perseverer.adapters.strava_export import import_strava_export
 from perseverer.auth.api_keys import generate_api_key, hash_api_key
@@ -245,9 +249,12 @@ def auth_login() -> None:
     password = os.environ.get("GARMIN_PASSWORD") or typer.prompt(
         "Garmin password", hide_input=True
     )
-    client = Garmin(email, password, prompt_mfa=lambda: typer.prompt("Garmin MFA code"))
-    settings.garmin_tokenstore_dir.mkdir(parents=True, exist_ok=True)
-    client.login(tokenstore=str(settings.garmin_tokenstore_dir))
+    login_with_credentials(
+        email,
+        password,
+        settings.garmin_tokenstore_dir,
+        prompt_mfa=lambda: typer.prompt("Garmin MFA code"),
+    )
     typer.echo(f"Logged in. Token store saved to {settings.garmin_tokenstore_dir}")
 
 
@@ -255,13 +262,14 @@ def auth_login() -> None:
 def auth_status() -> None:
     """Whether a Garmin token store exists and how long ago it was last written."""
     settings = get_settings()
-    tokendir = settings.garmin_tokenstore_dir
-    if not tokendir.exists() or not any(tokendir.iterdir()):
+    present, age_days = token_store_status(settings.garmin_tokenstore_dir)
+    if not present:
         typer.echo("No token store found - run `sync auth login`.")
         raise typer.Exit(code=1)
-    newest_mtime = max(f.stat().st_mtime for f in tokendir.rglob("*") if f.is_file())
-    age_days = (datetime.now(UTC) - datetime.fromtimestamp(newest_mtime, tz=UTC)).days
-    typer.echo(f"Token store present at {tokendir}, last written {age_days} day(s) ago.")
+    typer.echo(
+        f"Token store present at {settings.garmin_tokenstore_dir}, "
+        f"last written {age_days} day(s) ago."
+    )
 
 
 @athlete_app.command("set-password")

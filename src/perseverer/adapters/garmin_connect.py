@@ -78,6 +78,58 @@ class GarminRateLimitAborted(Exception):
     """Garmin returned 429. The run stops immediately; no retry, no backoff-and-continue."""
 
 
+def login_with_credentials(
+    username: str,
+    password: str,
+    tokenstore_dir: Path,
+    *,
+    prompt_mfa: Callable[[], str] | None = None,
+    client_factory: Callable[..., Garmin] = Garmin,
+) -> None:
+    """The only other place (besides `sync auth login`) credentials are ever used — a
+    human-initiated, one-time login (now reachable from the Settings-page web form too, see
+    api/routers/settings.py) that persists only the resulting token store, never the password
+    itself. Deliberately a module-level function, not a method on GarminConnectAdapter — that
+    class's "never touches credentials" invariant (see its own authenticate() docstring) stays
+    auditable from its own file alone this way, rather than one method away from a credentialed
+    code path.
+
+    `prompt_mfa=None` (the web-login-form case) does not support Garmin's MFA challenge — the
+    production API container runs multiple uvicorn workers with no shared memory, and Garmin's
+    MFA resume needs the same in-process client object across two separate HTTP requests, which
+    isn't reliable across workers. If Garmin requires MFA and no prompt_mfa is given,
+    `garminconnect` raises `GarminConnectAuthenticationError("MFA Required but no prompt_mfa
+    mechanism supplied")` — callers can detect this via `"MFA" in str(exc)` and point the user at
+    `sync auth login` (which passes a real interactive prompt_mfa and can complete the challenge
+    from a terminal) instead.
+
+    Deliberately does NOT call `client.login(tokenstore=str(tokenstore_dir))` -- confirmed live
+    (not assumed) that `garminconnect`'s own convenience form tries to load and reuse an
+    *existing* valid token store first, and only falls back to the credentials just passed in if
+    that load fails or the API rejects the cached token. With a still-valid session already on
+    disk (the common case once connected at all), that silently ignores whatever username/
+    password was actually submitted -- including a wrong password, which would otherwise report
+    success without ever validating anything. Calling `client.login()` bare forces the real
+    credentialed path every time (this function's whole point), then `client.client.dump(...)`
+    persists the result the same way `login(tokenstore=...)` would have internally.
+    """
+    tokenstore_dir.mkdir(parents=True, exist_ok=True)
+    client = client_factory(username, password, prompt_mfa=prompt_mfa)
+    client.login()
+    client.client.dump(str(tokenstore_dir))
+
+
+def token_store_status(tokenstore_dir: Path) -> tuple[bool, int | None]:
+    """(present, age_in_days) — a pure filesystem check, no network call. Same logic `sync auth
+    status` (cli.py) already had; extracted here so the CLI command and the Settings-page status
+    endpoint share one implementation instead of two copies drifting apart."""
+    if not tokenstore_dir.exists() or not any(tokenstore_dir.iterdir()):
+        return False, None
+    newest_mtime = max(f.stat().st_mtime for f in tokenstore_dir.rglob("*") if f.is_file())
+    age_days = (datetime.now(UTC) - datetime.fromtimestamp(newest_mtime, tz=UTC)).days
+    return True, age_days
+
+
 class RateLimiter:
     """Enforces a minimum interval between requests and a hard cap per rolling hour. Hitting
     the hourly cap stops the current run cleanly (the next scheduled run continues) rather

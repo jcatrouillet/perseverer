@@ -3,7 +3,7 @@
 // can be created from either the calendar page or the activity detail page.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm, apiPut } from "./client";
 import type {
   ActivityComparisonsOut,
   ActivityContextOut,
@@ -27,6 +27,9 @@ import type {
   ClimbingSummaryOut,
   DuplicatePairOut,
   FitnessDailyRollupOut,
+  GarminAuthStatusOut,
+  GarminLoginIn,
+  GarminLoginOut,
   GoalOut,
   GoalProgressOut,
   HealthDashboardOut,
@@ -35,6 +38,9 @@ import type {
   HrZoneConfigIn,
   HrZoneConfigOut,
   InsightOut,
+  JobSource,
+  JobStatusOut,
+  JobTriggerOut,
   NoteCreate,
   NoteOut,
   PaceBandOut,
@@ -672,6 +678,73 @@ export function useSetHrZoneConfig() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["hr-zone-config"] });
     },
+  });
+}
+
+/** Token store presence/age + the most recent garmin_connect sync result -- read-only, no
+ * network call to Garmin itself (see token_store_status's own docstring). */
+export function useGarminStatus() {
+  return useQuery({
+    queryKey: ["garmin-status"],
+    queryFn: () => apiGet<GarminAuthStatusOut>("/api/v1/settings/garmin/status"),
+  });
+}
+
+/** A human-initiated, one-shot Garmin login (see login_with_credentials's own docstring) --
+ * does not support Garmin's MFA challenge; a 422 response means the account needs `sync auth
+ * login` from a terminal instead. */
+export function useGarminLogin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: GarminLoginIn) =>
+      apiPost<GarminLoginOut>("/api/v1/settings/garmin/login", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["garmin-status"] });
+    },
+  });
+}
+
+/** Triggers the same sync_garmin_connect() call the daily worker already makes, once, right
+ * now. Runs in the background on the server -- see useLatestJob below for progress. */
+export function useTriggerGarminSync() {
+  return useMutation({
+    mutationFn: () => apiPost<JobTriggerOut>("/api/v1/settings/garmin/sync", {}),
+  });
+}
+
+/** Triggers `sync rebuild`'s web counterpart -- never destructive (raw-first: only derived
+ * tables are wiped and replayed from the archive). See useLatestJob below for progress. */
+export function useTriggerRebuild() {
+  return useMutation({
+    mutationFn: () => apiPost<JobTriggerOut>("/api/v1/settings/rebuild", {}),
+  });
+}
+
+/** Uploads a Garmin or Strava bulk-export .zip for import -- the web counterpart of `sync
+ * import garmin-export`/`sync import strava-export <path>`. Runs in the background on the
+ * server -- see useLatestJob below for progress. */
+export function useUploadBulkExport() {
+  return useMutation({
+    mutationFn: ({ kind, file }: { kind: "garmin" | "strava"; file: File }) => {
+      const formData = new FormData();
+      formData.append("kind", kind);
+      formData.append("file", file);
+      return apiPostForm<JobTriggerOut>("/api/v1/settings/import/bulk-export", formData);
+    },
+  });
+}
+
+/** Status polling for the three triggers above, all backed by the same `ingest_run` row shape
+ * -- same "poll while running, stop once settled" pattern as useActivityLocation above (the
+ * only other polling precedent in this app), just keyed by job source instead of activity id.
+ * `enabled` lets a card only start polling once its own trigger has actually fired. */
+export function useLatestJob(source: JobSource, enabled: boolean) {
+  return useQuery({
+    queryKey: ["latest-job", source],
+    queryFn: () =>
+      apiGet<JobStatusOut | null>(`/api/v1/settings/jobs/latest?source=${source}`),
+    enabled,
+    refetchInterval: (query) => (query.state.data?.status === "running" ? 2000 : false),
   });
 }
 

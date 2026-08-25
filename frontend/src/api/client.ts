@@ -61,7 +61,12 @@ export function clearCredential(): void {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const credential = getStoredCredential();
   const headers = new Headers(options.headers);
-  headers.set("Content-Type", "application/json");
+  // A FormData body (file uploads, see apiPostForm) must NOT get an explicit Content-Type --
+  // the browser sets the correct `multipart/form-data; boundary=...` itself only when it owns
+  // that header; setting "application/json" here would break the multipart parse entirely.
+  if (!(options.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
   if (credential) headers.set(credential.header, credential.value);
 
   const response = await fetch(`${getBaseUrl()}${path}`, { ...options, headers });
@@ -101,6 +106,11 @@ export function apiPut<T>(path: string, body: unknown): Promise<T> {
 
 export function apiDelete<T>(path: string): Promise<T> {
   return request<T>(path, { method: "DELETE" });
+}
+
+// For multipart/form-data bodies (file uploads) -- see request()'s own FormData branch above.
+export function apiPostForm<T>(path: string, formData: FormData): Promise<T> {
+  return request<T>(path, { method: "POST", body: formData });
 }
 
 // Login has no stored credential yet, so it bypasses `request` entirely.

@@ -223,12 +223,29 @@ because you don't recognize it — stop, that's the bug.
   insights.md` for the exact windows/dimensions and the deliberately-adjustable thresholds.
 - **`garmin_connect` safety rules, non-negotiable**: it never constructs a credentialed client
   automatically — `authenticate()` only loads the token store (`data/garmin_tokens/`), and if
-  that fails, raises `GarminAuthRequired` rather than falling back to credentials. The *only*
-  place credentials are ever used is `sync auth login`, run interactively by a human. A 429
-  (`GarminConnectTooManyRequestsError`) aborts the current run immediately — no retry, ever,
-  anywhere. Garmin's SSO 429-locks per account with no recovery path; see
-  `docs/adr/0003-phase-2-garmin-adapters.md` for how this is enforced structurally, not just
-  by convention.
+  that fails, raises `GarminAuthRequired` rather than falling back to credentials. Credentials
+  are only ever used in two places, both human-initiated and one-shot: `sync auth login` (CLI,
+  MFA-capable) and `POST /settings/garmin/login` (the Settings page's own login form —
+  MFA-*incapable* by deliberate choice, since bercy's API container runs multiple uvicorn
+  workers with no shared memory, and Garmin's MFA resume needs one in-process client object
+  across two requests; an MFA-challenged account falls back to the CLI). Both funnel through
+  `adapters/garmin_connect.py::login_with_credentials`, one shared function, so this invariant
+  has one implementation to audit, not two. A 429 (`GarminConnectTooManyRequestsError`) aborts
+  the current run immediately — no retry, ever, anywhere. Garmin's SSO 429-locks per account
+  with no recovery path; see `docs/adr/0003-phase-2-garmin-adapters.md` for how this is enforced
+  structurally, not just by convention.
+- **Settings-page operational actions**: `api/routers/settings.py` adds the web
+  counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
+  ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip
+  upload, the first `UploadFile` endpoint in this codebase). No job-queue infrastructure exists
+  or was added — sync/rebuild/import all run via FastAPI's `BackgroundTasks` (the one existing
+  precedent, `activities.py::get_activity_location`) and are polled through one generic
+  `GET /settings/jobs/latest?source=...`, reading the same `ingest_run` table every sync/import
+  entrypoint already writes (a new `source="rebuild"` value, written by
+  `rebuild.py::rebuild_database_tracked`, since the plain CLI-only `rebuild_database` itself
+  stays untouched). A bulk-export upload is streamed to a per-upload-unique temp path, not the
+  CLI's own fixed `extract_root` — that fixed path would collide across two concurrent web
+  uploads (never a concern for the CLI's single-operator use).
 - **Staleness is a first-class signal, not an afterthought.** `perseverer/staleness.py` checks
   (a) whether `garmin_connect` has succeeded recently — escalating from "warning" to "critical"
   past `PERSEVERER_GARMIN_STALE_ESCALATE_DAYS` (default 7) — and (b) whether

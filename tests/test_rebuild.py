@@ -24,6 +24,7 @@ from perseverer.db.schema import (
     athlete,
     health_observation,
     health_stream,
+    ingest_run,
     metadata,
     sleep_session,
 )
@@ -41,7 +42,7 @@ from perseverer.health.json_parser import (
     parse_daily_training_status_json,
     parse_hydration_json,
 )
-from perseverer.rebuild import rebuild_database
+from perseverer.rebuild import rebuild_database, rebuild_database_tracked
 
 SLEEP_DATA_RECORDS = [
     {
@@ -933,3 +934,66 @@ def test_rebuild_reapplies_the_garmin_activity_name_correction(tmp_path: Path) -
         name_after_rebuild = conn.execute(select(activity.c.name)).scalar_one()
 
     assert name_after_rebuild == "Santa Clara - W1 Fri . Tempo"
+
+
+# --- rebuild_database_tracked -- the Settings-page-triggered wrapper, tested for its own
+# ingest_run bookkeeping (rebuild_database itself is already covered throughout this file). ------
+
+
+def test_rebuild_database_tracked_writes_a_success_ingest_run_row(tmp_path: Path) -> None:
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    archive_root.mkdir()
+    parquet_dir.mkdir()
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        replayed = rebuild_database_tracked(
+            conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID
+        )
+        row = conn.execute(
+            select(ingest_run).where(
+                ingest_run.c.athlete_id == DEFAULT_ATHLETE_ID, ingest_run.c.source == "rebuild"
+            )
+        ).fetchone()
+
+    assert replayed == 0  # nothing archived yet -- an empty archive is a valid, real state
+    assert row is not None
+    assert row.status == "success"
+    assert row.finished_at is not None
+    assert row.items_seen == 0
+
+
+def test_rebuild_database_tracked_records_failure_and_reraises(tmp_path: Path) -> None:
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    archive_root.mkdir()
+    parquet_dir.mkdir()
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        # A corrupt archive.json sidecar makes restore_raw_object_table blow up mid-rebuild --
+        # a real failure mode, not an artificial one, and enough to exercise the except branch.
+        (archive_root / "00").mkdir()
+        (archive_root / "00" / "deadbeef.json").write_text("not valid json")
+
+        with pytest.raises(Exception):  # noqa: B017 -- whatever json.JSONDecodeError-adjacent error surfaces
+            rebuild_database_tracked(
+                conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID
+            )
+
+        row = conn.execute(
+            select(ingest_run).where(
+                ingest_run.c.athlete_id == DEFAULT_ATHLETE_ID, ingest_run.c.source == "rebuild"
+            )
+        ).fetchone()
+
+    assert row is not None
+    assert row.status == "failed"
+    assert row.finished_at is not None
+    assert row.errors is not None
+    assert json.loads(row.errors)[0]["error"]

@@ -787,6 +787,77 @@ the current values for the other two alongside it.
 
 **Response `200`:** `HrZoneConfigOut`.
 
+### `GET /settings/garmin/status`
+
+Garmin Connect connection status — a token store presence/age check (no network call to Garmin
+itself) plus the most recent `garmin_connect` sync result.
+
+**Response `200`:** `GarminAuthStatusOut` — `token_store_present` (bool), `token_store_age_days`
+(int, nullable), `last_sync_status` (`"running"|"success"|"failed"`, nullable — `null` means no
+sync has ever run), `last_sync_at` (datetime, nullable), `last_sync_error` (string, nullable).
+
+### `POST /settings/garmin/login`
+
+A human-initiated, one-shot Garmin login — the web counterpart of `sync auth login`. Only the
+resulting session token is persisted; the password is used once and never stored. **Does not
+support Garmin's MFA challenge** — if the account requires one, this returns `422` pointing at
+`sync auth login` (interactive, MFA-capable) instead. See
+`adapters/garmin_connect.py::login_with_credentials`'s own docstring for why: multiple uvicorn
+workers with no shared memory means the in-progress login can't reliably survive across the two
+requests an MFA flow would need.
+
+**Request body** (`GarminLoginIn`): `username` (string), `password` (string).
+
+**Response `200`:** `GarminLoginOut` — `{"success": true}`. **`400`** — wrong username/password
+(deliberately not `401`: this app's frontend treats any `401` as "your own Perseverer session
+expired" and force-logs you out — see the endpoint's own docstring). **`422`** — this account
+requires MFA. **`429`** — Garmin rate-limited the attempt; wait before retrying (never retried
+automatically, matching this adapter's own no-retry-on-429 rule everywhere else).
+
+### `POST /settings/garmin/sync`
+
+Triggers the same `sync_garmin_connect()` call the daily worker and `sync import garmin-connect`
+already make, once, right now. Runs in the background — poll `GET /settings/jobs/latest?
+source=garmin_connect` for progress; this call itself returns immediately.
+
+**Response `200`:** `JobTriggerOut` — `{"triggered": true}`.
+
+### `POST /settings/rebuild`
+
+Web counterpart of `sync rebuild`. Never destructive — only derived tables are wiped and
+replayed from the raw archive. Runs in the background — poll `GET /settings/jobs/latest?
+source=rebuild` for progress. Can take several minutes on a large archive.
+
+**Response `200`:** `JobTriggerOut` — `{"triggered": true}`.
+
+### `POST /settings/import/bulk-export`
+
+Web counterpart of `sync import garmin-export`/`sync import strava-export <path>` — uploads a
+bulk-export `.zip` instead of pointing at a path already on disk. Always safe to re-run — both
+importers are idempotent full-archive rescans, so an overlapping/updated export is a clean
+no-op for anything already ingested. Runs in the background — poll `GET /settings/jobs/latest?
+source=garmin_export` (or `strava_export`) for progress.
+
+**Request body:** `multipart/form-data` — `kind` (`"garmin"|"strava"`), `file` (the `.zip`).
+
+**Response `200`:** `JobTriggerOut` — `{"triggered": true}`. **`422`** — the uploaded file isn't
+a `.zip`. Note: a reverse proxy in front of this API may reject a very large export before it
+reaches this endpoint at all — outside this app's own configuration.
+
+### `GET /settings/jobs/latest`
+
+The most recent `ingest_run` row for one source — generic status polling shared by the three
+triggers above (and, incidentally, every other sync/import entrypoint that writes to the same
+table).
+
+**Query params:** `source` (`"garmin_connect"|"rebuild"|"garmin_export"|"strava_export"`,
+required).
+
+**Response `200`:** `JobStatusOut | null` — `null` if that source has never run.
+`JobStatusOut`: `source`, `status` (`"running"|"success"|"failed"`), `started_at`,
+`finished_at` (nullable), `items_seen`, `items_new`, `error_count`, `first_error` (string,
+nullable).
+
 ---
 
 ## System
@@ -1229,6 +1300,11 @@ means every sport combined), `target_distance_m`. `GoalProgressPoint`: `local_da
 `max_hr_bpm`, `threshold_hr_bpm`, `resting_hr_bpm` (number, nullable — the three configured
 inputs) plus derived `zone1_high_bpm`…`zone4_high_bpm` (number, nullable — `null` whenever the
 inputs needed to compute them aren't configured).
+
+### GarminAuthStatusOut / JobStatusOut
+
+See `GET /settings/garmin/status` and `GET /settings/jobs/latest` above — both documented
+field-by-field there rather than repeated here.
 
 ### LoginResponse
 

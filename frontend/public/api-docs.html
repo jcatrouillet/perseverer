@@ -1004,6 +1004,26 @@ const SCHEMAS = [
       ["zone4_high_bpm","number|null",""],
     ] },
   { name: "LoginResponse", fields: [ ["access_token","string","JWT — send as Authorization: Bearer <token>."], ["expires_at","string(date-time)",""] ] },
+  { name: "GarminAuthStatusOut", note: "Returned by GET /settings/garmin/status.", fields: [
+      ["token_store_present","boolean",""],
+      ["token_store_age_days","integer|null",""],
+      ["last_sync_status","string|null","running | success | failed; null means no sync has ever run."],
+      ["last_sync_at","string(date-time)|null",""],
+      ["last_sync_error","string|null",""],
+    ] },
+  { name: "JobTriggerOut", note: "Returned by POST /settings/garmin/sync, /settings/rebuild, /settings/import/bulk-export.", fields: [
+      ["triggered","boolean","Always true — a failure to trigger raises an HTTP error instead."],
+    ] },
+  { name: "JobStatusOut", note: "Returned by GET /settings/jobs/latest.", fields: [
+      ["source","string","garmin_connect | rebuild | garmin_export | strava_export"],
+      ["status","string","running | success | failed"],
+      ["started_at","string(date-time)",""],
+      ["finished_at","string(date-time)|null",""],
+      ["items_seen","integer",""],
+      ["items_new","integer",""],
+      ["error_count","integer",""],
+      ["first_error","string|null",""],
+    ] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1472,6 +1492,60 @@ const GROUPS = [
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/hr-zones \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"max_hr_bpm": 188, "threshold_hr_bpm": 172, "resting_hr_bpm": 46}'` }
+    },
+    { method: "GET", path: "/api/v1/settings/garmin/status", summary: "Garmin Connect connection status.",
+      description: "Token store presence/age (a filesystem check, no network call to Garmin) plus the most recent garmin_connect sync result.",
+      responses: [ { code: 200, ref: "GarminAuthStatusOut" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/settings/garmin/status \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/settings/garmin/login", summary: "A human-initiated, one-shot Garmin login.",
+      description: "The web counterpart of `sync auth login`. Only the resulting session token is persisted — the password is used once and never stored. Does not support Garmin's MFA challenge (multiple uvicorn workers with no shared memory can't reliably carry an in-progress login across two requests) — an MFA-challenged account gets a 422 pointing at `sync auth login` instead.",
+      body: { schema: "GarminLoginIn", fields: [
+        ["username","string","req",""],
+        ["password","string","req","Never stored — see description."],
+      ]},
+      responses: [
+        { code: 200, ref: "GarminLoginOut" },
+        { code: 400, note: "Incorrect Garmin username or password. Deliberately not 401 — this app's frontend treats any 401 as your own Perseverer session expiring and force-logs you out." },
+        { code: 422, note: "This account requires an MFA code — use `sync auth login` instead." },
+        { code: 429, note: "Garmin rate-limited this attempt — wait before retrying, never auto-retried." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/garmin/login \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"username": "me@example.com", "password": "..."}'` }
+    },
+    { method: "POST", path: "/api/v1/settings/garmin/sync", summary: "Trigger a Garmin Connect sync right now.",
+      description: "The same sync_garmin_connect() call the daily worker and `sync import garmin-connect` already make. Runs in the background — this returns immediately; poll GET /settings/jobs/latest?source=garmin_connect for progress.",
+      responses: [ { code: 200, ref: "JobTriggerOut" } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/garmin/sync \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/settings/rebuild", summary: "Rebuild the database from the raw archive.",
+      description: "The web counterpart of `sync rebuild`. Never destructive — only derived tables are wiped and replayed from the raw archive. Runs in the background — poll GET /settings/jobs/latest?source=rebuild for progress. Can take several minutes on a large archive.",
+      responses: [ { code: 200, ref: "JobTriggerOut" } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/rebuild \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/settings/import/bulk-export", summary: "Upload a Garmin or Strava bulk-export .zip for import.",
+      description: "The web counterpart of `sync import garmin-export`/`sync import strava-export <path>`. Always safe to re-run — both importers are idempotent full-archive rescans. Runs in the background — poll GET /settings/jobs/latest?source=garmin_export (or strava_export) for progress. A reverse proxy in front of this API may reject a very large export before it reaches this endpoint at all.",
+      body: { schema: "multipart/form-data", fields: [
+        ["kind","string","req",`"garmin" or "strava"`],
+        ["file","file","req","The .zip export archive."],
+      ]},
+      responses: [
+        { code: 200, ref: "JobTriggerOut" },
+        { code: 422, note: "The uploaded file isn't a .zip." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/import/bulk-export \\
+  -H "X-API-Key: YOUR_API_KEY" \\
+  -F "kind=strava" -F "file=@export.zip"` }
+    },
+    { method: "GET", path: "/api/v1/settings/jobs/latest", summary: "Status of the most recent triggered job for one source.",
+      description: "Generic status polling shared by the sync/rebuild/import triggers above — all write to the same ingest_run table every sync/import entrypoint in this project already uses.",
+      params: [ ["source","query","req","string","—","garmin_connect | rebuild | garmin_export | strava_export"] ],
+      responses: [ { code: 200, ref: "JobStatusOut", note: "null if that source has never run." } ],
+      example: { qs: "?source=rebuild" }
     },
   ]},
 
