@@ -486,6 +486,12 @@ export function ActivityDetailPage({ id }: { id: string }) {
 
       {isBoulderingActivity(a.sport, a.sub_sport) && (
         <>
+          {a.splits.length > 0 && (
+            <section className="card">
+              <h2>Routes Climbed</h2>
+              <ClimbGradeChart gradeBreakdown={gradeBreakdownFromRoutes(boulderingRoutes(a.splits))} />
+            </section>
+          )}
           <BoulderingRoutesTable
             splits={a.splits}
             onSetStatus={(splitIndex, result) =>
@@ -501,12 +507,6 @@ export function ActivityDetailPage({ id }: { id: string }) {
               setClimbRouteStatus.isError || addClimbRoute.isError || deleteClimbRoute.isError
             }
           />
-          {a.splits.length > 0 && (
-            <section className="card">
-              <h2>Routes Climbed</h2>
-              <ClimbGradeChart gradeBreakdown={gradeBreakdownFromRoutes(boulderingRoutes(a.splits))} />
-            </section>
-          )}
           {climbComparisons.data && (
             <ClimbComparisonTable activity={a} comparisons={climbComparisons.data} />
           )}

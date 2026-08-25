@@ -23,14 +23,7 @@ import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../../dateUtils";
 import { monthlyAverageSleepHours } from "../../healthStats";
-import {
-  BODY_COMPOSITION_ENERGY_METRICS,
-  BODY_COMPOSITION_INDEX_METRICS,
-  BODY_COMPOSITION_MASS_METRICS,
-  BODY_COMPOSITION_PERCENT_METRICS,
-  CORE_METRICS,
-  HRV_SPO2_STRESS_METRICS,
-} from "../HealthPage";
+import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
 import { busiestYear } from "../../yearStats";
 import "../../styles/calendar.css";
 
@@ -144,41 +137,14 @@ export function AllTimeView() {
               />
             </ChartFullscreen>
 
-            <ChartFullscreen as="h3" title="HRV / SpO2 / Stress — over all time">
-              <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />
+            <ChartFullscreen as="h3" title="HRV — over all time">
+              <HealthTrendChart metrics={health.data.metrics} keys={HRV_METRIC} />
             </ChartFullscreen>
 
-            <ChartFullscreen as="h3" title="Weight & muscle mass — over all time">
+            <ChartFullscreen as="h3" title="Weight — over all time">
               <HealthTrendChart
                 metrics={health.data.metrics}
-                keys={BODY_COMPOSITION_MASS_METRICS}
-                tickGranularity="month"
-              />
-            </ChartFullscreen>
-
-            <ChartFullscreen as="h3" title="Body composition % — over all time">
-              <HealthTrendChart
-                metrics={health.data.metrics}
-                keys={BODY_COMPOSITION_PERCENT_METRICS}
-                tickGranularity="month"
-              />
-            </ChartFullscreen>
-
-            <ChartFullscreen
-              as="h3"
-              title="BMI, bone mass, visceral fat & metabolic age — over all time"
-            >
-              <HealthTrendChart
-                metrics={health.data.metrics}
-                keys={BODY_COMPOSITION_INDEX_METRICS}
-                tickGranularity="month"
-              />
-            </ChartFullscreen>
-
-            <ChartFullscreen as="h3" title="BMR — over all time">
-              <HealthTrendChart
-                metrics={health.data.metrics}
-                keys={BODY_COMPOSITION_ENERGY_METRICS}
+                keys={WEIGHT_METRIC}
                 tickGranularity="month"
               />
             </ChartFullscreen>

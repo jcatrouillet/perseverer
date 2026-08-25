@@ -35,21 +35,13 @@ export const BODY_COMPOSITION_METRICS = [
   "metabolic_age",
   "protein_ratio_pct",
 ];
-// The summary calendar views (YearView/MonthView/AllTimeView) trend body composition rather
-// than averaging it -- but the ten metrics above span wildly different magnitudes (BMR ~1500
-// vs bone mass ~3), so one shared-axis line chart would flatten the small ones to near zero.
-// Grouped instead by comparable real-world scale (see docs/DATA_DICTIONARY.md's Eufy section
-// for the actual figures this was checked against), the same way HRV/SpO2/Stress already share
-// one chart because their ranges are already close.
-export const BODY_COMPOSITION_MASS_METRICS = ["weight_kg", "muscle_mass_kg"];
-export const BODY_COMPOSITION_PERCENT_METRICS = ["body_fat_pct", "water_pct", "protein_ratio_pct"];
-export const BODY_COMPOSITION_INDEX_METRICS = [
-  "bmi",
-  "bone_mass_kg",
-  "visceral_fat",
-  "metabolic_age",
-];
-export const BODY_COMPOSITION_ENERGY_METRICS = ["bmr_kcal"];
+// The summary calendar views (YearView/MonthView/AllTimeView) trend only HRV and weight -- by
+// request, SpO2, stress, and the remaining Eufy body-composition metrics (BMI, body fat %,
+// muscle mass, bone mass, water %, BMR, visceral fat, metabolic age, protein ratio) are left out
+// of those trend charts as low-value there. They're still visible in this page's own
+// BODY_COMPOSITION_METRICS list section above.
+export const HRV_METRIC = ["hrv_nightly_average"];
+export const WEIGHT_METRIC = ["weight_kg"];
 
 function defaultRange(): { start: string; end: string } {
   const end = new Date();

@@ -394,7 +394,7 @@ export function PaceTrendsChart({ activities }: { activities: ActivitySummary[] 
         <ResponsiveContainer width="100%" height={180}>
           <BarChart
             data={durationData}
-            margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
+            margin={{ top: 0, right: 16, bottom: 8, left: 0 }}
             onClick={handleChartClick}
             onMouseMove={handleChartMouseMove}
             style={{ cursor: "crosshair", userSelect: "none" }}

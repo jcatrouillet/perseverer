@@ -22,14 +22,7 @@ import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { monthName, yearRange } from "../../dateUtils";
 import { weeklyAverageSleepHours } from "../../healthStats";
-import {
-  BODY_COMPOSITION_ENERGY_METRICS,
-  BODY_COMPOSITION_INDEX_METRICS,
-  BODY_COMPOSITION_MASS_METRICS,
-  BODY_COMPOSITION_PERCENT_METRICS,
-  CORE_METRICS,
-  HRV_SPO2_STRESS_METRICS,
-} from "../HealthPage";
+import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
 import { personalRecords } from "../../runningStats";
 import { busiestMonth } from "../../yearStats";
 import "../../styles/calendar.css";
@@ -153,39 +146,12 @@ export function YearView({ year }: { year: number }) {
               />
             </ChartFullscreen>
 
-            <ChartFullscreen as="h3" title={`HRV / SpO2 / Stress — over ${year}`}>
-              <HealthTrendChart metrics={health.data.metrics} keys={HRV_SPO2_STRESS_METRICS} />
+            <ChartFullscreen as="h3" title={`HRV — over ${year}`}>
+              <HealthTrendChart metrics={health.data.metrics} keys={HRV_METRIC} />
             </ChartFullscreen>
 
-            <ChartFullscreen as="h3" title={`Weight & muscle mass — over ${year}`}>
-              <HealthTrendChart
-                metrics={health.data.metrics}
-                keys={BODY_COMPOSITION_MASS_METRICS}
-              />
-            </ChartFullscreen>
-
-            <ChartFullscreen as="h3" title={`Body composition % — over ${year}`}>
-              <HealthTrendChart
-                metrics={health.data.metrics}
-                keys={BODY_COMPOSITION_PERCENT_METRICS}
-              />
-            </ChartFullscreen>
-
-            <ChartFullscreen
-              as="h3"
-              title={`BMI, bone mass, visceral fat & metabolic age — over ${year}`}
-            >
-              <HealthTrendChart
-                metrics={health.data.metrics}
-                keys={BODY_COMPOSITION_INDEX_METRICS}
-              />
-            </ChartFullscreen>
-
-            <ChartFullscreen as="h3" title={`BMR — over ${year}`}>
-              <HealthTrendChart
-                metrics={health.data.metrics}
-                keys={BODY_COMPOSITION_ENERGY_METRICS}
-              />
+            <ChartFullscreen as="h3" title={`Weight — over ${year}`}>
+              <HealthTrendChart metrics={health.data.metrics} keys={WEIGHT_METRIC} />
             </ChartFullscreen>
           </>
         )}

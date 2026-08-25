@@ -494,14 +494,17 @@ export function TrainingBandsChart() {
         {hasCompositionData && (
           <>
             <p className="chart-note">Duration of each run -- always the full history.</p>
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={204}>
               <BarChart data={compositionRows} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
                 <XAxis
                   dataKey="ts"
                   type="number"
                   scale="time"
                   domain={["dataMin", "dataMax"]}
-                  hide
+                  stroke="var(--color-text-muted)"
+                  fontSize={11}
+                  tickFormatter={useYearTicks ? formatYearTick : formatMonthTick}
+                  ticks={useYearTicks ? yearTicks : undefined}
                 />
                 <YAxis
                   dataKey="hours"
