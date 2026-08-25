@@ -439,6 +439,7 @@ export function RunningStats({
           tone="pace"
           hero
         />
+        <StatTile label="Number of runs" value={activities.length} icon="run" tone="load" hero />
         <StatTile
           label="Average pace"
           value={formatPaceMinPerKm(totalMovingDurationS, totalDistanceM)}
