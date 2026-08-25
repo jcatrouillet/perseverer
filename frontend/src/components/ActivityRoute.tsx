@@ -32,10 +32,23 @@ export interface RouteData {
   points: RoutePoint[];
   distanceM: (number | null)[];
   elapsedS: number[];
+  // The same elapsed time as `elapsedS`, but *without* pause compression -- i.e. real wall-clock
+  // seconds since the activity's own first recorded sample, matching what the backend's trim
+  // endpoint (activity_trim.py::_recompute_window) actually expects for trim_start_s/trim_end_s.
+  // `elapsedS` is deliberately compressed for map/slider display (see below); anything that needs
+  // to hand a boundary back to the backend must use this parallel array instead, indexed
+  // identically -- see ActivityTrimControls.tsx's own commit path for why this matters.
+  rawElapsedS: number[];
   altitudeM: (number | null)[] | undefined;
 }
 
-const EMPTY_ROUTE: RouteData = { points: [], distanceM: [], elapsedS: [], altitudeM: undefined };
+const EMPTY_ROUTE: RouteData = {
+  points: [],
+  distanceM: [],
+  elapsedS: [],
+  rawElapsedS: [],
+  altitudeM: undefined,
+};
 
 /** Reduces a raw stream response down to the parallel lat/lon/distance/elapsed-time arrays the
  * route map and splits table need -- shared with DayViewActivityRoute.tsx's compact auto-play
@@ -58,6 +71,7 @@ export function buildRouteData(stream: StreamResponse): RouteData {
   const points: RoutePoint[] = [];
   const distanceM: (number | null)[] = [];
   const elapsedS: number[] = [];
+  const rawElapsedS: number[] = [];
   const altitudeM: (number | null)[] = [];
 
   for (let i = 0; i < stream.timestamps.length; i++) {
@@ -67,10 +81,17 @@ export function buildRouteData(stream: StreamResponse): RouteData {
     points.push({ lat: la, lon: lo });
     distanceM.push(distanceSeries?.[i] ?? null);
     elapsedS.push(compress(rawElapsedAll[i]!));
+    rawElapsedS.push(rawElapsedAll[i]!);
     altitudeM.push(altitudeSeries?.[i] ?? null);
   }
 
-  return { points, distanceM, elapsedS, altitudeM: altitudeSeries != null ? altitudeM : undefined };
+  return {
+    points,
+    distanceM,
+    elapsedS,
+    rawElapsedS,
+    altitudeM: altitudeSeries != null ? altitudeM : undefined,
+  };
 }
 
 export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport: string }) {

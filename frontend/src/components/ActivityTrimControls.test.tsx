@@ -7,11 +7,12 @@ import type { RouteData } from "./ActivityRoute";
 
 const ACTIVITY_START = "2025-06-01T08:00:00Z";
 
-function route(n = 100): RouteData {
+function route(n = 100, rawElapsedS?: number[]): RouteData {
   return {
     points: Array.from({ length: n }, (_, i) => ({ lat: 37 + i * 0.0001, lon: -122 })),
     distanceM: Array.from({ length: n }, (_, i) => i * 2),
     elapsedS: Array.from({ length: n }, (_, i) => i),
+    rawElapsedS: rawElapsedS ?? Array.from({ length: n }, (_, i) => i),
     altitudeM: Array.from({ length: n }, (_, i) => 100 + i * 0.1),
   };
 }
@@ -112,6 +113,36 @@ describe("ActivityTrimControls", () => {
     fireEvent.change(sliders[0]!, { target: { value: "30" } });
     fireEvent.click(screen.getByText("Save trim"));
     expect(onCommit).toHaveBeenCalledWith(30, null);
+  });
+
+  it("commits raw (uncompressed) elapsed seconds, not the compressed slider value, for a paused activity", () => {
+    // A real device pause makes elapsedS (compressed, used for the slider domain) diverge from
+    // rawElapsedS (real wall-clock seconds, what the backend's trim endpoint actually expects) --
+    // e.g. a 1000s pause after index 30 collapses index 31 onwards way down in elapsedS while
+    // rawElapsedS keeps counting real seconds. Regression test for the bug where onCommit sent
+    // the compressed slider value straight through, silently committing a much shorter/earlier
+    // window than the slider promised (confirmed against a real production activity).
+    const rawElapsedS = Array.from({ length: 100 }, (_, i) => (i <= 30 ? i : i + 1000));
+    const onCommit = vi.fn();
+    render(
+      <ActivityTrimControls
+        route={route(100, rawElapsedS)}
+        laps={[]}
+        activityStartTimeUtc={ACTIVITY_START}
+        suggestedTrimStartS={0}
+        suggestedTrimEndS={99}
+        onCommit={onCommit}
+        onCancel={noop}
+        isSaving={false}
+        isError={false}
+      />,
+    );
+
+    const sliders = screen.getAllByRole("slider");
+    // Move the "Keep until" slider to compressed index 40 -- rawElapsedS there is 1040, not 40.
+    fireEvent.change(sliders[1]!, { target: { value: "40" } });
+    fireEvent.click(screen.getByText("Save trim"));
+    expect(onCommit).toHaveBeenCalledWith(null, 1040);
   });
 
   it("calls onCancel when Cancel is clicked", () => {

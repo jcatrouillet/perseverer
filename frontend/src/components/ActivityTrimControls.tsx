@@ -64,6 +64,14 @@ export function ActivityTrimControls({
     }
   }
   const valid = startIdx >= 0 && endIdx >= startIdx;
+  // route.elapsedS (used for the slider domain above) is pause-compressed for a cleaner
+  // map/slider experience (see ActivityRoute.tsx's own docstring) -- but the backend's trim
+  // endpoint expects raw, uncompressed elapsed seconds. Indices are shared 1:1 between the two
+  // parallel arrays, so look up the *raw* boundary at the same index rather than sending the
+  // compressed trimStartS/trimEndS state directly (which, for any activity with a real device
+  // pause, would silently commit a much shorter/earlier window than the slider promised).
+  const rawTrimStartS = valid ? (route.rawElapsedS[startIdx] ?? null) : null;
+  const rawTrimEndS = valid ? (route.rawElapsedS[endIdx] ?? null) : null;
 
   const previewPoints = valid ? route.points.slice(startIdx, endIdx + 1) : [];
   const previewDistanceM = valid ? route.distanceM.slice(startIdx, endIdx + 1) : [];
@@ -170,8 +178,8 @@ export function ActivityTrimControls({
           disabled={!valid || isSaving}
           onClick={() =>
             onCommit(
-              trimStartS > 0 ? trimStartS : null,
-              trimEndS < totalS ? trimEndS : null,
+              trimStartS > 0 ? rawTrimStartS : null,
+              trimEndS < totalS ? rawTrimEndS : null,
             )
           }
         >
