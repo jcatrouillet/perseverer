@@ -151,14 +151,24 @@ because you don't recognize it — stop, that's the bug.
     sync kept reporting success. Two low-value report kinds (`healthStatusData` — internal
     data-quality metadata, `outliersCount` almost always 0; `AbnormalHrEvents` — only 2 events
     across ~4 years of real data) were deliberately left export-only rather than wired live.
-    A second *range* fetch (Phase 9): `get_body_battery` (`garmin.daily_body_battery.*`,
-    `HealthStreamPoint`s under `garmin.daily_body_battery.level` in `health_stream`/Parquet, not
-    `health_observation`) — added because no daily-summary or GDPR-export field carries a real
-    per-minute body-battery series, only 8 sparse named checkpoints (verified live against the
-    real account, not assumed — see `health/json_parser.py::parse_daily_body_battery_json`'s own
-    docstring). Surfaces as a real intraday chart on the day view (`GET /health/stream`, the
-    first endpoint to read `health_stream` at all), not the sparse connect-the-dots version that
-    data would otherwise produce.
+    Body battery (Phase 9, revised): `HealthStreamPoint`s under `garmin.daily_body_battery.level`
+    in `health_stream`/Parquet, not `health_observation` — added because no daily-summary or
+    GDPR-export field carries a real per-minute body-battery series, only 8 sparse named
+    checkpoints. The first live source tried, `get_body_battery` (a *range* fetch, one call per
+    run), itself turned out on live verification to return only ~6 sparse checkpoints/day —
+    nowhere near dense enough. `get_stress_data` (a *per-date* fetch, like sleep/HRV/etc. above,
+    not a range call — this endpoint only takes a single date) turned out to carry a genuinely
+    dense, ~3-minute-cadence `bodyBatteryValuesArray` instead (confirmed live against the real
+    account, not assumed), and is now the adapter's live body-battery source — see
+    `health/json_parser.py::parse_daily_stress_json`'s own docstring. The original
+    `get_body_battery`-based fetch/parser (`parse_daily_body_battery_json`) stay in place
+    unchanged, purely so already-archived raw bytes of that shape still replay on `sync rebuild`
+    (raw-first/never-destructive) — `rebuild.py` has a branch for each raw JSON `kind`. This
+    response also carries a real intraday *stress* series and daily stress scalars
+    (`avgStressLevel`/`maxStressLevel`) that aren't parsed into observations yet — cataloged via
+    `unrecognized_field_keys`, not dropped, pending a future stress feature. Surfaces as a real
+    intraday chart on the day view (`GET /health/stream`, the first endpoint to read
+    `health_stream` at all), not the sparse connect-the-dots version the old fetch produced.
   - `strava_export` (`adapters/strava_export.py`, Phase 8) — historical backfill from Strava's
     "export your data" archive, zero network calls. `.fit`/`.fit.gz` files go through the same
     `ingest_dispatch.ingest_fit_bytes` as every other source (often literally the same Garmin

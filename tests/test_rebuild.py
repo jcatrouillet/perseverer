@@ -35,6 +35,7 @@ from perseverer.health.json_parser import (
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
+    parse_daily_stress_json,
     parse_daily_summary_json,
     parse_daily_training_readiness_json,
     parse_daily_training_status_json,
@@ -597,6 +598,80 @@ def test_rebuild_replays_garmin_connect_daily_body_battery_json(tmp_path: Path) 
     assert replayed == 1
     assert after == before == 69.0
     assert stream_after == stream_before == 1
+
+
+def test_rebuild_replays_garmin_connect_daily_stress_json(tmp_path: Path) -> None:
+    """The current live body-battery source (see adapters/garmin_connect.py's
+    fetch_and_ingest_daily_body_battery docstring) -- proves the dense stream_points-derived
+    health_stream row survives a rebuild replay from raw bytes alone, with no live re-fetch.
+    Uses the real, plural `bodyBatteryValueDescriptorsDTOList` key confirmed live."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    content = json.dumps(
+        {
+            "calendarDate": "2026-08-05",
+            "avgStressLevel": 23,
+            "bodyBatteryValuesArray": [
+                [1754380800000, "MEASURED", 19, 3.0],
+                [1754380980000, "MEASURED", 20, 3.0],
+            ],
+            "bodyBatteryValueDescriptorsDTOList": [
+                {
+                    "bodyBatteryValueDescriptorIndex": 0,
+                    "bodyBatteryValueDescriptorKey": "timestamp",
+                },
+                {
+                    "bodyBatteryValueDescriptorIndex": 1,
+                    "bodyBatteryValueDescriptorKey": "bodyBatteryStatus",
+                },
+                {
+                    "bodyBatteryValueDescriptorIndex": 2,
+                    "bodyBatteryValueDescriptorKey": "bodyBatteryLevel",
+                },
+            ],
+        }
+    ).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            kind="garmin_connect_daily_stress_json",
+            content=content,
+            locator="daily-stress/2026-08-05",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="garmin_connect",
+            batch=parse_daily_stress_json(content),
+        )
+        conn.commit()
+        stream_before = conn.execute(
+            select(health_stream.c.n_samples).where(
+                health_stream.c.metric_key == "garmin.daily_body_battery.level"
+            )
+        ).scalar_one()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        stream_after = conn.execute(
+            select(health_stream.c.n_samples).where(
+                health_stream.c.metric_key == "garmin.daily_body_battery.level"
+            )
+        ).scalar_one()
+
+    assert replayed == 1
+    assert stream_after == stream_before == 2
 
 
 def test_rebuild_replays_eufy_scale_reading_json(tmp_path: Path) -> None:

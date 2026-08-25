@@ -1317,7 +1317,7 @@ const GROUPS = [
       example: { qs: "?start_date=2026-08-01&end_date=2026-08-19" }
     },
     { method: "GET", path: "/api/v1/health/stream", summary: "One day's intraday health_stream series.",
-      description: "Currently the only producer is garmin.daily_body_battery.level, a real per-reading body-battery curve fetched live from Garmin's own get_body_battery endpoint. Distinct from GET /health/observations, which returns once-or-a-few-per-day EAV rows -- health_stream is a genuine intraday series, one metric_key per Parquet file.",
+      description: "Currently the only producer is garmin.daily_body_battery.level, a real per-reading body-battery curve (~3-minute cadence) fetched live from Garmin's own get_stress_data endpoint. Distinct from GET /health/observations, which returns once-or-a-few-per-day EAV rows -- health_stream is a genuine intraday series, one metric_key per Parquet file.",
       params: [
         ["metric_key","query","req","string","—","e.g. garmin.daily_body_battery.level."],
         ["date","query","req","string(date)","—","A single local date -- this endpoint has no range form."],

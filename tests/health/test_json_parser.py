@@ -13,6 +13,7 @@ from perseverer.health.json_parser import (
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
+    parse_daily_stress_json,
     parse_daily_summary_json,
     parse_daily_training_readiness_json,
     parse_daily_training_status_json,
@@ -708,3 +709,93 @@ def test_daily_body_battery_non_list_top_level_produces_empty_batch() -> None:
     batch = parse_daily_body_battery_json(_bytes({"charged": 50}))
     assert batch.observations == []
     assert batch.stream_points == []
+
+
+# --- parse_daily_stress_json: garmin_connect's live get_stress_data() shape -- confirmed live
+# to be a genuinely dense, ~3-minute-cadence body-battery source (339 "MEASURED" + a handful of
+# "MODELED" points on a real day), unlike parse_daily_body_battery_json's own sparse ~6-point/
+# day endpoint above. One record per date, not a list. Field names/shape confirmed against the
+# real account (not recalled/guessed); values below are synthetic. -------------------------------
+
+DAILY_STRESS: dict[str, object] = {
+    "userProfilePK": 87061520,
+    "calendarDate": "2025-06-01",
+    "startTimestampGMT": "2025-06-01T07:00:00.0",
+    "endTimestampGMT": "2025-06-02T00:13:00.0",
+    "maxStressLevel": 97,
+    "avgStressLevel": 23,
+    "stressValueDescriptorsDTOList": [
+        {"index": 0, "key": "timestamp"},
+        {"index": 1, "key": "stressLevel"},
+    ],
+    "stressValuesArray": [
+        [1748761200000, 19],
+        [1748761380000, 22],
+    ],
+    "bodyBatteryValueDescriptorsDTOList": [
+        {"bodyBatteryValueDescriptorIndex": 0, "bodyBatteryValueDescriptorKey": "timestamp"},
+        {
+            "bodyBatteryValueDescriptorIndex": 1,
+            "bodyBatteryValueDescriptorKey": "bodyBatteryStatus",
+        },
+        {
+            "bodyBatteryValueDescriptorIndex": 2,
+            "bodyBatteryValueDescriptorKey": "bodyBatteryLevel",
+        },
+    ],
+    "bodyBatteryValuesArray": [
+        [1748761200000, "MEASURED", 19, 3.0],
+        [1748761380000, "MEASURED", 20, 3.0],
+        [1748789280000, "MODELED", 82, 3.0],
+    ],
+}
+
+
+def test_daily_stress_body_battery_values_array_becomes_stream_points() -> None:
+    """The whole point of this parser -- a real per-~3-minute series, not the old endpoint's
+    sparse checkpoints. Reads the 4-wide row (timestamp, status, level, an undocumented 4th
+    column) via the plural bodyBatteryValueDescriptorsDTOList key, ignoring the extra column."""
+    batch = parse_daily_stress_json(_bytes(DAILY_STRESS))
+    points = [p for p in batch.stream_points if p.metric_key == "garmin.daily_body_battery.level"]
+    assert len(points) == 3
+    assert {p.value for p in points} == {19.0, 20.0, 82.0}
+    # 1748761200000 ms -> a real UTC instant, not the epoch or a truncated value.
+    first = next(p for p in points if p.value == 19.0)
+    assert first.timestamp_utc == datetime(2025, 6, 1, 7, 0, 0)
+
+
+def test_daily_stress_status_is_not_distinguished() -> None:
+    """MEASURED and MODELED rows both become plain stream points -- this parser doesn't
+    currently draw Garmin's own "Estimated" distinction (see its own docstring)."""
+    batch = parse_daily_stress_json(_bytes(DAILY_STRESS))
+    values = {p.value for p in batch.stream_points}
+    assert 82.0 in values  # the MODELED row wasn't dropped
+
+
+def test_daily_stress_other_fields_are_cataloged_not_dropped_or_materialized() -> None:
+    """avgStressLevel/maxStressLevel/stressValuesArray/etc. are real data this endpoint
+    carries, but out of scope for this parser (a live stress feature) -- never-drop-a-field
+    means they're still registered via unrecognized_field_keys, not turned into
+    observations."""
+    batch = parse_daily_stress_json(_bytes(DAILY_STRESS))
+    assert batch.observations == []
+    keys = batch.unrecognized_field_keys
+    assert "garmin.daily_stress.avgStressLevel" in keys
+    assert "garmin.daily_stress.maxStressLevel" in keys
+    assert "garmin.daily_stress.stressValuesArray" in keys
+    assert "garmin.daily_stress.userProfilePK" in keys
+    # The body-battery fields this parser *does* consume aren't re-cataloged as unrecognized.
+    assert "garmin.daily_stress.bodyBatteryValuesArray" not in keys
+    assert "garmin.daily_stress.calendarDate" not in keys
+
+
+def test_daily_stress_missing_calendar_date_produces_empty_batch() -> None:
+    batch = parse_daily_stress_json(_bytes({"avgStressLevel": 23}))
+    assert batch.stream_points == []
+    assert batch.unrecognized_field_keys == []
+
+
+def test_daily_stress_non_dict_top_level_produces_empty_batch() -> None:
+    batch = parse_daily_stress_json(_list_bytes([{"calendarDate": "2025-06-01"}]))
+    assert batch.stream_points == []
+    assert batch.observations == []

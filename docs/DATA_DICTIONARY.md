@@ -164,13 +164,26 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
   first device's data taken since this athlete has only ever had one recording device); and
   `garmin.daily_race_predictions.<field>` (`get_race_predictions`, one of two live fetches that
   accept a date range and return one record per day in a *single* request per sync run, not
-  once per day — the other is `get_body_battery`/`garmin.daily_body_battery.<field>`, Phase 9,
-  added because no daily-summary or GDPR-export field carries body battery as a real per-minute
-  series, only 8 sparse named checkpoints; its own `bodyBatteryValuesArray` — `[timestamp_ms,
-  level]` pairs, read via the response's own `bodyBatteryValueDescriptorDTOList` column-index
-  map rather than a hardcoded position — becomes `HealthStreamPoint`s under
-  `garmin.daily_body_battery.level` in `health_stream` below, not `health_observation` rows like
-  every other field on that same response). `garmin.hydration.<field>` gained a second
+  once per day — the other was originally `get_body_battery`/`garmin.daily_body_battery.<field>`,
+  Phase 9, added because no daily-summary or GDPR-export field carries body battery as a real
+  per-minute series, only 8 sparse named checkpoints; live verification later found this
+  endpoint itself only returns ~6 sparse checkpoints/day, so it's no longer this project's live
+  body-battery source). `garmin.daily_body_battery.level` (`HealthStreamPoint`s in
+  `health_stream` below, not `health_observation` rows) is now sourced from `get_stress_data`
+  instead — a *per-date* fetch (like sleep/HRV above, not a range call: this endpoint only takes
+  a single date) whose response carries a genuinely dense, ~3-minute-cadence
+  `bodyBatteryValuesArray` — `[timestamp_ms, status, level, an undocumented 4th column]` rows,
+  read via the response's own `bodyBatteryValueDescriptorsDTOList` (plural "Descriptors", a
+  different key name than the old endpoint's singular one) column-index map rather than a
+  hardcoded position, tolerating the extra trailing column. The old
+  `get_body_battery`/`parse_daily_body_battery_json` fetch/parser and raw JSON kind
+  (`garmin_connect_daily_body_battery_json`) stay in place unchanged, purely so already-archived
+  raw bytes of that shape still replay on `sync rebuild` (raw-first/never-destructive) —
+  `rebuild.py` has a branch per raw JSON kind. `get_stress_data`'s response also carries a real
+  intraday *stress* series (`stressValuesArray`) and daily stress scalars
+  (`avgStressLevel`/`maxStressLevel`), neither parsed into observations yet — cataloged via
+  `unrecognized_field_keys`, not dropped, pending a future stress feature. `garmin.hydration.
+  <field>` gained a second
   provenance the same way `garmin.daily_summary.*` already had two (`daily_summary_json` vs
   `garmin_connect_daily_summary_json`): `get_hydration_data`'s live JSON shape matches the
   *existing* `parse_hydration_json` exactly, so no new parser was needed, just a new
@@ -189,11 +202,12 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
   year_month)`: `heart_rate` (from `monitoring_mesgs`, `timestamp_16`-corrected — decision 1),
   `stress_level`, `respiration_rate`, `spo2`, `hrv`, and (Phase 9) `garmin.daily_body_battery.
   level` — the first `health_stream` producer that isn't a FIT parser (every other one comes
-  from `health/fit_parser.py`; this one from `health/json_parser.py::
-  parse_daily_body_battery_json`), and the first metric exposed to the frontend at all —
-  `GET /health/stream` (`api/routers/health.py`), read directly with pyarrow (no DuckDB
-  downsampling tier needed for one day's worth of readings), powers the day view's Body Battery
-  chart. Unlike `activity_stream`, a month's file is built up incrementally across many daily
+  from `health/fit_parser.py`; this one from `health/json_parser.py`, originally
+  `parse_daily_body_battery_json`, now `parse_daily_stress_json` — see above), and the first
+  metric exposed to the frontend at all — `GET /health/stream` (`api/routers/health.py`), read
+  directly with pyarrow (no DuckDB downsampling tier needed for one day's worth of readings),
+  powers the day view's Body Battery chart. Unlike `activity_stream`, a month's file is built up
+  incrementally across many daily
   source files via `write_health_stream`'s merge-by-timestamp (decision 10) — re-ingesting a day
   is idempotent, not a duplicate. That merge normalizes every timestamp to naive before
   comparing (a real bug, found building the body-battery feature: pyarrow round-trips a

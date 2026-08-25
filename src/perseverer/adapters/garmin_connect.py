@@ -51,10 +51,10 @@ from perseverer.gap import refresh_avg_gap
 from perseverer.garmin_connect_activity_name import backfill_garmin_activity_names
 from perseverer.health.ingest import HealthIngestResult, ingest_health_batch
 from perseverer.health.json_parser import (
-    parse_daily_body_battery_json,
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
+    parse_daily_stress_json,
     parse_daily_summary_json,
     parse_daily_training_readiness_json,
     parse_daily_training_status_json,
@@ -513,22 +513,24 @@ class GarminConnectAdapter:
         parquet_dir: Path,
         *,
         athlete_id: str,
-        since: datetime,
-        until: datetime,
+        local_date: str,
     ) -> HealthIngestResult:
-        """Body battery (`get_body_battery`) for the whole rolling window in *one* request --
-        same "this endpoint itself accepts a range" reasoning as `fetch_and_ingest_race_
-        predictions` above. See health/json_parser.py::parse_daily_body_battery_json for the
-        real per-minute-ish series (`bodyBatteryValuesArray`) this exists to capture -- no
-        daily-summary/export field carries that, only sparse named checkpoints."""
+        """One calendar day's body battery, sourced from `get_stress_data` (the dailyStress
+        endpoint) rather than `get_body_battery` (the dailyBodyBattery "reports" endpoint this
+        adapter originally used) -- live verification found the latter only returns ~6 sparse
+        checkpoints/day, while the former carries a genuinely dense ~3-minute-cadence series.
+        Per-date, like sleep/HRV/etc. above, not a range fetch -- `get_stress_data` only takes
+        a single date. See health/json_parser.py::parse_daily_stress_json for the response
+        shape and why the old parse_daily_body_battery_json/raw JSON kind stay in place
+        unchanged (already-archived bytes must still replay on `sync rebuild`)."""
         assert self._client is not None, "call authenticate() first"
         self.rate_limiter.wait()
-        start_date = since.date().isoformat()
-        end_date = until.date().isoformat()
         try:
-            data = self._client.get_body_battery(startdate=start_date, enddate=end_date)
+            data = self._client.get_stress_data(local_date)
         except GarminConnectTooManyRequestsError as e:
-            raise GarminRateLimitAborted("429 from Garmin while fetching body battery") from e
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching body battery for {local_date}"
+            ) from e
 
         content = json.dumps(data).encode("utf-8")
         archive_raw_bytes(
@@ -536,16 +538,16 @@ class GarminConnectAdapter:
             archive_root,
             athlete_id=athlete_id,
             source=SOURCE_NAME,
-            kind="garmin_connect_daily_body_battery_json",
+            kind="garmin_connect_daily_stress_json",
             content=content,
-            locator=f"body-battery/{start_date}_{end_date}",
+            locator=f"daily-stress/{local_date}",
         )
         return ingest_health_batch(
             conn,
             parquet_dir,
             athlete_id=athlete_id,
             source=SOURCE_NAME,
-            batch=parse_daily_body_battery_json(content),
+            batch=parse_daily_stress_json(content),
         )
 
 
@@ -773,22 +775,28 @@ def sync_garmin_connect(
             conn.rollback()
             summary.errors.append({"error": f"race predictions: {e}"})
 
-        # Body battery -- same one-range-request shape as race predictions above (see
-        # fetch_and_ingest_daily_body_battery's own docstring).
-        try:
-            body_battery_result = adapter.fetch_and_ingest_daily_body_battery(
-                conn,
-                archive_root,
-                parquet_dir,
-                athlete_id=athlete_id,
-                since=since,
-                until=started_at,
-            )
-            conn.commit()
-            touched_dates |= body_battery_result.affected_local_dates
-        except GarminRateLimitAborted as e:
-            conn.rollback()
-            summary.errors.append({"error": f"body battery: {e}"})
+        # Body battery -- same whole-rolling-window, idempotent-upsert, self-healing contract as
+        # sleep/HRV/wellness above (get_stress_data only takes a single date, unlike race
+        # predictions' own range endpoint).
+        body_battery_date = since.date()
+        while body_battery_date <= today:
+            try:
+                body_battery_result = adapter.fetch_and_ingest_daily_body_battery(
+                    conn,
+                    archive_root,
+                    parquet_dir,
+                    athlete_id=athlete_id,
+                    local_date=body_battery_date.isoformat(),
+                )
+                conn.commit()
+                touched_dates |= body_battery_result.affected_local_dates
+            except GarminRateLimitAborted as e:
+                conn.rollback()
+                summary.errors.append(
+                    {"body_battery_date": body_battery_date.isoformat(), "error": str(e)}
+                )
+                break  # no retry loop — same contract as the loops above
+            body_battery_date += timedelta(days=1)
     except (GarminAuthRequired, GarminRateLimitAborted) as e:
         summary.errors.append({"error": str(e)})
 

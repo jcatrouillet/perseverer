@@ -57,6 +57,7 @@ from perseverer.health.json_parser import (
     parse_daily_hrv_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
+    parse_daily_stress_json,
     parse_daily_summary_json,
     parse_daily_training_readiness_json,
     parse_daily_training_status_json,
@@ -229,12 +230,24 @@ def rebuild_database(
             )
             touched_dates |= health_result.affected_local_dates
         elif row.kind == "garmin_connect_daily_body_battery_json":
+            # Superseded as the live fetch source (see fetch_and_ingest_daily_body_battery's own
+            # docstring) -- this branch stays so already-archived raw bytes of this older shape
+            # still replay (raw-first/never-destructive).
             health_result = ingest_health_batch(
                 conn,
                 parquet_dir,
                 athlete_id=athlete_id,
                 source=row.source,
                 batch=parse_daily_body_battery_json(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind == "garmin_connect_daily_stress_json":
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_daily_stress_json(content),
             )
             touched_dates |= health_result.affected_local_dates
         elif row.kind == "eufy_scale_reading_json":

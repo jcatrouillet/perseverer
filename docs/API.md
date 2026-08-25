@@ -568,10 +568,10 @@ one series per human-meaningful `logical_metric` (`steps`, `resting_hr_bpm`, `we
 ### `GET /health/stream`
 
 One day's intraday `health_stream` series — currently the only producer is
-`garmin.daily_body_battery.level`, a real per-reading body-battery curve fetched live from
-Garmin's own `get_body_battery` endpoint. Distinct from `GET /health/observations`, which
-returns once-or-a-few-per-day EAV rows — `health_stream` is a genuine intraday series, one
-metric_key per Parquet file.
+`garmin.daily_body_battery.level`, a real per-reading body-battery curve (~3-minute cadence)
+fetched live from Garmin's own `get_stress_data` endpoint. Distinct from `GET
+/health/observations`, which returns once-or-a-few-per-day EAV rows — `health_stream` is a
+genuine intraday series, one metric_key per Parquet file.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|

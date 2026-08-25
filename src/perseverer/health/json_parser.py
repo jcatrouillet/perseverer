@@ -468,16 +468,60 @@ _DAILY_BODY_BATTERY_ARRAY_FIELDS = frozenset(
 )
 
 
+def _extract_body_battery_points(
+    values_array: Any, descriptors: Any
+) -> tuple[list[HealthStreamPoint], list[str]]:
+    """Shared by parse_daily_body_battery_json (old whole-range endpoint) and
+    parse_daily_stress_json (new per-date endpoint, which embeds a body-battery array of the
+    same shape under a differently-named descriptor key -- see the latter's own docstring for
+    why both exist). Both read the array positionally via the descriptor list's own index
+    rather than a hardcoded [0]/[1], so this tolerates the new endpoint's rows being 4-wide
+    (timestamp, status, level, an undocumented 4th column) -- only the two indices actually
+    needed are read, extra trailing columns are silently ignored, not flagged as unrecognized
+    (the whole array is one already-recognized field; this project's unrecognized-field
+    tracking operates at the JSON-key level, not per-array-column).
+    """
+    points: list[HealthStreamPoint] = []
+    if not isinstance(values_array, list) or not isinstance(descriptors, list):
+        return points, []
+    index_by_key = {
+        d.get("bodyBatteryValueDescriptorKey"): d.get("bodyBatteryValueDescriptorIndex")
+        for d in descriptors
+        if isinstance(d, dict)
+    }
+    ts_index = index_by_key.get("timestamp")
+    level_index = index_by_key.get("bodyBatteryLevel")
+    if ts_index is None or level_index is None:
+        return points, ["garmin.daily_body_battery.bodyBatteryValuesArray"]
+    for row in values_array:
+        if not isinstance(row, list) or len(row) <= max(ts_index, level_index):
+            continue
+        ts_ms, level = row[ts_index], row[level_index]
+        if not isinstance(ts_ms, int | float) or not isinstance(level, int | float):
+            continue
+        points.append(
+            HealthStreamPoint(
+                metric_key="garmin.daily_body_battery.level",
+                timestamp_utc=datetime.fromtimestamp(ts_ms / 1000, tz=UTC).replace(tzinfo=None),
+                value=float(level),
+            )
+        )
+    return points, []
+
+
 def parse_daily_body_battery_json(raw_bytes: bytes) -> HealthBatch:
-    """The whole-range response from `Garmin.get_body_battery(startdate, enddate)` -- verified
-    live against the real account (not recalled/guessed, see ADR 0003 decision 1-2), one record
-    per day in the range. `bodyBatteryValuesArray` is the real per-minute-ish series this was
-    built for -- `[timestamp_ms, level]` pairs, GMT epoch milliseconds -- read via its own
-    `bodyBatteryValueDescriptorDTOList` column-index map rather than a hardcoded [0]/[1]
-    position, in case Garmin ever reorders it. Everything else on the record (charged/drained
-    totals, the two feedback-event dicts, the activity-impact event list) is either a plain
-    scalar (flattened into observations the normal way) or cataloged as unrecognized -- this
-    parser's whole job is the one array `_flatten_scalars` can't handle, not those extras.
+    """The whole-range response from `Garmin.get_body_battery(startdate, enddate)`. Superseded
+    by parse_daily_stress_json below as this adapter's live body-battery source (that endpoint
+    turned out, on live verification, to return only ~6 sparse checkpoints/day -- nowhere near
+    the "real per-minute-ish series" this was originally built to capture) -- kept here,
+    unchanged, purely so already-archived raw bytes of this JSON shape (kind
+    `garmin_connect_daily_body_battery_json`) still replay correctly on `sync rebuild`
+    (raw-first/never-destructive; see rebuild.py). One record per day in the range;
+    `bodyBatteryValuesArray` read via its own `bodyBatteryValueDescriptorDTOList` column-index
+    map rather than a hardcoded [0]/[1] position, in case Garmin ever reorders it. Everything
+    else on the record (charged/drained totals, the two feedback-event dicts, the
+    activity-impact event list) is either a plain scalar (flattened into observations the
+    normal way) or cataloged as unrecognized.
     """
     data: Any = json.loads(raw_bytes)
     if not isinstance(data, list):
@@ -504,41 +548,68 @@ def parse_daily_body_battery_json(raw_bytes: bytes) -> HealthBatch:
         observations.extend(obs)
         unrecognized.extend(unrec)
 
-        values_array = record.get("bodyBatteryValuesArray")
-        descriptors = record.get("bodyBatteryValueDescriptorDTOList")
-        if not isinstance(values_array, list) or not isinstance(descriptors, list):
-            continue
-        index_by_key = {
-            d["bodyBatteryValueDescriptorKey"]: d["bodyBatteryValueDescriptorIndex"]
-            for d in descriptors
-            if isinstance(d, dict)
-        }
-        ts_index = index_by_key.get("timestamp")
-        level_index = index_by_key.get("bodyBatteryLevel")
-        if ts_index is None or level_index is None:
-            unrecognized.append("garmin.daily_body_battery.bodyBatteryValuesArray")
-            continue
-        for row in values_array:
-            if not isinstance(row, list) or len(row) <= max(ts_index, level_index):
-                continue
-            ts_ms, level = row[ts_index], row[level_index]
-            if not isinstance(ts_ms, int | float) or not isinstance(level, int | float):
-                continue
-            stream_points.append(
-                HealthStreamPoint(
-                    metric_key="garmin.daily_body_battery.level",
-                    timestamp_utc=datetime.fromtimestamp(ts_ms / 1000, tz=UTC).replace(
-                        tzinfo=None
-                    ),
-                    value=float(level),
-                )
-            )
+        points, array_unrec = _extract_body_battery_points(
+            record.get("bodyBatteryValuesArray"), record.get("bodyBatteryValueDescriptorDTOList")
+        )
+        stream_points.extend(points)
+        unrecognized.extend(array_unrec)
 
     return HealthBatch(
         observations=observations,
         stream_points=stream_points,
         unrecognized_field_keys=sorted(set(unrecognized)),
     )
+
+
+# calendarDate + the two body-battery keys this parser itself consumes -- everything else on
+# the response (avgStressLevel, maxStressLevel, the intraday stressValuesArray, timestamps,
+# userProfilePK, ...) is real data this endpoint carries but deliberately not turned into
+# observations/stream points here (a live per-date stress feature is out of scope for this
+# fix); still registered via unrecognized_field_keys below so nothing is silently dropped, and
+# the raw JSON is archived verbatim regardless -- a future stress feature loses nothing by this
+# parser not building it now.
+_DAILY_STRESS_HANDLED_FIELDS = frozenset(
+    {"calendarDate", "bodyBatteryValuesArray", "bodyBatteryValueDescriptorsDTOList"}
+)
+
+
+def parse_daily_stress_json(raw_bytes: bytes) -> HealthBatch:
+    """`Garmin.get_stress_data(cdate)` -- confirmed live against the real account (not
+    recalled/guessed, see ADR 0003 decision 1-2) to carry a genuinely dense, ~3-minute-cadence
+    `bodyBatteryValuesArray` (339 "MEASURED" + a handful of "MODELED" gap-filled points on a
+    real day) -- unlike `Garmin.get_body_battery`'s own whole-range "reports/daily" endpoint
+    (parse_daily_body_battery_json above), which only returns ~6 sparse checkpoints/day despite
+    being the endpoint this project originally built the body-battery stream around. This is
+    now the adapter's live body-battery source (see adapters/garmin_connect.py); the old
+    function/raw JSON kind stay in place unchanged, purely so already-archived bytes from
+    before this fix still replay on `sync rebuild`.
+
+    One record per call (a single date), not a list like the old endpoint. The date field is
+    `calendarDate`, and the body-battery descriptor list here is
+    `bodyBatteryValueDescriptorsDTOList` -- plural "Descriptors", a different key name than the
+    old endpoint's singular `bodyBatteryValueDescriptorDTOList`. Row status ("MEASURED" vs
+    "MODELED") isn't distinguished here -- both become plain stream points, at least as
+    complete as Garmin's own gap-filled rendering (their app draws "MODELED" points as a dotted
+    "Estimated" line; this project doesn't currently distinguish the two visually either).
+    """
+    data: Any = json.loads(raw_bytes)
+    if not isinstance(data, dict):
+        return HealthBatch()
+
+    local_date = data.get("calendarDate")
+    if not isinstance(local_date, str):
+        return HealthBatch()
+
+    unrecognized = [
+        f"garmin.daily_stress.{key}" for key in data if key not in _DAILY_STRESS_HANDLED_FIELDS
+    ]
+
+    points, array_unrec = _extract_body_battery_points(
+        data.get("bodyBatteryValuesArray"), data.get("bodyBatteryValueDescriptorsDTOList")
+    )
+    unrecognized.extend(array_unrec)
+
+    return HealthBatch(stream_points=points, unrecognized_field_keys=sorted(set(unrecognized)))
 
 
 # GDPR export health JSON (DI-Connect-Wellness/Metrics/Aggregator) — see

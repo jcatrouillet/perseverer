@@ -64,8 +64,8 @@ class FakeGarminClient:
         raise_on_hydration_for: set[str] | None = None,
         race_predictions: list[dict[str, Any]] | None = None,
         raise_on_race_predictions: bool = False,
-        body_battery: list[dict[str, Any]] | None = None,
-        raise_on_body_battery: bool = False,
+        stress_by_date: dict[str, dict[str, Any]] | None = None,
+        raise_on_stress_for: set[str] | None = None,
     ) -> None:
         self.activities = activities
         self.fit_bytes_by_id = fit_bytes_by_id
@@ -92,13 +92,9 @@ class FakeGarminClient:
         self.race_predictions = race_predictions or []
         self._raise_on_race_predictions = raise_on_race_predictions
         self.race_predictions_calls: list[tuple[str, str]] = []
-        # Deliberately *not* a bare `[]` default -- same archive_raw_bytes sha256-dedup-across-
-        # kinds reasoning as get_training_readiness's own comment above: an unconfigured test
-        # would otherwise archive byte-identical content to get_race_predictions's own `[]`
-        # default and silently collide onto that one raw_object row.
-        self.body_battery = body_battery or [{"date": "1970-01-01", "charged": 0, "drained": 0}]
-        self._raise_on_body_battery = raise_on_body_battery
-        self.body_battery_calls: list[tuple[str, str]] = []
+        self.stress_by_date = stress_by_date or {}
+        self._raise_on_stress_for = raise_on_stress_for or set()
+        self.stress_calls: list[str] = []
 
     def login(self, tokenstore: str | None = None) -> tuple[None, None]:
         if self._raise_on_login:
@@ -189,11 +185,15 @@ class FakeGarminClient:
             raise GarminConnectTooManyRequestsError("429")
         return self.race_predictions
 
-    def get_body_battery(self, startdate: str, enddate: str) -> list[dict[str, Any]]:
-        self.body_battery_calls.append((startdate, enddate))
-        if self._raise_on_body_battery:
+    def get_stress_data(self, cdate: str) -> dict[str, Any]:
+        self.stress_calls.append(cdate)
+        if cdate in self._raise_on_stress_for:
             raise GarminConnectTooManyRequestsError("429")
-        return self.body_battery
+        # Deliberately not a bare `{"calendarDate": cdate}` -- that's byte-identical to
+        # get_stats()'s own default for the same date, and archive_raw_bytes dedupes purely by
+        # sha256 across *all* kinds (see get_training_readiness's own comment above), which
+        # would silently collide the two onto one raw_object row.
+        return self.stress_by_date.get(cdate, {"calendarDate": cdate, "maxStressLevel": -1})
 
 
 def _seed_athlete(engine: Engine) -> None:
@@ -367,7 +367,7 @@ def test_sync_garmin_connect_full_orchestration_with_fake_client(tmp_path: Path)
         "garmin_connect_daily_training_status_json",
         "garmin_connect_daily_hydration_json",
         "garmin_connect_race_predictions_json",
-        "garmin_connect_daily_body_battery_json",
+        "garmin_connect_daily_stress_json",
     }
     # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation --
     # the daily-wellness loop now touches every date in the rolling window too (11 dates at
@@ -483,7 +483,7 @@ def test_daily_wellness_is_fetched_archived_and_ingested(tmp_path: Path) -> None
         "garmin_connect_daily_training_status_json",
         "garmin_connect_daily_hydration_json",
         "garmin_connect_race_predictions_json",
-        "garmin_connect_daily_body_battery_json",
+        "garmin_connect_daily_stress_json",
     }
     assert resting_hr == 47
 
@@ -531,7 +531,7 @@ def test_wellness_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
         "garmin_connect_daily_training_status_json",
         "garmin_connect_daily_hydration_json",
         "garmin_connect_race_predictions_json",
-        "garmin_connect_daily_body_battery_json",
+        "garmin_connect_daily_stress_json",
     }
 
 
@@ -1106,10 +1106,13 @@ def test_race_predictions_429_aborts_the_run_without_retrying(tmp_path: Path) ->
     assert race_prediction_kinds == []  # nothing archived for the fetch that 429'd
 
 
-def test_body_battery_is_fetched_archived_and_ingested_once_per_run(tmp_path: Path) -> None:
-    """Same one-range-call-per-run shape as race predictions above -- proves get_body_battery()
-    is invoked exactly once per sync run, not once per day, and that
-    parse_daily_body_battery_json's stream-point extraction lands real health_stream data."""
+def test_body_battery_is_fetched_archived_and_ingested_per_date(tmp_path: Path) -> None:
+    """Same per-date, whole-rolling-window shape as sleep/HRV above -- get_stress_data() (the
+    dense body-battery source, see fetch_and_ingest_daily_body_battery's own docstring for why
+    it replaced the sparse get_body_battery range endpoint) is invoked once per day, and
+    parse_daily_stress_json's stream-point extraction lands real health_stream data. Descriptor
+    list uses the real, plural `bodyBatteryValueDescriptorsDTOList` key confirmed live -- a
+    different name than the old endpoint's singular one."""
     today = dt.datetime.now(dt.UTC).date().isoformat()
 
     client_holder: list[FakeGarminClient] = []
@@ -1118,24 +1121,27 @@ def test_body_battery_is_fetched_archived_and_ingested_once_per_run(tmp_path: Pa
         client = FakeGarminClient(
             activities=[],
             fit_bytes_by_id={},
-            body_battery=[
-                {
-                    "date": today,
-                    "charged": 69,
-                    "drained": 68,
-                    "bodyBatteryValuesArray": [[1748761200000, 19]],
-                    "bodyBatteryValueDescriptorDTOList": [
+            stress_by_date={
+                today: {
+                    "calendarDate": today,
+                    "avgStressLevel": 23,
+                    "bodyBatteryValuesArray": [[1748761200000, "MEASURED", 19, 3.0]],
+                    "bodyBatteryValueDescriptorsDTOList": [
                         {
                             "bodyBatteryValueDescriptorIndex": 0,
                             "bodyBatteryValueDescriptorKey": "timestamp",
                         },
                         {
                             "bodyBatteryValueDescriptorIndex": 1,
+                            "bodyBatteryValueDescriptorKey": "bodyBatteryStatus",
+                        },
+                        {
+                            "bodyBatteryValueDescriptorIndex": 2,
                             "bodyBatteryValueDescriptorKey": "bodyBatteryLevel",
                         },
                     ],
                 }
-            ],
+            },
         )
         client_holder.append(client)
         return client
@@ -1151,7 +1157,7 @@ def test_body_battery_is_fetched_archived_and_ingested_once_per_run(tmp_path: Pa
             tmp_path / "parquet",
             tmp_path / "tokens",
             athlete_id=DEFAULT_ATHLETE_ID,
-            rolling_window_days=3,
+            rolling_window_days=0,  # just today -- one get_stress_data() call
             rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
             client_factory=factory,
         )
@@ -1160,12 +1166,6 @@ def test_body_battery_is_fetched_archived_and_ingested_once_per_run(tmp_path: Pa
                 select(raw_object.c.kind).where(raw_object.c.source == "garmin_connect")
             ).scalars()
         )
-        charged = conn.execute(
-            select(health_observation.c.value_num).where(
-                health_observation.c.metric_key == "garmin.daily_body_battery.charged",
-                health_observation.c.local_date == today,
-            )
-        ).scalar_one()
         stream_row = conn.execute(
             select(health_stream.c.n_samples).where(
                 health_stream.c.metric_key == "garmin.daily_body_battery.level"
@@ -1173,16 +1173,17 @@ def test_body_battery_is_fetched_archived_and_ingested_once_per_run(tmp_path: Pa
         ).fetchone()
 
     assert summary.errors == []
-    assert "garmin_connect_daily_body_battery_json" in kinds
-    assert charged == 69.0
+    assert "garmin_connect_daily_stress_json" in kinds
     assert stream_row is not None
     assert stream_row.n_samples == 1
-    assert len(client_holder[0].body_battery_calls) == 1  # one range call, not one per day
+    assert len(client_holder[0].stress_calls) == 1
 
 
 def test_body_battery_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
+    today = dt.datetime.now(dt.UTC).date().isoformat()
+
     def factory() -> FakeGarminClient:
-        return FakeGarminClient(activities=[], fit_bytes_by_id={}, raise_on_body_battery=True)
+        return FakeGarminClient(activities=[], fit_bytes_by_id={}, raise_on_stress_for={today})
 
     engine = make_engine(tmp_path / "db.sqlite")
     metadata.create_all(engine)
@@ -1202,7 +1203,7 @@ def test_body_battery_429_aborts_the_run_without_retrying(tmp_path: Path) -> Non
         body_battery_kinds = conn.execute(
             select(raw_object.c.id).where(
                 raw_object.c.source == "garmin_connect",
-                raw_object.c.kind == "garmin_connect_daily_body_battery_json",
+                raw_object.c.kind == "garmin_connect_daily_stress_json",
             )
         ).fetchall()
 
