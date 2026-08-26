@@ -39,6 +39,14 @@ export function ChartFullscreen({
 }) {
   const [open, setOpen] = useState(false);
 
+  // A chart that renders nothing (no data for this range) shouldn't leave its own heading and
+  // fullscreen affordance dangling above an empty spot -- a summary view should only show what
+  // it actually has, section and all, not just the chart body. Every caller already renders
+  // its chart unconditionally as `children`, so checking here covers all of them at once.
+  if (children == null) {
+    return null;
+  }
+
   return (
     <>
       <Heading

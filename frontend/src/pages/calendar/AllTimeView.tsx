@@ -24,7 +24,7 @@ import { PeriodShareButton } from "../../components/ShareButton";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../../dateUtils";
-import { monthlyAverageSleepHours } from "../../healthStats";
+import { anyMetricHasData, monthlyAverageSleepHours } from "../../healthStats";
 import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
 import { busiestYear } from "../../yearStats";
 import "../../styles/calendar.css";
@@ -63,7 +63,13 @@ export function AllTimeView() {
   const end = dates[dates.length - 1] ?? today;
 
   const fitness = useFitness(start, end);
-  const health = useHealthDashboard(start, end);
+  // Deliberately NOT bounded to `start` (the earliest *activity*) -- health data can genuinely
+  // predate the athlete's first tracked activity (e.g. Apple Health weight history reaching back
+  // to 2011 for an athlete whose first tracked run was 2016), and GET /health/dashboard only
+  // ever returns days that actually have data, so widening the query costs nothing when that
+  // earlier history doesn't exist. EARLIEST_PLAUSIBLE_DATE is the same "genuinely earliest
+  // anything could be" floor `all` above already filters activities against.
+  const health = useHealthDashboard(EARLIEST_PLAUSIBLE_DATE, end);
   const sleep = useSleep(start, end);
   const climbing = useClimbingSummary(start, end);
   // Bounded to when sleep data actually starts, not the full activity history range above --
@@ -129,28 +135,42 @@ export function AllTimeView() {
         {health.isError && <p role="alert">Could not load health data.</p>}
         {health.data && (
           <>
-            <h3>Core daily summary — average over all time</h3>
-            <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+            {anyMetricHasData(health.data.metrics, CORE_METRICS) && (
+              <>
+                <h3>Core daily summary — average over all time</h3>
+                <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+              </>
+            )}
 
-            <ChartFullscreen as="h3" title="Average monthly sleep — over all time">
-              <SleepDurationChart
-                data={monthlySleep.map((p) => ({ x: p.month, hours: p.avgHours }))}
-                tickFormatter={formatMonthTick}
-                interval={Math.max(0, Math.ceil(monthlySleep.length / 10) - 1)}
-              />
-            </ChartFullscreen>
+            {monthlySleep.some((p) => p.avgHours != null) && (
+              <ChartFullscreen as="h3" title="Average monthly sleep — over all time">
+                <SleepDurationChart
+                  data={monthlySleep.map((p) => ({ x: p.month, hours: p.avgHours }))}
+                  tickFormatter={formatMonthTick}
+                  interval={Math.max(0, Math.ceil(monthlySleep.length / 10) - 1)}
+                />
+              </ChartFullscreen>
+            )}
 
-            <ChartFullscreen as="h3" title="HRV — over all time">
-              <HealthTrendChart metrics={health.data.metrics} keys={HRV_METRIC} />
-            </ChartFullscreen>
+            {anyMetricHasData(health.data.metrics, HRV_METRIC) && (
+              <ChartFullscreen as="h3" title="HRV — over all time">
+                <HealthTrendChart
+                  metrics={health.data.metrics}
+                  keys={HRV_METRIC}
+                  tickGranularity="year"
+                />
+              </ChartFullscreen>
+            )}
 
-            <ChartFullscreen as="h3" title="Weight — over all time">
-              <HealthTrendChart
-                metrics={health.data.metrics}
-                keys={WEIGHT_METRIC}
-                tickGranularity="month"
-              />
-            </ChartFullscreen>
+            {anyMetricHasData(health.data.metrics, WEIGHT_METRIC) && (
+              <ChartFullscreen as="h3" title="Weight — over all time">
+                <HealthTrendChart
+                  metrics={health.data.metrics}
+                  keys={WEIGHT_METRIC}
+                  tickGranularity="month"
+                />
+              </ChartFullscreen>
+            )}
           </>
         )}
       </section>

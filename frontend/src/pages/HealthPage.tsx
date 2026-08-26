@@ -63,10 +63,15 @@ export function MetricSection({
   const byKey = new Map(metrics.map((m) => [m.logical_metric, m]));
   const present = keys.map((k) => byKey.get(k)).filter((m): m is HealthDashboardMetricOut => !!m);
 
+  // No data for anything in this section, anywhere in the selected range -- hide the whole
+  // section (heading included) rather than a dangling title over an empty list.
+  if (present.length === 0) {
+    return null;
+  }
+
   return (
     <section>
       <h2>{title}</h2>
-      {present.length === 0 && <p>No data for this section in the selected range.</p>}
       <ul>
         {present.map((m) => {
           const latest = m.daily[m.daily.length - 1];

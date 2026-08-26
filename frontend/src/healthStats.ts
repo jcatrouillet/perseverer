@@ -18,6 +18,20 @@ export function weightedAverage(metric: HealthDashboardMetricOut | undefined): n
   return sumObservations > 0 ? sumValues / sumObservations : null;
 }
 
+/** Whether any of the given logical metrics has at least one real value anywhere in the range
+ * already fetched -- used to gate a whole heading+chart (or heading+tile-grid) block so a
+ * summary view never shows a dangling title over an empty chart. A parent component can't tell
+ * whether a child it renders (e.g. HealthTrendChart) will itself render null -- `children` is an
+ * unrendered element, not that child's eventual output -- so this check has to happen at the call
+ * site, the same shape WeekWellnessCharts.tsx's own (pre-existing) `hasDailyData` already uses,
+ * generalized here to several keys at once (CORE_METRICS, multi-key respiration, etc.). */
+export function anyMetricHasData(metrics: HealthDashboardMetricOut[], keys: string[]): boolean {
+  return keys.some((key) => {
+    const metric = metrics.find((m) => m.logical_metric === key);
+    return (metric?.daily ?? []).some((d) => d.value_avg != null || d.value_last != null);
+  });
+}
+
 /** A metric's value for one specific day -- `value_avg` falling back to `value_last`, matching
  * `mergeTrendSeries`'s own choice below so a single-day readout (a wellness strip) and a trend
  * chart never disagree about which field represents "the" value for a day that has more than

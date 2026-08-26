@@ -23,7 +23,7 @@ import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { monthName, yearRange } from "../../dateUtils";
-import { weeklyAverageSleepHours } from "../../healthStats";
+import { anyMetricHasData, weeklyAverageSleepHours } from "../../healthStats";
 import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
 import { personalRecords } from "../../runningStats";
 import { busiestMonth } from "../../yearStats";
@@ -137,25 +137,35 @@ export function YearView({ year }: { year: number }) {
         {health.isError && <p role="alert">Could not load health data.</p>}
         {health.data && (
           <>
-            <h3>Core daily summary — average over {year}</h3>
-            <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+            {anyMetricHasData(health.data.metrics, CORE_METRICS) && (
+              <>
+                <h3>Core daily summary — average over {year}</h3>
+                <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+              </>
+            )}
 
-            <ChartFullscreen as="h3" title={`Average weekly sleep — over ${year}`}>
-              <SleepDurationChart
-                data={weeklySleep.map((p) => ({ x: p.weekStart, hours: p.avgHours }))}
-                tickFormatter={formatWeekTick}
-                tooltipLabelFormatter={(x) => `Week of ${formatWeekTick(x)}`}
-                interval={Math.max(0, Math.ceil(weeklySleep.length / 8) - 1)}
-              />
-            </ChartFullscreen>
+            {weeklySleep.some((p) => p.avgHours != null) && (
+              <ChartFullscreen as="h3" title={`Average weekly sleep — over ${year}`}>
+                <SleepDurationChart
+                  data={weeklySleep.map((p) => ({ x: p.weekStart, hours: p.avgHours }))}
+                  tickFormatter={formatWeekTick}
+                  tooltipLabelFormatter={(x) => `Week of ${formatWeekTick(x)}`}
+                  interval={Math.max(0, Math.ceil(weeklySleep.length / 8) - 1)}
+                />
+              </ChartFullscreen>
+            )}
 
-            <ChartFullscreen as="h3" title={`HRV — over ${year}`}>
-              <HealthTrendChart metrics={health.data.metrics} keys={HRV_METRIC} />
-            </ChartFullscreen>
+            {anyMetricHasData(health.data.metrics, HRV_METRIC) && (
+              <ChartFullscreen as="h3" title={`HRV — over ${year}`}>
+                <HealthTrendChart metrics={health.data.metrics} keys={HRV_METRIC} />
+              </ChartFullscreen>
+            )}
 
-            <ChartFullscreen as="h3" title={`Weight — over ${year}`}>
-              <HealthTrendChart metrics={health.data.metrics} keys={WEIGHT_METRIC} />
-            </ChartFullscreen>
+            {anyMetricHasData(health.data.metrics, WEIGHT_METRIC) && (
+              <ChartFullscreen as="h3" title={`Weight — over ${year}`}>
+                <HealthTrendChart metrics={health.data.metrics} keys={WEIGHT_METRIC} />
+              </ChartFullscreen>
+            )}
           </>
         )}
       </section>

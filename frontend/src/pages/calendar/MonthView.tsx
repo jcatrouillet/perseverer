@@ -27,6 +27,7 @@ import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { eachDate, monthGridWeeks, monthName, monthRange, parseIsoDate } from "../../dateUtils";
+import { anyMetricHasData } from "../../healthStats";
 import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
 import { personalRecords } from "../../runningStats";
 import { busiestWeekStart } from "../../yearStats";
@@ -156,33 +157,43 @@ export function MonthView({ year, month }: { year: number; month: number }) {
         {health.isError && <p role="alert">Could not load health data.</p>}
         {health.data && (
           <>
-            <h3>Core daily summary — average over {periodLabel}</h3>
-            <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+            {anyMetricHasData(health.data.metrics, CORE_METRICS) && (
+              <>
+                <h3>Core daily summary — average over {periodLabel}</h3>
+                <HealthMetricTiles metrics={health.data.metrics} keys={CORE_METRICS} />
+              </>
+            )}
 
-            <ChartFullscreen as="h3" title={`Sleep duration — over ${periodLabel}`}>
-              <SleepDurationChart
-                data={eachDate(start, end).map((d) => {
-                  const session = sleep.data?.find((s) => s.local_date === d);
-                  return {
-                    x: d,
-                    hours:
-                      session?.total_sleep_s != null
-                        ? Math.round((session.total_sleep_s / 3600) * 10) / 10
-                        : null,
-                  };
-                })}
-                tickFormatter={formatMonthDayTick}
-                interval={2}
-              />
-            </ChartFullscreen>
+            {sleep.data?.some((s) => s.total_sleep_s != null) && (
+              <ChartFullscreen as="h3" title={`Sleep duration — over ${periodLabel}`}>
+                <SleepDurationChart
+                  data={eachDate(start, end).map((d) => {
+                    const session = sleep.data?.find((s) => s.local_date === d);
+                    return {
+                      x: d,
+                      hours:
+                        session?.total_sleep_s != null
+                          ? Math.round((session.total_sleep_s / 3600) * 10) / 10
+                          : null,
+                    };
+                  })}
+                  tickFormatter={formatMonthDayTick}
+                  interval={2}
+                />
+              </ChartFullscreen>
+            )}
 
-            <ChartFullscreen as="h3" title={`HRV — over ${periodLabel}`}>
-              <HealthTrendChart metrics={health.data.metrics} keys={HRV_METRIC} />
-            </ChartFullscreen>
+            {anyMetricHasData(health.data.metrics, HRV_METRIC) && (
+              <ChartFullscreen as="h3" title={`HRV — over ${periodLabel}`}>
+                <HealthTrendChart metrics={health.data.metrics} keys={HRV_METRIC} />
+              </ChartFullscreen>
+            )}
 
-            <ChartFullscreen as="h3" title={`Weight — over ${periodLabel}`}>
-              <HealthTrendChart metrics={health.data.metrics} keys={WEIGHT_METRIC} />
-            </ChartFullscreen>
+            {anyMetricHasData(health.data.metrics, WEIGHT_METRIC) && (
+              <ChartFullscreen as="h3" title={`Weight — over ${periodLabel}`}>
+                <HealthTrendChart metrics={health.data.metrics} keys={WEIGHT_METRIC} />
+              </ChartFullscreen>
+            )}
           </>
         )}
       </section>

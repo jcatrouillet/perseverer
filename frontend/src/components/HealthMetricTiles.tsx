@@ -17,9 +17,19 @@ export function HealthMetricTiles({
   metrics: HealthDashboardMetricOut[];
   keys: string[];
 }) {
+  // A summary view should only show what it actually has -- a tile with nothing to report
+  // (never "—") would just be visual noise next to tiles that do have a real value.
+  const present = keys.filter((key) => {
+    const metric = metrics.find((m) => m.logical_metric === key);
+    return weightedAverage(metric) != null;
+  });
+  if (present.length === 0) {
+    return null;
+  }
+
   return (
     <div className="stat-grid">
-      {keys.map((key) => {
+      {present.map((key) => {
         const metric = metrics.find((m) => m.logical_metric === key);
         const avg = weightedAverage(metric);
         const style = healthMetricStyle(key);
@@ -27,7 +37,7 @@ export function HealthMetricTiles({
           <StatTile
             key={key}
             label={key.replace(/_/g, " ")}
-            value={avg != null ? avg.toFixed(1) : "—"}
+            value={avg!.toFixed(1)}
             icon={style.icon}
             tone={style.tone}
             hero={HERO_METRICS.has(key)}

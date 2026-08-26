@@ -35,8 +35,11 @@ const SHORT_MONTH_NAMES = [
   "Dec",
 ];
 
-function formatAxisTick(ts: number, tickGranularity: "day" | "month"): string {
+export function formatAxisTick(ts: number, tickGranularity: "day" | "month" | "year"): string {
   const d = new Date(ts);
+  if (tickGranularity === "year") {
+    return String(d.getUTCFullYear());
+  }
   if (tickGranularity === "month") {
     return `${SHORT_MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
   }
@@ -47,12 +50,13 @@ export function HealthTrendChart({
   metrics,
   keys,
   // Day-of-month ticks ("08-15") are meaningless once the visible range spans years (the
-  // all-time body-composition charts) -- the caller opts into "Jan 2024"-style ticks instead.
+  // all-time body-composition charts) -- the caller opts into "Jan 2024"-style or plain-year
+  // ticks instead.
   tickGranularity = "day",
 }: {
   metrics: HealthDashboardMetricOut[];
   keys: string[];
-  tickGranularity?: "day" | "month";
+  tickGranularity?: "day" | "month" | "year";
 }) {
   const data = mergeTrendSeries(metrics, keys);
   // A logical metric can exist in `metrics` (it has data *somewhere* in history) yet contribute
@@ -60,11 +64,25 @@ export function HealthTrendChart({
   // field. Filtering on actual points in `data`, not just presence in `metrics`, keeps an
   // empty line from silently occupying a legend swatch as if it had data.
   const present = keys.filter((k) => data.some((point) => point[k] != null));
-  const missing = keys.filter((k) => !present.includes(k));
 
-  if (data.length === 0) {
-    return <p>No data for this section in the selected range.</p>;
+  // Nothing to plot at all -- hide the whole chart rather than showing an empty frame or a
+  // "no data" placeholder (a summary view should only ever show what it actually has).
+  if (data.length === 0 || present.length === 0) {
+    return null;
   }
+
+  // Recharts' own auto-tick placement for a numeric/time-scale axis picks ticks at a roughly
+  // month-ish "nice" interval regardless of tickFormatter -- reformatting every one of those
+  // ticks down to just its year (via formatAxisTick below) would print the same year many times
+  // over ("2023" repeated for every month-tick that falls in 2023) rather than once. Explicit
+  // `ticks` overrides that entirely: one tick per distinct calendar year actually present in the
+  // data, positioned at that year's Jan 1.
+  const yearTicks =
+    tickGranularity === "year"
+      ? Array.from(new Set(data.map((p) => new Date(p.ts).getUTCFullYear())))
+          .sort((a, b) => a - b)
+          .map((year) => Date.UTC(year, 0, 1))
+      : undefined;
 
   return (
     <div>
@@ -80,6 +98,7 @@ export function HealthTrendChart({
             type="number"
             scale="time"
             domain={["dataMin", "dataMax"]}
+            ticks={yearTicks}
             stroke="var(--color-text-muted)"
             fontSize={11}
             tickFormatter={(ts: number) => formatAxisTick(ts, tickGranularity)}
@@ -132,11 +151,6 @@ export function HealthTrendChart({
             color: seriesColor(key),
           }))}
         />
-      )}
-      {missing.length > 0 && (
-        <p className="chart-note">
-          No data in this range for: {missing.map((k) => k.replace(/_/g, " ")).join(", ")}
-        </p>
       )}
     </div>
   );

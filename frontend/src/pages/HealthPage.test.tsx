@@ -26,9 +26,12 @@ describe("MetricSection", () => {
     expect(screen.getByText(/^steps$/i)).toBeInTheDocument();
   });
 
-  it("shows a placeholder when none of the requested keys have data", () => {
-    render(<MetricSection title="HRV" metrics={[]} keys={["hrv_nightly_average"]} />);
-    expect(screen.getByText(/no data for this section/i)).toBeInTheDocument();
+  it("renders nothing -- heading included -- when none of the requested keys have data", () => {
+    const { container } = render(
+      <MetricSection title="HRV" metrics={[]} keys={["hrv_nightly_average"]} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText("HRV")).not.toBeInTheDocument();
   });
 
   it("shows the latest daily value and its date", () => {

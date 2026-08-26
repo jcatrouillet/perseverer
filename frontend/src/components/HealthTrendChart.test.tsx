@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { HealthDashboardMetricOut } from "../api/types";
-import { HealthTrendChart } from "./HealthTrendChart";
+import { formatAxisTick, HealthTrendChart } from "./HealthTrendChart";
 
 function metric(logical_metric: string, values: number[]): HealthDashboardMetricOut {
   return {
@@ -42,5 +42,24 @@ describe("HealthTrendChart", () => {
     const legend = container.querySelector(".chart-legend");
     expect(legend).toBeInTheDocument();
     expect(legend?.querySelectorAll(".chart-legend__item")).toHaveLength(2);
+  });
+
+  it("renders nothing when none of the requested keys have any data", () => {
+    const { container } = render(<HealthTrendChart metrics={[]} keys={["weight_kg"]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing when a metric is present but has zero points in range", () => {
+    const { container } = render(
+      <HealthTrendChart metrics={[metric("weight_kg", [])]} keys={["weight_kg"]} />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("formats a year-granularity tick as a plain year, not a month or day", () => {
+    const ts = Date.UTC(2020, 5, 15);
+    expect(formatAxisTick(ts, "year")).toBe("2020");
+    expect(formatAxisTick(ts, "month")).toBe("Jun 2020");
+    expect(formatAxisTick(ts, "day")).toBe("06-15");
   });
 });

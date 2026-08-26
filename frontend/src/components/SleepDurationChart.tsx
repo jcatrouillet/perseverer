@@ -25,8 +25,12 @@ export function SleepDurationChart({
    * WeekRunningStats' weekly-distance/VDOT charts). */
   interval?: number;
 }) {
+  // Hide entirely rather than an empty chart or a "no data" placeholder -- a summary view should
+  // only show what it actually has. Callers gate their own heading on the same check (see
+  // healthStats.ts::anyMetricHasData / this file's own `data.some(...)` shape) so this never
+  // leaves a dangling title above nothing.
   if (!data.some((p) => p.hours != null)) {
-    return <p>No data for this section in the selected range.</p>;
+    return null;
   }
 
   return (
