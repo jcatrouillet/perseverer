@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy import Engine, select
 
-from perseverer.adapters.fit_folder import _local_date, import_from_folder
+from perseverer.adapters.fit_folder import _derive_activity_id, _local_date, import_from_folder
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
     activity,
@@ -153,13 +153,41 @@ def test_rebuild_from_archive_after_deleting_the_database(tmp_path: Path) -> Non
     assert after == before
 
 
-def test_sport_override_survives_rebuild_despite_the_activity_id_changing(
-    tmp_path: Path,
-) -> None:
+def test_derive_activity_id_is_deterministic() -> None:
+    assert _derive_activity_id("ath1", "fit_folder", "ext1") == _derive_activity_id(
+        "ath1", "fit_folder", "ext1"
+    )
+
+
+def test_derive_activity_id_differs_by_external_id() -> None:
+    assert _derive_activity_id("ath1", "fit_folder", "ext1") != _derive_activity_id(
+        "ath1", "fit_folder", "ext2"
+    )
+
+
+def test_derive_activity_id_differs_by_source() -> None:
+    assert _derive_activity_id("ath1", "fit_folder", "ext1") != _derive_activity_id(
+        "ath1", "garmin_connect", "ext1"
+    )
+
+
+def test_derive_activity_id_differs_by_athlete() -> None:
+    assert _derive_activity_id("ath1", "fit_folder", "ext1") != _derive_activity_id(
+        "ath2", "fit_folder", "ext1"
+    )
+
+
+def test_derive_activity_id_fits_the_column_width() -> None:
+    assert len(_derive_activity_id("ath1", "fit_folder", "ext1")) == 26
+
+
+def test_sport_override_survives_rebuild(tmp_path: Path) -> None:
     """The whole reason activity_sport_override exists rather than a bare `UPDATE activity SET
-    sport = ...`: `sync rebuild` deletes and re-inserts every activity row with a brand-new
-    ULID, so a correction keyed by the old activity.id would silently vanish. Keyed by
-    start_time_utc instead -- this proves it actually survives the id changing underneath it."""
+    sport = ...`: `sync rebuild` deletes and re-inserts every activity row, and a correction
+    keyed by activity.id alone would be fragile to that. Keyed by start_time_utc instead. ids
+    are now deterministic (_derive_activity_id) so they no longer actually change across a
+    rebuild -- asserted below -- but the override stays keyed by start_time_utc regardless, as
+    defense in depth against any future case where a match doesn't resolve to the same id."""
     engine, import_dir = _setup(tmp_path)
     archive_root = tmp_path / "archive"
     parquet_dir = tmp_path / "parquet"
@@ -189,14 +217,12 @@ def test_sport_override_survives_rebuild_despite_the_activity_id_changing(
             select(activity.c.id, activity.c.sport, activity.c.sub_sport)
         ).one()
 
-    assert new_id != original_id  # the id really did change
+    assert new_id == original_id  # deterministic id -- rebuild no longer reassigns it
     assert new_sport == "hiking"
     assert new_sub_sport == "generic"
 
 
-def test_race_override_survives_rebuild_despite_the_activity_id_changing(
-    tmp_path: Path,
-) -> None:
+def test_race_override_survives_rebuild(tmp_path: Path) -> None:
     """Same rebuild-survival guarantee as the sport override, for the independent is_race
     correction -- both live on the same activity_sport_override row, keyed by start_time_utc."""
     engine, import_dir = _setup(tmp_path)
@@ -222,13 +248,11 @@ def test_race_override_survives_rebuild_despite_the_activity_id_changing(
         rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
         new_id, new_is_race = conn.execute(select(activity.c.id, activity.c.is_race)).one()
 
-    assert new_id != original_id  # the id really did change
+    assert new_id == original_id  # deterministic id -- rebuild no longer reassigns it
     assert new_is_race is True
 
 
-def test_name_override_survives_rebuild_despite_the_activity_id_changing(
-    tmp_path: Path,
-) -> None:
+def test_name_override_survives_rebuild(tmp_path: Path) -> None:
     """Same rebuild-survival guarantee as the sport/race overrides, for the independent name
     correction -- all three live on the same activity_sport_override row, keyed by
     start_time_utc."""
@@ -256,7 +280,7 @@ def test_name_override_survives_rebuild_despite_the_activity_id_changing(
         rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
         new_id, new_name = conn.execute(select(activity.c.id, activity.c.name)).one()
 
-    assert new_id != original_id  # the id really did change
+    assert new_id == original_id  # deterministic id -- rebuild no longer reassigns it
     assert new_name == "Santa Clara - Race Pace Run"
 
 

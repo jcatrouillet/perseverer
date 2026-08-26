@@ -8,6 +8,7 @@ SMB/rsync/Drive don't reliably fire inotify events inside a container (see CLAUD
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -16,7 +17,6 @@ from pathlib import Path
 
 import polyline as polyline_codec
 from sqlalchemy import Connection, select
-from ulid import ULID
 
 from perseverer.adapters.base import AdapterHealth, ObjectRef, RawPayload
 from perseverer.archive import archive_raw_bytes
@@ -141,6 +141,18 @@ def _derive_external_id(start_time_utc: datetime, device: ParsedDevice | None, s
     return sha256
 
 
+def _derive_activity_id(athlete_id: str, source: str, external_id: str) -> str:
+    """Deterministic, content-derived -- the same (athlete, source, external_id) always
+    produces the same id, so `sync rebuild`/the Settings-page "Rebuild now" button never
+    reassigns it the way a fresh `ULID()` (what this replaced) silently did on every replay,
+    breaking every bookmarked/shared `/activities/{id}` URL. Nothing in this codebase relies on
+    activity.id being time-sortable (ULID's actual property -- confirmed by search: every
+    list/detail ordering already uses start_time_utc/local_date) or ever parses it back into a
+    real ULID, so a plain hash fits the existing `String(26)` column with no migration."""
+    digest = hashlib.sha256(f"{athlete_id}:{source}:{external_id}".encode()).hexdigest()
+    return digest[:26]
+
+
 def _upsert_device(conn: Connection, athlete_id: str, device: ParsedDevice) -> int | None:
     if not device.serial_number and not device.product:
         return None
@@ -178,11 +190,17 @@ def _find_merge_match(
     rows = conn.execute(
         select(
             activity.c.id, activity.c.start_time_utc, activity.c.duration_s, activity.c.sport
-        ).where(
+        )
+        .where(
             activity.c.athlete_id == athlete_id,
             activity.c.start_time_utc.between(window_start, window_end),
             activity.c.deleted_at.is_(None),
         )
+        # Deterministic tiebreak -- with no ORDER BY, which candidate "wins" when more than
+        # one falls in the +/-1-day window is DB-order-dependent, not guaranteed stable
+        # across a rebuild's replay. Rare (needs two similar-duration activities close
+        # together), but a rebuild must reproduce the exact same match every time.
+        .order_by(activity.c.start_time_utc)
     ).fetchall()
 
     for row in rows:
@@ -225,6 +243,7 @@ def insert_new_activity(
     athlete_id: str,
     source: str,
     device_id: int | None,
+    external_id: str,
     a: CanonicalActivity,
 ) -> str:
     """Inserts a brand-new `activity` row (plus its metrics/laps/splits/route/stream) from a
@@ -233,9 +252,14 @@ def insert_new_activity(
     reusable from the sources-split endpoint (`routers/activities.py`), which deliberately
     bypasses merge-matching when reconstructing an activity a human has just said was wrongly
     merged -- re-running `_find_merge_match` there could just merge it right back.
+
+    `external_id` (the same stable identity `activity_source_link` already keys on for
+    idempotent upsert -- see `_derive_external_id`/`ingest_canonical_batch`) drives the new
+    activity's own id via `_derive_activity_id`, so the id survives a rebuild instead of
+    getting a fresh random one every replay.
     """
     now = datetime.now(UTC)
-    activity_id = str(ULID())
+    activity_id = _derive_activity_id(athlete_id, source, external_id)
     conn.execute(
         activity.insert().values(
             id=activity_id,
@@ -447,7 +471,13 @@ def ingest_canonical_batch(
         activity_id = matched_id
     else:
         activity_id = insert_new_activity(
-            conn, parquet_dir, athlete_id=athlete_id, source=source, device_id=device_id, a=a
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=source,
+            device_id=device_id,
+            external_id=external_id,
+            a=a,
         )
 
     conn.execute(

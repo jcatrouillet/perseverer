@@ -1767,6 +1767,7 @@ def split_activity_source(
         athlete_id=athlete_id,
         source=target.source,
         device_id=device_id,
+        external_id=target.external_id,
         a=parsed,
     )
 

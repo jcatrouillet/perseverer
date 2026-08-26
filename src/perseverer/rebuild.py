@@ -135,7 +135,11 @@ def rebuild_database(
             raw_object.c.source_locator,
         )
         .where(raw_object.c.athlete_id == athlete_id)
-        .order_by(raw_object.c.fetched_at)
+        # id as a tiebreaker -- two raw objects sharing an identical archived fetched_at
+        # timestamp would otherwise have DB-unspecified relative order, and replay order feeds
+        # directly into merge-matching (_find_merge_match's "first source wins" identity
+        # anchor), which must reproduce the exact same result on every rebuild.
+        .order_by(raw_object.c.fetched_at.asc(), raw_object.c.id.asc())
     ).fetchall()
 
     replayed = 0

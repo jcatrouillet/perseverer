@@ -936,6 +936,51 @@ def test_rebuild_reapplies_the_garmin_activity_name_correction(tmp_path: Path) -
     assert name_after_rebuild == "Santa Clara - W1 Fri . Tempo"
 
 
+def test_activity_id_is_identical_across_two_rebuilds(tmp_path: Path) -> None:
+    """The regression test for the id-churn bug this project actually hit in production: a
+    `sync rebuild` used to mint a brand-new random ULID for every activity on every replay,
+    silently breaking every bookmarked/shared `/activities/{id}` URL. activity.id is now
+    derived deterministically from (athlete_id, source, external_id) -- see
+    fit_folder.py::_derive_activity_id -- so two independent rebuilds from the same raw archive
+    must produce the exact same id, not just the same activity content (already covered by the
+    test above)."""
+    fitness_dir = tmp_path / "src" / "DI_CONNECT" / "DI-Connect-Fitness" / "2024"
+    fitness_dir.mkdir(parents=True)
+    shutil.copy(_GARMIN_EXPORT_FIXTURE, fitness_dir / "55501234_ACTIVITY.fit")
+
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        import_garmin_export(
+            conn,
+            archive_root,
+            parquet_dir,
+            tmp_path / "extract",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            path=tmp_path / "src",
+        )
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        id_after_first_rebuild = conn.execute(select(activity.c.id)).scalar_one()
+
+    engine3 = make_engine(tmp_path / "db3.sqlite")
+    metadata.create_all(engine3)
+    _seed_athlete(engine3)
+    with engine3.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        id_after_second_rebuild = conn.execute(select(activity.c.id)).scalar_one()
+
+    assert id_after_first_rebuild == id_after_second_rebuild
+
+
 # --- rebuild_database_tracked -- the Settings-page-triggered wrapper, tested for its own
 # ingest_run bookkeeping (rebuild_database itself is already covered throughout this file). ------
 
