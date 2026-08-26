@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { useHealthDashboard, useSleep } from "../api/queries";
 import type { HealthDashboardMetricOut } from "../api/types";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 import { isoDate } from "../dateUtils";
 
 // Exported so other pages (e.g. YearView's year-in-review stats) can reuse the exact same
@@ -118,7 +119,7 @@ export function HealthPage() {
         </label>
       </form>
 
-      {dashboard.isLoading && <p>Loading…</p>}
+      {dashboard.isLoading && <LoadingSpinner />}
       {dashboard.isError && <p role="alert">Could not load the health dashboard.</p>}
 
       {dashboard.data && (
@@ -143,7 +144,7 @@ export function HealthPage() {
 
       <section>
         <h2>Sleep</h2>
-        {sleep.isLoading && <p>Loading…</p>}
+        {sleep.isLoading && <LoadingSpinner />}
         {sleep.isError && <p role="alert">Could not load sleep data.</p>}
         {sleep.data && sleep.data.length === 0 && <p>No sleep sessions in this range.</p>}
         <ul>

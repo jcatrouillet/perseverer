@@ -12,6 +12,7 @@ import { hrZoneRangeLabel } from "../activityMetrics";
 import { formatDurationHM } from "../runningStats";
 import { BulkImportCard } from "../components/BulkImportCard";
 import { GarminConnectCard } from "../components/GarminConnectCard";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 import { RebuildCard } from "../components/RebuildCard";
 import "../styles/settings.css";
 
@@ -243,7 +244,7 @@ export function SettingsPage() {
           a stretch of car travel the recording was never stopped for. Open one to review and
           trim it.
         </p>
-        {trimCandidates.isLoading && <p>Loading…</p>}
+        {trimCandidates.isLoading && <LoadingSpinner />}
         {trimCandidates.isError && <p role="alert">Could not load.</p>}
         {trimCandidates.data && trimCandidates.data.length === 0 && (
           <p className="settings-scan__empty">Nothing flagged.</p>
@@ -267,7 +268,7 @@ export function SettingsPage() {
           auto-detection) that were never merged into one record. Open either side to review and
           merge.
         </p>
-        {duplicatePairs.isLoading && <p>Loading…</p>}
+        {duplicatePairs.isLoading && <LoadingSpinner />}
         {duplicatePairs.isError && <p role="alert">Could not load.</p>}
         {duplicatePairs.data && duplicatePairs.data.length === 0 && (
           <p className="settings-scan__empty">Nothing flagged.</p>

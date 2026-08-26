@@ -54,6 +54,7 @@ import { ChartFullscreen } from "../components/ChartFullscreen";
 import { ClimbComparisonTable } from "../components/ClimbComparisonTable";
 import { ClimbGradeChart } from "../components/ClimbGradeChart";
 import { Icon } from "../components/Icon";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 import { NotesPanel } from "../components/NotesPanel";
 import { PaceVariabilityChart } from "../components/PaceVariabilityChart";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
@@ -144,7 +145,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const mergePreview = useActivityMergePreview(id, mergeCandidateId ?? "", mergeCandidateId != null);
   const mergeActivity = useMergeActivity(id);
 
-  if (activity.isLoading) return <p>Loading…</p>;
+  if (activity.isLoading) return <LoadingSpinner size="lg" />;
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
 
   const a = activity.data;

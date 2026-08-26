@@ -21,6 +21,7 @@ import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
+import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { NotesPanel } from "../../components/NotesPanel";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
@@ -109,7 +110,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
           periodStart={`${year}-${String(month).padStart(2, "0")}`}
         />
       </div>
-      {calendar.isLoading && <p>Loading…</p>}
+      {calendar.isLoading && <LoadingSpinner />}
       {calendar.isError && <p role="alert">Could not load the month.</p>}
 
       <PeriodStatsCard
@@ -145,13 +146,13 @@ export function MonthView({ year, month }: { year: number; month: number }) {
         ) : (
           <h2>Fitness &amp; Form</h2>
         )}
-        {fitness.isLoading && <p>Loading…</p>}
+        {fitness.isLoading && <LoadingSpinner />}
         {fitness.isError && <p role="alert">Could not load Fitness &amp; Form.</p>}
       </section>
 
       <section className="card">
         <h2>Health</h2>
-        {health.isLoading && <p>Loading…</p>}
+        {health.isLoading && <LoadingSpinner />}
         {health.isError && <p role="alert">Could not load health data.</p>}
         {health.data && (
           <>

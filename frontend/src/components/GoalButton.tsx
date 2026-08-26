@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useDeleteGoal, useGoalProgress } from "../api/queries";
 import { GoalForm } from "./GoalForm";
 import { GoalProgressChart } from "./GoalProgressChart";
+import { LoadingSpinner } from "./LoadingSpinner";
 import { Modal } from "./Modal";
 import "../styles/goals.css";
 
@@ -33,7 +34,7 @@ export function GoalButton({
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title={`${periodLabel} goal`}>
-        {progress.isLoading && <p>Loading…</p>}
+        {progress.isLoading && <LoadingSpinner size="sm" />}
         {progress.isError && <p role="alert">Could not load this goal.</p>}
 
         {progress.data && (!progress.data.available || editing) && (

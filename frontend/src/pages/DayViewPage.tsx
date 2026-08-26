@@ -33,6 +33,7 @@ import { BodyBatteryChart } from "../components/BodyBatteryChart";
 import { DateNavigator } from "../components/DateNavigator";
 import { DayViewActivityRoute } from "../components/DayViewActivityRoute";
 import { Icon } from "../components/Icon";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 import { NotesPanel } from "../components/NotesPanel";
 import { StatTile } from "../components/StatTile";
 import { mondayOf, parseIsoDate } from "../dateUtils";
@@ -158,7 +159,7 @@ export function DayViewPage({ date }: { date: string }) {
         </p>
       )}
 
-      {activities.isLoading && <p>Loading…</p>}
+      {activities.isLoading && <LoadingSpinner />}
       {activities.isError && <p role="alert">Could not load activities.</p>}
       {activities.data && activities.data.items.length === 0 && (
         <p>No activities recorded for this day.</p>

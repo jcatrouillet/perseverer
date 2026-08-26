@@ -16,6 +16,7 @@ import { Link } from "wouter";
 
 import { useActivityMapPoints } from "../api/queries";
 import type { ActivityMapPointOut } from "../api/types";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 import { EARLIEST_PLAUSIBLE_DATE } from "../dateUtils";
 import { sportStyle, toneColor } from "../metricStyle";
 import "../styles/map-explorer.css";
@@ -63,7 +64,7 @@ export function MapExplorerPage() {
     <main>
       <h1>Map explorer</h1>
       <p className="map-explorer__count">
-        {points.isLoading && "Loading…"}
+        {points.isLoading && <LoadingSpinner size="sm" />}
         {points.isError && <span role="alert">Could not load activity locations.</span>}
         {points.data && `${filtered.length} of ${allPoints.length} activities shown`}
       </p>

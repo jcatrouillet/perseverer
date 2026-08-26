@@ -18,6 +18,7 @@ import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
+import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { PeriodShareButton } from "../../components/ShareButton";
 import { RunningStats } from "../../components/RunningStats";
@@ -87,7 +88,7 @@ export function AllTimeView() {
       <DateNavigator year={Number(end.slice(0, 4))} />
       <h1>All time</h1>
       <PeriodShareButton periodType="all" />
-      {allActivities.isLoading && <p>Loading…</p>}
+      {allActivities.isLoading && <LoadingSpinner />}
       {allActivities.isError && <p role="alert">Could not load all-time data.</p>}
 
       <PeriodStatsCard
@@ -118,13 +119,13 @@ export function AllTimeView() {
         ) : (
           <h2>Fitness &amp; Form</h2>
         )}
-        {fitness.isLoading && <p>Loading…</p>}
+        {fitness.isLoading && <LoadingSpinner />}
         {fitness.isError && <p role="alert">Could not load Fitness &amp; Form.</p>}
       </section>
 
       <section className="card">
         <h2>Health</h2>
-        {health.isLoading && <p>Loading…</p>}
+        {health.isLoading && <LoadingSpinner />}
         {health.isError && <p role="alert">Could not load health data.</p>}
         {health.data && (
           <>

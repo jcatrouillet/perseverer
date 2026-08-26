@@ -7,6 +7,7 @@
 import { useState } from "react";
 
 import { useAllActivities } from "../api/queries";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 import { PaceTrendsChart } from "../components/PaceTrendsChart";
 import { TrainingBandsChart } from "../components/TrainingBandsChart";
 import "../styles/insights.css";
@@ -43,7 +44,7 @@ export function InsightsPage() {
 
       {tab === "pace-trends" && (
         <>
-          {runs.isLoading && <p>Loading…</p>}
+          {runs.isLoading && <LoadingSpinner />}
           {runs.isError && <p role="alert">Could not load running activities.</p>}
           {runs.data && <PaceTrendsChart activities={runs.data} />}
         </>

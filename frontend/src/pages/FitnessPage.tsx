@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useFitness, useHealthObservations } from "../api/queries";
 import { ChartFullscreen } from "../components/ChartFullscreen";
 import { FitnessChart } from "../components/FitnessChart";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 import { isoDate } from "../dateUtils";
 
 const READINESS_SCORE_KEY = "garmin.export.TrainingReadinessDTO.score";
@@ -52,7 +53,7 @@ export function FitnessPage() {
         </label>
       </form>
 
-      {fitness.isLoading && <p>Loading…</p>}
+      {fitness.isLoading && <LoadingSpinner />}
       {fitness.isError && <p role="alert">Could not load Fitness &amp; Form.</p>}
       {fitness.data && (
         // Unlike this same chart's other call sites (AllTimeView/MonthView/YearView, each

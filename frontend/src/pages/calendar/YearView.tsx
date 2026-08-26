@@ -18,6 +18,7 @@ import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
+import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
@@ -90,7 +91,7 @@ export function YearView({ year }: { year: number }) {
         <GoalButton periodType="year" periodStart={String(year)} periodLabel={String(year)} />
         <PeriodShareButton periodType="year" periodStart={String(year)} />
       </div>
-      {months.isLoading && <p>Loading…</p>}
+      {months.isLoading && <LoadingSpinner />}
       {months.isError && <p role="alert">Could not load the year.</p>}
 
       <PeriodStatsCard
@@ -126,13 +127,13 @@ export function YearView({ year }: { year: number }) {
         ) : (
           <h2>Fitness &amp; Form</h2>
         )}
-        {fitness.isLoading && <p>Loading…</p>}
+        {fitness.isLoading && <LoadingSpinner />}
         {fitness.isError && <p role="alert">Could not load Fitness &amp; Form.</p>}
       </section>
 
       <section className="card">
         <h2>Health</h2>
-        {health.isLoading && <p>Loading…</p>}
+        {health.isLoading && <LoadingSpinner />}
         {health.isError && <p role="alert">Could not load health data.</p>}
         {health.data && (
           <>

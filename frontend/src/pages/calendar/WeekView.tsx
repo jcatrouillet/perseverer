@@ -14,6 +14,7 @@ import { ActivityCard } from "../../components/ActivityCard";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
+import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { NotesPanel } from "../../components/NotesPanel";
 import { MetricChip, StatTile } from "../../components/StatTile";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
@@ -215,7 +216,7 @@ export function WeekView({ date }: { date: string }) {
         />
       )}
 
-      {calendar.isLoading && <p>Loading…</p>}
+      {calendar.isLoading && <LoadingSpinner />}
       {calendar.isError && <p role="alert">Could not load the week.</p>}
 
       {eachDate(start, end).map((d) => {

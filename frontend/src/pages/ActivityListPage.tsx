@@ -7,6 +7,7 @@ import { Link } from "wouter";
 
 import { useActivities, useActivityRoutes, useHealthDashboard, useSleep } from "../api/queries";
 import { ActivityCard } from "../components/ActivityCard";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricChip } from "../components/StatTile";
 import { isoDate } from "../dateUtils";
 import { valueForDate } from "../healthStats";
@@ -76,7 +77,7 @@ export function ActivityListPage() {
         </label>
       </form>
 
-      {activities.isLoading && <p>Loading…</p>}
+      {activities.isLoading && <LoadingSpinner />}
       {activities.isError && <p role="alert">Could not load activities.</p>}
       {activities.data && groups.length === 0 && <p>No activities found.</p>}
 

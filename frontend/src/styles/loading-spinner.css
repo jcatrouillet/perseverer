@@ -1,0 +1,103 @@
+/* A hand-rolled scissor-running stick figure -- see LoadingSpinner.tsx's own docstring for why
+   this is separate arm/leg line segments pivoting at the shoulder/hip, not a single animated
+   static pose. */
+
+.loading-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.loading-spinner__icon {
+  color: var(--color-accent);
+  overflow: visible;
+}
+
+.loading-spinner__label {
+  font-size: var(--font-size-sm);
+}
+
+.loading-spinner--sm .loading-spinner__icon {
+  width: 16px;
+  height: 16px;
+}
+
+.loading-spinner--md .loading-spinner__icon {
+  width: 24px;
+  height: 24px;
+}
+
+.loading-spinner--lg .loading-spinner__icon {
+  width: 40px;
+  height: 40px;
+}
+
+.loading-spinner--lg .loading-spinner__label {
+  font-size: var(--font-size-base);
+}
+
+/* Opposite-arm-opposite-leg pairing, as in a real gait: leg-a swings with arm-b, leg-b with
+   arm-a. Both legs/arms pivot at the same hip/shoulder point and share one base path (a plain
+   line straight down) -- rotation alone does all the work of separating them into a stride. */
+.loading-spinner__leg-a,
+.loading-spinner__arm-b {
+  transform-origin: 10.8px 13px;
+  animation: loading-spinner-swing-a 0.55s ease-in-out infinite alternate;
+}
+
+.loading-spinner__leg-b,
+.loading-spinner__arm-a {
+  transform-origin: 10.8px 13px;
+  animation: loading-spinner-swing-b 0.55s ease-in-out infinite alternate;
+}
+
+.loading-spinner__arm-a,
+.loading-spinner__arm-b {
+  transform-origin: 12.3px 6.8px;
+}
+
+/* A runner's whole upper body rises on every footstrike -- twice per full leg-swing cycle, so
+   this runs at half the leg/arm animation's duration. */
+.loading-spinner__bob {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: loading-spinner-bob 0.275s ease-in-out infinite alternate;
+}
+
+@keyframes loading-spinner-swing-a {
+  0% {
+    transform: rotate(-32deg);
+  }
+  100% {
+    transform: rotate(32deg);
+  }
+}
+
+@keyframes loading-spinner-swing-b {
+  0% {
+    transform: rotate(32deg);
+  }
+  100% {
+    transform: rotate(-32deg);
+  }
+}
+
+@keyframes loading-spinner-bob {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner__leg-a,
+  .loading-spinner__leg-b,
+  .loading-spinner__arm-a,
+  .loading-spinner__arm-b,
+  .loading-spinner__bob {
+    animation: none;
+  }
+}

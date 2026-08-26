@@ -27,6 +27,7 @@ import { useLocation } from "wouter";
 import { usePaceBands, usePaceBandsByActivity } from "../api/queries";
 import type { ActivityPaceBandsOut, PaceBandOut } from "../api/types";
 import { ChartFullscreen } from "./ChartFullscreen";
+import { LoadingSpinner } from "./LoadingSpinner";
 import { parseIsoDate } from "../dateUtils";
 import { formatDurationHM } from "../runningStats";
 import "../styles/training-bands.css";
@@ -321,7 +322,7 @@ export function TrainingBandsChart() {
   const hasAggregateData = aggregateRows.some((r) => r.seconds > 0);
   const hasCompositionData = compositionRows.length > 0;
 
-  if (aggregate.isLoading || byActivity.isLoading) return <p>Loading…</p>;
+  if (aggregate.isLoading || byActivity.isLoading) return <LoadingSpinner />;
   if (aggregate.isError || byActivity.isError) {
     return <p role="alert">Could not load training bands.</p>;
   }
