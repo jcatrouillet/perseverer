@@ -4,8 +4,9 @@
 // inventory), so this is computed client-side from elevation+distance stream data using the
 // energy-cost-of-running model from Minetti et al. (2002), "Energy cost of walking and running
 // at extreme uphill and downhill slopes" -- the same polynomial widely reported as the basis for
-// Strava's own GAP. Shared by the per-km splits panel (ActivityRouteMap/SplitsTable) and the GAP
-// chart panel, so both read the same effort model.
+// Strava's own GAP. Shared by the per-km splits panel (ActivityRouteMap/SplitsTable), the GAP
+// chart panel, and the Intervals table's per-lap GAP column (ActivityDetailPage.tsx), so all
+// three read the same effort model.
 //
 // Cost of running C(i), in J/(kg*m), as a function of grade i (fraction, e.g. 0.1 = 10% uphill):
 //   C(i) = 155.4*i^5 - 30.4*i^4 - 43.3*i^3 + 46.3*i^2 + 19.5*i + 3.6
@@ -79,5 +80,72 @@ export function gapSeriesMinPerKm(
     if (pace == null) return null;
     const grade = gradeAt(distanceM, altitudeM, i, halfWindowM);
     return grade == null ? null : gradeAdjustedPaceMinPerKm(pace, grade);
+  });
+}
+
+export interface LapForGap {
+  start_time_utc: string;
+  duration_s: number | null;
+  moving_duration_s: number | null;
+  distance_m: number | null;
+}
+
+function altitudeAtRawElapsedS(
+  rawElapsedS: number[],
+  altitudeM: (number | null)[],
+  targetS: number,
+): number | null {
+  for (let i = 0; i < rawElapsedS.length; i++) {
+    if (rawElapsedS[i]! < targetS) continue;
+    if (i === 0) return altitudeM[0] ?? null;
+    const a0 = altitudeM[i - 1];
+    const a1 = altitudeM[i];
+    if (a0 == null || a1 == null) return null;
+    const prevT = rawElapsedS[i - 1]!;
+    const span = rawElapsedS[i]! - prevT;
+    const frac = span > 0 ? (targetS - prevT) / span : 0;
+    return a0 + frac * (a1 - a0);
+  }
+  return altitudeM[altitudeM.length - 1] ?? null;
+}
+
+/** Grade-adjusted pace (minutes/km) for each lap in `laps`, one-value-per-lap in the same
+ * one-average-grade-per-segment style as `splits.ts::buildSplit` -- just keyed by each lap's own
+ * wall-clock time range (from its recorded `start_time_utc`) instead of a fixed distance
+ * boundary. A lap's own *end* boundary is the next lap's `start_time_utc` (mirrors
+ * ActivityCharts.tsx's own `lapBoundaries`, built the same way for its lap-band overlays) rather
+ * than summing durations -- robust to a lap that paused mid-interval, where `duration_s`
+ * (elapsed) and `moving_duration_s` (pause-excluded) diverge and neither alone locates the real
+ * recorded end-of-lap sample. `streamStartTimeUtc` is the stream's own first timestamp, the same
+ * reference point ActivityCharts.tsx converts lap start times against. Returns one entry per
+ * lap, aligned by position; `null` wherever the stream has no altitude channel or a lap's own
+ * distance/duration is missing. */
+export function computeLapGapsMinPerKm(
+  laps: LapForGap[],
+  streamStartTimeUtc: string,
+  rawElapsedS: number[],
+  altitudeM: (number | null)[] | undefined,
+): (number | null)[] {
+  if (altitudeM == null || rawElapsedS.length === 0 || laps.length === 0) {
+    return laps.map(() => null);
+  }
+  const startMs = new Date(streamStartTimeUtc).getTime();
+  const lapStartS = laps.map((lap) => (new Date(lap.start_time_utc).getTime() - startMs) / 1000);
+  const lastRawS = rawElapsedS[rawElapsedS.length - 1]!;
+
+  return laps.map((lap, i) => {
+    // moving_duration_s excludes any device pause within the lap -- see the identical fallback
+    // and rationale on ActivityDetailPage.tsx's own Pace column, kept in sync with it here.
+    const effectiveDurationS = lap.moving_duration_s ?? lap.duration_s;
+    if (!effectiveDurationS || lap.distance_m == null || lap.distance_m <= 0) return null;
+
+    const endS = i + 1 < laps.length ? lapStartS[i + 1]! : lastRawS;
+    const startAlt = altitudeAtRawElapsedS(rawElapsedS, altitudeM, lapStartS[i]!);
+    const endAlt = altitudeAtRawElapsedS(rawElapsedS, altitudeM, endS);
+    if (startAlt == null || endAlt == null) return null;
+
+    const elevChangeM = endAlt - startAlt;
+    const paceMinPerKm = effectiveDurationS / 60 / (lap.distance_m / 1000);
+    return gradeAdjustedPaceMinPerKm(paceMinPerKm, elevChangeM / lap.distance_m);
   });
 }

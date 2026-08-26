@@ -59,11 +59,13 @@ import { NotesPanel } from "../components/NotesPanel";
 import { PaceVariabilityChart } from "../components/PaceVariabilityChart";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
 import { boulderingRoutes, gradeBreakdownFromRoutes, isBoulderingActivity } from "../boulderingRoutes";
+import { computeLapGapsMinPerKm } from "../gap";
 import { sportStyle } from "../metricStyle";
 import { computePaceVariability } from "../paceVariability";
 import {
   effectiveDurationS,
   formatClockDuration,
+  formatMinPerKm,
   formatPaceMinPerKm,
   isPaceSport,
   isRunningSport,
@@ -111,6 +113,23 @@ export function ActivityDetailPage({ id }: { id: string }) {
     () => (routeStream.data ? buildRouteData(routeStream.data) : null),
     [routeStream.data],
   );
+  // Per-lap GAP for the Intervals table (see ../gap.ts) -- reuses the medium-tier `stream`
+  // ActivityCharts already fetches rather than paying for the high-tier routeStream just for
+  // this; a lap-average grade doesn't need per-km precision. Empty until the stream arrives, so
+  // the table itself (which needs no stream data otherwise) can render immediately either way.
+  const lapGaps = useMemo(() => {
+    const laps = activity.data?.laps;
+    const streamStartTimeUtc = stream.data?.timestamps[0];
+    if (!laps || laps.length === 0 || !stream.data || streamStartTimeUtc == null) return [];
+    const startMs = new Date(streamStartTimeUtc).getTime();
+    const rawElapsedS = stream.data.timestamps.map((t) => (new Date(t).getTime() - startMs) / 1000);
+    return computeLapGapsMinPerKm(
+      laps,
+      streamStartTimeUtc,
+      rawElapsedS,
+      stream.data.series.altitude_m,
+    );
+  }, [stream.data, activity.data?.laps]);
   const context = useActivityContext(
     id,
     activity.data != null && activity.data.sport !== "hiking",
@@ -413,6 +432,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
                   )}
                   <th>Distance</th>
                   <th>{paceSport ? "Pace" : "Speed"}</th>
+                  {paceSport && <th>GAP</th>}
                   {showExpectedColumns && <th>Expected pace</th>}
                   <th>Avg HR</th>
                   <th>Max HR</th>
@@ -474,6 +494,11 @@ export function ActivityDetailPage({ id }: { id: string }) {
                             : `${(lap.distance_m / 1000 / (effectiveLapDuration / 3600)).toFixed(1)} km/h`
                           : "—"}
                       </td>
+                      {paceSport && (
+                        <td>
+                          {lapGaps[i] != null ? `${formatMinPerKm(lapGaps[i]!)} /km` : "—"}
+                        </td>
+                      )}
                       {showExpectedColumns && <td>{expectedPace}</td>}
                       <td>{lap.avg_hr ?? "—"}</td>
                       <td>{lap.max_hr ?? "—"}</td>
