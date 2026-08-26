@@ -58,3 +58,46 @@ def test_list_sleep_empty_range_returns_empty_list(
     )
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_list_sleep_dedupes_overlapping_sources_preferring_garmin_connect(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """A date covered by both garmin_export's historical backfill and garmin_connect's rolling
+    live sync gets two legitimate sleep_session rows (see sleep.py's _SOURCE_PRIORITY docstring)
+    -- GET /sleep must collapse them to one per local_date, not leak both to the frontend."""
+    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+    with engine.connect() as conn:
+        conn.execute(
+            sleep_session.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2025-06-01",
+                start_time_utc=now,
+                end_time_utc=now,
+                total_sleep_s=30240.0,
+                sleep_score=58.0,
+                source="garmin_export",
+            )
+        )
+        conn.execute(
+            sleep_session.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2025-06-01",
+                start_time_utc=now,
+                end_time_utc=now,
+                total_sleep_s=26100.0,
+                sleep_score=58.0,
+                source="garmin_connect",
+            )
+        )
+        conn.commit()
+
+    r = client.get(
+        "/api/v1/sleep?start_date=2025-05-25&end_date=2025-06-05", headers=auth_headers
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["local_date"] == "2025-06-01"
+    assert body[0]["source"] == "garmin_connect"
+    assert body[0]["total_sleep_s"] == 26100.0
