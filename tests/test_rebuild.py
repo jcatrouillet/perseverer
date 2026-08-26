@@ -1071,6 +1071,54 @@ def test_activity_id_is_identical_across_two_rebuilds(tmp_path: Path) -> None:
     assert id_after_first_rebuild == id_after_second_rebuild
 
 
+def test_rebuild_database_commits_incrementally_not_in_one_long_transaction(
+    tmp_path: Path,
+) -> None:
+    """Regression test for a real production incident: the tail phase (overrides + rollups +
+    fitness + insights + VDOT/pace-bands/GAP + weather titles) used to share one long
+    uncommitted transaction with the per-row replay loop before it, and a rebuild on bercy once
+    hung inside that transaction, losing hours of otherwise-already-computed work when the
+    process had to be killed. Each step now commits on its own (see rebuild.py's own comment on
+    this) -- asserts that a real rebuild issues comfortably more commits than the ~4 it would if
+    the whole tail were still one block (2 for the wipe/restore, 1 per replayed row, 1 final)."""
+    fitness_dir = tmp_path / "src" / "DI_CONNECT" / "DI-Connect-Fitness" / "2024"
+    fitness_dir.mkdir(parents=True)
+    shutil.copy(_GARMIN_EXPORT_FIXTURE, fitness_dir / "55501234_ACTIVITY.fit")
+
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        import_garmin_export(
+            conn,
+            archive_root,
+            parquet_dir,
+            tmp_path / "extract",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            path=tmp_path / "src",
+        )
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        commit_count = 0
+        original_commit = conn.commit
+
+        def counting_commit() -> None:
+            nonlocal commit_count
+            commit_count += 1
+            original_commit()
+
+        conn.commit = counting_commit  # type: ignore[method-assign]
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+
+    assert commit_count >= 10
+
+
 # --- rebuild_database_tracked -- the Settings-page-triggered wrapper, tested for its own
 # ingest_run bookkeeping (rebuild_database itself is already covered throughout this file). ------
 

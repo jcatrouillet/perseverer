@@ -354,16 +354,29 @@ def rebuild_database(
         conn.commit()
         replayed += 1
 
+    # Every step from here through the end of this function commits on its own rather than
+    # sharing one long transaction across all of them -- confirmed necessary live: a real
+    # rebuild on bercy once put this entire tail into a single uncommitted transaction that hung
+    # partway through (inside a live multi-worker process, most likely a lock/resource
+    # contention issue between this long-running writer and the app's own concurrent request
+    # handling) and had to be recovered by manually re-running just these calls standalone.
+    # Committing after each call bounds how much work a future hang or crash here can lose, and
+    # -- as the recovery itself demonstrated -- lets exactly this tail be safely re-run on its
+    # own against already-replayed data, without redoing the (far more expensive) per-row replay
+    # loop above.
+
     # Re-applies any athlete-recorded sport corrections (see sport_override.py's own docstring
     # for why this can't just be a mutated `activity.sport` value the replay above writes once
     # and forgets -- the replay just wiped it back to whatever the raw bytes say). Before the
     # rollup/insight refresh below so those see the corrected sport, not the raw one.
     apply_sport_overrides(conn, athlete_id=athlete_id)
+    conn.commit()
 
     # Same "durable, never-wiped correction re-applied after every rebuild" shape as
     # apply_sport_overrides above, for the athlete's own bouldering route-status corrections and
     # manually-added routes -- see bouldering_overrides.py's own docstring.
     apply_bouldering_route_overrides(conn, athlete_id=athlete_id)
+    conn.commit()
 
     # Same durable-correction shape again, for the athlete's own car-travel trims -- see
     # activity_trim.py's own docstring. No SQLite attachment needed (unlike the API's shared
@@ -373,6 +386,7 @@ def rebuild_database(
     apply_activity_trim_overrides(
         conn, duckdb.connect(":memory:"), parquet_dir, athlete_id=athlete_id
     )
+    conn.commit()
 
     # Same durable-correction shape again, for the athlete's own manual "these two activities
     # are the same" merges -- see activity_merge.py's own docstring. Natural merge-matching
@@ -381,6 +395,7 @@ def rebuild_database(
     # catches cases it didn't before) -- apply_activity_merge_overrides skips a durable row once
     # both its anchors already resolve to the same activity_id, so this is a no-op for those.
     apply_activity_merge_overrides(conn, athlete_id=athlete_id)
+    conn.commit()
 
     # Re-derives Garmin's own sport/name corrections from summarizedActivitiesExport (see
     # garmin_activity_summary.py's own docstring) -- the replay above just re-parsed every
@@ -393,19 +408,26 @@ def rebuild_database(
     # its own weather emoji, and backfill_weather_titles skips a title that already starts with
     # one.
     backfill_activity_corrections(conn, archive_root, athlete_id=athlete_id)
+    conn.commit()
 
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
+    conn.commit()
     if touched_dates:
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
+        conn.commit()
         refresh_insights(conn, athlete_id=athlete_id)
+        conn.commit()
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         # After apply_sport_overrides above, not before -- that call already restores any
         # previously-set emoji title from the durable override table, so this only ever does
         # real work for an activity that never had one to begin with.
         backfill_weather_titles(conn, archive_root, athlete_id=athlete_id)
-    conn.commit()
+        conn.commit()
 
     return replayed
 
