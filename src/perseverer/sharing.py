@@ -9,7 +9,18 @@ f-strings, not a template engine -- the page is simple enough that adding a Jinj
 for it isn't worth it) -- both the OG meta tags social platforms read and the visible page body
 come from the exact same query, so there's no risk of the preview card and the page disagreeing.
 Deliberately excludes fields `ActivitySummary` includes but this project's own schema docs flag
-as not vetted for public exposure: `weight_kg`, `avg_hr_bpm`/`max_hr_bpm`.
+as not vetted for public exposure: `weight_kg`, `avg_hr_bpm`/`max_hr_bpm` -- and, by the same
+reasoning, the period share below deliberately excludes health data entirely (weight/HRV/sleep),
+even though the real YearView page it mirrors shows those: this app's own existing stance is
+that health metrics aren't vetted for public exposure, and a period share has no per-activity
+opt-in the way an activity share at least implicitly does.
+
+`render_period_share_html` mirrors YearView/AllTimeView's own stats -- activity totals, a
+running-specific breakdown (query `activity` directly, not a rollup, since day_rollup/
+period_rollup don't break down by sport), a month-by-month table (year periods only; "all" can
+span a decade of months, not worth a table), and a Fitness & Form (CTL/ATL) chart -- rendered as
+inline hand-built SVG (`_svg_line_chart`/`_svg_bar_chart`) rather than a JS charting library,
+consistent with this whole page being static, crawler-readable HTML with no JS at all.
 """
 
 from __future__ import annotations
@@ -22,7 +33,14 @@ from html import escape
 
 from sqlalchemy import Connection, func, select
 
-from perseverer.db.schema import activity, day_rollup, share_link
+from perseverer.db.schema import (
+    activity,
+    day_rollup,
+    fitness_daily_rollup,
+    period_rollup,
+    share_link,
+)
+from perseverer.merge.engine import sport_family
 
 _TOKEN_BYTES = 32
 
@@ -138,6 +156,66 @@ def _stats_grid(*pairs: tuple[str, str]) -> str:
     return f'<div class="stats">\n{rows}\n</div>'
 
 
+def _svg_line_chart(
+    series: list[tuple[float, float]], *, width: int = 560, height: int = 140
+) -> str:
+    """Two polylines (e.g. CTL/ATL) sharing one y-scale -- `series` is a list of (a, b) value
+    pairs, one per x position, already in display order. Empty string for fewer than 2 points
+    (nothing to draw a line between)."""
+    if len(series) < 2:
+        return ""
+    values = [v for pair in series for v in pair]
+    lo, hi = min(values), max(values)
+    span = hi - lo or 1.0
+    pad = 6
+
+    def x_at(i: int) -> float:
+        return pad + i / (len(series) - 1) * (width - 2 * pad)
+
+    def y_at(v: float) -> float:
+        return height - pad - (v - lo) / span * (height - 2 * pad)
+
+    a_pts = " ".join(f"{x_at(i):.1f},{y_at(a):.1f}" for i, (a, _) in enumerate(series))
+    b_pts = " ".join(f"{x_at(i):.1f},{y_at(b):.1f}" for i, (_, b) in enumerate(series))
+    return (
+        f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" '
+        f'role="img" aria-label="Fitness (CTL) and Fatigue (ATL) over time" class="chart">'
+        f'<polyline points="{a_pts}" fill="none" stroke="#2563eb" stroke-width="2"/>'
+        f'<polyline points="{b_pts}" fill="none" stroke="#f59e0b" stroke-width="2"/>'
+        f"</svg>"
+    )
+
+
+def _svg_bar_chart(bars: list[tuple[str, float]], *, width: int = 560, height: int = 150) -> str:
+    """One bar per (label, value) pair, e.g. monthly distance -- `bars` in display order."""
+    if not bars:
+        return ""
+    max_v = max(v for _, v in bars) or 1.0
+    pad = 4
+    plot_w = width - 2 * pad
+    slot_w = plot_w / len(bars)
+    bar_w = slot_w * 0.6
+    label_y = height - 6
+    bar_floor = height - 22
+    parts = []
+    for i, (label, v) in enumerate(bars):
+        x = pad + i * slot_w + (slot_w - bar_w) / 2
+        bar_h = (v / max_v) * (bar_floor - 10)
+        y = bar_floor - bar_h
+        parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{bar_h:.1f}" '
+            f'fill="#2563eb" rx="2"/>'
+        )
+        parts.append(
+            f'<text x="{x + bar_w / 2:.1f}" y="{label_y}" font-size="9" text-anchor="middle" '
+            f'fill="#666">{escape(label)}</text>'
+        )
+    return (
+        f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" '
+        f'role="img" aria-label="Monthly distance" class="chart">{"".join(parts)}</svg>'
+    )
+
+
 def _page(*, title: str, description: str, body: str) -> str:
     title_esc, desc_esc = escape(title), escape(description)
     return f"""<!doctype html>
@@ -155,10 +233,15 @@ def _page(*, title: str, description: str, body: str) -> str:
           max-width: 32rem; margin: 3rem auto; padding: 0 1.5rem; color: #1a1a1a; }}
   h1 {{ font-size: 1.4rem; margin-bottom: 0.25rem; }}
   .meta {{ color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }}
+  h2 {{ font-size: 1rem; margin: 1.75rem 0 0.5rem; }}
   .stats {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }}
   .stat {{ background: #f5f5f5; border-radius: 8px; padding: 0.75rem 1rem; }}
   .stat .label {{ font-size: 0.75rem; color: #666; text-transform: uppercase; }}
   .stat .value {{ font-size: 1.3rem; font-weight: 600; }}
+  .chart {{ display: block; margin: 0.5rem 0; }}
+  .chart-legend {{ font-size: 0.75rem; color: #666; margin-bottom: 0.25rem; }}
+  .legend-dot {{ display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%;
+                 margin-right: 0.25rem; }}
   footer {{ margin-top: 2rem; font-size: 0.8rem; color: #999; }}
 </style>
 </head>
@@ -228,6 +311,11 @@ def _period_date_range(period_type: str, period_start: str | None) -> tuple[str 
     return period_start, (start + timedelta(days=6)).isoformat()
 
 
+_MONTH_ABBR = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
+
 def render_period_share_html(
     conn: Connection, athlete_id: str, period_type: str, period_start: str | None
 ) -> str:
@@ -235,30 +323,108 @@ def render_period_share_html(
         return render_unavailable_html()
     start, end = _period_date_range(period_type, period_start)
 
-    query = select(
+    rollup_query = select(
         func.coalesce(func.sum(day_rollup.c.activity_count), 0).label("activity_count"),
         func.sum(day_rollup.c.activity_distance_m).label("distance_m"),
         func.sum(day_rollup.c.activity_elevation_gain_m).label("elevation_gain_m"),
+        func.sum(day_rollup.c.activity_moving_duration_s).label("moving_duration_s"),
         func.count().filter(day_rollup.c.activity_count > 0).label("active_days"),
     ).where(day_rollup.c.athlete_id == athlete_id)
     if start is not None and end is not None:
-        query = query.where(day_rollup.c.local_date.between(start, end))
-    row = conn.execute(query).one()
+        rollup_query = rollup_query.where(day_rollup.c.local_date.between(start, end))
+    totals = conn.execute(rollup_query).one()
+
+    # Every non-deleted activity's sport/distance/duration in range, fetched once -- used below
+    # both for the single longest activity and the running breakdown (sport_family has no SQL
+    # equivalent, so that filter runs in Python here, same cross-language-duplication precedent
+    # as insights/rules_pb.py's own personalRecords logic).
+    activity_query = select(
+        activity.c.sport, activity.c.distance_m, activity.c.moving_duration_s
+    ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
+    if start is not None and end is not None:
+        activity_query = activity_query.where(activity.c.local_date.between(start, end))
+    activities = conn.execute(activity_query).fetchall()
+    with_distance = [a for a in activities if a.distance_m]
+    longest_m = max((a.distance_m for a in with_distance), default=None)
 
     label = "All time" if period_type == "all" else (period_start or "")
     description = (
-        f"{row.activity_count} activities, {_format_km(row.distance_m)}, "
-        f"{row.active_days} active day(s)"
+        f"{totals.activity_count} activities, {_format_km(totals.distance_m)}, "
+        f"{totals.active_days} active day(s)"
     )
     stats = _stats_grid(
-        ("Activities", str(row.activity_count)),
-        ("Distance", _format_km(row.distance_m)),
-        ("Elevation gain", _format_meters(row.elevation_gain_m)),
-        ("Active days", str(row.active_days)),
+        ("Activities", str(totals.activity_count)),
+        ("Distance", _format_km(totals.distance_m)),
+        ("Moving time", _format_duration(totals.moving_duration_s)),
+        ("Elevation gain", _format_meters(totals.elevation_gain_m)),
+        ("Active days", str(totals.active_days)),
+        ("Longest activity", _format_km(longest_m)),
     )
+
+    running_body = ""
+    running = [a for a in with_distance if sport_family(a.sport) == "run"]
+    if running:
+        total_run_m = sum(a.distance_m or 0 for a in running)
+        total_run_s = sum(a.moving_duration_s or 0 for a in running)
+        longest_run_m = max(a.distance_m or 0 for a in running)
+        running_stats = _stats_grid(
+            ("Kilometers run", f"{total_run_m / 1000:.0f} km"),
+            ("Number of runs", str(len(running))),
+            ("Avg pace", _format_pace(total_run_s, total_run_m)),
+            ("Longest run", _format_km(longest_run_m)),
+        )
+        running_body = f"<h2>Running</h2>\n{running_stats}\n"
+
+    # Month-by-month distance, year periods only -- "all" can span a decade of months (not worth
+    # a bar per month) and week/month periods are already narrower than a month themselves.
+    months_body = ""
+    if period_type == "year" and period_start is not None:
+        month_rows = conn.execute(
+            select(period_rollup.c.period_start, period_rollup.c.activity_distance_m)
+            .where(
+                period_rollup.c.athlete_id == athlete_id,
+                period_rollup.c.period_type == "month",
+                period_rollup.c.period_start.between(f"{period_start}-01", f"{period_start}-12"),
+            )
+            .order_by(period_rollup.c.period_start)
+        ).fetchall()
+        bars = [
+            (
+                _MONTH_ABBR[int(r.period_start.split("-")[1]) - 1],
+                (r.activity_distance_m or 0) / 1000,
+            )
+            for r in month_rows
+        ]
+        if any(v > 0 for _, v in bars):
+            months_body = f"<h2>Distance by month (km)</h2>\n{_svg_bar_chart(bars)}\n"
+
+    # Fitness & Form (CTL/ATL) -- meaningful only over month+ windows; a week's worth of points
+    # is too short a trend to chart.
+    fitness_body = ""
+    if period_type in ("month", "year", "all"):
+        fitness_query = (
+            select(fitness_daily_rollup.c.ctl, fitness_daily_rollup.c.atl)
+            .where(fitness_daily_rollup.c.athlete_id == athlete_id)
+            .order_by(fitness_daily_rollup.c.local_date)
+        )
+        if start is not None and end is not None:
+            fitness_query = fitness_query.where(
+                fitness_daily_rollup.c.local_date.between(start, end)
+            )
+        fitness_rows = conn.execute(fitness_query).fetchall()
+        chart = _svg_line_chart([(r.ctl, r.atl) for r in fitness_rows])
+        if chart:
+            fitness_body = (
+                "<h2>Fitness &amp; Form</h2>\n"
+                '<div class="chart-legend"><span class="legend-dot" '
+                'style="background:#2563eb"></span>Fitness (CTL) &nbsp; '
+                '<span class="legend-dot" style="background:#f59e0b"></span>Fatigue (ATL)</div>\n'
+                f"{chart}\n"
+            )
+
     body = f"""
 <h1>{escape(label)}</h1>
 <div class="meta">Activity summary</div>
 {stats}
-"""
+{running_body}{fitness_body}{months_body}"""
     return _page(title=f"{label} summary", description=description, body=body)

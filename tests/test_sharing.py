@@ -10,7 +10,15 @@ from pathlib import Path
 from sqlalchemy import Engine, select
 
 from perseverer.db.engine import make_engine
-from perseverer.db.schema import activity, athlete, day_rollup, metadata, share_link
+from perseverer.db.schema import (
+    activity,
+    athlete,
+    day_rollup,
+    fitness_daily_rollup,
+    metadata,
+    period_rollup,
+    share_link,
+)
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.sharing import (
     create_share_link,
@@ -260,3 +268,128 @@ def test_render_period_share_html_rejects_an_invalid_period_type(tmp_path: Path)
         html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "decade", "2026")
 
     assert "no longer available" in html
+
+
+def test_render_period_share_html_includes_a_running_breakdown(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="run1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-01",
+                sport="running",
+                distance_m=10000.0,
+                moving_duration_s=3000.0,  # 5:00/km
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            activity.insert().values(
+                id="run2",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-15",
+                sport="trail_running",  # same sport_family("run") as plain running
+                distance_m=20000.0,
+                moving_duration_s=7200.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        # A non-running activity in the same range -- must not be counted in the running totals.
+        conn.execute(
+            activity.insert().values(
+                id="ride1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-10",
+                sport="cycling",
+                distance_m=40000.0,
+                moving_duration_s=3600.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Running" in html
+    assert "30 km" in html  # 10km + 20km run distance, cycling excluded
+    assert ">2<" in html  # two runs (including the trail_running one)
+    assert "20.00 km" in html  # longest run
+
+
+def test_render_period_share_html_includes_a_monthly_distance_chart_for_a_year(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime.now(dt.UTC)
+    with engine.connect() as conn:
+        for period_start, dist in (("2026-01", 50000.0), ("2026-02", 80000.0)):
+            conn.execute(
+                period_rollup.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    period_type="month",
+                    period_start=period_start,
+                    period_end=f"{period_start}-28",
+                    activity_count=4,
+                    activity_distance_m=dist,
+                    refreshed_at=now,
+                )
+            )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "year", "2026")
+
+    assert "Distance by month" in html
+    assert "<svg" in html
+    assert ">Jan<" in html
+    assert ">Feb<" in html
+
+
+def test_render_period_share_html_includes_a_fitness_form_chart(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime.now(dt.UTC)
+    with engine.connect() as conn:
+        for day, ctl, atl in (("2026-06-01", 40.0, 35.0), ("2026-06-15", 45.0, 50.0)):
+            conn.execute(
+                fitness_daily_rollup.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    local_date=day,
+                    training_load=100.0,
+                    ctl=ctl,
+                    atl=atl,
+                    tsb=ctl - atl,
+                    refreshed_at=now,
+                )
+            )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Fitness &amp; Form" in html
+    assert "Fitness (CTL)" in html
+    assert "Fatigue (ATL)" in html
+    assert "<svg" in html
+
+
+def test_render_period_share_html_omits_charts_with_no_data(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "week", "2026-06-01")
+
+    assert "Running" not in html
+    assert "Fitness &amp; Form" not in html
+    assert "Distance by month" not in html
