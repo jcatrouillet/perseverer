@@ -368,6 +368,17 @@ export interface JobStatusOut {
   first_error: string | null;
 }
 
+// POST /activities/{id}/share, POST /periods/{period_type}/share
+export interface ShareLinkOut {
+  id: number;
+  url: string;
+}
+
+// POST /share/{id}/revoke
+export interface RevokeShareOut {
+  revoked: boolean;
+}
+
 export interface ActivityWorkoutStepOut {
   step_index: number;
   duration_type: string | null;

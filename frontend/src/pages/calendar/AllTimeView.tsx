@@ -19,6 +19,7 @@ import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
+import { PeriodShareButton } from "../../components/ShareButton";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../../dateUtils";
@@ -85,6 +86,7 @@ export function AllTimeView() {
     <main>
       <DateNavigator year={Number(end.slice(0, 4))} />
       <h1>All time</h1>
+      <PeriodShareButton periodType="all" />
       {allActivities.isLoading && <p>Loading…</p>}
       {allActivities.isError && <p role="alert">Could not load all-time data.</p>}
 

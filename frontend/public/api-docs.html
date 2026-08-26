@@ -1026,6 +1026,13 @@ const SCHEMAS = [
       ["error_count","integer",""],
       ["first_error","string|null",""],
     ] },
+  { name: "ShareLinkOut", note: "Returned by POST /activities/{id}/share and POST /periods/{period_type}/share.", fields: [
+      ["id","integer","The share link's own id — pass this (not the token) to POST /share/{id}/revoke."],
+      ["url","string","The full public share URL, e.g. https://your-perseverer-host/share/<token>."],
+    ] },
+  { name: "RevokeShareOut", note: "Returned by POST /share/{id}/revoke.", fields: [
+      ["revoked","boolean","False (not an error) if the id doesn't exist or isn't owned by the authenticated athlete — never leaks which."],
+    ] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1548,6 +1555,46 @@ const GROUPS = [
       params: [ ["source","query","req","string","—","garmin_connect | rebuild | garmin_export | strava_export"] ],
       responses: [ { code: 200, ref: "JobStatusOut", note: "null if that source has never run." } ],
       example: { qs: "?source=rebuild" }
+    },
+  ]},
+
+  { id: "sharing", title: "Sharing", endpoints: [
+    { method: "POST", path: "/api/v1/activities/{activity_id}/share", summary: "Create an unauthenticated share link for one activity.",
+      description: "The raw token is only ever returned here — only its SHA-256 hash is stored. Anyone with the resulting URL can view the activity without signing in.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [
+        { code: 200, ref: "ShareLinkOut" },
+        { code: 404, note: "The activity doesn't exist, isn't owned by the authenticated athlete, or is soft-deleted." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/activities/ACTIVITY_ID/share \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/periods/{period_type}/share", summary: "Create an unauthenticated share link for one summary period.",
+      description: "Aggregates the same day_rollup data the calendar views already show — a week, month, year, or (for \"all\") every day on record.",
+      params: [
+        ["period_type","path","req","string","—",`week | month | year | all`],
+        ["period_start","query","opt","string","—","Required unless period_type is \"all\" (422 otherwise). E.g. \"2026-06\" for a month, \"2026\" for a year, \"2026-06-01\" (the Monday) for a week."],
+      ],
+      responses: [
+        { code: 200, ref: "ShareLinkOut" },
+        { code: 422, note: 'period_start is required unless period_type is "all".' },
+      ],
+      example: { curl: `curl -X POST "https://your-perseverer-host/api/v1/periods/month/share?period_start=2026-06" \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/share/{id}/revoke", summary: "Revoke a share link.",
+      description: "Idempotent — revoking an already-revoked or cross-athlete-owned link returns revoked: false rather than erroring, so this endpoint never leaks whether an id belongs to another athlete.",
+      params: [ ["id","path","req","integer","—","The share link's own id (from ShareLinkOut), not the token."] ],
+      responses: [ { code: 200, ref: "RevokeShareOut" } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/share/1/revoke \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/share/{token}", summary: "View a shared activity or period — no authentication.",
+      description: "Public by omission, not a special-cased bypass — same mechanism as /healthz, /version, /auth/login. Note this path has no /api/v1 prefix, and lives on the frontend's own origin via an nginx forwarding rule (docker/nginx.conf), not the API's port. Returns server-rendered HTML with real Open Graph meta tags computed from the same data as the visible page, so a pasted link's social-preview card always matches what it links to. An unknown or revoked token renders a \"this link is no longer available\" page rather than a 404.",
+      auth: "none",
+      params: [ ["token","path","req","string","—",""] ],
+      responses: [ { code: 200, note: "text/html — either the rendered share page or the \"no longer available\" fallback." } ],
+      example: { curl: `curl https://your-perseverer-host/share/TOKEN` }
     },
   ]},
 

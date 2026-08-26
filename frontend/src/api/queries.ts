@@ -46,6 +46,8 @@ import type {
   PaceBandOut,
   Page,
   PeriodCalendarResponse,
+  RevokeShareOut,
+  ShareLinkOut,
   SleepSessionOut,
   SplitOut,
   StreamResponse,
@@ -789,5 +791,32 @@ export function useDeleteGoal() {
         queryKey: ["goal-progress", goal.period_type, goal.period_start],
       });
     },
+  });
+}
+
+/** Creates an unauthenticated share link for one activity -- see sharing.py's own docstring
+ * for what's deliberately excluded from the public page (weight, HR). */
+export function useCreateActivityShare(activityId: string) {
+  return useMutation({
+    mutationFn: () => apiPost<ShareLinkOut>(`/api/v1/activities/${activityId}/share`, {}),
+  });
+}
+
+/** Same as above, for a summary period -- "all" needs no periodStart. */
+export function useCreatePeriodShare(
+  periodType: "week" | "month" | "year" | "all",
+  periodStart?: string,
+) {
+  return useMutation({
+    mutationFn: () => {
+      const qs = periodStart ? `?period_start=${encodeURIComponent(periodStart)}` : "";
+      return apiPost<ShareLinkOut>(`/api/v1/periods/${periodType}/share${qs}`, {});
+    },
+  });
+}
+
+export function useRevokeShare() {
+  return useMutation({
+    mutationFn: (id: number) => apiPost<RevokeShareOut>(`/api/v1/share/${id}/revoke`, {}),
   });
 }

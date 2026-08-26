@@ -13,6 +13,10 @@ guess), gated by the same shared API key via a raw ASGI wrapper (`Mount` bypasse
 `Depends`), and requires composing its session-manager lifespan into this app's own lifespan --
 `streamable_http_app()` must be called (building `mcp_asgi_app` below) before `mcp_lifespan` is
 entered.
+
+`GET /share/{token}` (share.py) is the other deliberately unauthenticated route besides
+/healthz/version/auth/login -- an athlete-issued link viewable by anyone who has it, with no
+X-API-Key/JWT at all. See share.py's own module docstring.
 """
 
 from fastapi import FastAPI
@@ -29,6 +33,7 @@ from perseverer.api.routers import (
     health,
     insights,
     notes,
+    share,
     sleep,
 )
 from perseverer.api.routers import settings as settings_router
@@ -67,6 +72,11 @@ app.include_router(insights.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")
 app.include_router(goals.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
+app.include_router(share.management_router, prefix="/api/v1")
+# No prefix, no auth -- the one deliberately public surface in this app besides
+# /healthz//version/auth/login. See share.py's own module docstring for why (and how the
+# reverse proxy/nginx get a same-origin /share/{token} URL to this route at all).
+app.include_router(share.router)
 
 
 @app.get("/api/v1/healthz")

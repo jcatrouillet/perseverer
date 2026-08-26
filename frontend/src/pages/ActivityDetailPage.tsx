@@ -42,6 +42,7 @@ import { ActivityNameCorrection } from "../components/ActivityNameCorrection";
 import { ActivityRoute, buildRouteData } from "../components/ActivityRoute";
 import { ActivitySourcesPanel } from "../components/ActivitySourcesPanel";
 import { ActivitySportCorrection } from "../components/ActivitySportCorrection";
+import { ActivityShareButton } from "../components/ShareButton";
 import {
   ActivityStatsGridPrimary,
   ActivityStatsGridSecondary,
@@ -539,6 +540,12 @@ export function ActivityDetailPage({ id }: { id: string }) {
           sport={sport}
         />
       )}
+
+      <section className="card">
+        <h2>Share</h2>
+        <p className="chart-note">Generate a link anyone can open without signing in.</p>
+        <ActivityShareButton activityId={id} />
+      </section>
 
       <section className="card">
         <h2>Notes</h2>

@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     jwt_secret: str | None = None
     jwt_expiry_days: int = 30
 
+    # --- Share links (sharing.py, api/routers/share.py) ---
+    # The externally-visible origin a share URL should point at (e.g.
+    # "https://perseverer.example.com") -- needed because the request the create-share
+    # endpoint handles arrives from *inside* the reverse proxy, whose own Host header doesn't
+    # necessarily match what a link recipient's browser should actually open. Unset -> falls
+    # back to the incoming request's own base URL (fine for local dev; production should set
+    # this explicitly, same "don't guess the public hostname" reasoning as
+    # PERSEVERER_API_BASE_URL on the frontend side, see docs/DEPLOY.md).
+    public_base_url: str | None = None
+
     # --- Eufy Life body-composition sync (adapters/eufy.py) ---
     # All optional and unset by default -- sync_eufy() skips with a log line, not an error, when
     # unconfigured. Deliberately plain env-var credentials, not a token-store-only model like

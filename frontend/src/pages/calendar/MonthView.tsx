@@ -16,6 +16,7 @@ import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
 import { GoalButton } from "../../components/GoalButton";
+import { PeriodShareButton } from "../../components/ShareButton";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
@@ -102,6 +103,10 @@ export function MonthView({ year, month }: { year: number; month: number }) {
           periodType="month"
           periodStart={`${year}-${String(month).padStart(2, "0")}`}
           periodLabel={periodLabel}
+        />
+        <PeriodShareButton
+          periodType="month"
+          periodStart={`${year}-${String(month).padStart(2, "0")}`}
         />
       </div>
       {calendar.isLoading && <p>Loading…</p>}

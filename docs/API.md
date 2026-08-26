@@ -866,6 +866,62 @@ nullable).
 
 ---
 
+## Sharing
+
+An athlete-issued link granting **unauthenticated, read-only** access to one activity or one
+summary period. The creation/revocation endpoints below need the usual `X-API-Key`/JWT; the
+`GET /share/{token}` page itself deliberately does not — same "public by omission" mechanism as
+`/healthz`/`/version`/`/auth/login`, not a special-cased bypass. It returns server-rendered HTML
+(not JSON), with real `<meta property="og:...">` tags computed from the same render as the
+visible page, so a pasted link's social-preview card can never disagree with what it links to.
+The public path is un-prefixed (`/share/{token}`, not `/api/v1/share/{token}`) so the link is
+short and shareable, and so a reverse proxy that splits by port rather than path (see
+`docs/DEPLOY.md`) only needs one `location /share/` forwarding rule.
+
+### `POST /activities/{activity_id}/share`
+
+Creates a share link for one activity. **`404`** if the activity doesn't exist (or isn't owned
+by the authenticated athlete, or is soft-deleted).
+
+**Response `200`:** `ShareLinkOut` — `{"id": 1, "url": "https://.../share/<token>"}`. The raw
+token is only ever returned here; only its SHA-256 hash is stored.
+
+### `POST /periods/{period_type}/share`
+
+Creates a share link for one summary period. `period_type` is a path segment
+(`"week"|"month"|"year"|"all"`).
+
+**Query params:** `period_start` (string, required unless `period_type` is `"all"` — e.g.
+`"2026-06"` for a month, `"2026"` for a year, `"2026-06-01"` — the period's start date — for a
+week). **`422`** if omitted for a non-`"all"` period type.
+
+**Response `200`:** `ShareLinkOut`.
+
+### `POST /share/{id}/revoke`
+
+Revokes a share link by its numeric id (the `id` `ShareLinkOut` returned at creation, not the
+token itself). Idempotent — revoking an already-revoked or cross-athlete-owned link returns
+`revoked: false` rather than erroring, so this endpoint never leaks whether a given id belongs
+to another athlete.
+
+**Response `200`:** `RevokeShareOut` — `{"revoked": true|false}`.
+
+### `GET /share/{token}`
+
+**No authentication.** Renders the shared activity or period as a plain HTML page. An
+unknown/revoked token renders a "this link is no longer available" page (never a `404` — a
+`404` would look identical to "revoked" and there's no reason to distinguish the two to an
+outside visitor).
+
+Activity pages show name, sport, date, distance, duration, pace, elevation gain — deliberately
+excluding weight/HR fields. Period pages aggregate `day_rollup` over the period's date range
+(distance, activity count, elevation gain, active days) — a month, a year, or (for `"all"`)
+every day on record.
+
+**Response `200`:** `text/html`.
+
+---
+
 ## System
 
 ### `GET /healthz`
@@ -1316,3 +1372,9 @@ field-by-field there rather than repeated here.
 
 `access_token` (string, JWT — send as `Authorization: Bearer <token>`), `expires_at` (string,
 date-time).
+
+### ShareLinkOut / RevokeShareOut
+
+See `POST /activities/{activity_id}/share` and `POST /share/{id}/revoke` under **Sharing**
+above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `RevokeShareOut`:
+`revoked` (bool).

@@ -774,7 +774,7 @@ note = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
     Column("entity_type", String, nullable=False),  # "activity" | "day"
-    # An activity ULID when entity_type="activity", an ISO local_date when entity_type="day".
+    # An activity id when entity_type="activity", an ISO local_date when entity_type="day".
     Column("entity_id", String, nullable=False),
     Column("body", Text, nullable=False),
     Column("author", String, nullable=True),  # e.g. "agent", a human's name, or null
@@ -829,6 +829,33 @@ merge_decision = Table(
     Column("reasons", Text, nullable=False),  # JSON list[str]
     Column("inputs", Text, nullable=False),  # JSON
     Column("decided_at", DateTime(), nullable=False),
+)
+
+# --- Share links (Phase 10): an athlete-issued token granting unauthenticated, read-only
+# access to one activity or one summary period -- see sharing.py and
+# api/routers/share.py. Only viable now that activity.id is deterministic (see
+# fit_folder.py::_derive_activity_id) -- a link into a random-ULID id would go dead on the
+# next rebuild, defeating the point of a link meant to be pasted somewhere durable. Follows
+# auth/api_keys.py's own convention exactly: only a sha256 of the token is ever stored, never
+# the plaintext, even though a share link isn't a login credential. -----------------------
+
+share_link = Table(
+    "share_link",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("token_hash", String, nullable=False),
+    # "activity" -> target_id is an activity.id. "period" -> target_id is
+    # "<period_type>:<period_start>" (period_type one of week|month|year|all; period_start
+    # e.g. "2026-06" or "2026", omitted -- just "all" -- for period_type="all").
+    Column("target_type", String, nullable=False),
+    Column("target_id", String, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    # Nullable-means-"hasn't happened" -- same idiom as activity.deleted_at, not a separate
+    # boolean flag.
+    Column("revoked_at", DateTime(), nullable=True),
+    UniqueConstraint("token_hash", name="uq_share_link_token_hash"),
+    Index("ix_share_link_athlete", "athlete_id"),
 )
 
 # --- Athlete-scoping bookkeeping, enforced by tests/db/test_schema.py -----------
