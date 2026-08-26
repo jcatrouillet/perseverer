@@ -581,7 +581,9 @@ check, so a Eufy-side failure (bad credentials, an API change) never blocks eith
 `GET /health/dashboard`'s `LOGICAL_METRICS` promotes ten of the raw `eufy.scale.*` fields to
 human-meaningful dashboard names (`weight_kg`, `bmi`, `body_fat_pct`, `muscle_mass_kg`,
 `bone_mass_kg`, `water_pct`, `bmr_kcal`, `visceral_fat`, `metabolic_age`, `protein_ratio_pct`) —
-each a single-alias entry, since Eufy is the only source for any of them. The remaining ~14 raw
+single-alias entries, since Eufy is the only source for any of them, except `weight_kg`/`bmi`/
+`body_fat_pct`, which each carry a second `apple_health.*` alias for the pre-Eufy era (see the
+Apple Health export section below). The remaining ~14 raw
 fields (`impedance`, `mode`, `head_size`, etc.) are still fully stored/queryable via
 `GET /health/observations`, just not promoted to the dashboard — the same "catalog broadly, surface
 a curated subset" split Garmin's own much larger raw field set already uses. Surfaced in the
@@ -630,6 +632,89 @@ category axis -- which spaces every plotted point evenly by index regardless of 
 would make a month-long silence between two readings look identical to two consecutive days. Every
 chart built on `HealthTrendChart` (HRV/SpO2/Stress, respiration, body composition) inherits this,
 though only the sparse body-composition charts make the difference visible.
+
+## Apple Health export import (blood pressure, pre-Eufy body composition)
+
+`adapters/apple_health_export.py::import_apple_health_export` — a one-time backfill from an Apple
+Health "export.xml" archive (Settings > [Name] > Export All Health Data on iOS), zero network
+calls, same category as `garmin_export`/`strava_export`. Confirmed against a real export (not
+assumed): blood pressure (122 systolic + 122 diastolic `Record`s, 2020-02-07 through
+2025-06-15, unit always `mmHg`) and body mass (790 `Record`s, back to 2011-01-31, unit always
+`kg`) exist in the file, alongside ~74 other record types (nutrition, mindfulness, ECG,
+Apple-Watch-era vitals, 996 real clinical/medical records from a connected health-records
+account) this adapter deliberately does not parse.
+
+**Scope.** Blood pressure is imported in full, unconditionally — nothing else in this project has
+any BP source. Body mass, BMI (`HKQuantityTypeIdentifierBodyMassIndex`), and body-fat percentage
+(`HKQuantityTypeIdentifierBodyFatPercentage`) are imported only for records dated strictly before
+`weight_before`, an ISO date the CLI auto-detects as the athlete's earliest `eufy.scale.weight`
+observation (`adapters/apple_health_export.py::detect_weight_cutoff_from_eufy`) unless overridden
+— this fills the real gap Eufy can't (Eufy only has data from when that scale was bought), rather
+than duplicating or contesting what Eufy already covers for the overlapping era. A record whose
+`sourceName == "eufy Life"` is excluded even when its own date falls before the cutoff: that's
+Apple's own sync of the exact same first Eufy reading landing on the other side of a UTC/
+local-date boundary (confirmed: one such record is dated 2020-11-11 in Apple Health, one day
+before the Eufy adapter's own earliest raw fetch of 2020-11-12 UTC), not a distinct data point.
+
+**Metric keys**: `apple_health.body_mass` (kg), `apple_health.body_mass_index` (unitless),
+`apple_health.body_fat_percentage` (%), `apple_health.blood_pressure_systolic` /
+`_diastolic` (mmHg) — `aggregation="instant"`, same convention as `eufy.scale.*`. Blood pressure
+systolic/diastolic are stored as two independent observations sharing one `observed_at_utc`
+(Apple's `startDate`) rather than as an explicitly paired reading — no need to parse the wrapping
+`Correlation` XML element at all, since `health_observation` already stores multi-field
+one-timestamp readings this way for every Eufy scale step-on.
+
+**Unit normalization**: `BodyMass` — passthrough if `unit="kg"` (100% of this real export), `×
+0.45359237` if `unit="lb"` (Apple Health's schema allows this depending on device locale; not
+exercised by any real export seen so far, kept as a defensive path). `BodyMassIndex` —
+passthrough, `unit=None`. `BodyFatPercentage` — Apple's own HealthKit convention stores this as a
+**0–1 fraction** despite carrying `unit="%"` (confirmed: `value="0.211"` for a ~21% reading) — `×
+100` to match `eufy.scale.body_fat`'s already-established true-percent convention, or the two
+sources would visibly disagree in scale on the same chart.
+
+**Raw archiving: whole-file, not per-record.** Every other adapter in this codebase archives raw
+bytes at *file* granularity — one `raw_object` per FIT file, per Garmin JSON report, per Eufy API
+reading — with a generic parser pulling many observations out of that one archived blob. A real
+`export.xml` can run to gigabytes with millions of XML elements, so this adapter follows the same
+file-granularity precedent rather than introducing per-record archiving (no precedent anywhere in
+this codebase, and would mean millions of tiny raw_object rows for a one-time import): the
+**entire file** is archived once as a single `raw_object` (`kind="apple_health_export_xml"`,
+`source="apple_health_export"`), then streamed through
+`health/apple_health_parser.py::parse_apple_health_export_xml` — the only `ET.iterparse`-based
+parser in this codebase (`gpx/parser.py`/`tcx/parser.py` both use non-streaming `ET.fromstring`,
+fine for their own much smaller files) — extracting the ~5 record types above into one
+`HealthBatch`, fed through the same `ingest_health_batch` every other health source uses. Because
+the whole file is archived, extending this parser later to pull more record types (VO2max,
+mindfulness sessions, etc.) out of the same export never requires the user to re-supply the
+original file — a code change plus `sync rebuild` alone would pick it up.
+`rebuild.py`'s `apple_health_export_xml` replay branch re-derives `weight_before` fresh via
+`detect_weight_cutoff_from_eufy` at replay time (rather than persisting it as extra raw_object
+metadata) — the same "re-derive over store" preference `garmin_export_health_json`'s own replay
+branch already uses for `report_kind`. This only works because `eufy_scale_reading_json` raw
+objects always replay earlier in `fetched_at` order than any `apple_health_export_xml` row could
+(Eufy predates any Apple Health import by construction), so Eufy's own data is already in
+`health_observation` by the time this branch runs.
+
+**Dashboard wiring.** `GET /health/dashboard`'s `weight_kg`/`bmi`/`body_fat_pct` logical metrics
+(`api/routers/health.py::LOGICAL_METRICS`) each carry a second alias —
+`["eufy.scale.weight", "apple_health.body_mass"]` and so on — so the existing weight/BMI/body-fat
+charts extend back through the pre-Eufy era with zero frontend changes. These three metrics route
+through `_body_composition_daily`'s sequential outlier-rejection walk (see above), which now
+queries `metric_key IN (aliases)` instead of a single key and tracks each accepted day's own
+`source_metric_key` — since the two sources never share a date by construction, the same
+last-accepted-value algorithm keeps working correctly straight across the 2020-11 source
+transition with no special-casing. Blood pressure has **no dashboard chart yet** — deliberately
+deferred (a two-series systolic/diastolic chart is real net-new frontend work); queryable via
+`GET /health/observations?metric_key=apple_health.blood_pressure_systolic` (or `_diastolic`) only,
+for now.
+
+**Deliberately out of scope, not lost**: 996 real clinical/medical records (labs, medications,
+diagnoses, conditions, allergies, immunizations — synced from a connected health-records account,
+a different and more sensitive category of data than fitness/wellness metrics), ECG waveforms (a
+different data shape entirely — ~3-minute ADC traces, not a scalar metric), nutrition logs,
+mindfulness sessions, and Apple-Watch-era HR/VO2max/HRV/respiration (Garmin already covers that
+same period for this athlete). Workout GPX routes in the export overlap existing Garmin/Strava
+activities for 2020–2022 and are not imported as activities.
 
 ## Bouldering per-route data (reverse-engineered, undocumented FIT fields)
 

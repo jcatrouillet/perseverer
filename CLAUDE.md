@@ -192,6 +192,42 @@ because you don't recognize it — stop, that's the bug.
     `scale_data` field into `eufy.scale.<field>` (not just the 9 fields the sibling project's
     own extraction uses) — see `docs/DATA_DICTIONARY.md` for the full field list and unit
     handling.
+  - `apple_health_export` (`adapters/apple_health_export.py`) — historical backfill from an
+    Apple Health "export.xml" archive (Settings > [Name] > Export All Health Data on iOS), zero
+    network calls. Imports blood pressure (full history — nothing else in this project has any
+    BP source) and body mass/BMI/body-fat percentage dated strictly before the athlete's earliest
+    `eufy.scale.weight` reading (`weight_before`, auto-detected from the DB by the CLI unless
+    overridden) — this fills the real gap Eufy itself can't (Eufy only has data from when that
+    scale was bought), rather than duplicating what Eufy already covers. A record whose
+    `sourceName` is `"eufy Life"` is excluded even when its date falls before the cutoff — that's
+    Apple's own sync of the same first Eufy reading landing on the other side of a UTC/
+    local-date boundary, not a distinct pre-Eufy data point. `BodyFatPercentage` values are a
+    0–1 fraction despite carrying `unit="%"` (a real HealthKit quirk, confirmed against a real
+    export) and are multiplied by 100 to match `eufy.scale.body_fat`'s already-established true-
+    percent convention; `BodyMass` gets a defensive lb→kg conversion (not exercised by any real
+    export seen so far — every one has been 100% kg). Unlike every other file-shaped adapter in
+    this codebase, which archives raw bytes per *unit fetched* (one raw_object per FIT file, per
+    Garmin JSON report, per Eufy API reading), this adapter archives the **entire** export.xml as
+    a single `raw_object` (`kind="apple_health_export_xml"`) — a real export can run to
+    gigabytes with millions of XML elements, so per-record archiving (no precedent anywhere in
+    this codebase) would mean millions of tiny raw_object rows for a one-time import, with no
+    benefit over archiving the source file once. A single streaming parse
+    (`health/apple_health_parser.py`, the only `ET.iterparse`-based parser in this codebase —
+    every other XML parser here is small-file, non-streaming) then extracts the ~5 record types
+    this pass cares about out of the ~76 present in a real export; everything else (ECG,
+    nutrition, mindfulness, Apple Watch-era vitals Garmin already covers, and 996 real
+    clinical/medical records from a connected health-records account — a different, more
+    sensitive category of data entirely) stays deliberately unparsed, not lost: because the whole
+    file is archived, extending this parser later to pull more record types never requires the
+    user to re-supply the original export, just a code change plus `sync rebuild`.
+    `weight_kg`/`bmi`/`body_fat_pct` on `GET /health/dashboard` (`api/routers/health.py`) carry a
+    second alias for these three `apple_health.*` metric keys alongside their Eufy ones, so the
+    existing weight/BMI/body-fat charts extend back through the pre-Eufy era with no frontend
+    changes — the two sources never share a date by construction, so the same sequential
+    outlier-rejection walk (`_body_composition_daily`) that already guards against a shared
+    bathroom scale picking up someone else's reading keeps working unmodified across the source
+    boundary. Blood pressure itself has no dashboard chart yet (deliberately deferred — see
+    `docs/DATA_DICTIONARY.md`), queryable via `GET /health/observations` only for now.
   Every `.fit` file, from any adapter (except `garmin_connect`, which only ever downloads
   activity FIT files), goes through `ingest_dispatch.ingest_fit_bytes` — archives once, tries
   the shared activity parser (`fit/parser.py`), falls back to the shared health parser

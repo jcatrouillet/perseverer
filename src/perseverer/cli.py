@@ -26,6 +26,10 @@ if sys.stderr.encoding is not None and sys.stderr.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 from sqlalchemy import func, select
 
+from perseverer.adapters.apple_health_export import (
+    detect_weight_cutoff_from_eufy,
+    import_apple_health_export,
+)
 from perseverer.adapters.eufy import sync_eufy
 from perseverer.adapters.fit_folder import import_from_folder
 from perseverer.adapters.garmin_connect import (
@@ -166,6 +170,51 @@ def import_strava_export_cmd(
     if summary.errors:
         for e in summary.errors:
             typer.echo(f"  {e['activity_id']}: {e['error']}", err=True)
+        raise typer.Exit(code=1)
+
+
+@import_app.command("apple-health")
+def import_apple_health_cmd(
+    path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            help="A .zip, extracted directory, or export.xml from an Apple Health export",
+        ),
+    ],
+    weight_before: Annotated[
+        str | None,
+        typer.Option(
+            help="ISO date -- only import BodyMass/BMI/body-fat records before this date. "
+            "Defaults to the athlete's earliest eufy.scale.weight reading."
+        ),
+    ] = None,
+) -> None:
+    """One-shot backfill of blood pressure (full history) and pre-Eufy body composition from an
+    Apple Health "export.xml" archive. Zero network calls."""
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        cutoff = weight_before or detect_weight_cutoff_from_eufy(conn, DEFAULT_ATHLETE_ID)
+        if cutoff is None:
+            typer.echo(
+                "No eufy.scale.weight data found and --weight-before not given -- skipping "
+                "weight/BMI/body-fat import (blood pressure will still be imported).",
+                err=True,
+            )
+        summary = import_apple_health_export(
+            conn,
+            settings.raw_archive_dir,
+            settings.parquet_dir,
+            settings.data_dir / "tmp" / "apple_health_export",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            path=path,
+            weight_before=cutoff,
+        )
+    typer.echo(f"seen={summary.items_seen} new={summary.items_new} errors={len(summary.errors)}")
+    if summary.errors:
+        for e in summary.errors:
+            typer.echo(f"  {e['file']}: {e['error']}", err=True)
         raise typer.Exit(code=1)
 
 

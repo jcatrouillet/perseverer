@@ -12,6 +12,7 @@ from sqlalchemy import Connection, delete, select
 
 from perseverer.activity_merge import apply_activity_merge_overrides
 from perseverer.activity_trim import apply_activity_trim_overrides
+from perseverer.adapters.apple_health_export import detect_weight_cutoff_from_eufy
 from perseverer.adapters.garmin_export import report_kind_from_filename
 from perseverer.adapters.strava_export import (
     csv_row_from_raw_json,
@@ -53,6 +54,7 @@ from perseverer.fitness import refresh_fitness_rollup
 from perseverer.gap import refresh_avg_gap
 from perseverer.garmin_activity_summary import backfill_activity_corrections
 from perseverer.gpx.parser import parse_gpx
+from perseverer.health.apple_health_parser import parse_apple_health_export_xml
 from perseverer.health.eufy_parser import parse_eufy_scale_reading
 from perseverer.health.ingest import ingest_health_batch
 from perseverer.health.json_parser import (
@@ -264,6 +266,22 @@ def rebuild_database(
                 athlete_id=athlete_id,
                 source=row.source,
                 batch=parse_eufy_scale_reading(content),
+            )
+            touched_dates |= health_result.affected_local_dates
+        elif row.kind == "apple_health_export_xml":
+            # weight_before isn't stored on raw_object -- re-derived here exactly like
+            # import_apple_health_export's own CLI layer does, rather than persisting extra
+            # metadata (matching this file's own report_kind_from_filename precedent just above).
+            # Safe because eufy_scale_reading_json rows replay earlier in fetched_at order than
+            # this one ever could (Eufy predates any Apple Health import by construction), so
+            # Eufy's data is already in health_observation by the time this branch runs.
+            weight_before = detect_weight_cutoff_from_eufy(conn, athlete_id)
+            health_result = ingest_health_batch(
+                conn,
+                parquet_dir,
+                athlete_id=athlete_id,
+                source=row.source,
+                batch=parse_apple_health_export_xml(content, weight_before=weight_before),
             )
             touched_dates |= health_result.affected_local_dates
         elif row.kind == "garmin_export_health_json":

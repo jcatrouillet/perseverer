@@ -736,6 +736,96 @@ def test_rebuild_replays_eufy_scale_reading_json(tmp_path: Path) -> None:
     assert after == before == 77.2
 
 
+_APPLE_HEALTH_FIXTURE_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<HealthData locale="en_US">
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="SmarTrack" sourceVersion="045"
+ unit="kg" creationDate="2020-09-25 08:12:00 -0700" startDate="2020-09-25 08:12:00 -0700"
+ endDate="2020-09-25 08:12:00 -0700" value="83.9"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="SmarTrack" sourceVersion="045"
+ unit="kg" creationDate="2021-01-01 08:00:00 -0700" startDate="2021-01-01 08:00:00 -0700"
+ endDate="2021-01-01 08:00:00 -0700" value="80.0"/>
+<Record type="HKQuantityTypeIdentifierBloodPressureSystolic" sourceName="Health"
+ sourceVersion="18.5" unit="mmHg" creationDate="2025-06-15 23:02:49 -0700"
+ startDate="2025-06-15 23:02:00 -0700" endDate="2025-06-15 23:02:00 -0700" value="124"/>
+</HealthData>
+"""
+
+
+def test_rebuild_replays_apple_health_export_xml(tmp_path: Path) -> None:
+    """An apple_health_export_xml raw object (see adapters/apple_health_export.py) must survive a
+    rebuild -- including correctly re-deriving weight_before from Eufy data, which itself must
+    already have replayed earlier in the same rebuild run (fetched_at order) for this to work.
+    The fixture's 2020-09-25 weight is before the Eufy cutoff (2020-11-12) and must survive; the
+    2021-01-01 weight is after it and must not."""
+    archive_root = tmp_path / "archive"
+    parquet_dir = tmp_path / "parquet"
+    eufy_content = json.dumps(
+        {
+            "id": "record-1",
+            "device_id": "dev",
+            "user_id": "user",
+            "customer_id": "cust",
+            "group_id": "",
+            "create_time": 1605155529,  # 2020-11-12T02:32:09Z
+            "scale_data": {"weight": 838},
+            "status": 0,
+        }
+    ).encode("utf-8")
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="eufy",
+            kind="eufy_scale_reading_json",
+            content=eufy_content,
+            locator="reading/record-1",
+            external_id="record-1",
+        )
+        ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="eufy",
+            batch=parse_eufy_scale_reading(eufy_content),
+        )
+        conn.commit()
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            source="apple_health_export",
+            kind="apple_health_export_xml",
+            content=_APPLE_HEALTH_FIXTURE_XML,
+            locator="export.xml",
+        )
+        conn.commit()
+
+    engine2 = make_engine(tmp_path / "db2.sqlite")
+    metadata.create_all(engine2)
+    _seed_athlete(engine2)
+    with engine2.connect() as conn:
+        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        weight_rows = conn.execute(
+            select(health_observation.c.local_date, health_observation.c.value_num).where(
+                health_observation.c.metric_key == "apple_health.body_mass"
+            )
+        ).fetchall()
+        bp_rows = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "apple_health.blood_pressure_systolic"
+            )
+        ).fetchall()
+
+    assert replayed == 2
+    assert [(r.local_date, r.value_num) for r in weight_rows] == [("2020-09-25", 83.9)]
+    assert [r.value_num for r in bp_rows] == [124.0]
+
+
 _STRAVA_GPX_BODY = b"""<?xml version="1.0" encoding="UTF-8"?>
 <gpx creator="StravaGPX" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
  <trk>

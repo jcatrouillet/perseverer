@@ -84,14 +84,17 @@ LOGICAL_METRICS: dict[str, list[str]] = {
         "garmin.export.sleepData.averageRespiration",
         "garmin.daily_sleep.averageRespirationValue",
     ],
-    # Body composition -- Eufy smart scale is the only source (see adapters/eufy.py), so each
-    # of these is a single-alias entry, not a merge. The curated, human-meaningful subset of
-    # the ~24 raw eufy.scale.* fields that get promoted to the dashboard; the rest are still
-    # fully stored/queryable via GET /health/observations, matching the same "catalog broadly,
-    # surface a curated subset" split already used for Garmin's own larger raw field set.
-    "weight_kg": ["eufy.scale.weight"],
-    "bmi": ["eufy.scale.bmi"],
-    "body_fat_pct": ["eufy.scale.body_fat"],
+    # Body composition -- Eufy smart scale is the primary source (see adapters/eufy.py); weight/
+    # bmi/body_fat_pct additionally carry a second, older alias from adapters/apple_health_export.py
+    # (Apple Health export data predating the Eufy scale, cutoff at Eufy's own earliest reading --
+    # see that adapter's docstring) since the two never share a date by construction. The curated,
+    # human-meaningful subset of the ~24 raw eufy.scale.* fields that get promoted to the
+    # dashboard; the rest are still fully stored/queryable via GET /health/observations, matching
+    # the same "catalog broadly, surface a curated subset" split already used for Garmin's own
+    # larger raw field set.
+    "weight_kg": ["eufy.scale.weight", "apple_health.body_mass"],
+    "bmi": ["eufy.scale.bmi", "apple_health.body_mass_index"],
+    "body_fat_pct": ["eufy.scale.body_fat", "apple_health.body_fat_percentage"],
     "muscle_mass_kg": ["eufy.scale.muscle_mass"],
     "bone_mass_kg": ["eufy.scale.bone_mass"],
     "water_pct": ["eufy.scale.water"],
@@ -152,9 +155,10 @@ def list_health_observations(
 # majority there, not a minority). Filtered here, at the display layer, using a *sequential*
 # baseline instead (see _body_composition_daily): the raw archive and health_observation rows
 # stay untouched (raw-first), only what the dashboard/charts render is affected. Each of these
-# logical metrics has exactly one alias (Eufy is the sole source), so filtering reads straight
-# from health_observation instead of health_metric_daily_rollup. See docs/DATA_DICTIONARY.md's
-# Eufy section.
+# logical metrics has at most two aliases (Eufy, plus Apple Health for weight/bmi/body_fat_pct's
+# pre-Eufy era -- the two never share a date by construction, see
+# adapters/apple_health_export.py), so filtering reads straight from health_observation instead
+# of health_metric_daily_rollup. See docs/DATA_DICTIONARY.md's Eufy section.
 _OUTLIER_FILTERED_METRICS = frozenset(
     {
         "weight_kg",
@@ -175,32 +179,35 @@ def _body_composition_daily(
     conn: Connection,
     *,
     athlete_id: str,
-    metric_key: str,
+    aliases: list[str],
     start_date: date,
     end_date: date,
     max_relative_deviation: float = 0.15,
 ) -> HealthDashboardMetricOut | None:
-    """Rebuilds the daily aggregate for one Eufy body-composition metric directly from raw
-    `health_observation` rows, walking the *entire* history in chronological order and rejecting
-    a reading if it deviates more than `max_relative_deviation` from the last *accepted* reading
-    -- not from its nearby peers. A symmetric neighbor-window comparison (tried first, see git
-    history) breaks down on real data: a shared scale can go through a multi-week stretch where
-    someone else's readings actually outnumber the athlete's own within any reasonably-sized
-    window, so a plain local median gets pulled toward the wrong cluster. Anchoring to the last
-    accepted value instead means a whole run of bad readings gets rejected together, however many
-    of them there are or how tightly they cluster near each other, since they're never compared
-    to each other -- only to the last value that was itself accepted. The very first-ever reading
-    for a metric has nothing to compare against and is always accepted.
+    """Rebuilds the daily aggregate for one body-composition metric directly from raw
+    `health_observation` rows, walking the *entire* history (across every alias in `aliases`,
+    e.g. Eufy plus Apple Health's pre-Eufy era -- the two never share a date by construction) in
+    chronological order and rejecting a reading if it deviates more than `max_relative_deviation`
+    from the last *accepted* reading -- not from its nearby peers. A symmetric neighbor-window
+    comparison (tried first, see git history) breaks down on real data: a shared scale can go
+    through a multi-week stretch where someone else's readings actually outnumber the athlete's
+    own within any reasonably-sized window, so a plain local median gets pulled toward the wrong
+    cluster. Anchoring to the last accepted value instead means a whole run of bad readings gets
+    rejected together, however many of them there are or how tightly they cluster near each
+    other, since they're never compared to each other -- only to the last value that was itself
+    accepted. The very first-ever reading for a metric has nothing to compare against and is
+    always accepted.
     """
     rows = conn.execute(
         select(
             health_observation.c.local_date,
             health_observation.c.observed_at_utc,
             health_observation.c.value_num,
+            health_observation.c.metric_key,
         )
         .where(
             health_observation.c.athlete_id == athlete_id,
-            health_observation.c.metric_key == metric_key,
+            health_observation.c.metric_key.in_(aliases),
             health_observation.c.value_num.is_not(None),
         )
         .order_by(health_observation.c.observed_at_utc)
@@ -209,6 +216,7 @@ def _body_composition_daily(
     baseline: float | None = None
     by_date: dict[str, list[float]] = {}
     last_by_date: dict[str, tuple[object, float]] = {}
+    source_by_date: dict[str, str] = {}
     last_accepted_date: str | None = None
     for row in rows:
         value = row.value_num
@@ -226,6 +234,7 @@ def _body_composition_daily(
         if not (start_date <= row_date <= end_date):
             continue
         by_date.setdefault(row.local_date, []).append(value)
+        source_by_date[row.local_date] = row.metric_key
         current_last = last_by_date.get(row.local_date)
         if current_last is None or row.observed_at_utc > current_last[0]:
             last_by_date[row.local_date] = (row.observed_at_utc, value)
@@ -239,7 +248,7 @@ def _body_composition_daily(
             value_max=max(values),
             value_last=last_by_date[local_date][1],
             n_observations=len(values),
-            source_metric_key=metric_key,
+            source_metric_key=source_by_date[local_date],
         )
         for local_date, values in sorted(by_date.items())
     ]
@@ -320,7 +329,7 @@ def get_health_dashboard(
             merged = _body_composition_daily(
                 conn,
                 athlete_id=athlete_id,
-                metric_key=aliases[0],
+                aliases=aliases,
                 start_date=start_date,
                 end_date=end_date,
             )

@@ -47,6 +47,7 @@ def _seed_body_observation(
     local_date: str,
     value: float,
     observed_at_utc: dt.datetime | None = None,
+    source: str = "eufy",
 ) -> None:
     """Like _seed_observation, but with a caller-controlled `observed_at_utc` -- needed to
     reproduce same-day-multiple-readings scenarios (a shared scale used by more than one
@@ -66,7 +67,7 @@ def _seed_body_observation(
                     category="health",
                     value_type="numeric",
                     first_seen_at=now,
-                    first_seen_source="eufy",
+                    first_seen_source=source,
                 )
             )
         conn.execute(
@@ -77,7 +78,7 @@ def _seed_body_observation(
                 local_date=local_date,
                 aggregation="instant",
                 value_num=value,
-                source="eufy",
+                source=source,
             )
         )
         conn.commit()
@@ -265,6 +266,52 @@ def test_health_dashboard_drops_a_body_composition_outlier_reading(
     metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
     dates = {d["local_date"] for d in metrics["weight_kg"]["daily"]}
     assert dates == {"2026-08-08", "2026-08-09", "2026-08-12"}
+
+
+def test_health_dashboard_merges_apple_health_pre_eufy_weight_with_eufy(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # Apple Health's pre-Eufy era (apple_health.body_mass) and Eufy's own readings
+    # (eufy.scale.weight) never share a date by construction (see
+    # adapters/apple_health_export.py's weight_before cutoff) -- the dashboard's weight_kg
+    # chart must still stitch both sources into one continuous chronological series, including
+    # running the same sequential outlier rejection across the source boundary.
+    _seed_body_observation(
+        engine,
+        metric_key="apple_health.body_mass",
+        local_date="2015-06-01",
+        value=84.0,
+        observed_at_utc=dt.datetime(2015, 6, 1, 8, tzinfo=dt.UTC),
+        source="apple_health_export",
+    )
+    _seed_body_observation(
+        engine,
+        metric_key="apple_health.body_mass",
+        local_date="2020-09-25",
+        value=83.9,
+        observed_at_utc=dt.datetime(2020, 9, 25, 8, tzinfo=dt.UTC),
+        source="apple_health_export",
+    )
+    _seed_body_observation(
+        engine,
+        metric_key="eufy.scale.weight",
+        local_date="2020-11-12",
+        value=83.8,
+        observed_at_utc=dt.datetime(2020, 11, 12, 2, tzinfo=dt.UTC),
+    )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2015-01-01&end_date=2021-01-01",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    daily = {d["local_date"]: d for d in metrics["weight_kg"]["daily"]}
+    assert daily.keys() == {"2015-06-01", "2020-09-25", "2020-11-12"}
+    assert daily["2015-06-01"]["source_metric_key"] == "apple_health.body_mass"
+    assert daily["2020-09-25"]["source_metric_key"] == "apple_health.body_mass"
+    assert daily["2020-11-12"]["source_metric_key"] == "eufy.scale.weight"
+    assert daily["2020-11-12"]["value_last"] == 83.8
 
 
 def test_health_dashboard_excludes_a_bad_reading_from_a_mixed_day_average(
