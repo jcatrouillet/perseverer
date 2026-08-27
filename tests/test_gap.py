@@ -14,7 +14,13 @@ from perseverer.db.engine import make_engine
 from perseverer.db.schema import activity, activity_metric, activity_stream, athlete, metadata
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.fit.types import StreamPoint
-from perseverer.gap import AVG_GAP_METRIC_KEY, compute_avg_gap_speed_mps, refresh_avg_gap
+from perseverer.gap import (
+    AVG_GAP_METRIC_KEY,
+    _cost_of_running,
+    _grade_adjusted_time_factor,
+    compute_avg_gap_speed_mps,
+    refresh_avg_gap,
+)
 from perseverer.streams import write_activity_stream
 
 
@@ -144,6 +150,31 @@ def _add_gap_stream(
             channels=json.dumps(channels),
         )
     )
+
+
+class TestGradeAdjustedTimeFactor:
+    """The softened downhill curve matching Strava's own published post-2017 points -- see
+    gap.py's own module docstring and _grade_adjusted_time_factor's docstring for the sourcing.
+    Mirrors frontend/src/gap.test.ts's equivalent describe block exactly, same three points."""
+
+    def test_flat_ground_is_unadjusted(self) -> None:
+        assert abs(_grade_adjusted_time_factor(0.0) - 1.0) < 1e-9
+
+    def test_minus_9_percent_hits_the_known_dip(self) -> None:
+        # factor is a *speed* multiplier of 0.88 there, so the time multiplier is 1/0.88.
+        assert abs(_grade_adjusted_time_factor(-0.09) - 1 / 0.88) < 1e-9
+
+    def test_minus_18_percent_is_fully_recovered(self) -> None:
+        assert abs(_grade_adjusted_time_factor(-0.18) - 1.0) < 1e-9
+
+    def test_gentler_than_pure_minetti_at_minus_10_percent(self) -> None:
+        softened = _grade_adjusted_time_factor(-0.1)
+        pure_minetti = 3.6 / _cost_of_running(-0.1)
+        assert softened < pure_minetti
+
+    def test_stays_flat_beyond_minus_18_percent(self) -> None:
+        assert abs(_grade_adjusted_time_factor(-0.3) - 1.0) < 1e-9
+        assert abs(_grade_adjusted_time_factor(-0.9) - 1.0) < 1e-9
 
 
 class TestRefreshAvgGap:

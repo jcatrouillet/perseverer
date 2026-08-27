@@ -2,14 +2,16 @@
 raw stream and stored as an ordinary `activity_metric` row -- the same EAV mechanism
 `performance.py` (VDOT) and `pace_bands.py` already use, one metric_key, not a new table.
 
-The model itself (Minetti et al. 2002 energy-cost-of-running polynomial) is duplicated from
-`frontend/src/gap.ts`, not shared -- same cross-language duplication precedent as
-`weatherCode.ts`/`weather_code.py` and `personalRecords`/`rules_pb.py`. The frontend's own copy
-computes a *per-point* series for the GAP chart panel (ActivityCharts.tsx), smoothed over a real
-horizontal window since a single point-to-point grade off raw GPS/barometric samples is mostly
-noise -- this module doesn't need that: averaged over a whole activity's thousands of samples,
-point-to-point noise on individual intervals washes out in the aggregate, and a summary "how hard
-was this run, effort-adjusted" number doesn't need the same visual smoothing a chart line does.
+The model itself (Minetti et al. 2002 energy-cost-of-running polynomial for uphill/flat, plus a
+softened downhill curve matching Strava's own published post-2017 points -- see
+`_grade_adjusted_time_factor`'s own docstring) is duplicated from `frontend/src/gap.ts`, not
+shared -- same cross-language duplication precedent as `weatherCode.ts`/`weather_code.py` and
+`personalRecords`/`rules_pb.py`. The frontend's own copy computes a *per-point* series for the
+GAP chart panel (ActivityCharts.tsx), smoothed over a real horizontal window since a single
+point-to-point grade off raw GPS/barometric samples is mostly noise -- this module doesn't need
+that: averaged over a whole activity's thousands of samples, point-to-point noise on individual
+intervals washes out in the aggregate, and a summary "how hard was this run, effort-adjusted"
+number doesn't need the same visual smoothing a chart line does.
 
 Storage is SI throughout (project convention, CLAUDE.md principle 6): average grade-adjusted
 *speed* in m/s, not a pre-formatted "min/km" pace string -- the presentation layer (API schema /
@@ -25,6 +27,7 @@ every row for the athlete under this metric_key, then reinsert from every curren
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,13 +50,46 @@ _STATIONARY_MPS_FLOOR = 0.3
 _FLAT_COST = 3.6  # C(0)
 _MAX_GRADE = 0.45
 
+# The three points Strava's own "An Improved GAP Model" (2017) post disclosed for their
+# post-2017 downhill curve, as a speed multiplier f(grade) -- see frontend/src/gap.ts's own
+# module docstring for the full reasoning (confirmed by reading Strava's posts directly, not
+# assumed): Minetti overcorrects downhill effort badly relative to Strava's own published chart,
+# and Strava has never released the replacement model's exact coefficients. The dip sits exactly
+# at half of _DOWNHILL_RECOVERY_GRADE (-9% = -18%/2) by construction of the sine bump below, so
+# there's no separate "dip grade" constant to carry -- it falls out of the formula itself.
+_DOWNHILL_DIP_FACTOR = 0.88
+_DOWNHILL_RECOVERY_GRADE = -0.18
+
 
 def _cost_of_running(grade_fraction: float) -> float:
     """C(i) = 155.4*i^5 - 30.4*i^4 - 43.3*i^3 + 46.3*i^2 + 19.5*i + 3.6 -- energy cost of running,
     J/(kg*m), at grade `i` (fraction, e.g. 0.1 = 10% uphill). Ported from frontend/src/gap.ts's
-    own `costOfRunning`, which cites Minetti et al. (2002)."""
+    own `costOfRunning`, which cites Minetti et al. (2002). Uphill/flat only -- see
+    `_grade_adjusted_time_factor` for downhill."""
     i = max(-_MAX_GRADE, min(_MAX_GRADE, grade_fraction))
     return 155.4 * i**5 - 30.4 * i**4 - 43.3 * i**3 + 46.3 * i**2 + 19.5 * i + _FLAT_COST
+
+
+def _downhill_speed_factor(grade_fraction: float) -> float:
+    """Ported from frontend/src/gap.ts's own `downhillSpeedFactor` -- a smooth bump through
+    (0, 1.0) -> (_DOWNHILL_DIP_GRADE, _DOWNHILL_DIP_FACTOR) -> (_DOWNHILL_RECOVERY_GRADE, 1.0),
+    flat at 1.0 beyond the recovery point. Only ever called with grade_fraction <= 0."""
+    if grade_fraction <= _DOWNHILL_RECOVERY_GRADE:
+        return 1.0
+    return 1 - (1 - _DOWNHILL_DIP_FACTOR) * math.sin(
+        (math.pi * grade_fraction) / _DOWNHILL_RECOVERY_GRADE
+    )
+
+
+def _grade_adjusted_time_factor(grade_fraction: float) -> float:
+    """Multiplier on actual elapsed time to get grade-adjusted (flat-equivalent) time for a
+    segment run at `grade_fraction` -- ported from frontend/src/gap.ts's own
+    `gradeAdjustedPaceMinPerKm` ratio (same uphill-Minetti/downhill-Strava-points split), just
+    expressed as a time multiplier since callers here already have elapsed seconds rather than a
+    pace value."""
+    if grade_fraction < 0:
+        return 1 / _downhill_speed_factor(grade_fraction)
+    return _FLAT_COST / _cost_of_running(grade_fraction)
 
 
 def compute_avg_gap_speed_mps(
@@ -62,8 +98,8 @@ def compute_avg_gap_speed_mps(
     altitudes_m: Sequence[float | None],
 ) -> float | None:
     """Distance-weighted average grade-adjusted speed across the whole stream: each interval's
-    grade-adjusted pace (actual pace scaled by C(0)/C(grade), same relationship
-    frontend/src/gap.ts's `gradeAdjustedPaceMinPerKm` uses) is weighted by that interval's own
+    actual time is scaled by `_grade_adjusted_time_factor` (same relationship
+    frontend/src/gap.ts's `gradeAdjustedPaceMinPerKm` uses) and weighted by that interval's own
     horizontal distance, so `total grade-adjusted time / total distance` is the equivalent flat-
     ground pace that would cover the same distance at the same total effort. All three sequences
     must be the same length and share index order, as read straight off one Parquet table's
@@ -86,10 +122,10 @@ def compute_avg_gap_speed_mps(
         if speed_mps < _STATIONARY_MPS_FLOOR:
             continue
         grade = (a1 - a0) / dist_delta
-        # actual_pace_s_per_m * FLAT_COST/cost(grade) -- the grade-adjusted-time contribution of
-        # this interval simplifies to dt_s * FLAT_COST/cost(grade) directly (actual_pace_s_per_m
+        # actual_pace_s_per_m * grade_adjusted_time_factor(grade) -- the grade-adjusted-time
+        # contribution of this interval simplifies to dt_s * factor directly (actual_pace_s_per_m
         # * dist_delta == dt_s by construction), no separate pace variable needed.
-        total_gap_time_s += dt_s * (_FLAT_COST / _cost_of_running(grade))
+        total_gap_time_s += dt_s * _grade_adjusted_time_factor(grade)
         total_distance_m += dist_delta
     if total_distance_m <= 0 or total_gap_time_s <= 0:
         return None

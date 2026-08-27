@@ -1,18 +1,36 @@
 // Grade Adjusted Pace -- the equivalent flat-ground pace that represents the same physiological
 // effort as running at a given grade. No raw field exists anywhere in this archive (confirmed:
 // zero GAP/Performance-Condition/Stamina fields in FIT or JSON sources -- ADR 0010's real-data
-// inventory), so this is computed client-side from elevation+distance stream data using the
-// energy-cost-of-running model from Minetti et al. (2002), "Energy cost of walking and running
-// at extreme uphill and downhill slopes" -- the same polynomial widely reported as the basis for
-// Strava's own GAP. Shared by the per-km splits panel (ActivityRouteMap/SplitsTable), the GAP
-// chart panel, and the Intervals table's per-lap GAP column (ActivityDetailPage.tsx), so all
-// three read the same effort model.
+// inventory), so this is computed client-side from elevation+distance stream data. Shared by the
+// per-km splits panel (ActivityRouteMap/SplitsTable), the GAP chart panel, and the Intervals
+// table's per-lap GAP column (ActivityDetailPage.tsx), so all three read the same effort model.
 //
-// Cost of running C(i), in J/(kg*m), as a function of grade i (fraction, e.g. 0.1 = 10% uphill):
+// Uphill/flat uses the energy-cost-of-running model from Minetti et al. (2002), "Energy cost of
+// walking and running at extreme uphill and downhill slopes" -- this was confirmed (by directly
+// reading Strava Engineering's own posts, not assumed) to be literally Strava's own original GAP
+// model. Cost of running C(i), in J/(kg*m), as a function of grade i (fraction, e.g. 0.1 = 10%
+// uphill):
 //   C(i) = 155.4*i^5 - 30.4*i^4 - 43.3*i^3 + 46.3*i^2 + 19.5*i + 3.6
 // Power (J/(kg*s)) at grade i and speed v is C(i)*v. Grade-adjusted speed is the flat-ground
 // speed producing the same power: C(0)*v_gap = C(i)*v_actual, so v_gap = v_actual * C(i)/C(0).
-// Equivalently, in pace (time/distance) terms: pace_gap = pace_actual * C(0)/C(i).
+// Equivalently, in pace (time/distance) terms: pace_gap = pace_actual * C(0)/C(i). Strava's own
+// "An Improved GAP Model" (2017) post says uphill agreement between Minetti and their newer,
+// empirically-fit model is close ("almost equal", shifted ~2%), so uphill/flat keeps pure
+// Minetti unmodified.
+//
+// Downhill is different: that same 2017 post says Minetti overcorrects badly on downhills
+// (predicting a runner needs to run a steep downhill at up to 2x actual speed to match flat
+// effort, bottoming out around -18% grade) compared to their replacement model (bottoming out
+// at a much gentler ~1.14x around -9%, then easing back to no adjustment at all by -18%) --
+// confirmed by reading that post directly, not assumed. Strava has never published the new
+// model's exact coefficients (proprietary, fit from millions of runs' heart-rate data, later
+// patented as US 11,623,121) -- not even intervals.icu's own from-scratch GAP implementation
+// matches it exactly (confirmed via their forum: its own author found unexplained mismatches
+// against real Strava GAP and speculated Strava's model had moved beyond what they'd published).
+// So rather than inventing unpublished numbers, this reproduces only the three concrete points
+// Strava's own chart discloses -- flat (0%, factor 1.0), the dip (-9%, factor 0.88), and the
+// recovery (-18%, factor 1.0) -- as a smooth bump, holding flat (no adjustment) beyond -18% where
+// no further published data exists.
 
 const FLAT_COST = 3.6; // C(0)
 
@@ -25,13 +43,35 @@ function costOfRunning(gradeFraction: number): number {
   return 155.4 * i ** 5 - 30.4 * i ** 4 - 43.3 * i ** 3 + 46.3 * i ** 2 + 19.5 * i + FLAT_COST;
 }
 
+// The three points Strava's own "An Improved GAP Model" comparison chart disclosed for their
+// post-2017 downhill curve -- see the module docstring above for why these three and not a full
+// refit. Expressed as a *speed* multiplier f(grade) (matching the chart's own convention:
+// v_gap = v_actual * f(grade)), so pace_gap = pace_actual / f(grade). The dip sits exactly at
+// half of DOWNHILL_RECOVERY_GRADE (-9% = -18%/2) by construction of the sine bump below, so
+// there's no separate "dip grade" constant to carry -- it falls out of the formula itself.
+const DOWNHILL_DIP_FACTOR = 0.88;
+const DOWNHILL_RECOVERY_GRADE = -0.18;
+
+/** Smooth bump through (0, 1.0) -> (DOWNHILL_RECOVERY_GRADE / 2, DOWNHILL_DIP_FACTOR) ->
+ * (DOWNHILL_RECOVERY_GRADE, 1.0), flat at 1.0 beyond the recovery point. Only ever called with
+ * gradeFraction <= 0. */
+function downhillSpeedFactor(gradeFraction: number): number {
+  if (gradeFraction <= DOWNHILL_RECOVERY_GRADE) return 1;
+  return (
+    1 - (1 - DOWNHILL_DIP_FACTOR) * Math.sin((Math.PI * gradeFraction) / DOWNHILL_RECOVERY_GRADE)
+  );
+}
+
 /** Grade-adjusted pace (minutes/km) for a segment run at `actualPaceMinPerKm` over `gradeFraction`
- * (elevation change / horizontal distance, e.g. 0.05 for a 5% uphill). Returns `actualPaceMinPerKm`
- * unchanged at zero grade. */
+ * (elevation change / horizontal distance, e.g. 0.05 for a 5% uphill, -0.05 for a 5% downhill).
+ * Returns `actualPaceMinPerKm` unchanged at zero grade. */
 export function gradeAdjustedPaceMinPerKm(
   actualPaceMinPerKm: number,
   gradeFraction: number,
 ): number {
+  if (gradeFraction < 0) {
+    return actualPaceMinPerKm / downhillSpeedFactor(gradeFraction);
+  }
   return actualPaceMinPerKm * (FLAT_COST / costOfRunning(gradeFraction));
 }
 
