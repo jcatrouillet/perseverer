@@ -69,15 +69,23 @@ export function isRunningSport(sport: string): boolean {
   return RUNNING_SPORTS.has(sport);
 }
 
+// Below this speed, a sample is "stopped" (a traffic light, tying a shoe, a device auto-pause
+// boundary), not a genuinely slow moving pace -- matches several consumer GPS devices' own
+// auto-pause threshold, and the backend's identical `_STATIONARY_MPS_FLOOR` (pace_bands.py,
+// gap.py). Exported so any consumer needing "was this sample actually moving" (not just the
+// pace-sport-specific display floor in `streamSpeedValue` below) can use the same value --
+// see `computeHrZonesFromStream`'s own use of it for why: a stopped interval must not count
+// toward moving time, the same way `effectiveDurationS` already excludes it elsewhere.
+export const STATIONARY_MPS_FLOOR = 0.3;
+
 /** A stream's raw `speed_mps` sample converted to whatever unit `sport` reads naturally in.
- * Below 0.3 m/s (slower than a ~55min/km walk) is treated as stationary, not a real pace --
- * without this floor, a runner paused at a light produces a momentary "pace" of several
- * thousand min/km that dwarfs the rest of the chart's y-axis. Matches the same threshold
- * several consumer GPS devices use for auto-pause. */
+ * Below the stationary floor is treated as stationary, not a real pace -- without this floor, a
+ * runner paused at a light produces a momentary "pace" of several thousand min/km that dwarfs
+ * the rest of the chart's y-axis. */
 export function streamSpeedValue(sport: string, speedMps: number | null): number | null {
   if (speedMps == null) return null;
   if (isPaceSport(sport)) {
-    if (speedMps < 0.3) return null;
+    if (speedMps < STATIONARY_MPS_FLOOR) return null;
     return 1000 / (speedMps * 60);
   }
   return speedMps * 3.6;

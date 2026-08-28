@@ -17,6 +17,7 @@ export function TimeInZoneChart({
   heartRateStream,
   timestamps,
   configuredZoneBoundaries,
+  speedMpsStream,
 }: {
   metrics: ActivityMetricOut[];
   /** The activity's own per-second HR stream + timestamps, and the athlete's own configured
@@ -27,10 +28,15 @@ export function TimeInZoneChart({
   heartRateStream?: (number | null)[] | null;
   timestamps?: string[] | null;
   configuredZoneBoundaries?: [number, number, number, number] | null;
+  /** Same-length speed stream, index-aligned with heartRateStream/timestamps -- excludes a
+   * stopped interval from the computed total so it matches this app's moving-time convention
+   * elsewhere (and intervals.icu's own). Only used by the stream-computed path; the device-
+   * reported `extractHrZones` fallback already reflects however the device itself defined it. */
+  speedMpsStream?: (number | null)[] | null;
 }) {
   const zones =
     configuredZoneBoundaries != null && heartRateStream != null && timestamps != null
-      ? computeHrZonesFromStream(heartRateStream, timestamps, configuredZoneBoundaries)
+      ? computeHrZonesFromStream(heartRateStream, timestamps, configuredZoneBoundaries, speedMpsStream)
       : extractHrZones(metrics);
   if (!zones || zones.every((z) => z.seconds === 0)) return null;
 

@@ -405,6 +405,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
             heartRateStream={heartRateStream}
             timestamps={stream.data?.timestamps}
             configuredZoneBoundaries={configuredZoneBoundaries}
+            speedMpsStream={stream.data?.series.speed_mps}
           />
         </section>
       )}

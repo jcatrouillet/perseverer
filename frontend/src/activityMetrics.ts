@@ -3,6 +3,7 @@
 // backend change needed for the Milestone C stats grid or time-in-zone chart: every field they
 // need is already in that array, just not yet surfaced anywhere in the UI.
 import type { ActivityMetricOut } from "./api/types";
+import { STATIONARY_MPS_FLOOR } from "./runningStats";
 
 export function metricValue(metrics: ActivityMetricOut[], key: string): number | null {
   return metrics.find((m) => m.metric_key === key)?.value_num ?? null;
@@ -91,11 +92,22 @@ export function hrZoneRangeLabel(zone: HrZone): string {
  * from the interval up to (not including) the *next* recorded sample -- the same "reading at the
  * start of the interval decides the interval's zone" convention a device's own zone tracking
  * uses. The final sample contributes no interval (there's no next timestamp to bound it).
+ *
+ * `speedMps`, when given, excludes a stopped interval from every zone's total entirely (a
+ * confirmed real bug otherwise: elapsed time includes a device pause, and HR often coasts down
+ * slowly rather than dropping the instant a runner stops, so a stopped stretch attributes several
+ * minutes to whatever zone the athlete happened to be in when they paused -- reported live: ~7
+ * stopped minutes almost all landing in Z2, pushing it from 48% to 55% of the activity). This is
+ * the same moving-time convention `effectiveDurationS` already applies to pace/duration
+ * elsewhere in this app, and the one intervals.icu's own time-in-zone uses -- omitting `speedMps`
+ * (existing callers/tests that don't have a speed stream) falls back to counting every interval,
+ * unchanged from before.
  */
 export function computeHrZonesFromStream(
   heartRate: (number | null)[],
   timestamps: string[],
   boundaries: [number, number, number, number],
+  speedMps?: (number | null)[] | null,
 ): HrZone[] | null {
   if (heartRate.length === 0 || heartRate.length !== timestamps.length) return null;
 
@@ -103,6 +115,10 @@ export function computeHrZonesFromStream(
   for (let i = 0; i < heartRate.length - 1; i++) {
     const hr = heartRate[i];
     if (hr == null) continue;
+    if (speedMps != null) {
+      const speed = speedMps[i];
+      if (speed == null || speed < STATIONARY_MPS_FLOOR) continue;
+    }
     const dt = (new Date(timestamps[i + 1]!).getTime() - new Date(timestamps[i]!).getTime()) / 1000;
     if (dt <= 0) continue;
     let zone = 1;

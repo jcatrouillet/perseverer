@@ -76,4 +76,28 @@ describe("TimeInZoneChart", () => {
     );
     expect(screen.getByText("Z0")).toBeInTheDocument();
   });
+
+  it("excludes stopped time from the stream-computed total, not just moving time", () => {
+    // Regression test for a confirmed real bug: a stopped interval used to count toward
+    // whatever zone the athlete was in when they paused, inflating that zone's reported total
+    // beyond the activity's actual moving time. Minute-scale intervals so the distinction
+    // survives formatDurationHM's own minute-granularity rounding.
+    const timestamps = [
+      "2026-01-01T00:00:00Z", // moving, 0-5min
+      "2026-01-01T00:05:00Z", // stopped, 5-10min
+      "2026-01-01T00:10:00Z",
+    ];
+    render(
+      <TimeInZoneChart
+        metrics={realShape}
+        heartRateStream={[130, 130, 130]}
+        timestamps={timestamps}
+        configuredZoneBoundaries={[120, 140, 155, 170]}
+        speedMpsStream={[3.0, 0.0, 3.0]}
+      />,
+    );
+    // Only the one moving 5min interval counts -- the stopped 5-10min interval doesn't, so the
+    // total reads 5m, not the full 10m elapsed.
+    expect(screen.getByText(/Total 5m/)).toBeInTheDocument();
+  });
 });

@@ -142,4 +142,37 @@ describe("computeHrZonesFromStream", () => {
     expect(computeHrZonesFromStream([], [], boundaries)).toBeNull();
     expect(computeHrZonesFromStream([110], [], boundaries)).toBeNull();
   });
+
+  describe("with a speed stream (moving-time exclusion)", () => {
+    // Regression test for a confirmed real bug: without a speed check, a device pause (elapsed
+    // time keeps ticking, HR often coasts down slowly rather than dropping instantly) attributed
+    // several real minutes to whatever zone the athlete happened to be in when they stopped --
+    // reported live: ~7 stopped minutes almost all landing in Z2, pushing it from 48% to 55%.
+
+    it("excludes a stopped interval (below the stationary floor) from every zone's total", () => {
+      // 0-10s @130 moving (Z2), 10-20s @130 but stopped (speed 0), 20-30s @130 moving again.
+      const hr = [130, 130, 130, 130];
+      const timestamps = ts("2026-01-01T00:00:00Z", [0, 10, 20, 30]);
+      const speedMps = [3.0, 0.0, 3.0, 3.0];
+      const zones = computeHrZonesFromStream(hr, timestamps, boundaries, speedMps)!;
+      expect(zones.find((z) => z.index === 2)!.seconds).toBe(20); // only the two moving intervals
+      const total = zones.reduce((sum, z) => sum + z.seconds, 0);
+      expect(total).toBe(20); // the stopped 10s interval contributes to no zone at all
+    });
+
+    it("treats a null speed sample the same as stopped, not as moving", () => {
+      const hr = [130, 130];
+      const timestamps = ts("2026-01-01T00:00:00Z", [0, 10]);
+      const speedMps = [null, null];
+      const zones = computeHrZonesFromStream(hr, timestamps, boundaries, speedMps);
+      expect(zones).toBeNull(); // nothing usable at all
+    });
+
+    it("omitting speedMps counts every interval, unchanged from before", () => {
+      const hr = [130, 130];
+      const timestamps = ts("2026-01-01T00:00:00Z", [0, 10]);
+      const zones = computeHrZonesFromStream(hr, timestamps, boundaries)!;
+      expect(zones.find((z) => z.index === 2)!.seconds).toBe(10);
+    });
+  });
 });
