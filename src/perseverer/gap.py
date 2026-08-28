@@ -8,23 +8,40 @@ softened downhill curve matching Strava's own published post-2017 points -- see
 shared -- same cross-language duplication precedent as `weatherCode.ts`/`weather_code.py` and
 `personalRecords`/`rules_pb.py`.
 
-**Grade is computed over a real +/-15s time window (`_windowed_grade`, `_DEFAULT_HALF_WINDOW_S`),
-never from raw sample-to-sample altitude deltas** -- this module originally assumed averaging
-over a whole activity's thousands of samples would wash noise out on its own, but a confirmed
-real regression (reported against the once-shipped per-lap API, reproduced against real data)
-showed that's false: a run with ~52m of real elevation gain/loss produced ~123m of raw summed
-gain (roughly 58% of the signal was GPS/barometric noise), and because Minetti's cost curve is
-steeper uphill than the downhill curve is generous, *symmetric* altitude noise around a near-zero
-true grade does not cancel once converted through that asymmetric curve and averaged -- it
-produces a systematic *fast* bias (every rep of a real interval session landed 7-14s/km faster
-than intervals.icu's own smoothed GAP for the identical run). Widening the grade calculation to a
-window -- the same idea `frontend/src/gap.ts`'s own per-point chart series (`gradeAt`) already
-used for exactly this reason -- fixes it, but only once the window is keyed on *time*, not
-distance: a first attempt reused `gradeAt`'s own fixed-*distance* half-window and under-smoothed
-exactly the fastest segments (VO2/threshold reps), since a fixed distance covers less real time
-the faster a segment is run. A 30s moving average (+/-15s) reproduced intervals.icu's own GAP
-closely across a real interval session's every segment, independent of pace -- confirmed by
-reproducing both the raw and 30s-smoothed calculation against the real reported activity.
+Two independent, confirmed real bugs here, found by the same reporter reproducing this module's
+own formula against real data, both now fixed:
+
+**Grade is computed over a real +/-15s time window (`_windowed_grade`,
+`_DEFAULT_HALF_WINDOW_S`), never from raw sample-to-sample altitude deltas** -- this module
+originally assumed averaging over a whole activity's thousands of samples would wash noise out on
+its own, but that's false: a run with ~52m of real elevation gain/loss produced ~123m of raw
+summed gain (roughly 58% of the signal was GPS/barometric noise), and because the cost curve is
+asymmetric around zero grade, *symmetric* altitude noise around a near-zero true grade does not
+cancel once converted through that asymmetric curve and averaged -- it produces a systematic
+*fast* bias. Widening the grade calculation to a window -- the same idea `frontend/src/gap.ts`'s
+own per-point chart series (`gradeAt`) already used for exactly this reason -- fixes it, but only
+once the window is keyed on *time*, not distance: a first attempt reused `gradeAt`'s own
+fixed-*distance* half-window and under-smoothed exactly the fastest segments (VO2/threshold
+reps), since a fixed distance covers less real time the faster a segment is run.
+
+**The whole-activity/whole-lap average is now distance-weighted (equivalent-flat-distance /
+moving time), not time-weighted** -- see `compute_avg_gap_speed_mps`'s own docstring for the full
+derivation and why the two formulas, identical per-interval at constant speed, diverge once real
+pace varies across segments (exactly the shape of an interval workout: fast reps, slow recovery
+jogs). This is the physically correct, energy-conserving definition, and matters most whenever
+grade *and* pace both vary substantially within one activity/lap -- its effect was modest on the
+first reported (largely flat, ~50m gain/loss) activity, but is expected to matter far more on a
+hillier one.
+
+**Still open**: after both fixes, the residual gap to intervals.icu on that first activity was
+isolated (by holding every other variable fixed) to the softened downhill curve
+(`_downhill_speed_factor`) -- removing it entirely (pure Minetti, symmetric, no downhill
+treatment at all) reproduced the reporter's own independently-computed reference numbers almost
+exactly. That single activity had almost no real descent, though, so it can't actually
+discriminate between "Strava's real GAP uses a softer downhill curve than pure Minetti" (this
+module's current assumption, sourced from Strava's own published post) and "intervals.icu (and
+maybe Strava) is closer to pure Minetti after all" -- both hypotheses fit the same flat data
+equally well. Left unchanged pending a real descent-heavy activity to actually tell them apart.
 
 Storage is SI throughout (project convention, CLAUDE.md principle 6): average grade-adjusted
 *speed* in m/s, not a pre-formatted "min/km" pace string -- the presentation layer (API schema /
@@ -151,13 +168,39 @@ def compute_avg_gap_speed_mps(
     start_idx: int = 0,
     end_idx: int | None = None,
 ) -> float | None:
-    """Distance-weighted average grade-adjusted speed across the whole stream: each interval's
-    actual time is scaled by `_grade_adjusted_time_factor` (same relationship
-    frontend/src/gap.ts's `gradeAdjustedPaceMinPerKm` uses) and weighted by that interval's own
-    horizontal distance, so `total grade-adjusted time / total distance` is the equivalent flat-
-    ground pace that would cover the same distance at the same total effort. Each interval's own
-    grade comes from `_windowed_grade`, not its own two raw endpoints -- see module docstring for
-    why a raw sample-to-sample grade is unusable.
+    """Equivalent-flat-distance average grade-adjusted speed across the whole stream:
+    `total equivalent-flat distance / total moving time`, the same energy-conserving definition
+    Strava/intervals.icu use. Each interval's own real distance is scaled into "how much distance
+    this same effort would have covered on flat ground" by `1 / _grade_adjusted_time_factor`
+    (the two are reciprocals -- see the derivation below), then summed and divided by total real
+    moving time. Each interval's own grade comes from `_windowed_grade`, not its own two raw
+    endpoints -- see module docstring for why a raw sample-to-sample grade is unusable.
+
+    **This is not the same as time-weighting**, and the difference is not cosmetic -- it was a
+    confirmed real bug, reported and diagnosed down to the exact mechanism by a careful reader
+    who reproduced this project's own formula independently. An earlier version of this function
+    instead scaled each interval's real *time* by `_grade_adjusted_time_factor` and divided total
+    real distance by that summed grade-adjusted time. Per-interval, at constant speed, the two
+    formulas are algebraically identical (either one reduces to `actual_pace *
+    _grade_adjusted_time_factor(grade)` for a single uniform segment) -- which is exactly why
+    every hand-crafted single-segment test already in this suite passed under both versions, and
+    why the bug went undetected until a real multi-pace activity (fast reps interleaved with slow
+    recovery jogs) exposed it. Once *aggregated* across segments of differing pace, the two
+    formulas diverge: distance-weighting (this version) is
+    `sum(dd_i / factor_i) / sum(dt_i)`, matching the standard physical
+    derivation (constant power within each interval: energy_i = cost(grade_i) * distance_i,
+    independent of how that interval's own speed varies) -- while time-weighting was
+    `sum(dd_i) / sum(dt_i * factor_i)`, which has no equivalent physical justification once
+    speed genuinely varies interval-to-interval. The wrong formula's error was also
+    systematically one-directional (faster), not just noisier -- matching exactly what was
+    reported -- because the cost curve is asymmetric around zero grade: confirmed directly
+    against both branches (not the raw Minetti polynomial alone, which is uphill/flat-only and
+    never runs downhill in this codebase), a 10% uphill costs about 2.37 J/(kg*m) more than
+    flat, while the *softened* downhill branch (see `_grade_adjusted_time_factor`'s own docstring
+    for why it's softened) only discounts a 10% downhill by about 0.43 J/(kg*m). A formula more
+    sensitive to how *time* was distributed across segments -- recovery jogs, which are slow,
+    contribute disproportionate time weight -- inherits more of that asymmetry than one weighted
+    by real distance covered does.
 
     `start_idx`/`end_idx` restrict which raw intervals get *summed* (default: the whole stream,
     `[0, len-1)`) without restricting where `_windowed_grade` is allowed to look for its window
@@ -177,8 +220,8 @@ def compute_avg_gap_speed_mps(
     end_idx = n - 1 if end_idx is None else min(end_idx, n - 1)
     start_idx = max(0, start_idx)
 
-    total_gap_time_s = 0.0
-    total_distance_m = 0.0
+    total_moving_time_s = 0.0
+    total_equiv_flat_m = 0.0
     for i in range(start_idx, end_idx):
         d0, d1 = distances_m[i], distances_m[i + 1]
         if d0 is None or d1 is None:
@@ -195,14 +238,11 @@ def compute_avg_gap_speed_mps(
         grade = _windowed_grade(timestamps_utc, distances_m, altitudes_m, i)
         if grade is None:
             continue
-        # actual_pace_s_per_m * grade_adjusted_time_factor(grade) -- the grade-adjusted-time
-        # contribution of this interval simplifies to dt_s * factor directly (actual_pace_s_per_m
-        # * dist_delta == dt_s by construction), no separate pace variable needed.
-        total_gap_time_s += dt_s * _grade_adjusted_time_factor(grade)
-        total_distance_m += dist_delta
-    if total_distance_m <= 0 or total_gap_time_s <= 0:
+        total_equiv_flat_m += dist_delta / _grade_adjusted_time_factor(grade)
+        total_moving_time_s += dt_s
+    if total_moving_time_s <= 0 or total_equiv_flat_m <= 0:
         return None
-    return total_distance_m / total_gap_time_s
+    return total_equiv_flat_m / total_moving_time_s
 
 
 def compute_lap_gap_speeds_mps(

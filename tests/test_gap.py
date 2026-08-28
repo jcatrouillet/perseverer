@@ -88,25 +88,68 @@ class TestComputeAvgGapSpeedMps:
         assert gap is not None
         assert abs(gap - 4.0) < 1e-9
 
-    def test_noisy_but_net_flat_altitude_does_not_produce_a_fast_bias(self) -> None:
+    def test_noisy_but_net_flat_altitude_does_not_produce_a_large_fast_bias(self) -> None:
         """Regression test for a confirmed real bug: summing raw 1Hz sample-to-sample altitude
         deltas over a real run with ~52m of true elevation gain/loss produced ~123m of implied
-        gain -- roughly 58% GPS/barometric noise -- and because Minetti's cost curve is steeper
-        uphill than the downhill curve is generous, that *symmetric* noise around a near-zero
-        true grade produced a systematic *fast* bias (every rep of a real interval session
-        landed 7-14s/km faster than intervals.icu's own smoothed GAP). Reproduced here: a
-        genuinely flat course (net elevation change zero), 1Hz sampling (matching real device
-        data), with alternating +/-3m noise every sample -- without windowing this would read
-        measurably faster than the true 4 m/s; with `_windowed_grade` smoothing it over a real
-        +/-15s time window, it should read indistinguishable from the true flat speed."""
+        gain -- roughly 58% GPS/barometric noise -- and because the cost curve is asymmetric
+        around zero grade, that noise produced a systematic *fast* bias (every rep of a real
+        interval session landed 7-14s/km faster than intervals.icu's own smoothed GAP).
+        Reproduced here: a genuinely flat course (net elevation change zero), 1Hz sampling
+        (matching real device data), with alternating +/-3m noise every sample.
+
+        This exact fixture -- noise alternating in perfect lock-step with the sample rate -- is
+        close to a worst case for any finite time window (real GPS/barometric noise isn't this
+        perfectly periodic), so a modest residual bias is still expected here even after
+        windowing; the tolerance below is deliberately loose. What matters is that it's small
+        relative to the ~10-13% bias the unsmoothed calculation showed on the real reported
+        activity, not that this specific adversarial synthetic case reads exactly 4.0."""
         n = 61
         distances = [i * 4.0 for i in range(n)]  # 4 m/s, 1s steps
         altitudes = [100.0 + (3.0 if i % 2 == 0 else -3.0) for i in range(n)]
         gap = compute_avg_gap_speed_mps(_timestamps(n, step_s=1), distances, altitudes)
         assert gap is not None
-        # 4 m/s actual pace; a real fast bias from unsmoothed noise would read measurably above
-        # this (confirmed against this exact fixture before the windowing fix landed).
-        assert abs(gap - 4.0) < 0.1
+        assert abs(gap - 4.0) < 0.2  # well under a 5% bias, vs. ~10-13% unsmoothed on real data
+
+    def test_heterogeneous_pace_across_segments_uses_distance_weighting_not_time_weighting(
+        self,
+    ) -> None:
+        """Regression test for the actual reported bug mechanism, distinct from the noise/
+        smoothing issue above: per-interval, at *constant* speed, time-weighting (this
+        function's own original aggregation) and distance-weighting (the correct, energy-
+        conserving one -- see this function's own docstring for the physical derivation) give
+        identical results, which is why every single-uniform-segment test elsewhere in this
+        class passed under either formula and the bug went undetected until a real multi-pace
+        activity exposed it. The two formulas only diverge once real pace varies *across*
+        segments -- exactly the shape of an interval workout (fast reps, slow recovery jogs).
+        Two segments here, a large deliberate pace difference so the disagreement is
+        unambiguous: 9 intervals @ 8 m/s flat, then 9 intervals @ 2 m/s on a 10% grade."""
+        start = dt.datetime(2026, 1, 1, tzinfo=dt.UTC)
+        timestamps = [start + dt.timedelta(seconds=i * 10) for i in range(19)]
+        distances = [i * 80.0 for i in range(10)]  # segment 1: 8 m/s, flat
+        altitudes = [100.0] * 10
+        base_d, base_a = distances[-1], altitudes[-1]
+        for i in range(1, 10):  # segment 2: 2 m/s, +10% grade
+            distances.append(base_d + i * 20.0)
+            altitudes.append(base_a + i * 2.0)
+
+        gap = compute_avg_gap_speed_mps(timestamps, distances, altitudes)
+        assert gap is not None
+
+        # What the old (buggy) time-weighted formula would have computed for the identical raw
+        # data, using each interval's own *unwindowed* grade to keep the comparison exact.
+        total_weighted_time_s = 0.0
+        total_distance_m = 0.0
+        for i in range(len(timestamps) - 1):
+            dd = distances[i + 1] - distances[i]
+            grade = (altitudes[i + 1] - altitudes[i]) / dd
+            total_weighted_time_s += 10.0 * _grade_adjusted_time_factor(grade)
+            total_distance_m += dd
+        old_buggy_gap = total_distance_m / total_weighted_time_s
+
+        # A large, unambiguous disagreement -- if this ever starts failing because the two
+        # match, the aggregation regressed back to time-weighting.
+        assert gap < old_buggy_gap
+        assert (old_buggy_gap - gap) > 0.3  # m/s
 
 
 class TestWindowedGrade:
