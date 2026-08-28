@@ -18,6 +18,7 @@ from perseverer.gap import (
     AVG_GAP_METRIC_KEY,
     _cost_of_running,
     _grade_adjusted_time_factor,
+    _windowed_grade,
     compute_avg_gap_speed_mps,
     compute_lap_gap_speeds_mps,
     refresh_avg_gap,
@@ -87,14 +88,98 @@ class TestComputeAvgGapSpeedMps:
         assert gap is not None
         assert abs(gap - 4.0) < 1e-9
 
+    def test_noisy_but_net_flat_altitude_does_not_produce_a_fast_bias(self) -> None:
+        """Regression test for a confirmed real bug: summing raw 1Hz sample-to-sample altitude
+        deltas over a real run with ~52m of true elevation gain/loss produced ~123m of implied
+        gain -- roughly 58% GPS/barometric noise -- and because Minetti's cost curve is steeper
+        uphill than the downhill curve is generous, that *symmetric* noise around a near-zero
+        true grade produced a systematic *fast* bias (every rep of a real interval session
+        landed 7-14s/km faster than intervals.icu's own smoothed GAP). Reproduced here: a
+        genuinely flat course (net elevation change zero), 1Hz sampling (matching real device
+        data), with alternating +/-3m noise every sample -- without windowing this would read
+        measurably faster than the true 4 m/s; with `_windowed_grade` smoothing it over a real
+        +/-15s time window, it should read indistinguishable from the true flat speed."""
+        n = 61
+        distances = [i * 4.0 for i in range(n)]  # 4 m/s, 1s steps
+        altitudes = [100.0 + (3.0 if i % 2 == 0 else -3.0) for i in range(n)]
+        gap = compute_avg_gap_speed_mps(_timestamps(n, step_s=1), distances, altitudes)
+        assert gap is not None
+        # 4 m/s actual pace; a real fast bias from unsmoothed noise would read measurably above
+        # this (confirmed against this exact fixture before the windowing fix landed).
+        assert abs(gap - 4.0) < 0.1
+
+
+class TestWindowedGrade:
+    def test_flat_ground_is_zero(self) -> None:
+        distances = [i * 20.0 for i in range(11)]
+        altitudes = [100.0] * 11
+        assert _windowed_grade(_timestamps(11), distances, altitudes, 5) == 0.0
+
+    def test_steady_uphill_matches_the_true_grade_regardless_of_window(self) -> None:
+        # A perfectly linear ramp -- windowing a noiseless signal shouldn't distort it at all,
+        # any more than reading the raw endpoints would.
+        distances = [i * 20.0 for i in range(11)]
+        altitudes = [i * 2.0 for i in range(11)]  # 2m per 20m -> 10% grade throughout
+        grade = _windowed_grade(_timestamps(11), distances, altitudes, 5)
+        assert grade is not None
+        assert abs(grade - 0.10) < 1e-9
+
+    def test_alternating_noise_around_flat_averages_to_near_zero(self) -> None:
+        distances = [i * 20.0 for i in range(11)]
+        altitudes = [100.0 + (3.0 if i % 2 == 0 else -3.0) for i in range(11)]
+        grade = _windowed_grade(_timestamps(11), distances, altitudes, 5)
+        assert grade is not None
+        assert abs(grade) < 0.02  # near-zero, not the wild per-sample swings raw deltas show
+
+    def test_none_when_a_window_edge_has_no_distance(self) -> None:
+        # The window is keyed on time, so only the two *edge* points' own distance/altitude
+        # matter -- a None strictly between them (never selected as an edge) doesn't propagate.
+        distances: list[float | None] = [0.0, 20.0, None, 60.0, None]
+        altitudes: list[float | None] = [100.0] * 5
+        # 10s spacing, +/-15s half-window -> right edge lands on index 4, which has no distance.
+        assert _windowed_grade(_timestamps(5, step_s=10), distances, altitudes, 2) is None
+
+    def test_a_missing_value_strictly_inside_the_window_does_not_propagate(self) -> None:
+        # Confirms the flip side of the test above: only the two edge points are read, so a gap
+        # in between (a dropped barometric sample, say) doesn't sink the whole window.
+        distances: list[float | None] = [0.0, 20.0, None, 60.0, 80.0]
+        altitudes: list[float | None] = [100.0] * 5
+        grade = _windowed_grade(_timestamps(5, step_s=10), distances, altitudes, 2)
+        assert grade == 0.0
+
+    def test_narrows_to_available_data_near_the_stream_edges(self) -> None:
+        # Near index 0, the window can only look forward -- shouldn't return None just because
+        # the left side is bounded by the array start rather than half_window_s.
+        distances = [i * 20.0 for i in range(11)]
+        altitudes = [100.0] * 11
+        assert _windowed_grade(_timestamps(11), distances, altitudes, 0) == 0.0
+
+    def test_a_fast_segment_still_gets_the_full_time_window(self) -> None:
+        """The bug a fixed-*distance* window has: it covers less real time the faster a segment
+        is run, under-smoothing exactly the fastest (VO2/threshold) reps where noise bias matters
+        most. A *time* window doesn't have this problem -- prove it by checking a fast segment's
+        window still reaches multiple points away, not just its immediate neighbours."""
+        # 1s spacing, ~5.7 m/s (a hard interval pace) -- a 25m distance half-window would only
+        # reach ~4 points either side; a 15s time half-window reaches all 15.
+        distances = [i * 5.7 for i in range(31)]
+        altitudes = [100.0] * 31
+        # Confirm indirectly: alternating noise here should still average to near-zero, which
+        # only happens if the window is wide enough (in sample count) to average several cycles.
+        altitudes = [100.0 + (3.0 if i % 2 == 0 else -3.0) for i in range(31)]
+        grade = _windowed_grade(_timestamps(31, step_s=1), distances, altitudes, 15)
+        assert grade is not None
+        assert abs(grade) < 0.02
+
 
 def _epoch_s(n: int, *, step_s: int = 10, start_s: float = 0.0) -> list[float]:
     return [start_s + i * step_s for i in range(n)]
 
 
 class TestComputeLapGapSpeedsMps:
-    """Boundary-slicing behavior only -- the grade-adjusted math itself is already covered by
-    TestComputeAvgGapSpeedMps above, which this function reuses unchanged on each lap's slice."""
+    """Boundary behavior only -- the grade-adjusted math itself is already covered by
+    TestComputeAvgGapSpeedMps above, which this function reuses via start_idx/end_idx bounds
+    over the *full* stream (not a per-lap slice -- see the next test for why that distinction
+    is load-bearing, not just an implementation detail)."""
 
     def test_flat_ground_each_lap_matches_its_own_raw_speed(self) -> None:
         # 11 points, 0-100s, 4 m/s throughout, flat. Two laps split at 50s.
@@ -134,6 +219,31 @@ class TestComputeLapGapSpeedsMps:
         result = compute_lap_gap_speeds_mps([0.0, 999.0], stream_epoch_s, distances, altitudes)
         assert result[0] is not None
         assert result[1] is None
+
+    def test_windowing_uses_full_stream_context_across_a_lap_boundary(self) -> None:
+        """Regression test: slicing the stream per lap *before* computing GAP (the original
+        implementation) was a confirmed real bug -- a point near a lap's own boundary loses the
+        window context that would normally reach past it, biasing exactly the boundary samples a
+        coach reading interval reps cares about most. Proven here by showing the real
+        (full-stream-context) result differs from what a naive slice-then-average would give for
+        the identical lap -- if compute_lap_gap_speeds_mps ever regressed back to slicing first,
+        this would start asserting a false equality and fail."""
+        n = 21
+        distances = [i * 20.0 for i in range(n)]  # 2 m/s
+        altitudes = [100.0 + (3.0 if i % 2 == 0 else -3.0) for i in range(n)]
+        stream_epoch_s = _epoch_s(n)
+
+        results = compute_lap_gap_speeds_mps([0.0, 100.0], stream_epoch_s, distances, altitudes)
+        lap2_full_context = results[1]
+
+        # What the old (buggy) slice-first approach would have computed: only lap 2's own points
+        # visible to the windowing search, so its first samples lose their left-side context.
+        lap2_sliced_only = compute_avg_gap_speed_mps(
+            _timestamps(n - 10, step_s=10), distances[10:], altitudes[10:]
+        )
+
+        assert lap2_full_context is not None and lap2_sliced_only is not None
+        assert abs(lap2_full_context - lap2_sliced_only) > 1e-6
 
     def test_mismatched_stream_lengths_return_all_none(self) -> None:
         result = compute_lap_gap_speeds_mps([0.0, 10.0], [0.0, 10.0, 20.0], [0.0, 40.0], [100.0])

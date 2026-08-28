@@ -6,12 +6,25 @@ The model itself (Minetti et al. 2002 energy-cost-of-running polynomial for uphi
 softened downhill curve matching Strava's own published post-2017 points -- see
 `_grade_adjusted_time_factor`'s own docstring) is duplicated from `frontend/src/gap.ts`, not
 shared -- same cross-language duplication precedent as `weatherCode.ts`/`weather_code.py` and
-`personalRecords`/`rules_pb.py`. The frontend's own copy computes a *per-point* series for the
-GAP chart panel (ActivityCharts.tsx), smoothed over a real horizontal window since a single
-point-to-point grade off raw GPS/barometric samples is mostly noise -- this module doesn't need
-that: averaged over a whole activity's thousands of samples, point-to-point noise on individual
-intervals washes out in the aggregate, and a summary "how hard was this run, effort-adjusted"
-number doesn't need the same visual smoothing a chart line does.
+`personalRecords`/`rules_pb.py`.
+
+**Grade is computed over a real +/-15s time window (`_windowed_grade`, `_DEFAULT_HALF_WINDOW_S`),
+never from raw sample-to-sample altitude deltas** -- this module originally assumed averaging
+over a whole activity's thousands of samples would wash noise out on its own, but a confirmed
+real regression (reported against the once-shipped per-lap API, reproduced against real data)
+showed that's false: a run with ~52m of real elevation gain/loss produced ~123m of raw summed
+gain (roughly 58% of the signal was GPS/barometric noise), and because Minetti's cost curve is
+steeper uphill than the downhill curve is generous, *symmetric* altitude noise around a near-zero
+true grade does not cancel once converted through that asymmetric curve and averaged -- it
+produces a systematic *fast* bias (every rep of a real interval session landed 7-14s/km faster
+than intervals.icu's own smoothed GAP for the identical run). Widening the grade calculation to a
+window -- the same idea `frontend/src/gap.ts`'s own per-point chart series (`gradeAt`) already
+used for exactly this reason -- fixes it, but only once the window is keyed on *time*, not
+distance: a first attempt reused `gradeAt`'s own fixed-*distance* half-window and under-smoothed
+exactly the fastest segments (VO2/threshold reps), since a fixed distance covers less real time
+the faster a segment is run. A 30s moving average (+/-15s) reproduced intervals.icu's own GAP
+closely across a real interval session's every segment, independent of pace -- confirmed by
+reproducing both the raw and 30s-smoothed calculation against the real reported activity.
 
 Storage is SI throughout (project convention, CLAUDE.md principle 6): average grade-adjusted
 *speed* in m/s, not a pre-formatted "min/km" pace string -- the presentation layer (API schema /
@@ -61,6 +74,43 @@ _MAX_GRADE = 0.45
 _DOWNHILL_DIP_FACTOR = 0.88
 _DOWNHILL_RECOVERY_GRADE = -0.18
 
+# A *time* window, not a distance one -- confirmed against real data (reported bug, reproduced):
+# a fixed-distance window (this module's first attempt at this fix used
+# frontend/src/gap.ts::DEFAULT_HALF_WINDOW_M, a 25m half-window) under-smooths exactly the
+# segments where the bias matters most, because it covers less real time at a faster pace, right
+# when VO2/threshold reps are running hardest. A 30s moving average (i.e. a +/-15s half-window)
+# reproduced intervals.icu's own GAP closely (within a few seconds/km) across a real interval
+# session's every segment, independent of that segment's own pace -- see module docstring.
+_DEFAULT_HALF_WINDOW_S = 15.0
+
+
+def _windowed_grade(
+    timestamps_utc: Sequence[datetime],
+    distances_m: Sequence[float | None],
+    altitudes_m: Sequence[float | None],
+    i: int,
+    half_window_s: float = _DEFAULT_HALF_WINDOW_S,
+) -> float | None:
+    """Grade at sample `i`, smoothed over a real *time* window rather than the raw sample-to-
+    sample delta -- same widening-search shape as `frontend/src/gap.ts`'s own `gradeAt` (walk
+    left/right from `i` until each side spans at least `half_window_s`, or the array runs out),
+    just keyed on elapsed time instead of distance -- see `_DEFAULT_HALF_WINDOW_S`'s own comment
+    for why. `None` if either window edge is missing a distance/altitude value."""
+    center_t = timestamps_utc[i]
+    n = len(timestamps_utc)
+    left = i
+    while left > 0 and (center_t - timestamps_utc[left]).total_seconds() < half_window_s:
+        left -= 1
+    right = i
+    while right < n - 1 and (timestamps_utc[right] - center_t).total_seconds() < half_window_s:
+        right += 1
+    d0, d1 = distances_m[left], distances_m[right]
+    a0, a1 = altitudes_m[left], altitudes_m[right]
+    if d0 is None or d1 is None or a0 is None or a1 is None:
+        return None
+    span = d1 - d0
+    return (a1 - a0) / span if span > 0 else None
+
 
 def _cost_of_running(grade_fraction: float) -> float:
     """C(i) = 155.4*i^5 - 30.4*i^4 - 43.3*i^3 + 46.3*i^2 + 19.5*i + 3.6 -- energy cost of running,
@@ -97,21 +147,41 @@ def compute_avg_gap_speed_mps(
     timestamps_utc: Sequence[datetime],
     distances_m: Sequence[float | None],
     altitudes_m: Sequence[float | None],
+    *,
+    start_idx: int = 0,
+    end_idx: int | None = None,
 ) -> float | None:
     """Distance-weighted average grade-adjusted speed across the whole stream: each interval's
     actual time is scaled by `_grade_adjusted_time_factor` (same relationship
     frontend/src/gap.ts's `gradeAdjustedPaceMinPerKm` uses) and weighted by that interval's own
     horizontal distance, so `total grade-adjusted time / total distance` is the equivalent flat-
-    ground pace that would cover the same distance at the same total effort. All three sequences
-    must be the same length and share index order, as read straight off one Parquet table's
-    columns. None when there's nothing usable to average (too few samples, or every interval
-    missing a channel/stationary)."""
+    ground pace that would cover the same distance at the same total effort. Each interval's own
+    grade comes from `_windowed_grade`, not its own two raw endpoints -- see module docstring for
+    why a raw sample-to-sample grade is unusable.
+
+    `start_idx`/`end_idx` restrict which raw intervals get *summed* (default: the whole stream,
+    `[0, len-1)`) without restricting where `_windowed_grade` is allowed to look for its window
+    edges -- callers pass the *full* stream's `distances_m`/`altitudes_m` even when only summing
+    a sub-range (see `compute_lap_gap_speeds_mps`), so a point near the sub-range's own boundary
+    still gets a real window on both sides instead of one truncated at that boundary.
+
+    All three sequences must be the same length and share index order, as read straight off one
+    Parquet table's columns. `None` when there's nothing usable to average (too few samples, or
+    every interval missing a channel/stationary)."""
+    n = len(timestamps_utc)
+    if len(distances_m) != n or len(altitudes_m) != n or n < 2:
+        return None
+    # Clamped, not trusted verbatim -- a caller's own end_idx (e.g. compute_lap_gap_speeds_mps's
+    # bisect_left against a lap start past the stream's last sample) can otherwise exceed n - 1
+    # and index distances_m[i + 1] out of range below.
+    end_idx = n - 1 if end_idx is None else min(end_idx, n - 1)
+    start_idx = max(0, start_idx)
+
     total_gap_time_s = 0.0
     total_distance_m = 0.0
-    for i in range(len(timestamps_utc) - 1):
+    for i in range(start_idx, end_idx):
         d0, d1 = distances_m[i], distances_m[i + 1]
-        a0, a1 = altitudes_m[i], altitudes_m[i + 1]
-        if d0 is None or d1 is None or a0 is None or a1 is None:
+        if d0 is None or d1 is None:
             continue
         dist_delta = d1 - d0
         if dist_delta <= 0:
@@ -122,7 +192,9 @@ def compute_avg_gap_speed_mps(
         speed_mps = dist_delta / dt_s
         if speed_mps < _STATIONARY_MPS_FLOOR:
             continue
-        grade = (a1 - a0) / dist_delta
+        grade = _windowed_grade(timestamps_utc, distances_m, altitudes_m, i)
+        if grade is None:
+            continue
         # actual_pace_s_per_m * grade_adjusted_time_factor(grade) -- the grade-adjusted-time
         # contribution of this interval simplifies to dt_s * factor directly (actual_pace_s_per_m
         # * dist_delta == dt_s by construction), no separate pace variable needed.
@@ -139,16 +211,23 @@ def compute_lap_gap_speeds_mps(
     distances_m: Sequence[float | None],
     altitudes_m: Sequence[float | None],
 ) -> list[float | None]:
-    """One average grade-adjusted speed per lap -- computed by slicing the activity's own full-
-    resolution stream at each lap's own wall-clock boundary and reusing `compute_avg_gap_speed_mps`
-    on that slice, rather than a second averaging implementation. Same one-lap-is-one-time-range
-    convention `frontend/src/gap.ts::computeLapGapsMinPerKm` uses -- a lap's own end is the next
-    lap's start, or the stream's last point for the final lap -- except this is the real distance-
-    weighted per-interval average (every stream sample within the lap contributes, matching
-    `refresh_avg_gap`'s own whole-activity computation) rather than that frontend function's
-    single net-elevation-change-over-the-whole-lap approximation, which is what actually let this
-    move server-side: a headless caller can now read the same number the API already serves for a
-    whole activity, per lap, without rendering a page.
+    """One average grade-adjusted speed per lap -- computed against each lap's own wall-clock
+    boundary within the activity's full-resolution stream, reusing `compute_avg_gap_speed_mps`'s
+    `start_idx`/`end_idx` bounds rather than a second averaging implementation. Same one-lap-is-
+    one-time-range convention `frontend/src/gap.ts::computeLapGapsMinPerKm` used to -- a lap's own
+    end is the next lap's start, or the stream's last point for the final lap -- except this is
+    the real distance-weighted per-interval average (every stream sample within the lap
+    contributes, matching `refresh_avg_gap`'s own whole-activity computation) rather than that
+    (now-removed) frontend function's single net-elevation-change-over-the-whole-lap
+    approximation, which is what actually let this move server-side: a headless caller can now
+    read the same number the API already serves for a whole activity, per lap, without rendering
+    a page.
+
+    Deliberately passes the *full* stream to `compute_avg_gap_speed_mps` on every call, bounded
+    by `start_idx`/`end_idx` rather than a sliced sub-array: `_windowed_grade` needs points
+    outside a lap's own boundary to give a point near that boundary a real (not truncated)
+    window -- slicing first was a confirmed real bug (a systematic fast bias right at interval
+    boundaries, the exact place a coach most needs an accurate number).
 
     `lap_start_epoch_s`/`stream_epoch_s` are Unix seconds (epoch), not `datetime` -- the caller
     reads the Parquet stream via DuckDB's own `epoch(timestamp_utc)`, the same convention
@@ -159,7 +238,7 @@ def compute_lap_gap_speeds_mps(
     locate each lap's own boundary in it.
 
     All three stream sequences must be the same length and share index order. `None` per lap
-    wherever that lap's own slice has too few points, is missing a channel, or the lap falls
+    wherever that lap's own range has too few points, is missing a channel, or the lap falls
     entirely after the stream's last sample -- same contract as `compute_avg_gap_speed_mps` itself.
     """
     if (
@@ -168,6 +247,8 @@ def compute_lap_gap_speeds_mps(
         or len(stream_epoch_s) != len(altitudes_m)
     ):
         return [None] * len(lap_start_epoch_s)
+
+    timestamps_utc = [datetime.fromtimestamp(s, tz=UTC) for s in stream_epoch_s]
 
     results: list[float | None] = []
     for i, start_s in enumerate(lap_start_epoch_s):
@@ -179,14 +260,9 @@ def compute_lap_gap_speeds_mps(
         if start_idx >= len(stream_epoch_s) or end_idx <= start_idx:
             results.append(None)
             continue
-        slice_ts = [
-            datetime.fromtimestamp(s, tz=UTC) for s in stream_epoch_s[start_idx : end_idx + 1]
-        ]
         results.append(
             compute_avg_gap_speed_mps(
-                slice_ts,
-                distances_m[start_idx : end_idx + 1],
-                altitudes_m[start_idx : end_idx + 1],
+                timestamps_utc, distances_m, altitudes_m, start_idx=start_idx, end_idx=end_idx
             )
         )
     return results
