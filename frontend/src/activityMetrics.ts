@@ -102,7 +102,21 @@ export function hrZoneRangeLabel(zone: HrZone): string {
  * elsewhere in this app, and the one intervals.icu's own time-in-zone uses -- omitting `speedMps`
  * (existing callers/tests that don't have a speed stream) falls back to counting every interval,
  * unchanged from before.
+ *
+ * A genuine gap *in what got recorded* (the device stops emitting samples entirely -- e.g. a
+ * standing rest during interval reps -- rather than continuing to emit stationary/zero-speed
+ * samples) is a second, distinct failure mode `speedMps` alone can't catch, since there's no
+ * sample *inside* the gap to exclude by speed. A confirmed real bug: an 8-minute standing rest
+ * with no recorded samples at all attributed its whole gap to the one HR reading from *before*
+ * it (133 bpm, carried forward across all 8 minutes as if that effort continued) rather than to
+ * the reading a real continuous recording would have shown. `_MAX_SAMPLE_GAP_S` (matching
+ * pace_bands.py's own identical constant/reasoning: real device data is close to 1 Hz, so
+ * anything wider is a recording gap, not normal sampling) excludes any interval that wide
+ * entirely, rather than attributing even a capped few seconds of it to what's almost certainly
+ * the wrong zone.
  */
+const _MAX_SAMPLE_GAP_S = 10;
+
 export function computeHrZonesFromStream(
   heartRate: (number | null)[],
   timestamps: string[],
@@ -120,7 +134,7 @@ export function computeHrZonesFromStream(
       if (speed == null || speed < STATIONARY_MPS_FLOOR) continue;
     }
     const dt = (new Date(timestamps[i + 1]!).getTime() - new Date(timestamps[i]!).getTime()) / 1000;
-    if (dt <= 0) continue;
+    if (dt <= 0 || dt > _MAX_SAMPLE_GAP_S) continue;
     let zone = 1;
     while (zone <= 4 && hr >= boundaries[zone - 1]) zone += 1;
     secondsByZone.set(zone, (secondsByZone.get(zone) ?? 0) + dt);

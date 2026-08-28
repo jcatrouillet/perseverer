@@ -80,12 +80,37 @@ describe("TimeInZoneChart", () => {
   it("excludes stopped time from the stream-computed total, not just moving time", () => {
     // Regression test for a confirmed real bug: a stopped interval used to count toward
     // whatever zone the athlete was in when they paused, inflating that zone's reported total
-    // beyond the activity's actual moving time. Minute-scale intervals so the distinction
-    // survives formatDurationHM's own minute-granularity rounding.
+    // beyond the activity's actual moving time. Real ~1Hz-spaced samples (5s apart, well under
+    // the max-sample-gap cap below) covering 5min moving then 5min stopped, so the distinction
+    // survives formatDurationHM's own minute-granularity rounding without also tripping the
+    // separate max-sample-gap exclusion (a different fixture below covers that one).
+    const start = new Date("2026-01-01T00:00:00Z").getTime();
+    const n = 121; // 0..600s at 5s spacing
+    const timestamps = Array.from({ length: n }, (_, i) => new Date(start + i * 5000).toISOString());
+    const heartRateStream = Array.from({ length: n }, () => 130);
+    const speedMpsStream = Array.from({ length: n }, (_, i) => (i < 60 ? 3.0 : 0.0));
+    render(
+      <TimeInZoneChart
+        metrics={realShape}
+        heartRateStream={heartRateStream}
+        timestamps={timestamps}
+        configuredZoneBoundaries={[120, 140, 155, 170]}
+        speedMpsStream={speedMpsStream}
+      />,
+    );
+    // Only the first 60 (moving) intervals count -- the stopped second half doesn't, so the
+    // total reads 5m, not the full 10m elapsed.
+    expect(screen.getByText(/Total 5m/)).toBeInTheDocument();
+  });
+
+  it("excludes a genuine recording gap even without a speed stream", () => {
+    // Regression test for a second, distinct real bug: a standing rest with *no recorded
+    // samples at all* (not even stationary ones) attributed its whole gap to the HR reading
+    // from before it -- carrying a real effort forward across a real rest with no data in it.
     const timestamps = [
-      "2026-01-01T00:00:00Z", // moving, 0-5min
-      "2026-01-01T00:05:00Z", // stopped, 5-10min
-      "2026-01-01T00:10:00Z",
+      "2026-01-01T00:00:00Z",
+      "2026-01-01T00:00:10Z", // a normal ~1Hz-ish interval -- counted
+      "2026-01-01T00:08:00Z", // a 470s gap -- excluded regardless of speed data
     ];
     render(
       <TimeInZoneChart
@@ -93,11 +118,9 @@ describe("TimeInZoneChart", () => {
         heartRateStream={[130, 130, 130]}
         timestamps={timestamps}
         configuredZoneBoundaries={[120, 140, 155, 170]}
-        speedMpsStream={[3.0, 0.0, 3.0]}
       />,
     );
-    // Only the one moving 5min interval counts -- the stopped 5-10min interval doesn't, so the
-    // total reads 5m, not the full 10m elapsed.
-    expect(screen.getByText(/Total 5m/)).toBeInTheDocument();
+    // Only the one real 10s interval counts, not the 470s gap after it.
+    expect(screen.getByText(/Total 0m/)).toBeInTheDocument();
   });
 });

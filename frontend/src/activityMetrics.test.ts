@@ -175,4 +175,41 @@ describe("computeHrZonesFromStream", () => {
       expect(zones.find((z) => z.index === 2)!.seconds).toBe(10);
     });
   });
+
+  describe("a genuine recording gap (no samples, not just a stopped one)", () => {
+    // Regression test for a confirmed real bug: an 8-minute standing rest between reps had no
+    // recorded samples at all (not even stationary ones) -- the whole 467s gap was attributed to
+    // the one HR reading from *before* it, carrying a Z2 effort forward across a real rest.
+
+    it("excludes an interval wider than the max sample gap, even without a speed stream", () => {
+      // 0-10s @133 (Z2, normal 10s sample spacing) then a 467s gap to the next real sample @95
+      // (Z1) -- the gap itself must contribute to neither zone.
+      const hr = [133, 95, 95];
+      const timestamps = ts("2026-01-01T00:00:00Z", [0, 10, 10 + 467]);
+      const zones = computeHrZonesFromStream(hr, timestamps, boundaries)!;
+      expect(zones.find((z) => z.index === 2)!.seconds).toBe(10); // only the real 10s interval
+      expect(zones.find((z) => z.index === 1)!.seconds).toBe(0); // the gap itself: excluded
+      const total = zones.reduce((sum, z) => sum + z.seconds, 0);
+      expect(total).toBe(10);
+    });
+
+    it("still excludes a wide gap even when a speed stream says the pre-gap sample was moving", () => {
+      // The speed check alone (moving-time exclusion) only ever looks at whether the sample
+      // *before* a gap was itself moving -- it has no way to know what happened during a gap
+      // with no samples in it at all. The gap-width check must catch this independently: with
+      // only these two samples and the one interval between them excluded, nothing is left.
+      const hr = [133, 95];
+      const timestamps = ts("2026-01-01T00:00:00Z", [0, 467]);
+      const speedMps = [3.0, 3.0]; // both "moving" by the speed check alone
+      const zones = computeHrZonesFromStream(hr, timestamps, boundaries, speedMps);
+      expect(zones).toBeNull();
+    });
+
+    it("keeps a normal ~1Hz interval, right at the boundary of the max gap", () => {
+      const hr = [133, 133];
+      const timestamps = ts("2026-01-01T00:00:00Z", [0, 10]); // exactly at the 10s cap
+      const zones = computeHrZonesFromStream(hr, timestamps, boundaries)!;
+      expect(zones.find((z) => z.index === 2)!.seconds).toBe(10);
+    });
+  });
 });
