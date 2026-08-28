@@ -3,6 +3,10 @@ training zones, independent of the per-activity, device-reported zones a watch b
 own FIT data. See db/schema.py::athlete_hr_zone_config and hr_zones.py for the storage shape,
 the blended-formula rationale, and why it's three reference points (max/threshold/resting HR),
 not the four zone boundaries directly.
+
+Also GET/PUT /settings/running-load -- an athlete's own configured running threshold pace, the
+one calibration constant running_load.py::compute_running_tss needs. See
+db/schema.py::athlete_running_load_config, which this mirrors deliberately.
 """
 
 from __future__ import annotations
@@ -65,6 +69,20 @@ class HrZoneConfigOut(BaseModel):
             zone3_high_bpm=boundaries[2] if boundaries else None,
             zone4_high_bpm=boundaries[3] if boundaries else None,
         )
+
+
+class RunningLoadConfigIn(BaseModel):
+    threshold_pace_sec_per_km: float | None = None
+
+    @model_validator(mode="after")
+    def _positive_if_set(self) -> RunningLoadConfigIn:
+        if self.threshold_pace_sec_per_km is not None and self.threshold_pace_sec_per_km <= 0:
+            raise ValueError("threshold_pace_sec_per_km must be positive")
+        return self
+
+
+class RunningLoadConfigOut(BaseModel):
+    threshold_pace_sec_per_km: float | None
 
 
 # GET /settings/garmin/status

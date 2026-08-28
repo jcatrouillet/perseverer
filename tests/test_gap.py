@@ -19,6 +19,7 @@ from perseverer.gap import (
     _cost_of_running,
     _grade_adjusted_time_factor,
     compute_avg_gap_speed_mps,
+    compute_lap_gap_speeds_mps,
     refresh_avg_gap,
 )
 from perseverer.streams import write_activity_stream
@@ -85,6 +86,62 @@ class TestComputeAvgGapSpeedMps:
         gap = compute_avg_gap_speed_mps(_timestamps(4, step_s=10), distances, altitudes)
         assert gap is not None
         assert abs(gap - 4.0) < 1e-9
+
+
+def _epoch_s(n: int, *, step_s: int = 10, start_s: float = 0.0) -> list[float]:
+    return [start_s + i * step_s for i in range(n)]
+
+
+class TestComputeLapGapSpeedsMps:
+    """Boundary-slicing behavior only -- the grade-adjusted math itself is already covered by
+    TestComputeAvgGapSpeedMps above, which this function reuses unchanged on each lap's slice."""
+
+    def test_flat_ground_each_lap_matches_its_own_raw_speed(self) -> None:
+        # 11 points, 0-100s, 4 m/s throughout, flat. Two laps split at 50s.
+        stream_epoch_s = _epoch_s(11)
+        distances = [i * 40.0 for i in range(11)]
+        altitudes = [100.0] * 11
+        result = compute_lap_gap_speeds_mps([0.0, 50.0], stream_epoch_s, distances, altitudes)
+        assert len(result) == 2
+        assert result[0] is not None and abs(result[0] - 4.0) < 1e-9
+        assert result[1] is not None and abs(result[1] - 4.0) < 1e-9
+
+    def test_final_lap_extends_to_the_streams_last_point(self) -> None:
+        # First half at 4 m/s, second half at 8 m/s -- laps split exactly at the speed change,
+        # so each lap's own GAP should reflect only its own half.
+        stream_epoch_s = _epoch_s(11)  # 0..100s
+        distances = [i * 40.0 for i in range(6)] + [200.0 + (i + 1) * 80.0 for i in range(5)]
+        altitudes = [100.0] * 11
+        result = compute_lap_gap_speeds_mps([0.0, 50.0], stream_epoch_s, distances, altitudes)
+        assert result[0] is not None and abs(result[0] - 4.0) < 1e-9
+        assert result[1] is not None and abs(result[1] - 8.0) < 1e-9
+
+    def test_matches_compute_avg_gap_speed_mps_on_the_equivalent_slice(self) -> None:
+        # Reuses TestComputeAvgGapSpeedMps's own uphill fixture shape as a cross-check that
+        # slicing doesn't change the underlying grade math at all.
+        stream_epoch_s = _epoch_s(11)
+        distances = [i * 40.0 for i in range(11)]
+        altitudes = [100.0 + i * 2.0 for i in range(11)]  # steady uphill throughout
+        [lap_result] = compute_lap_gap_speeds_mps([0.0], stream_epoch_s, distances, altitudes)
+        direct = compute_avg_gap_speed_mps(_timestamps(11), distances, altitudes)
+        assert lap_result is not None and direct is not None
+        assert abs(lap_result - direct) < 1e-9
+
+    def test_lap_starting_after_the_last_stream_sample_is_none(self) -> None:
+        stream_epoch_s = _epoch_s(5)  # 0..40s
+        distances = [i * 40.0 for i in range(5)]
+        altitudes = [100.0] * 5
+        result = compute_lap_gap_speeds_mps([0.0, 999.0], stream_epoch_s, distances, altitudes)
+        assert result[0] is not None
+        assert result[1] is None
+
+    def test_mismatched_stream_lengths_return_all_none(self) -> None:
+        result = compute_lap_gap_speeds_mps([0.0, 10.0], [0.0, 10.0, 20.0], [0.0, 40.0], [100.0])
+        assert result == [None, None]
+
+    def test_empty_stream_returns_all_none(self) -> None:
+        result = compute_lap_gap_speeds_mps([0.0, 10.0], [], [], [])
+        assert result == [None, None]
 
 
 def _engine(tmp_path: Path) -> Engine:

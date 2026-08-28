@@ -80,6 +80,21 @@ athlete_hr_zone_config = Table(
     Column("updated_at", DateTime(), nullable=False),
 )
 
+# An athlete's own configured running threshold pace -- the one calibration constant
+# `running_load.py::compute_running_tss` needs to turn grade-adjusted pace into a Coggan-style
+# rTSS (100 = one hour at threshold pace), the same convention TrainingPeaks/intervals.icu use.
+# One row per athlete (upsert, not history), null means "not configured yet" -- `refresh_
+# running_tss` is then a no-op and `fitness.py` keeps using Garmin's own `training_load_peak`
+# for every activity, exactly like before this table existed. Mirrors athlete_hr_zone_config's
+# own shape/contract deliberately, for the same reason (one small, athlete-tunable constant).
+athlete_running_load_config = Table(
+    "athlete_running_load_config",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("threshold_pace_sec_per_km", Float, nullable=True),
+    Column("updated_at", DateTime(), nullable=False),
+)
+
 # A distance goal for a whole calendar year or month, one per (athlete, period_type,
 # period_start) -- not a growing history of past goals, just "what's the target for this
 # period", upserted like athlete_hr_zone_config above. `sport=NULL` means every sport combined;

@@ -6,10 +6,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 
-import { useDuplicatePairs, useHrZoneConfig, useSetHrZoneConfig, useTrimCandidates } from "../api/queries";
+import {
+  useDuplicatePairs,
+  useHrZoneConfig,
+  useRunningLoadConfig,
+  useSetHrZoneConfig,
+  useSetRunningLoadConfig,
+  useTrimCandidates,
+} from "../api/queries";
 import type { DuplicateCandidateOut, TrimCandidateOut } from "../api/types";
 import { hrZoneRangeLabel } from "../activityMetrics";
-import { formatDurationHM } from "../runningStats";
+import { formatDurationHM, formatMinPerKm } from "../runningStats";
 import { BulkImportCard } from "../components/BulkImportCard";
 import { GarminConnectCard } from "../components/GarminConnectCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -73,6 +80,18 @@ function toInputValue(bpm: number | null): string {
   return bpm == null ? "" : String(bpm);
 }
 
+// "m:ss" pace text <-> seconds/km, for the running threshold-pace field below. No existing
+// parser to reuse (runningStats.ts only ever formats a pace for display, never parses one back).
+function parsePaceInput(value: string): number | null {
+  const match = /^(\d+):([0-5]\d)$/.exec(value.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function formatPaceInput(secPerKm: number | null): string {
+  return secPerKm == null ? "" : formatMinPerKm(secPerKm / 60);
+}
+
 function parseField(value: string): number | null {
   const trimmed = value.trim();
   if (trimmed === "") return null;
@@ -83,12 +102,28 @@ function parseField(value: string): number | null {
 export function SettingsPage() {
   const config = useHrZoneConfig();
   const mutation = useSetHrZoneConfig();
+  const runningLoadConfig = useRunningLoadConfig();
+  const runningLoadMutation = useSetRunningLoadConfig();
   const trimCandidates = useTrimCandidates();
   const duplicatePairs = useDuplicatePairs();
 
   const [maxHr, setMaxHr] = useState("");
   const [thresholdHr, setThresholdHr] = useState("");
   const [restingHr, setRestingHr] = useState("");
+  const [thresholdPaceText, setThresholdPaceText] = useState("");
+
+  // Same once-on-arrival pre-fill as the HR zone config below.
+  useEffect(() => {
+    if (!runningLoadConfig.data) return;
+    setThresholdPaceText(formatPaceInput(runningLoadConfig.data.threshold_pace_sec_per_km));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runningLoadConfig.isSuccess]);
+
+  const thresholdPaceSecPerKm = parsePaceInput(thresholdPaceText);
+  const paceClientError =
+    thresholdPaceText.trim() !== "" && thresholdPaceSecPerKm == null
+      ? "Enter a pace as m:ss, e.g. 5:08."
+      : null;
 
   // Pre-fill from the loaded config -- once, when it first arrives, not on every refetch (an
   // in-progress edit shouldn't be clobbered by a background refetch of the same query).
@@ -158,7 +193,7 @@ export function SettingsPage() {
           activity's own device-reported zones.
         </p>
         <form
-          className="settings-hr-zones__form"
+          className="settings-form"
           onSubmit={(e) => {
             e.preventDefault();
             if (clientError) return;
@@ -203,17 +238,17 @@ export function SettingsPage() {
             {mutation.isPending ? "Saving…" : "Save"}
           </button>
           {clientError && (
-            <span role="alert" className="settings-hr-zones__error">
+            <span role="alert" className="settings-form__error">
               {clientError}
             </span>
           )}
           {mutation.isError && !clientError && (
-            <span role="alert" className="settings-hr-zones__error">
+            <span role="alert" className="settings-form__error">
               Could not save -- check the values are sane (max &gt; resting, threshold ≤ max).
             </span>
           )}
           {mutation.isSuccess && (
-            <span className="settings-hr-zones__saved">Saved.</span>
+            <span className="settings-form__saved">Saved.</span>
           )}
         </form>
 
@@ -235,6 +270,54 @@ export function SettingsPage() {
             </tbody>
           </table>
         )}
+      </section>
+
+      <section className="card">
+        <h2>Running training load</h2>
+        <p className="chart-note">
+          Your threshold pace -- roughly your best sustainable ~1-hour effort -- calibrates
+          running's Fitness &amp; Form training load to the same 100-per-hour-at-threshold scale
+          TrainingPeaks and intervals.icu use, in place of Garmin's own uncalibrated Training
+          Load. Leave blank to keep using Garmin's number for running, same as every other sport.
+        </p>
+        <form
+          className="settings-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (paceClientError) return;
+            runningLoadMutation.mutate({ threshold_pace_sec_per_km: thresholdPaceSecPerKm });
+          }}
+        >
+          <label>
+            Threshold pace (min/km)
+            <input
+              type="text"
+              inputMode="numeric"
+              value={thresholdPaceText}
+              onChange={(e) => setThresholdPaceText(e.target.value)}
+              placeholder="e.g. 5:08"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={runningLoadMutation.isPending || paceClientError != null}
+          >
+            {runningLoadMutation.isPending ? "Saving…" : "Save"}
+          </button>
+          {paceClientError && (
+            <span role="alert" className="settings-form__error">
+              {paceClientError}
+            </span>
+          )}
+          {runningLoadMutation.isError && !paceClientError && (
+            <span role="alert" className="settings-form__error">
+              Could not save.
+            </span>
+          )}
+          {runningLoadMutation.isSuccess && (
+            <span className="settings-form__saved">Saved.</span>
+          )}
+        </form>
       </section>
 
       <section className="card">

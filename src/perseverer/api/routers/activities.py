@@ -95,13 +95,14 @@ from perseverer.db.schema import (
 from perseverer.db.schema import device as device_table
 from perseverer.db.schema import split as split_table
 from perseverer.fitness import refresh_fitness_rollup
-from perseverer.gap import AVG_GAP_METRIC_KEY
+from perseverer.gap import AVG_GAP_METRIC_KEY, compute_lap_gap_speeds_mps
 from perseverer.geocoding import get_or_fetch_activity_location, read_cached_location
 from perseverer.insights.engine import load_insight_activities, refresh_insights
 from perseverer.insights.rules_activity import compute_activity_insights
 from perseverer.performance import VDOT_METRIC_KEY
 from perseverer.reparse import reparse_raw_object
 from perseverer.rollups import refresh_daily_and_period_rollups
+from perseverer.running_load import RUNNING_TSS_METRIC_KEY
 from perseverer.sport_override import (
     set_fueling_override,
     set_name_override,
@@ -129,6 +130,14 @@ MAX_HR_METRIC_KEYS = ("fit.session.max_heart_rate", "strava.session.max_heart_ra
 # frontend/src/components/ActivityStatsGrid.tsx's own convention (confirmed against real data:
 # session values of ~75-88 correspond to the conventional 150-176 spm runners actually see).
 CADENCE_METRIC_KEY = "fit.session.avg_running_cadence"
+
+# Same alias-merge idiom as AVG_HR_METRIC_KEYS/MAX_HR_METRIC_KEYS above, priority-ordered: prefer
+# the athlete's own pace-calibrated rTSS (running_load.py) over Garmin's uncalibrated
+# training_load_peak wherever one exists -- fitness.py::refresh_fitness_rollup already does this
+# same substitution for the CTL/ATL/TSB aggregate, so a per-activity training_load reading here
+# must match it, not silently keep showing the pre-recalibration number (a confirmed real bug:
+# /fitness and /activities/{id} disagreed for every running activity until this was added).
+TRAINING_LOAD_METRIC_KEYS = (RUNNING_TSS_METRIC_KEY, "fit.session.training_load_peak")
 
 
 def _aliased_metric_subquery(keys: tuple[str, ...]):  # type: ignore[no-untyped-def]
@@ -234,19 +243,13 @@ def list_activities(
     # immediately above, rather than an N+1 per-activity lookup.
     avg_hr_subq = _aliased_metric_subquery(AVG_HR_METRIC_KEYS)
     max_hr_subq = _aliased_metric_subquery(MAX_HR_METRIC_KEYS)
-    # Same EAV pattern as avg/max heart rate above. training_load_peak's stored value_num is
-    # already the real Training Load figure -- the FIT SDK profile gives it `scale: 65536`,
-    # which its own decoder applies before we ever see the value (confirmed by introspecting
-    # the installed garmin_fit_sdk's profile.py, not assumed).
-    training_load_subq = (
-        select(activity_metric.c.value_num)
-        .where(
-            activity_metric.c.activity_id == activity.c.id,
-            activity_metric.c.metric_key == "fit.session.training_load_peak",
-        )
-        .limit(1)
-        .scalar_subquery()
-    )
+    # Same EAV pattern as avg/max heart rate above, and the same priority-ordered alias-merge
+    # (see TRAINING_LOAD_METRIC_KEYS): prefers running_tss over training_load_peak wherever one
+    # exists. training_load_peak's own stored value_num is already the real Training Load figure
+    # -- the FIT SDK profile gives it `scale: 65536`, which its own decoder applies before we
+    # ever see the value (confirmed by introspecting the installed garmin_fit_sdk's profile.py,
+    # not assumed).
+    training_load_subq = _aliased_metric_subquery(TRAINING_LOAD_METRIC_KEYS)
     # workout_rpe's raw stored value is the Borg CR10 scale x10 (an unmapped/generic field, so
     # nothing descales it on ingest) -- fetched raw here, descaled below in Python alongside
     # get_activity's identical conversion, so the two code paths can't drift out of sync.
@@ -723,7 +726,7 @@ def get_activity(
         raise HTTPException(status_code=404, detail="activity not found")
 
     stream_row = conn.execute(
-        select(activity_stream.c.parquet_path).where(
+        select(activity_stream.c.parquet_path, activity_stream.c.channels).where(
             activity_stream.c.activity_id == activity_id
         )
     ).fetchone()
@@ -773,6 +776,27 @@ def get_activity(
     laps = conn.execute(
         select(lap).where(lap.c.activity_id == activity_id).order_by(lap.c.lap_index)
     ).fetchall()
+
+    # Per-lap grade-adjusted pace, computed fresh here rather than stored -- see LapOut's own
+    # module docstring. Running-only (matches gap.py::refresh_avg_gap's own scoping) and only
+    # when the stream actually has the two channels GAP needs.
+    lap_gap_speeds: list[float | None] = [None] * len(laps)
+    if laps and stream_row is not None and row.sport == "running":
+        channels = json.loads(stream_row.channels)
+        if "altitude_m" in channels and "distance_m" in channels:
+            stream_rows = con.execute(
+                "SELECT epoch(timestamp_utc) AS ts, distance_m, altitude_m FROM read_parquet(?)"
+                " ORDER BY timestamp_utc",
+                [str(settings.parquet_dir / stream_row.parquet_path)],
+            ).fetchall()
+            if stream_rows:
+                lap_gap_speeds = compute_lap_gap_speeds_mps(
+                    [lap_row.start_time_utc.replace(tzinfo=UTC).timestamp() for lap_row in laps],
+                    [r[0] for r in stream_rows],
+                    [r[1] for r in stream_rows],
+                    [r[2] for r in stream_rows],
+                )
+
     splits = conn.execute(
         select(split_table)
         .where(split_table.c.activity_id == activity_id)
@@ -814,7 +838,7 @@ def get_activity(
         calories=row.calories,
         avg_hr_bpm=_first_metric(metrics_by_key, AVG_HR_METRIC_KEYS),
         max_hr_bpm=_first_metric(metrics_by_key, MAX_HR_METRIC_KEYS),
-        training_load=metrics_by_key.get("fit.session.training_load_peak"),
+        training_load=_first_metric(metrics_by_key, TRAINING_LOAD_METRIC_KEYS),
         workout_rpe=_workout_rpe_from_raw(metrics_by_key.get("fit.session.workout_rpe")),
         weight_kg=metrics_by_key.get("fit.user_profile.weight"),
         vdot=metrics_by_key.get(VDOT_METRIC_KEY),
@@ -850,8 +874,9 @@ def get_activity(
                 avg_hr=lap_row.avg_hr,
                 max_hr=lap_row.max_hr,
                 avg_speed_mps=lap_row.avg_speed_mps,
+                avg_gap_speed_mps=lap_gap_speeds[i],
             )
-            for lap_row in laps
+            for i, lap_row in enumerate(laps)
         ],
         splits=[
             SplitOut(

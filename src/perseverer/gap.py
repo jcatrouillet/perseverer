@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import math
+from bisect import bisect_left
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -130,6 +131,65 @@ def compute_avg_gap_speed_mps(
     if total_distance_m <= 0 or total_gap_time_s <= 0:
         return None
     return total_distance_m / total_gap_time_s
+
+
+def compute_lap_gap_speeds_mps(
+    lap_start_epoch_s: Sequence[float],
+    stream_epoch_s: Sequence[float],
+    distances_m: Sequence[float | None],
+    altitudes_m: Sequence[float | None],
+) -> list[float | None]:
+    """One average grade-adjusted speed per lap -- computed by slicing the activity's own full-
+    resolution stream at each lap's own wall-clock boundary and reusing `compute_avg_gap_speed_mps`
+    on that slice, rather than a second averaging implementation. Same one-lap-is-one-time-range
+    convention `frontend/src/gap.ts::computeLapGapsMinPerKm` uses -- a lap's own end is the next
+    lap's start, or the stream's last point for the final lap -- except this is the real distance-
+    weighted per-interval average (every stream sample within the lap contributes, matching
+    `refresh_avg_gap`'s own whole-activity computation) rather than that frontend function's
+    single net-elevation-change-over-the-whole-lap approximation, which is what actually let this
+    move server-side: a headless caller can now read the same number the API already serves for a
+    whole activity, per lap, without rendering a page.
+
+    `lap_start_epoch_s`/`stream_epoch_s` are Unix seconds (epoch), not `datetime` -- the caller
+    reads the Parquet stream via DuckDB's own `epoch(timestamp_utc)`, the same convention
+    `transport_mix.py`/`stream_query.py` already use for a request-time Parquet read, so there's
+    no tz-awareness mismatch to reconcile between a naive-implicit-UTC `lap.start_time_utc` and
+    whatever tzinfo a Parquet timestamp round-trips as. `stream_epoch_s` must be sorted ascending
+    (as read ordered by timestamp, matching every other reader of this file) so `bisect_left` can
+    locate each lap's own boundary in it.
+
+    All three stream sequences must be the same length and share index order. `None` per lap
+    wherever that lap's own slice has too few points, is missing a channel, or the lap falls
+    entirely after the stream's last sample -- same contract as `compute_avg_gap_speed_mps` itself.
+    """
+    if (
+        not stream_epoch_s
+        or len(stream_epoch_s) != len(distances_m)
+        or len(stream_epoch_s) != len(altitudes_m)
+    ):
+        return [None] * len(lap_start_epoch_s)
+
+    results: list[float | None] = []
+    for i, start_s in enumerate(lap_start_epoch_s):
+        start_idx = bisect_left(stream_epoch_s, start_s)
+        end_s = lap_start_epoch_s[i + 1] if i + 1 < len(lap_start_epoch_s) else None
+        end_idx = (
+            bisect_left(stream_epoch_s, end_s) if end_s is not None else len(stream_epoch_s) - 1
+        )
+        if start_idx >= len(stream_epoch_s) or end_idx <= start_idx:
+            results.append(None)
+            continue
+        slice_ts = [
+            datetime.fromtimestamp(s, tz=UTC) for s in stream_epoch_s[start_idx : end_idx + 1]
+        ]
+        results.append(
+            compute_avg_gap_speed_mps(
+                slice_ts,
+                distances_m[start_idx : end_idx + 1],
+                altitudes_m[start_idx : end_idx + 1],
+            )
+        )
+    return results
 
 
 def refresh_avg_gap(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> int:

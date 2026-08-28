@@ -2,6 +2,13 @@
 three reference points (max/threshold/resting HR). See api/schemas/settings.py and
 db/schema.py::athlete_hr_zone_config for the shape and hr_zones.py for the derivation formula.
 
+Also GET/PUT /settings/running-load -- an athlete's own configured running threshold pace, the
+one calibration constant `running_load.py::compute_running_tss` needs to turn grade-adjusted
+pace into a Coggan-style rTSS. Unlike the hr-zones PUT, this one also immediately recomputes
+`running_tss`/`fitness_daily_rollup`/insights for the athlete before returning -- otherwise a
+first-time save would look like a no-op until the next sync, since those are otherwise only
+refreshed at ingest time (see running_load.py's own module docstring).
+
 Also the Garmin Connect status/login/sync, rebuild, and bulk-export-upload endpoints -- the web
 counterparts of `sync auth login/status`, `sync import garmin-connect`, `sync rebuild`, and
 `sync import garmin-export/strava-export`. Login is the one place besides the CLI that ever
@@ -15,6 +22,8 @@ written by every sync/import entrypoint) already is one.
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import uuid4
@@ -41,10 +50,14 @@ from perseverer.api.schemas.settings import (
     HrZoneConfigOut,
     JobStatusOut,
     JobTriggerOut,
+    RunningLoadConfigIn,
+    RunningLoadConfigOut,
 )
 from perseverer.config import Settings, get_settings
-from perseverer.db.schema import athlete_hr_zone_config, ingest_run
-from perseverer.rebuild import rebuild_database_tracked
+from perseverer.db.schema import athlete_hr_zone_config, athlete_running_load_config, ingest_run
+from perseverer.fitness import refresh_fitness_rollup
+from perseverer.insights.engine import refresh_insights
+from perseverer.running_load import refresh_running_tss
 from perseverer.staleness import check_garmin_connect_staleness
 
 router = APIRouter()
@@ -93,6 +106,56 @@ def set_hr_zone_config(
     return HrZoneConfigOut.from_inputs(
         payload.max_hr_bpm, payload.threshold_hr_bpm, payload.resting_hr_bpm
     )
+
+
+@router.get("/settings/running-load")
+def get_running_load_config(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> RunningLoadConfigOut:
+    row = conn.execute(
+        select(athlete_running_load_config).where(
+            athlete_running_load_config.c.athlete_id == athlete_id
+        )
+    ).fetchone()
+    if row is None:
+        return RunningLoadConfigOut(threshold_pace_sec_per_km=None)
+    return RunningLoadConfigOut(threshold_pace_sec_per_km=row.threshold_pace_sec_per_km)
+
+
+@router.put("/settings/running-load")
+def set_running_load_config(
+    payload: RunningLoadConfigIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> RunningLoadConfigOut:
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    existing = conn.execute(
+        select(athlete_running_load_config.c.athlete_id).where(
+            athlete_running_load_config.c.athlete_id == athlete_id
+        )
+    ).scalar_one_or_none()
+    values = {
+        "threshold_pace_sec_per_km": payload.threshold_pace_sec_per_km,
+        "updated_at": now,
+    }
+    if existing is None:
+        conn.execute(
+            athlete_running_load_config.insert().values(athlete_id=athlete_id, **values)
+        )
+    else:
+        conn.execute(
+            athlete_running_load_config.update()
+            .where(athlete_running_load_config.c.athlete_id == athlete_id)
+            .values(**values)
+        )
+    # Immediate, not deferred to the next sync -- see module docstring. Cheap: pure recomputation
+    # over already-ingested data, no Parquet/network access.
+    refresh_running_tss(conn, athlete_id=athlete_id)
+    refresh_fitness_rollup(conn, athlete_id=athlete_id)
+    refresh_insights(conn, athlete_id=athlete_id)
+    conn.commit()
+    return RunningLoadConfigOut(threshold_pace_sec_per_km=payload.threshold_pace_sec_per_km)
 
 
 def _latest_ingest_run(conn: Connection, athlete_id: str, source: str) -> Row[Any] | None:
@@ -211,18 +274,34 @@ def post_garmin_sync(
 def post_rebuild(
     background_tasks: BackgroundTasks,
     athlete_id: Annotated[str, Depends(require_api_key)],
-    engine: Engine = Depends(get_engine),
-    settings: Settings = Depends(get_settings),
 ) -> JobTriggerOut:
-    """Same as `sync rebuild` (cli.py), triggered from the Settings page. Never destructive --
-    rebuild_database_tracked wipes only derived tables and replays them from the raw archive.
-    Poll GET /settings/jobs/latest?source=rebuild for progress."""
+    """Same as `sync rebuild --tracked` (cli.py), triggered from the Settings page. Never
+    destructive -- rebuild_database_tracked wipes only derived tables and replays them from the
+    raw archive. Poll GET /settings/jobs/latest?source=rebuild for progress.
+
+    Launched as a standalone `sync rebuild --tracked` subprocess rather than an in-process
+    BackgroundTasks call -- a real rebuild on bercy once hung for hours sharing a connection with
+    this same live multi-worker process's own request handling. A subprocess gets its own
+    interpreter, its own SQLAlchemy engine/connections, and no shared threads or event loop with
+    the workers serving ordinary traffic, so it can hold whatever long transaction it needs
+    without any of that contention. `ingest_run` bookkeeping (what GET /settings/jobs/latest
+    polls) still happens exactly as before, since the subprocess is running the same
+    rebuild_database_tracked function, just out-of-process -- fire-and-forget here, no need to
+    wait on or communicate with it."""
 
     def _run() -> None:
-        with engine.connect() as bg_conn:
-            rebuild_database_tracked(
-                bg_conn, settings.raw_archive_dir, settings.parquet_dir, athlete_id=athlete_id
-            )
+        subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "perseverer.cli",
+                "rebuild",
+                "--tracked",
+                "--athlete-id",
+                athlete_id,
+            ],
+            stdin=subprocess.DEVNULL,
+        )
 
     background_tasks.add_task(_run)
     return JobTriggerOut(triggered=True)

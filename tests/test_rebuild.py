@@ -10,6 +10,7 @@ import datetime as dt
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -21,7 +22,9 @@ from perseverer.archive import archive_raw_bytes
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
     activity,
+    activity_metric,
     athlete,
+    day_rollup,
     health_observation,
     health_stream,
     ingest_run,
@@ -42,7 +45,13 @@ from perseverer.health.json_parser import (
     parse_daily_training_status_json,
     parse_hydration_json,
 )
-from perseverer.rebuild import rebuild_database, rebuild_database_tracked
+from perseverer.rebuild import (
+    _REBUILDABLE_TABLES,
+    _SHADOW_SWAP_INSERT_ORDER,
+    rebuild_database,
+    rebuild_database_tracked,
+    rebuild_database_via_shadow,
+)
 
 SLEEP_DATA_RECORDS = [
     {
@@ -62,11 +71,11 @@ SLEEP_DATA_RECORDS = [
 ]
 
 
-def _seed_athlete(engine: Engine) -> None:
+def _seed_athlete(engine: Engine, athlete_id: str = DEFAULT_ATHLETE_ID) -> None:
     with engine.connect() as conn:
         conn.execute(
             athlete.insert().values(
-                id=DEFAULT_ATHLETE_ID,
+                id=athlete_id,
                 display_name="Test",
                 timezone="UTC",
                 unit_preference="metric",
@@ -1134,7 +1143,7 @@ def test_rebuild_database_tracked_writes_a_success_ingest_run_row(tmp_path: Path
     _seed_athlete(engine)
     with engine.connect() as conn:
         replayed = rebuild_database_tracked(
-            conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID
+            conn, archive_root, parquet_dir, tmp_path, athlete_id=DEFAULT_ATHLETE_ID
         )
         row = conn.execute(
             select(ingest_run).where(
@@ -1166,7 +1175,7 @@ def test_rebuild_database_tracked_records_failure_and_reraises(tmp_path: Path) -
 
         with pytest.raises(Exception):  # noqa: B017 -- whatever json.JSONDecodeError-adjacent error surfaces
             rebuild_database_tracked(
-                conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID
+                conn, archive_root, parquet_dir, tmp_path, athlete_id=DEFAULT_ATHLETE_ID
             )
 
         row = conn.execute(
@@ -1180,3 +1189,223 @@ def test_rebuild_database_tracked_records_failure_and_reraises(tmp_path: Path) -
     assert row.finished_at is not None
     assert row.errors is not None
     assert json.loads(row.errors)[0]["error"]
+
+
+# --- rebuild_database_via_shadow -- the real fix for today's incident: the replay runs against
+# a throwaway shadow database first, and only a short, atomic swap ever touches the live tables,
+# so a failed/interrupted replay leaves the live tables completely untouched instead of
+# wiped-and-partially-refilled. -----------------------------------------------------------------
+
+
+def _build_garmin_export_archive(tmp_path: Path, subdir: str) -> tuple[Path, Path]:
+    """One real activity, imported the normal way -- returns (archive_root, parquet_dir), ready
+    to be replayed by rebuild_database/rebuild_database_via_shadow. Same fixture/pattern as
+    test_activity_id_is_identical_across_two_rebuilds below, factored out for reuse across the
+    shadow-rebuild tests, which all need this same starting point."""
+    root = tmp_path / subdir
+    fitness_dir = root / "src" / "DI_CONNECT" / "DI-Connect-Fitness" / "2024"
+    fitness_dir.mkdir(parents=True)
+    shutil.copy(_GARMIN_EXPORT_FIXTURE, fitness_dir / "55501234_ACTIVITY.fit")
+
+    archive_root = root / "archive"
+    parquet_dir = root / "parquet"
+    engine = make_engine(root / "import.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        import_garmin_export(
+            conn, archive_root, parquet_dir, root / "extract", athlete_id=DEFAULT_ATHLETE_ID,
+            path=root / "src",
+        )
+    return archive_root, parquet_dir
+
+
+def _snapshot_all_rebuildable_rows(
+    conn: object, athlete_id: str
+) -> dict[str, list[dict[str, Any]]]:
+    """Every rebuildable table's rows for one athlete, as plain sorted dicts -- used to prove a
+    failed shadow rebuild left the live tables byte-for-byte as they were before it ran."""
+    snapshot: dict[str, list[dict[str, Any]]] = {}
+    for table in _REBUILDABLE_TABLES:
+        rows = conn.execute(select(table).where(table.c.athlete_id == athlete_id)).mappings().all()  # type: ignore[attr-defined]
+        snapshot[table.name] = sorted((dict(r) for r in rows), key=repr)
+    return snapshot
+
+
+def test_shadow_swap_insert_order_covers_exactly_the_same_tables_as_the_delete_order() -> None:
+    """Guards against the two lists silently drifting apart -- if a future table is added to
+    _REBUILDABLE_TABLES (the delete order) without a corresponding, correctly-placed entry in
+    _SHADOW_SWAP_INSERT_ORDER (the real topological insert order, which is *not* simply the
+    reverse -- see that tuple's own comment), rows for the new table would just never get
+    swapped in at all, silently."""
+    assert set(_SHADOW_SWAP_INSERT_ORDER) == set(_REBUILDABLE_TABLES)
+    assert len(_SHADOW_SWAP_INSERT_ORDER) == len(_REBUILDABLE_TABLES)
+
+
+def test_shadow_rebuild_leaves_live_tables_untouched_on_failure(tmp_path: Path) -> None:
+    archive_root, parquet_dir = _build_garmin_export_archive(tmp_path, "src1")
+
+    live_engine = make_engine(tmp_path / "live.sqlite")
+    metadata.create_all(live_engine)
+    _seed_athlete(live_engine)
+    with live_engine.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        before = _snapshot_all_rebuildable_rows(conn, DEFAULT_ATHLETE_ID)
+        assert before["activity"], "the archive must have actually populated something real"
+
+        # A corrupt sidecar makes the shadow's own restore_raw_object_table blow up -- same real
+        # failure mode test_rebuild_database_tracked_records_failure_and_reraises already uses.
+        (archive_root / "00").mkdir()
+        (archive_root / "00" / "deadbeef.json").write_text("not valid json")
+
+        with pytest.raises(Exception):  # noqa: B017 -- whatever error surfaces from the bad sidecar
+            rebuild_database_via_shadow(
+                conn, archive_root, parquet_dir, tmp_path, athlete_id=DEFAULT_ATHLETE_ID
+            )
+
+        after = _snapshot_all_rebuildable_rows(conn, DEFAULT_ATHLETE_ID)
+
+    assert after == before
+
+
+_UNSTABLE_ACROSS_INDEPENDENT_DATABASES = {
+    "id",
+    "device_id",
+    "sleep_session_id",
+    "raw_object_id",
+    # Plain wall-clock "recorded at" timestamps, stamped with whatever datetime.now() returns
+    # at insert time -- two independent process runs a fraction of a second apart will never
+    # agree on these exactly, which has nothing to do with whether the actual data matches.
+    "created_at",
+    "updated_at",
+    "decided_at",
+    "first_seen_at",
+    "ingested_at",
+    "refreshed_at",
+}
+
+
+def _strip_unstable_ids(
+    snapshot: dict[str, list[dict[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Autoincrement surrogate ids (and FK columns pointing at one) are assigned independently
+    by each database's own sequence, and plain "recorded at" timestamp columns are stamped with
+    wall-clock time at insert -- two separately-built databases holding logically identical
+    content will still disagree on these exact values by design (confirmed directly: this is
+    the same reason _swap_tables_from_shadow never copies surrogate ids verbatim -- see its own
+    docstring). Only meaningful when comparing rows across two *different* databases, like
+    test_shadow_rebuild_matches_plain_in_place_rebuild does; the other snapshot-based tests
+    compare the same database against itself and want the exact, unstripped comparison."""
+    stripped = {
+        table_name: [
+            {k: v for k, v in row.items() if k not in _UNSTABLE_ACROSS_INDEPENDENT_DATABASES}
+            for row in rows
+        ]
+        for table_name, rows in snapshot.items()
+    }
+    # Re-sort by the *stripped* content -- the original snapshot's own sort key (repr of the
+    # full row, id included) can put logically-identical rows in a different relative order
+    # once two independently-assigned ids differ, which would otherwise fail this comparison for
+    # a reason that has nothing to do with the actual content.
+    return {
+        table_name: sorted(rows, key=repr) for table_name, rows in stripped.items()
+    }
+
+
+def test_shadow_rebuild_matches_plain_in_place_rebuild(tmp_path: Path) -> None:
+    archive_root, parquet_dir = _build_garmin_export_archive(tmp_path, "src1")
+
+    plain_engine = make_engine(tmp_path / "plain.sqlite")
+    metadata.create_all(plain_engine)
+    _seed_athlete(plain_engine)
+    with plain_engine.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        plain_result = _strip_unstable_ids(_snapshot_all_rebuildable_rows(conn, DEFAULT_ATHLETE_ID))
+
+    shadow_engine = make_engine(tmp_path / "shadow_target.sqlite")
+    metadata.create_all(shadow_engine)
+    _seed_athlete(shadow_engine)
+    with shadow_engine.connect() as conn:
+        rebuild_database_via_shadow(
+            conn, archive_root, parquet_dir, tmp_path, athlete_id=DEFAULT_ATHLETE_ID
+        )
+        shadow_result = _strip_unstable_ids(
+            _snapshot_all_rebuildable_rows(conn, DEFAULT_ATHLETE_ID)
+        )
+
+    assert shadow_result == plain_result
+    assert plain_result["activity"]  # sanity: the comparison isn't vacuously true on empty data
+
+
+def test_shadow_rebuild_is_scoped_to_one_athlete(tmp_path: Path) -> None:
+    other_athlete_id = "01OTHERATHLETE0000000000000"
+    archive_root, parquet_dir = _build_garmin_export_archive(tmp_path, "src1")
+
+    engine = make_engine(tmp_path / "multi.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    _seed_athlete(engine, other_athlete_id)
+    now = dt.datetime.now(dt.UTC)
+    with engine.connect() as conn:
+        # Minimal pre-existing data for a *different* athlete, in two representative rebuildable
+        # tables -- must be completely unaffected by rebuilding DEFAULT_ATHLETE_ID alone.
+        conn.execute(
+            day_rollup.insert().values(
+                athlete_id=other_athlete_id,
+                local_date="2020-01-01",
+                activity_count=1,
+                refreshed_at=now,
+            )
+        )
+        conn.execute(
+            activity.insert().values(
+                id="other-activity-1",
+                athlete_id=other_athlete_id,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2020-01-01",
+                sport="running",
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        other_before = _snapshot_all_rebuildable_rows(conn, other_athlete_id)
+
+        rebuild_database_via_shadow(
+            conn, archive_root, parquet_dir, tmp_path, athlete_id=DEFAULT_ATHLETE_ID
+        )
+
+        other_after = _snapshot_all_rebuildable_rows(conn, other_athlete_id)
+        mine_after = _snapshot_all_rebuildable_rows(conn, DEFAULT_ATHLETE_ID)
+
+    assert other_after == other_before
+    assert mine_after["activity"]  # the rebuilt athlete's own data did land correctly
+
+
+def test_shadow_rebuild_swaps_parquet_files_not_just_sql_rows(tmp_path: Path) -> None:
+    archive_root, parquet_dir = _build_garmin_export_archive(tmp_path, "src1")
+
+    engine = make_engine(tmp_path / "live.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        stream_row = conn.execute(
+            select(activity_metric.c.activity_id).limit(1)
+        ).fetchone()
+        assert stream_row is not None
+        parquet_path = parquet_dir / f"{DEFAULT_ATHLETE_ID}/{stream_row.activity_id}.parquet"
+        assert parquet_path.exists()
+
+        # Simulate stale content sitting at the real (deterministic) path -- the swap must
+        # overwrite it, not leave it as-is.
+        real_bytes = parquet_path.read_bytes()
+        parquet_path.write_bytes(b"stale placeholder, not a real parquet file")
+
+        rebuild_database_via_shadow(
+            conn, archive_root, parquet_dir, tmp_path, athlete_id=DEFAULT_ATHLETE_ID
+        )
+
+    assert parquet_path.read_bytes() == real_bytes

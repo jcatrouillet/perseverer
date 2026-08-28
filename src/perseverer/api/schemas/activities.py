@@ -1,4 +1,11 @@
-"""Response models for GET /activities and GET /activities/{id}."""
+"""Response models for GET /activities and GET /activities/{id}.
+
+`LapOut.avg_gap_speed_mps` is computed fresh per request (`gap.py::compute_lap_gap_speeds_mps`,
+`activities.py::get_activity`'s own wiring) from the activity's raw Parquet stream, not stored --
+same "detail-page-only, computed every request" precedent `transport_mix_flag` already uses on
+this same endpoint. `None` for a non-running activity, an activity with no stream, or a lap whose
+own slice of the stream is too short/missing a channel.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +29,9 @@ class LapOut(BaseModel):
     avg_hr: float | None
     max_hr: float | None
     avg_speed_mps: float | None
+    # m/s, SI storage convention (CLAUDE.md principle 6) -- see module docstring above and
+    # gap.py::compute_lap_gap_speeds_mps.
+    avg_gap_speed_mps: float | None
 
 
 class SplitOut(BaseModel):
@@ -128,6 +138,10 @@ class ActivitySummary(BaseModel):
     calories: float | None
     avg_hr_bpm: float | None
     max_hr_bpm: float | None
+    # Prefers the athlete's own pace-calibrated running_tss (running_load.py) over Garmin's
+    # uncalibrated fit.session.training_load_peak wherever one exists -- see
+    # routers/activities.py::TRAINING_LOAD_METRIC_KEYS. Matches what fitness_daily_rollup's own
+    # CTL/ATL/TSB aggregate already uses per activity, so this and GET /fitness never disagree.
     training_load: float | None
     # Borg CR10 effort rating (0-10, half-point resolution): fit.session.workout_rpe's raw FIT
     # value is the same scale x10 (see routers/activities.py's read of this field for the

@@ -4,11 +4,14 @@ derived tables are wiped, because parsing is a pure function over the archive.
 """
 
 import json
+import shutil
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import duckdb
-from sqlalchemy import Connection, delete, select
+from sqlalchemy import Connection, Integer, delete, select
 
 from perseverer.activity_merge import apply_activity_merge_overrides
 from perseverer.activity_trim import apply_activity_trim_overrides
@@ -21,6 +24,7 @@ from perseverer.adapters.strava_export import (
 )
 from perseverer.archive import read_raw_bytes, restore_raw_object_table
 from perseverer.bouldering_overrides import apply_bouldering_route_overrides
+from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
     activity,
     activity_metric,
@@ -28,6 +32,7 @@ from perseverer.db.schema import (
     activity_stream,
     activity_workout,
     activity_workout_step,
+    athlete,
     day_rollup,
     fitness_daily_rollup,
     health_metric_daily_rollup,
@@ -38,6 +43,7 @@ from perseverer.db.schema import (
     insight,
     lap,
     merge_decision,
+    metadata,
     period_rollup,
     raw_object,
     route_geom,
@@ -74,6 +80,7 @@ from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
 from perseverer.rollups import refresh_daily_and_period_rollups
+from perseverer.running_load import refresh_running_tss
 from perseverer.sport_override import apply_sport_overrides
 from perseverer.tcx.parser import parse_tcx
 from perseverer.weather_titles import backfill_weather_titles
@@ -108,6 +115,98 @@ _REBUILDABLE_TABLES = (
     day_rollup,
     fitness_daily_rollup,
 )
+
+# The shadow-rebuild swap (rebuild_database_via_shadow) needs the *opposite* traversal from
+# _REBUILDABLE_TABLES' own delete order -- parents before children, so a row being inserted
+# never references a FK target that doesn't exist yet on the live side. Simply reversing
+# _REBUILDABLE_TABLES is *not* sufficient: `device` sits between `activity` and `sleep_stage` in
+# the delete order, but `health_observation` (which also references `device_id`) sits further
+# along still, so a naive reversal would insert health_observation before device ever lands.
+# This list is the real topological order for the 21 tables' actual FK graph (confirmed against
+# db/schema.py directly, not assumed): device/sleep_session/health_stream/the five rollup tables
+# have no dependency on anything else in this set and can go first in any order; sleep_stage
+# needs sleep_session; activity needs device; everything else needs activity. A test
+# (test_rebuild.py) asserts this covers the exact same 21 tables as _REBUILDABLE_TABLES, so the
+# two lists can't silently drift apart if a future table is added to one and not the other.
+_SHADOW_SWAP_INSERT_ORDER = (
+    device_table,
+    sleep_session,
+    health_stream,
+    day_rollup,
+    period_rollup,
+    health_metric_daily_rollup,
+    health_metric_period_rollup,
+    fitness_daily_rollup,
+    sleep_stage,
+    activity,
+    health_observation,
+    activity_source_link,
+    activity_metric,
+    activity_stream,
+    activity_workout_step,
+    activity_workout,
+    lap,
+    split_table,
+    route_geom,
+    insight,
+    merge_decision,
+)
+
+# Five FK columns, across four tables, can't have their value copied straight from the shadow
+# database: each references another table's own surrogate `id`, and that id is either freshly
+# reassigned during this same swap (device, sleep_session -- see _swap_tables_from_shadow's own
+# docstring for why every surrogate id is reassigned rather than copied) or was never touched by
+# the swap at all (raw_object, which isn't one of the 21 rebuildable tables -- it's preserved,
+# populated identically in both databases from the same on-disk archive sidecars). Each entry
+# maps (table, column) to (the extra JOIN clauses needed, the SELECT expression to use instead
+# of a plain column copy), resolving the referenced row through its own natural/business key --
+# device's (athlete_id, manufacturer, product, serial_number), sleep_session's (athlete_id,
+# local_date, source), raw_object's (athlete_id, sha256) -- rather than its now-meaningless
+# shadow-side numeric id.
+_FK_REMAP_JOINS: dict[tuple[str, str], tuple[str, str]] = {
+    ("activity", "device_id"): (
+        'LEFT JOIN shadow_db.device AS shadow_device ON shadow_device.id = src.device_id '
+        "LEFT JOIN device AS live_device ON live_device.athlete_id = shadow_device.athlete_id "
+        "AND live_device.manufacturer = shadow_device.manufacturer "
+        "AND live_device.product = shadow_device.product "
+        "AND live_device.serial_number = shadow_device.serial_number",
+        "live_device.id",
+    ),
+    ("health_observation", "device_id"): (
+        'LEFT JOIN shadow_db.device AS shadow_ho_device ON shadow_ho_device.id = src.device_id '
+        "LEFT JOIN device AS live_ho_device "
+        "ON live_ho_device.athlete_id = shadow_ho_device.athlete_id "
+        "AND live_ho_device.manufacturer = shadow_ho_device.manufacturer "
+        "AND live_ho_device.product = shadow_ho_device.product "
+        "AND live_ho_device.serial_number = shadow_ho_device.serial_number",
+        "live_ho_device.id",
+    ),
+    ("health_observation", "raw_object_id"): (
+        "LEFT JOIN shadow_db.raw_object AS shadow_ho_raw ON shadow_ho_raw.id = src.raw_object_id "
+        "LEFT JOIN raw_object AS live_ho_raw ON live_ho_raw.athlete_id = shadow_ho_raw.athlete_id "
+        "AND live_ho_raw.sha256 = shadow_ho_raw.sha256",
+        "live_ho_raw.id",
+    ),
+    ("sleep_session", "raw_object_id"): (
+        "LEFT JOIN shadow_db.raw_object AS shadow_ss_raw ON shadow_ss_raw.id = src.raw_object_id "
+        "LEFT JOIN raw_object AS live_ss_raw ON live_ss_raw.athlete_id = shadow_ss_raw.athlete_id "
+        "AND live_ss_raw.sha256 = shadow_ss_raw.sha256",
+        "live_ss_raw.id",
+    ),
+    ("sleep_stage", "sleep_session_id"): (
+        "JOIN shadow_db.sleep_session AS shadow_sess ON shadow_sess.id = src.sleep_session_id "
+        "JOIN sleep_session AS live_sess ON live_sess.athlete_id = shadow_sess.athlete_id "
+        "AND live_sess.local_date = shadow_sess.local_date "
+        "AND live_sess.source = shadow_sess.source",
+        "live_sess.id",
+    ),
+    ("activity_source_link", "raw_object_id"): (
+        "JOIN shadow_db.raw_object AS shadow_asl_raw ON shadow_asl_raw.id = src.raw_object_id "
+        "JOIN raw_object AS live_asl_raw ON live_asl_raw.athlete_id = shadow_asl_raw.athlete_id "
+        "AND live_asl_raw.sha256 = shadow_asl_raw.sha256",
+        "live_asl_raw.id",
+    ),
+}
 
 
 def rebuild_database(
@@ -413,15 +512,21 @@ def rebuild_database(
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
     conn.commit()
     if touched_dates:
-        refresh_fitness_rollup(conn, athlete_id=athlete_id)
-        conn.commit()
-        refresh_insights(conn, athlete_id=athlete_id)
-        conn.commit()
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         conn.commit()
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
         conn.commit()
         refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
+        # After refresh_avg_gap, not before -- running_tss's rTSS formula consumes the
+        # grade-adjusted speed refresh_avg_gap just wrote.
+        refresh_running_tss(conn, athlete_id=athlete_id)
+        conn.commit()
+        # After refresh_running_tss, not before -- fitness.py's CTL/ATL input now prefers
+        # running_tss's pace-calibrated value over training_load_peak wherever one exists.
+        refresh_fitness_rollup(conn, athlete_id=athlete_id)
+        conn.commit()
+        refresh_insights(conn, athlete_id=athlete_id)
         conn.commit()
         # After apply_sport_overrides above, not before -- that call already restores any
         # previously-set emoji title from the durable override table, so this only ever does
@@ -432,15 +537,197 @@ def rebuild_database(
     return replayed
 
 
-def rebuild_database_tracked(
-    conn: Connection, archive_root: Path, parquet_dir: Path, *, athlete_id: str
+def _insert_from_shadow_sql(table: object) -> str:
+    """Builds one table's INSERT...SELECT statement for the shadow-to-live swap. Never copies an
+    *integer* column named `id`: on every table where that's the primary key, it's an
+    autoincrement surrogate assigned independently by its own database's own sequence, so the
+    same integer can already be in use by a different, unrelated live row -- confirmed the hard
+    way (a real UNIQUE constraint collision on day_rollup.id, the first time this ran against a
+    live table that already had another athlete's data in it). Left to autoincrement fresh here
+    instead. `activity` is deliberately excluded from this exclusion: its own `id` column is
+    also named `id`, but it's a content-derived *string*, stable and identical between shadow
+    and live by construction, not a per-database sequence value -- confirmed the hard way too
+    (a blanket "skip any column named id" first cut wrongly dropped it, immediately surfacing as
+    a `NOT NULL constraint failed: activity.id` on the very next insert). A handful of other
+    columns, listed in _FK_REMAP_JOINS, resolve through the referenced row's own natural key
+    instead of a straight copy, for the same reason autoincrement ids don't copy safely."""
+    all_cols: list[str] = list(table.c.keys())  # type: ignore[attr-defined]
+    insert_cols = [
+        c for c in all_cols if not (c == "id" and isinstance(table.c[c].type, Integer))  # type: ignore[attr-defined]
+    ]
+    joins: list[str] = []
+    select_exprs: list[str] = []
+    for col in insert_cols:
+        remap = _FK_REMAP_JOINS.get((table.name, col))  # type: ignore[attr-defined]
+        if remap is None:
+            select_exprs.append(f"src.{col}")
+        else:
+            join_sql, select_expr = remap
+            joins.append(join_sql)
+            select_exprs.append(select_expr)
+    cols_sql = ", ".join(insert_cols)
+    select_sql = ", ".join(select_exprs)
+    join_sql = " ".join(joins)
+    return (
+        f'INSERT INTO "{table.name}" ({cols_sql}) '  # type: ignore[attr-defined]
+        f'SELECT {select_sql} FROM shadow_db."{table.name}" AS src '  # type: ignore[attr-defined]
+        f"{join_sql} WHERE src.athlete_id = ?"
+    )
+
+
+def _swap_tables_from_shadow(live_db_path: Path, shadow_db_path: Path, *, athlete_id: str) -> None:
+    """The one moment a shadow rebuild ever touches the live tables: a single transaction that
+    deletes this athlete's rows from every rebuildable table and replaces them with the shadow
+    database's freshly-replayed rows for the same athlete. Deletes in `_REBUILDABLE_TABLES`' own
+    children-before-parents order (same order the in-place wipe already uses); inserts in
+    `_SHADOW_SWAP_INSERT_ORDER` (the real topological order for this FK graph -- see that
+    tuple's own comment for why simply reversing the delete order isn't sufficient). Column
+    lists are enumerated explicitly on both sides rather than `SELECT *`, so a live/shadow
+    column-order mismatch can never silently corrupt data -- see `_insert_from_shadow_sql`.
+
+    Opens its own brand-new `sqlite3.connect(live_db_path)` rather than reusing the SQLAlchemy
+    `Connection` the rest of this module threads around -- confirmed necessary the hard way:
+    issuing ATTACH/DETACH through `Connection.connection.dbapi_connection` (SQLAlchemy's own
+    pooled DBAPI handle) intermittently left SQLite unable to DETACH afterwards ("database
+    shadow_db is locked"), for reasons that didn't reduce to any single cause worth chasing
+    further -- a fully independent connection, opened and closed only for this one swap, sidesteps
+    whatever residual pooled-connection state was responsible. This is safe: SQLite's WAL mode is
+    explicitly designed for multiple concurrent connections to the same file (verified directly,
+    not assumed, before this function was written -- see the module-level note on the empirical
+    atomicity check), so a second connection existing alongside the caller's own `conn` for the
+    handful of statements this needs is exactly the supported case, not a workaround.
+    """
+    # True autocommit at the Python driver level (isolation_level=None), explicit BEGIN/COMMIT
+    # SQL below, and `cached_statements=0` -- confirmed empirically (not assumed) that DETACH
+    # otherwise fails with "database shadow_db is locked" once this loop issues around 20+
+    # distinct SQL texts against the attach: Python's sqlite3 module caches prepared statements
+    # per connection (default up to 128), and a cached statement referencing shadow_db counts,
+    # from SQLite's perspective, as the database still being in use, so DETACH refuses until
+    # every such statement is finalized. Disabling the cache finalizes each statement right
+    # after it runs instead of holding it for reuse -- irrelevant here anyway, since none of
+    # these 21x2 statements repeat within a single call.
+    raw = sqlite3.connect(live_db_path, isolation_level=None, cached_statements=0)
+    try:
+        raw.execute("PRAGMA foreign_keys=ON")
+        raw.execute(f"ATTACH DATABASE '{shadow_db_path.as_posix()}' AS shadow_db")
+        try:
+            raw.execute("BEGIN")
+            # metric_definition is a shared, growing catalog -- never wiped/replayed (not one of
+            # the 21 rebuildable tables), but the shadow's own replay may have registered a new
+            # metric key nothing on the live side has ever seen yet (confirmed the hard way: a
+            # real FOREIGN KEY failure on activity_metric.metric_key without this). Merged in
+            # additively, matching this project's own "additive schema evolution" principle --
+            # never overwrites a live row, only adds ones missing (keyed by metric_key itself, a
+            # natural key, not a per-database surrogate id, so there's nothing to remap here).
+            raw.execute(
+                "INSERT OR IGNORE INTO metric_definition SELECT * FROM shadow_db.metric_definition"
+            )
+            for table in _REBUILDABLE_TABLES:
+                raw.execute(f'DELETE FROM "{table.name}" WHERE athlete_id = ?', (athlete_id,))
+            for table in _SHADOW_SWAP_INSERT_ORDER:
+                raw.execute(_insert_from_shadow_sql(table), (athlete_id,))
+            raw.execute("COMMIT")
+        finally:
+            raw.execute("DETACH DATABASE shadow_db")
+    finally:
+        raw.close()
+
+
+def _swap_parquet_from_shadow(shadow_parquet_dir: Path, parquet_dir: Path) -> None:
+    """Per-file atomic replace of every file the shadow rebuild wrote, mirroring
+    `_swap_tables_from_shadow`'s all-or-nothing intent as closely as a filesystem allows: each
+    individual `os.replace` is atomic (a concurrent DuckDB `read_parquet()` -- stream_query.py,
+    activity_trim.py -- never sees a half-written file), even though the whole directory tree
+    isn't swapped in one atomic step the way the SQL side is. Only ever called after
+    `_swap_tables_from_shadow` has already committed. Walks every file already isolated under
+    the athlete's own parquet subtree (streams.py::write_activity_stream/write_health_stream
+    both write under `<athlete_id>/...`), so this only ever touches that one athlete's files."""
+    for shadow_file in shadow_parquet_dir.rglob("*"):
+        if not shadow_file.is_file():
+            continue
+        real_file = parquet_dir / shadow_file.relative_to(shadow_parquet_dir)
+        real_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(shadow_file), str(real_file))
+
+
+def rebuild_database_via_shadow(
+    conn: Connection, archive_root: Path, parquet_dir: Path, data_dir: Path, *, athlete_id: str
 ) -> int:
-    """Same as rebuild_database above, wrapped with an `ingest_run` row (source="rebuild") so an
-    API-triggered rebuild (api/routers/settings.py) can be polled for status the same way
-    sync_garmin_connect's own run already can — mirrors that function's own try/except-and-
-    record pattern (adapters/garmin_connect.py). `sync rebuild` (cli.py) keeps calling the plain
-    rebuild_database directly; it already prints its result synchronously to the terminal, no
-    bookkeeping needed there.
+    """Same end result as `rebuild_database`, but the live tables are never wiped in place --
+    every raw object is replayed into a throwaway shadow database first, and only once that
+    replay succeeds does a short, atomic swap (`_swap_tables_from_shadow`) replace the live
+    athlete's rows with the shadow's. If the replay raises or is killed at any point, the live
+    tables were never opened for writing at all: nothing to roll back, no user-facing impact.
+
+    This exists because a real rebuild on bercy once hung for 5+ hours *after* wiping the live
+    tables, leaving the whole app reading broken/incomplete data for the entire outage (and,
+    separately, an interrupted rebuild during this same investigation left a local dev database
+    in the identical state) -- see rebuild.py's own module history / the ADR for the incident.
+    The replay itself keeps its full existing risk profile (still slow, still capable of
+    hanging) -- what changes is that none of that is ever visible to anything reading the live
+    database, because the live tables are never touched until the replay has already fully
+    succeeded.
+    """
+    shadow_dir = data_dir / "tmp" / f"rebuild_shadow_{uuid4().hex}"
+    shadow_db_path = shadow_dir / "shadow.db"
+    shadow_parquet_dir = shadow_dir / "parquet"
+    shadow_parquet_dir.mkdir(parents=True, exist_ok=True)
+
+    live_db_path = Path(str(conn.engine.url.database))
+
+    # `raw_object` isn't one of the 21 rebuildable tables -- in real production use it's already
+    # populated on the live side from ordinary ingestion (raw-first: every vendor fetch archives
+    # here regardless of any rebuild), long before a rebuild is ever triggered. But nothing
+    # actually guarantees that at this point (confirmed the hard way: a rebuild against a
+    # database that had never been touched otherwise left `activity_source_link`'s raw_object_id
+    # remap with nothing to match, silently dropping every row via its INNER JOIN), so this is
+    # called here defensively too. Already idempotent (matches on sha256, see its own docstring)
+    # -- a no-op in the normal case where the live raw_object table is already current.
+    restore_raw_object_table(conn, archive_root, athlete_id=athlete_id)
+    conn.commit()
+
+    shadow_engine = make_engine(shadow_db_path)
+    try:
+        metadata.create_all(shadow_engine)
+        with shadow_engine.connect() as shadow_conn:
+            # The shadow db needs its own `athlete` row before any FK-constrained insert can
+            # succeed -- metric_definition, by contrast, self-populates as ingestion calls
+            # get_or_register_metric, exactly like a real fresh install does.
+            athlete_row = conn.execute(
+                select(athlete).where(athlete.c.id == athlete_id)
+            ).mappings().one()
+            # Releases this read's own implicit transaction/snapshot on `conn` immediately,
+            # rather than holding it open for however long the replay below takes -- otherwise
+            # `conn`'s next query after this function returns would still see the pre-swap state
+            # (correct per WAL snapshot isolation, but not what any caller here wants).
+            conn.commit()
+            shadow_conn.execute(athlete.insert().values(dict(athlete_row)))
+            shadow_conn.commit()
+
+            replayed = rebuild_database(
+                shadow_conn, archive_root, shadow_parquet_dir, athlete_id=athlete_id
+            )
+
+        shadow_engine.dispose()
+        _swap_tables_from_shadow(live_db_path, shadow_db_path, athlete_id=athlete_id)
+        _swap_parquet_from_shadow(shadow_parquet_dir, parquet_dir)
+        return replayed
+    finally:
+        shadow_engine.dispose()
+        shutil.rmtree(shadow_dir, ignore_errors=True)
+
+
+def rebuild_database_tracked(
+    conn: Connection, archive_root: Path, parquet_dir: Path, data_dir: Path, *, athlete_id: str
+) -> int:
+    """Same as rebuild_database_via_shadow above, wrapped with an `ingest_run` row
+    (source="rebuild") so an API-triggered rebuild (api/routers/settings.py) can be polled for
+    status the same way sync_garmin_connect's own run already can — mirrors that function's own
+    try/except-and-record pattern (adapters/garmin_connect.py). `sync rebuild` (cli.py) uses this
+    same shadow path too now (not the plain in-place `rebuild_database`) — a rebuild run directly
+    on a box where perseverer-api/perseverer-worker are already live (bercy, always) hits the
+    exact same "live tables wiped mid-replay" risk this function's shadow approach exists to
+    avoid, whether it's triggered from the CLI or the Settings page.
     """
     started_at = datetime.now(UTC)
     result = conn.execute(
@@ -459,7 +746,9 @@ def rebuild_database_tracked(
     conn.commit()
 
     try:
-        replayed = rebuild_database(conn, archive_root, parquet_dir, athlete_id=athlete_id)
+        replayed = rebuild_database_via_shadow(
+            conn, archive_root, parquet_dir, data_dir, athlete_id=athlete_id
+        )
     except Exception as e:
         conn.execute(
             ingest_run.update()

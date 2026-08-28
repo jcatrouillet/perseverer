@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime as dt
 import io
 import json
+import subprocess
 import zipfile
 
 import pytest
@@ -16,8 +17,18 @@ from sqlalchemy import Connection, Engine, select
 
 import perseverer.api.routers.settings as settings_router
 from perseverer.config import Settings
-from perseverer.db.schema import athlete_hr_zone_config, ingest_run
+from perseverer.db.schema import (
+    activity_metric,
+    athlete_hr_zone_config,
+    athlete_running_load_config,
+    fitness_daily_rollup,
+    ingest_run,
+)
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.gap import AVG_GAP_METRIC_KEY
+from perseverer.metrics.registry import get_or_register_metric
+
+from .conftest import seed_activity
 
 
 def test_get_returns_all_null_when_unconfigured(
@@ -117,6 +128,129 @@ def test_put_rejects_threshold_hr_above_max_hr(
 def test_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/settings/hr-zones").status_code in (401, 403)
     assert client.put("/api/v1/settings/hr-zones", json={}).status_code in (401, 403)
+
+
+# --- GET/PUT /settings/running-load --------------------------------------------------------
+
+
+def test_running_load_get_returns_null_when_unconfigured(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/settings/running-load", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {"threshold_pace_sec_per_km": None}
+
+
+def test_running_load_put_stores_and_returns_the_value(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    r = client.put(
+        "/api/v1/settings/running-load",
+        json={"threshold_pace_sec_per_km": 308.0},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json() == {"threshold_pace_sec_per_km": 308.0}
+
+    with engine.connect() as conn:
+        row = conn.execute(select(athlete_running_load_config)).fetchone()
+    assert row is not None
+    assert row.threshold_pace_sec_per_km == 308.0
+
+
+def test_running_load_put_upserts_a_second_time_rather_than_duplicating(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    client.put(
+        "/api/v1/settings/running-load",
+        json={"threshold_pace_sec_per_km": 308.0},
+        headers=auth_headers,
+    )
+    client.put(
+        "/api/v1/settings/running-load",
+        json={"threshold_pace_sec_per_km": 300.0},
+        headers=auth_headers,
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(select(athlete_running_load_config)).fetchall()
+    assert len(rows) == 1
+    assert rows[0].threshold_pace_sec_per_km == 300.0
+
+
+def test_running_load_get_after_put_reflects_the_stored_config(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    client.put(
+        "/api/v1/settings/running-load",
+        json={"threshold_pace_sec_per_km": 300.0},
+        headers=auth_headers,
+    )
+    r = client.get("/api/v1/settings/running-load", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["threshold_pace_sec_per_km"] == 300.0
+
+
+def test_running_load_put_rejects_non_positive_value(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        "/api/v1/settings/running-load",
+        json={"threshold_pace_sec_per_km": 0.0},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+
+
+def test_running_load_put_immediately_refreshes_the_fitness_rollup(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """Saving a threshold pace must not look like a no-op until the next sync -- see
+    api/routers/settings.py's own module docstring."""
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="run1", local_date="2025-06-01", moving_duration_s=3600.0
+        )
+        get_or_register_metric(
+            conn,
+            metric_key=AVG_GAP_METRIC_KEY,
+            source="perseverer",
+            display_name="Average Grade Adjusted Pace",
+            unit_si="m/s",
+            category="performance",
+            value_type="numeric",
+        )
+        conn.execute(
+            activity_metric.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="run1",
+                metric_key=AVG_GAP_METRIC_KEY,
+                value_num=1000.0 / 300.0,  # exactly 5:00/km
+                source="perseverer",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+
+    r = client.put(
+        "/api/v1/settings/running-load",
+        json={"threshold_pace_sec_per_km": 300.0},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(fitness_daily_rollup).where(
+                fitness_daily_rollup.c.local_date == "2025-06-01"
+            )
+        ).fetchone()
+    assert row is not None
+    assert abs(row.training_load - 100.0) < 1e-9  # 1h exactly at threshold -> rTSS 100
+
+
+def test_running_load_endpoints_require_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/settings/running-load").status_code in (401, 403)
+    assert client.put("/api/v1/settings/running-load", json={}).status_code in (401, 403)
 
 
 # --- GET /settings/garmin/status ----------------------------------------------------------
@@ -310,24 +444,44 @@ def test_garmin_sync_trigger_runs_in_background_and_writes_ingest_run(
     assert row.status == "success"
 
 
-# --- POST /settings/rebuild -- runs the real rebuild_database_tracked against an empty local
-# archive; no Garmin/network access involved at all. -------------------------------------------
+# --- POST /settings/rebuild -- launches `sync rebuild --tracked` as a standalone subprocess
+# (see post_rebuild's own docstring for why: a real rebuild once hung for hours sharing a
+# connection with this same live multi-worker api process). `subprocess.Popen` is mocked here so
+# the test proves the endpoint delegates with the right argv, without actually spawning a real
+# rebuild -- rebuild_database_tracked's own ingest_run bookkeeping is already covered end-to-end
+# by tests/test_rebuild.py, so re-proving it here would just duplicate that coverage across a
+# process boundary this test suite has no business crossing. -----------------------------------
 
 
-def test_rebuild_trigger_writes_ingest_run(
-    client: TestClient, auth_headers: dict[str, str], test_settings: Settings, engine: Engine
+def test_rebuild_trigger_launches_a_tracked_rebuild_subprocess(
+    client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    test_settings.raw_archive_dir.mkdir(parents=True, exist_ok=True)
-    test_settings.parquet_dir.mkdir(parents=True, exist_ok=True)
+    calls: list[list[str]] = []
+
+    class FakePopen:
+        def __init__(self, argv: list[str], **kw: object) -> None:
+            calls.append(argv)
+
+    # settings.py does `import subprocess` (the whole module) and calls `subprocess.Popen`, so
+    # patching the real subprocess module's own attribute -- not reaching through
+    # settings_router's re-export of it -- is what actually takes effect, and is also what mypy's
+    # no-implicit-reexport rule wants (module attributes aren't part of a module's public API).
+    monkeypatch.setattr(subprocess, "Popen", FakePopen)
 
     r = client.post("/api/v1/settings/rebuild", headers=auth_headers)
     assert r.status_code == 200
     assert r.json() == {"triggered": True}
 
-    with engine.connect() as conn:
-        row = conn.execute(select(ingest_run).where(ingest_run.c.source == "rebuild")).fetchone()
-    assert row is not None
-    assert row.status == "success"
+    assert len(calls) == 1
+    argv = calls[0]
+    assert argv[1:] == [
+        "-m",
+        "perseverer.cli",
+        "rebuild",
+        "--tracked",
+        "--athlete-id",
+        DEFAULT_ATHLETE_ID,
+    ]
 
 
 # --- POST /settings/import/bulk-export -- a real (minimal) Strava export zip, uploaded via

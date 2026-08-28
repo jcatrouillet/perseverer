@@ -1,4 +1,4 @@
-.settings-hr-zones__form {
+.settings-form {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
@@ -6,7 +6,7 @@
   margin: var(--space-3) 0;
 }
 
-.settings-hr-zones__form label {
+.settings-form label {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -14,16 +14,16 @@
   color: var(--color-text-muted);
 }
 
-.settings-hr-zones__form input {
+.settings-form input {
   width: 9ch;
 }
 
-.settings-hr-zones__error {
+.settings-form__error {
   color: var(--color-danger);
   font-size: 13px;
 }
 
-.settings-hr-zones__saved {
+.settings-form__saved {
   color: var(--color-success);
   font-size: 13px;
 }

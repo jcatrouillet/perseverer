@@ -20,6 +20,7 @@ from perseverer.db.schema import (
 )
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.fitness import refresh_fitness_rollup
+from perseverer.running_load import RUNNING_TSS_METRIC_KEY
 
 _METRIC_KEY = "fit.session.training_load_peak"
 
@@ -45,6 +46,16 @@ def _engine(tmp_path: Path) -> Engine:
                 value_type="numeric",
                 first_seen_at=dt.datetime.now(dt.UTC),
                 first_seen_source="fit_folder",
+            )
+        )
+        conn.execute(
+            metric_definition.insert().values(
+                metric_key=RUNNING_TSS_METRIC_KEY,
+                display_name=RUNNING_TSS_METRIC_KEY,
+                category="performance",
+                value_type="numeric",
+                first_seen_at=dt.datetime.now(dt.UTC),
+                first_seen_source="perseverer",
             )
         )
         conn.commit()
@@ -226,6 +237,51 @@ def test_same_activity_multiple_sources_falls_back_to_max_when_primary_source_mi
         ).fetchone()
     assert row is not None
     assert row.training_load == 40.0
+
+
+def test_running_tss_overrides_training_load_peak_when_present(tmp_path: Path) -> None:
+    """An activity with both a training_load_peak row (Garmin's uncalibrated number) and a
+    running_tss row (this athlete's own pace-calibrated rTSS) uses the rTSS value -- see
+    fitness.py's own module docstring for why."""
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_activity(conn, activity_id="a0", local_date="2025-06-01")
+        _add_load(conn, activity_id="a0", source="fit_folder", value=264.0)
+        conn.execute(
+            activity_metric.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a0",
+                metric_key=RUNNING_TSS_METRIC_KEY,
+                value_num=140.0,
+                source="perseverer",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+        refresh_fitness_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+        row = conn.execute(
+            select(fitness_daily_rollup).where(fitness_daily_rollup.c.local_date == "2025-06-01")
+        ).fetchone()
+    assert row is not None
+    assert row.training_load == 140.0
+
+
+def test_training_load_peak_used_unchanged_when_no_running_tss_row(tmp_path: Path) -> None:
+    """No running_tss row at all (no threshold pace configured yet) -- behavior is byte-
+    identical to before running_tss existed, guarding backward compatibility."""
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_activity(conn, activity_id="a0", local_date="2025-06-01")
+        _add_load(conn, activity_id="a0", source="fit_folder", value=264.0)
+        conn.commit()
+        refresh_fitness_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+        row = conn.execute(
+            select(fitness_daily_rollup).where(fitness_daily_rollup.c.local_date == "2025-06-01")
+        ).fetchone()
+    assert row is not None
+    assert row.training_load == 264.0
 
 
 def test_refresh_is_idempotent_full_recompute_no_duplicate_rows(tmp_path: Path) -> None:

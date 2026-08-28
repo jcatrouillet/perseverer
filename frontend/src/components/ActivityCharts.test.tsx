@@ -45,6 +45,7 @@ function lap(start_time_utc: string, index: number): LapOut {
     avg_hr: 130,
     max_hr: 145,
     avg_speed_mps: 3.3,
+    avg_gap_speed_mps: null,
   };
 }
 

@@ -36,6 +36,13 @@ export function formatPaceMinPerKm(durationS: number, distanceM: number): string
   return formatMinPerKm(durationS / 60 / (distanceM / 1000));
 }
 
+/** m/s -> min/km, for the handful of places that read a server-computed `avg_gap_speed_mps`
+ * (whole-activity via GET .../comparisons, per-lap via GET /activities/{id}'s own laps -- see
+ * gap.py) and need to format it the same way as any other pace. */
+export function gapPaceMinPerKm(avgGapSpeedMps: number): number {
+  return 1000 / (avgGapSpeedMps * 60);
+}
+
 // Foot sports read naturally as a pace (min/km); wheeled/oared ones read naturally as a speed
 // (km/h) -- matching how Garmin Connect itself splits these, not an arbitrary per-app choice.
 // Shared by ActivityCard's summary pace/speed chip and ActivityCharts' per-second stream panel,

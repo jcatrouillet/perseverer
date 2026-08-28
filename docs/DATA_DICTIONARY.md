@@ -268,10 +268,12 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
   `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md`. Week starts Monday (confirmed
   against the user's Garmin Connect account, for exact reconciliation).
 - **`fitness_daily_rollup`** (Phase 6) — one row per `(athlete_id, local_date)`:
-  `training_load` (the deduplicated daily sum of `fit.session.training_load_peak`), and the
-  derived `ctl`/`atl`/`tsb` from an independently-computed Coggan/Banister EWMA — see
+  `training_load` (the deduplicated daily sum of per-activity load), and the derived
+  `ctl`/`atl`/`tsb` from an independently-computed Coggan/Banister EWMA — see
   `fitness.py::refresh_fitness_rollup`. Garmin's own exports have no CTL/ATL/TSB triplet at
-  all, so this is genuinely independent, not a mirror of a Garmin-provided value.
+  all, so this is genuinely independent, not a mirror of a Garmin-provided value. Per-activity
+  load prefers `perseverer.performance.running_tss` (see "Running TSS" below) when one exists,
+  falling back to `fit.session.training_load_peak` otherwise — see that section for why.
 
 ### Notes (Phase 3)
 
@@ -531,6 +533,21 @@ below). `gap.py::refresh_avg_gap` is a full delete-and-reinsert per athlete per 
 precedent as `performance.py::refresh_vdot`/`pace_bands.py::refresh_pace_bands` (called alongside
 both at every ingest entry point, and available standalone via `sync backfill-avg-gap`).
 
+**Per-lap GAP, served by the API instead of computed in the browser**: `GET /activities/{id}`'s
+own `laps` array carries an `avg_gap_speed_mps` per lap (`LapOut.avg_gap_speed_mps`), computed
+fresh per request (not stored) by `gap.py::compute_lap_gap_speeds_mps` — it reuses
+`compute_avg_gap_speed_mps` unchanged, just called once per lap on a slice of the same Parquet
+stream (read via DuckDB's `epoch(timestamp_utc)`, matching `transport_mix.py`'s own request-time
+Parquet-read convention, so there's no `datetime`-tzinfo mismatch to reconcile against
+`lap.start_time_utc`). A lap's own boundary is the next lap's `start_time_utc`, or the stream's
+last sample for the final lap. This replaced a client-side computation
+(`frontend/src/gap.ts::computeLapGapsMinPerKm`, since removed) that approximated each lap's grade
+from a single net-elevation-change-over-the-whole-lap, rather than this function's real distance-
+weighted average over every sample in the lap — so the API's own number is more accurate than
+what the frontend used to show, not just relocated. The frontend's Intervals table
+(`ActivityDetailPage.tsx`) now reads this field directly instead of computing its own, and any
+headless/scheduled caller can read the same per-interval GAP without rendering a page.
+
 `GET /activities/{id}/comparisons` (`api/routers/activities.py::get_activity_comparisons`) is a
 new endpoint for the activity detail page's "Similar runs from here" section: the 10 most recent
 *other* same-sport activities within ±15% of this one's own distance (`_COMPARISON_DISTANCE_
@@ -551,6 +568,37 @@ the Charts section, gated on `isRunningSport` like the existing per-activity ins
 current activity is shown as its own highlighted first row (its GAP/cadence read from the
 already-loaded `ActivityDetail.metrics` array, not a second request) so its own numbers sit
 directly alongside the 10 comparison runs.
+
+## Running TSS: a pace-calibrated training-load input for Fitness & Form
+
+Investigation into why Perseverer's CTL/Form read consistently 1.8x-3x higher than
+intervals.icu's for the same real training found the cause: `fitness_daily_rollup`'s only input
+was Garmin's own `fit.session.training_load_peak` (Firstbeat's proprietary EPOC/HR-based number),
+which was never calibrated to the "100 = one hour at threshold pace" Coggan TSS convention every
+other tool in the sport (TrainingPeaks, intervals.icu) uses — the EWMA math itself was already
+correct. `running_load.py` closes that gap for running specifically:
+
+- **`athlete_running_load_config`** — one row per athlete (upsert, mirrors
+  `athlete_hr_zone_config`'s own shape/contract exactly): `threshold_pace_sec_per_km`, the
+  athlete's own configured threshold pace. Null (the default) means "not configured yet".
+- New `activity_metric` key **`perseverer.performance.running_tss`** (`source="perseverer"`) —
+  one value per `sport == "running"` activity, computed by `running_load.py::compute_running_tss`
+  from the existing `perseverer.performance.avg_gap_speed_mps` metric (`gap.py::refresh_avg_gap`
+  — reused, not recomputed: no new Parquet/stream access) and the activity's own
+  `moving_duration_s`, using the standard rTSS formula `duration_hours * IF^2 * 100` where
+  `IF = avg_gap_speed_mps / threshold_speed_mps`. Full delete-and-reinsert per athlete per run,
+  same precedent as `refresh_vdot`/`refresh_pace_bands`/`refresh_avg_gap` (all four now run in
+  that dependency order at every ingest entry point, since this one consumes avg-GAP's output).
+  With no configured threshold pace, this is a no-op — `fitness.py` then falls back to
+  `training_load_peak` for every activity, byte-identical to before this feature existed.
+- `fitness.py::refresh_fitness_rollup` prefers a `running_tss` row per activity when one exists,
+  falling back to `training_load_peak` otherwise (any non-running sport, or a running activity
+  predating threshold-pace configuration) — see that module's own docstring.
+- `GET`/`PUT /settings/running-load` (mirrors `/settings/hr-zones`) lets the athlete set their
+  threshold pace from the frontend Settings page ("Running training load" card, `mm:ss`/km
+  input). Unlike the hr-zones PUT, this one also immediately re-runs `refresh_running_tss` →
+  `refresh_fitness_rollup` → `refresh_insights` before returning, so saving a threshold pace
+  updates CTL/TSB right away rather than waiting for the next sync.
 
 Each record's `scale_data` sub-object carries ~24 fields; the sibling project's own extraction only
 uses 9 of them. `parse_eufy_scale_reading` generically flattens **every** scalar `scale_data` field

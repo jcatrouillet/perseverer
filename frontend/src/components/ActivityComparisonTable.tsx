@@ -9,17 +9,13 @@ import { Link } from "wouter";
 
 import type { ActivityComparisonsOut, ActivityDetail } from "../api/types";
 import { metricValue } from "../activityMetrics";
-import { effectiveDurationS, formatMinPerKm, isPaceSport } from "../runningStats";
+import { effectiveDurationS, formatMinPerKm, gapPaceMinPerKm, isPaceSport } from "../runningStats";
 
 // Mirrors gap.py::AVG_GAP_METRIC_KEY and routers/activities.py::CADENCE_METRIC_KEY exactly --
 // duplicated string literals, not a shared constant module, matching how ActivityStatsGrid.tsx
 // already reads every other fit.session.* key directly (ADR 0012's cross-module precedent).
 const AVG_GAP_METRIC_KEY = "perseverer.performance.avg_gap_speed_mps";
 const CADENCE_METRIC_KEY = "fit.session.avg_running_cadence";
-
-function gapPaceMinPerKm(avgGapSpeedMps: number): number {
-  return 1000 / (avgGapSpeedMps * 60);
-}
 
 interface ComparisonRow {
   id: string;

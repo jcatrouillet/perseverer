@@ -787,6 +787,27 @@ the current values for the other two alongside it.
 
 **Response `200`:** `HrZoneConfigOut`.
 
+### `GET /settings/running-load`
+
+The athlete's configured running threshold pace — the calibration constant behind
+`perseverer.performance.running_tss`, a pace-based training-load input `fitness_daily_rollup`'s
+CTL/ATL/TSB prefers over Garmin's own uncalibrated `training_load_peak` for running (see
+`docs/DATA_DICTIONARY.md`'s "Running TSS" section for why). `null` means not configured yet —
+Fitness & Form keeps using Garmin's own number for every activity in that case.
+
+**Response `200`:** `RunningLoadConfigOut` — `threshold_pace_sec_per_km` (number, nullable).
+
+### `PUT /settings/running-load`
+
+Sets the athlete's threshold pace. Unlike `PUT /settings/hr-zones`, this also immediately
+recomputes `running_tss`/`fitness_daily_rollup`/insights for the athlete before returning, so
+CTL/ATL/TSB reflect the new pace right away rather than waiting for the next sync.
+
+**Request body** (`RunningLoadConfigIn`): `threshold_pace_sec_per_km` — `number, nullable`,
+optional, must be positive if given.
+
+**Response `200`:** `RunningLoadConfigOut`.
+
 ### `GET /settings/garmin/status`
 
 Garmin Connect connection status — a token store presence/age check (no network call to Garmin
@@ -1009,6 +1030,7 @@ Returned by `GET /activities/{id}`.
 | `lap_index` | integer (0-based) |
 | `start_time_utc` | string (date-time) |
 | `duration_s`, `moving_duration_s`, `distance_m`, `avg_hr`, `max_hr`, `avg_speed_mps` | number, nullable |
+| `avg_gap_speed_mps` | number, nullable — grade-adjusted average speed (m/s) for this lap, computed fresh per request from the activity's raw stream (`gap.py::compute_lap_gap_speeds_mps`), not stored. `null` for a non-running activity, an activity with no stream, or a lap whose own slice of the stream is too short/missing altitude or distance data. This is the same value the `avg_gap_speed_mps` field elsewhere in this API already reports at whole-activity granularity — the Intervals table on the frontend reads it from here rather than computing it client-side, so a headless caller gets the identical number. |
 
 ### SplitOut
 

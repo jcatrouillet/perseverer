@@ -47,6 +47,8 @@ import type {
   Page,
   PeriodCalendarResponse,
   RevokeShareOut,
+  RunningLoadConfigIn,
+  RunningLoadConfigOut,
   ShareLinkOut,
   SleepSessionOut,
   SplitOut,
@@ -679,6 +681,32 @@ export function useSetHrZoneConfig() {
     mutationFn: (body: HrZoneConfigIn) => apiPut<HrZoneConfigOut>("/api/v1/settings/hr-zones", body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["hr-zone-config"] });
+    },
+  });
+}
+
+/** An athlete's own configured running threshold pace (see running_load.py's own docstring) --
+ * the calibration constant behind the running-specific rTSS that Fitness & Form's CTL/ATL now
+ * prefers over Garmin's own training_load_peak. */
+export function useRunningLoadConfig() {
+  return useQuery({
+    queryKey: ["running-load-config"],
+    queryFn: () => apiGet<RunningLoadConfigOut>("/api/v1/settings/running-load"),
+  });
+}
+
+export function useSetRunningLoadConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RunningLoadConfigIn) =>
+      apiPut<RunningLoadConfigOut>("/api/v1/settings/running-load", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["running-load-config"] });
+      // The PUT itself recomputes fitness_daily_rollup/insights server-side immediately (see
+      // api/routers/settings.py) -- invalidate here so any Fitness & Form view already open
+      // picks up the new CTL/ATL/TSB without a manual refresh.
+      void queryClient.invalidateQueries({ queryKey: ["fitness"] });
+      void queryClient.invalidateQueries({ queryKey: ["insights"] });
     },
   });
 }

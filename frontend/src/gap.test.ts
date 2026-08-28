@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  computeLapGapsMinPerKm,
-  gapSeriesMinPerKm,
-  gradeAdjustedPaceMinPerKm,
-  type LapForGap,
-} from "./gap";
+import { gapSeriesMinPerKm, gradeAdjustedPaceMinPerKm } from "./gap";
 
 describe("gradeAdjustedPaceMinPerKm", () => {
   it("returns the actual pace unchanged on flat ground", () => {
@@ -107,91 +102,5 @@ describe("gapSeriesMinPerKm", () => {
   });
 });
 
-describe("computeLapGapsMinPerKm", () => {
-  const streamStartTimeUtc = "2024-01-01T00:00:00Z";
-
-  // Two 1km/5min laps back to back: flat for the first, a steady 5% climb (0m -> 50m) for the
-  // second. 30s-spaced samples, matching gapSeriesMinPerKm's own buildStream style above.
-  function buildTwoLapStream() {
-    const rawElapsedS: number[] = [];
-    const altitudeM: number[] = [];
-    for (let t = 0; t <= 600; t += 30) {
-      rawElapsedS.push(t);
-      altitudeM.push(t <= 300 ? 0 : ((t - 300) / 300) * 50);
-    }
-    const laps: LapForGap[] = [
-      {
-        start_time_utc: "2024-01-01T00:00:00Z",
-        duration_s: 300,
-        moving_duration_s: null,
-        distance_m: 1000,
-      },
-      {
-        start_time_utc: "2024-01-01T00:05:00Z",
-        duration_s: 300,
-        moving_duration_s: null,
-        distance_m: 1000,
-      },
-    ];
-    return { laps, rawElapsedS, altitudeM };
-  }
-
-  it("reads a flat lap's GAP as its actual pace", () => {
-    const { laps, rawElapsedS, altitudeM } = buildTwoLapStream();
-    const gaps = computeLapGapsMinPerKm(laps, streamStartTimeUtc, rawElapsedS, altitudeM);
-    expect(gaps[0]).toBeCloseTo(5, 5);
-  });
-
-  it("reads an uphill lap's GAP as faster than its actual pace, matching the known 5% grade", () => {
-    const { laps, rawElapsedS, altitudeM } = buildTwoLapStream();
-    const gaps = computeLapGapsMinPerKm(laps, streamStartTimeUtc, rawElapsedS, altitudeM);
-    expect(gaps[1]).toBeLessThan(5);
-    expect(gaps[1]).toBeCloseTo(gradeAdjustedPaceMinPerKm(5, 0.05), 3);
-  });
-
-  it("uses the next lap's start as the current lap's end boundary, not summed durations", () => {
-    // A lap that "paused" mid-interval (duration_s far exceeds moving_duration_s) must not throw
-    // off which stream samples the *next* lap's altitude lookup uses -- the boundary comes from
-    // start_time_utc, independent of either duration field.
-    const { rawElapsedS, altitudeM } = buildTwoLapStream();
-    const pausedLaps: LapForGap[] = [
-      {
-        start_time_utc: "2024-01-01T00:00:00Z",
-        duration_s: 300,
-        moving_duration_s: 60, // as if 240s of the lap were a device pause
-        distance_m: 1000,
-      },
-      {
-        start_time_utc: "2024-01-01T00:05:00Z",
-        duration_s: 300,
-        moving_duration_s: null,
-        distance_m: 1000,
-      },
-    ];
-    const gaps = computeLapGapsMinPerKm(pausedLaps, streamStartTimeUtc, rawElapsedS, altitudeM);
-    // Lap 2 still reads as the same known 5% climb regardless of lap 1's pause.
-    expect(gaps[1]).toBeCloseTo(gradeAdjustedPaceMinPerKm(5, 0.05), 3);
-  });
-
-  it("is null wherever there is no altitude channel", () => {
-    const { laps, rawElapsedS } = buildTwoLapStream();
-    const gaps = computeLapGapsMinPerKm(laps, streamStartTimeUtc, rawElapsedS, undefined);
-    expect(gaps.every((v) => v == null)).toBe(true);
-  });
-
-  it("is null for a lap missing distance or duration", () => {
-    const { rawElapsedS, altitudeM } = buildTwoLapStream();
-    const laps: LapForGap[] = [
-      { start_time_utc: "2024-01-01T00:00:00Z", duration_s: null, moving_duration_s: null, distance_m: 1000 },
-      { start_time_utc: "2024-01-01T00:05:00Z", duration_s: 300, moving_duration_s: null, distance_m: null },
-    ];
-    const gaps = computeLapGapsMinPerKm(laps, streamStartTimeUtc, rawElapsedS, altitudeM);
-    expect(gaps[0]).toBeNull();
-    expect(gaps[1]).toBeNull();
-  });
-
-  it("returns an empty array for no laps", () => {
-    const { rawElapsedS, altitudeM } = buildTwoLapStream();
-    expect(computeLapGapsMinPerKm([], streamStartTimeUtc, rawElapsedS, altitudeM)).toEqual([]);
-  });
-});
+// Per-lap GAP tests moved server-side -- see tests/test_gap.py::TestComputeLapGapSpeedsMps
+// (gap.py::compute_lap_gap_speeds_mps), now the only implementation.

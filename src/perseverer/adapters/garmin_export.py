@@ -39,6 +39,7 @@ from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
 from perseverer.rollups import refresh_daily_and_period_rollups
+from perseverer.running_load import refresh_running_tss
 from perseverer.weather_titles import backfill_weather_titles
 
 SOURCE_NAME = "garmin_export"
@@ -243,11 +244,12 @@ def import_garmin_export(
 
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
     if touched_dates:
-        refresh_fitness_rollup(conn, athlete_id=athlete_id)
-        refresh_insights(conn, athlete_id=athlete_id)
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
         refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_running_tss(conn, athlete_id=athlete_id)
+        refresh_fitness_rollup(conn, athlete_id=athlete_id)
+        refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 
     # Corrects sport/name using Garmin's own reclassification from summarizedActivitiesExport

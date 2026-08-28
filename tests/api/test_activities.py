@@ -12,6 +12,7 @@ from perseverer.db.schema import (
     activity_metric,
     activity_stream,
     health_observation,
+    lap,
     metric_definition,
     route_geom,
 )
@@ -167,6 +168,45 @@ def test_list_and_detail_surface_hr_load_and_descaled_rpe(
     assert detail["training_load"] == 81.8
     assert detail["workout_rpe"] == 4.6
     assert detail["weight_kg"] == 80.1
+
+
+def test_list_and_detail_prefer_running_tss_over_training_load_peak(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """Regression test: /fitness's CTL/ATL aggregate (fitness.py) already preferred running_tss
+    over training_load_peak, but GET /activities and GET /activities/{id} kept showing the raw
+    Garmin number -- confirmed as a real, reported discrepancy between per-activity and
+    aggregate training load for every running activity. Both endpoints must now agree."""
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    _add_metric(
+        engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=222.0
+    )
+    _add_metric(
+        engine, activity_id="a1", metric_key="perseverer.performance.running_tss", value=80.0
+    )
+
+    r = client.get("/api/v1/activities", headers=auth_headers)
+    assert r.json()["items"][0]["training_load"] == 80.0
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.json()["training_load"] == 80.0
+
+
+def test_list_and_detail_fall_back_to_training_load_peak_without_running_tss(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    _add_metric(
+        engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=222.0
+    )
+
+    r = client.get("/api/v1/activities", headers=auth_headers)
+    assert r.json()["items"][0]["training_load"] == 222.0
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.json()["training_load"] == 222.0
 
 
 def test_strava_session_hr_alias_is_read_when_fit_key_absent(
@@ -402,6 +442,102 @@ def test_stream_endpoint_downsamples_and_404s_without_stream(
         "/api/v1/activities/a1/stream?channels=not_a_channel", headers=auth_headers
     )
     assert r.status_code == 400
+
+
+def _write_flat_gap_stream(
+    engine: Engine, tmp_path: Path, *, activity_id: str, base: datetime
+) -> None:
+    # 11 points, 0-100s, 4 m/s throughout, flat ground -- matches test_gap.py's own fixture
+    # shape, so a lap's GAP should equal its own raw speed exactly.
+    points = [
+        StreamPoint(
+            timestamp_utc=base + timedelta(seconds=i * 10),
+            values={"distance_m": i * 40.0, "altitude_m": 100.0},
+        )
+        for i in range(11)
+    ]
+    rel_path, n_samples, channels = write_activity_stream(
+        tmp_path / "parquet", DEFAULT_ATHLETE_ID, activity_id, points
+    )
+    with engine.connect() as conn:
+        conn.execute(
+            activity_stream.insert().values(
+                activity_id=activity_id,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                parquet_path=rel_path,
+                n_samples=n_samples,
+                channels=json.dumps(channels),
+                sample_rate_hint=1.0,
+            )
+        )
+        conn.commit()
+
+
+def test_get_activity_detail_includes_per_lap_gap_speed(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine, tmp_path: Path
+) -> None:
+    base = datetime(2025, 6, 1, 10, 0, 0)
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")  # sport="running" by default
+        conn.execute(
+            lap.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                lap_index=0,
+                start_time_utc=base,
+                duration_s=50.0,
+                moving_duration_s=50.0,
+                distance_m=200.0,
+            )
+        )
+        conn.execute(
+            lap.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                lap_index=1,
+                start_time_utc=base + timedelta(seconds=50),
+                duration_s=50.0,
+                moving_duration_s=50.0,
+                distance_m=200.0,
+            )
+        )
+        conn.commit()
+    _write_flat_gap_stream(engine, tmp_path, activity_id="a1", base=base)
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    laps_out = r.json()["laps"]
+    assert len(laps_out) == 2
+    for lap_out in laps_out:
+        assert lap_out["avg_gap_speed_mps"] is not None
+        assert abs(lap_out["avg_gap_speed_mps"] - 4.0) < 1e-6
+
+
+def test_get_activity_detail_omits_lap_gap_speed_for_non_running_sport(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine, tmp_path: Path
+) -> None:
+    base = datetime(2025, 6, 1, 10, 0, 0)
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1", sport="cycling")
+        conn.execute(
+            lap.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                lap_index=0,
+                start_time_utc=base,
+                duration_s=50.0,
+                moving_duration_s=50.0,
+                distance_m=200.0,
+            )
+        )
+        conn.commit()
+    _write_flat_gap_stream(engine, tmp_path, activity_id="a1", base=base)
+
+    r = client.get("/api/v1/activities/a1", headers=auth_headers)
+    assert r.status_code == 200
+    laps_out = r.json()["laps"]
+    assert len(laps_out) == 1
+    assert laps_out[0]["avg_gap_speed_mps"] is None
 
 
 def _add_route(

@@ -24,6 +24,11 @@ export interface LapOut {
   avg_hr: number | null;
   max_hr: number | null;
   avg_speed_mps: number | null;
+  // m/s -- computed server-side per request from the raw stream (see gap.py::
+  // compute_lap_gap_speeds_mps), null for a non-running activity or a lap with no usable stream
+  // slice. Convert to min/km the same way ActivityComparisonTable.tsx does for the whole-activity
+  // version.
+  avg_gap_speed_mps: number | null;
 }
 
 export interface SplitOut {
@@ -324,6 +329,18 @@ export interface HrZoneConfigIn {
   max_hr_bpm: number | null;
   threshold_hr_bpm: number | null;
   resting_hr_bpm: number | null;
+}
+
+// An athlete's own configured running threshold pace -- the calibration constant
+// running_load.py::compute_running_tss needs to turn grade-adjusted pace into a Coggan-style
+// rTSS (100 = one hour at threshold pace), used in place of Garmin's own uncalibrated
+// training_load_peak for the CTL/ATL/TSB Fitness & Form series. Null means "not configured yet".
+export interface RunningLoadConfigOut {
+  threshold_pace_sec_per_km: number | null;
+}
+
+export interface RunningLoadConfigIn {
+  threshold_pace_sec_per_km: number | null;
 }
 
 // GET /settings/garmin/status

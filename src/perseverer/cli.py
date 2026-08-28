@@ -56,7 +56,7 @@ from perseverer.garmin_connect_activity_name import backfill_garmin_activity_nam
 from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
-from perseverer.rebuild import rebuild_database
+from perseverer.rebuild import rebuild_database_tracked, rebuild_database_via_shadow
 from perseverer.weather_titles import backfill_weather_titles
 from perseverer.worker.main import run_daily_sync
 
@@ -407,16 +407,61 @@ def report_counts() -> None:
 
 
 @app.command("rebuild")
-def rebuild() -> None:
-    """Wipe every derived table and replay the entire raw archive to reconstruct the
-    database - proves "raw first": nothing here depends on any vendor being reachable.
+def rebuild(
+    tracked: Annotated[
+        bool,
+        typer.Option(
+            "--tracked/--no-tracked",
+            help=(
+                "Write an ingest_run row (source=rebuild) the same way the Settings page's "
+                "trigger polls for status, instead of just printing the result. Used internally "
+                "when the API launches this as a standalone subprocess (see "
+                "api/routers/settings.py::post_rebuild) -- a real production rebuild once hung "
+                "for hours inside the live multi-worker api process, and this command run as its "
+                "own OS process (not an in-process background task) is how that's now avoided; "
+                "not meant for everyday interactive use."
+            ),
+        ),
+    ] = False,
+    athlete_id: Annotated[
+        str,
+        typer.Option(
+            "--athlete-id",
+            help=(
+                "Defaults to DEFAULT_ATHLETE_ID like every other command here -- overridable so "
+                "the API subprocess launch can pass through the specific athlete `require_api_key` "
+                "actually resolved, rather than silently assuming the default one."
+            ),
+        ),
+    ] = DEFAULT_ATHLETE_ID,
+) -> None:
+    """Replay the entire raw archive to reconstruct the database - proves "raw first": nothing
+    here depends on any vendor being reachable. Replays into a throwaway shadow database first
+    and only swaps it into the live tables once the replay fully succeeds (see
+    rebuild_database_via_shadow's own docstring) -- this runs on the same box as
+    perseverer-api/perseverer-worker in production, so the live tables must never be left
+    wiped-and-partially-refilled for however long a replay takes, whether this command was
+    triggered from here directly or via the Settings page.
     """
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        replayed = rebuild_database(
-            conn, settings.raw_archive_dir, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID
-        )
+        if tracked:
+            replayed = rebuild_database_tracked(
+                conn,
+                settings.raw_archive_dir,
+                settings.parquet_dir,
+                settings.data_dir,
+                athlete_id=athlete_id,
+            )
+        else:
+            replayed = rebuild_database_via_shadow(
+                conn,
+                settings.raw_archive_dir,
+                settings.parquet_dir,
+                settings.data_dir,
+                athlete_id=athlete_id,
+            )
     typer.echo(f"Replayed {replayed} raw objects")
 
 

@@ -27,6 +27,7 @@ function lap(overrides: Partial<LapOut> = {}): LapOut {
     avg_hr: null,
     max_hr: null,
     avg_speed_mps: null,
+    avg_gap_speed_mps: null,
     ...overrides,
   };
 }

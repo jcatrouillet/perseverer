@@ -622,6 +622,7 @@ const F = {
     ["avg_hr","number|null",""],
     ["max_hr","number|null",""],
     ["avg_speed_mps","number|null",""],
+    ["avg_gap_speed_mps","number|null","Grade-adjusted average speed (m/s) for this lap, computed fresh per request from the raw stream -- not stored. null for a non-running activity, no stream, or a lap whose own stream slice is too short/missing altitude or distance data."],
   ],
   split: [
     ["split_index","integer","0-based."],
@@ -1002,6 +1003,9 @@ const SCHEMAS = [
       ["zone2_high_bpm","number|null",""],
       ["zone3_high_bpm","number|null",""],
       ["zone4_high_bpm","number|null",""],
+    ] },
+  { name: "RunningLoadConfigOut", note: "Returned by GET and PUT /settings/running-load.", fields: [
+      ["threshold_pace_sec_per_km","number|null","null means not configured yet -- Fitness & Form keeps using Garmin's own training_load_peak for every activity in that case."],
     ] },
   { name: "LoginResponse", fields: [ ["access_token","string","JWT — send as Authorization: Bearer <token>."], ["expires_at","string(date-time)",""] ] },
   { name: "GarminAuthStatusOut", note: "Returned by GET /settings/garmin/status. No real token expiry is reportable -- Garmin exposes no readable expiry for the refresh token that actually matters -- so staleness_severity/staleness_message (how many days the last sync has been failing) is the practical substitute.", fields: [
@@ -1501,6 +1505,21 @@ const GROUPS = [
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/hr-zones \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"max_hr_bpm": 188, "threshold_hr_bpm": 172, "resting_hr_bpm": 46}'` }
+    },
+    { method: "GET", path: "/api/v1/settings/running-load", summary: "Get the athlete's configured running threshold pace.",
+      description: "The calibration constant behind perseverer.performance.running_tss, a pace-based training-load input fitness_daily_rollup's CTL/ATL/TSB prefers over Garmin's own uncalibrated training_load_peak for running. null means not configured yet.",
+      responses: [ { code: 200, ref: "RunningLoadConfigOut" } ],
+      example: {}
+    },
+    { method: "PUT", path: "/api/v1/settings/running-load", summary: "Set the athlete's running threshold pace.",
+      description: "Unlike PUT /settings/hr-zones, this also immediately recomputes running_tss/fitness_daily_rollup/insights for the athlete before returning, so CTL/ATL/TSB reflect the new pace right away rather than waiting for the next sync.",
+      body: { schema: "RunningLoadConfigIn", fields: [
+        ["threshold_pace_sec_per_km","number|null","opt","","Must be positive if given."],
+      ]},
+      responses: [ { code: 200, ref: "RunningLoadConfigOut" } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/running-load \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"threshold_pace_sec_per_km": 308}'` }
     },
     { method: "GET", path: "/api/v1/settings/garmin/status", summary: "Garmin Connect connection status.",
       description: "Token store presence/age (a filesystem check, no network call to Garmin) plus the most recent garmin_connect sync result. No real token expiry is reportable -- Garmin exposes no readable expiry for the refresh token that actually matters -- so staleness_severity/staleness_message (an escalating warning/critical signal off how many days the last sync has been failing) is the practical substitute.",

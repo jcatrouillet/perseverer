@@ -64,6 +64,7 @@ from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
 from perseverer.rollups import refresh_daily_and_period_rollups
+from perseverer.running_load import refresh_running_tss
 from perseverer.weather_titles import backfill_weather_titles
 
 SOURCE_NAME = "garmin_connect"
@@ -853,27 +854,34 @@ def sync_garmin_connect(
         summary.errors.append({"error": str(e)})
 
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
-    # Unconditional, unlike the other four ingest entry points: this is the daily scheduled
-    # sync path (worker/main.py runs it once/day regardless of whether new activities were
-    # found), so the Fitness & Form series' end date must keep advancing through rest days --
-    # see fitness.py and docs/adr/0009-phase-6-calendar-rollups-fitness-health.md. The same
-    # reasoning is why refresh_insights is unconditional here too (ADR 0012): a window like
-    # "last 30 days" shifts every day even with zero new ingests, and this daily cron run is
-    # this codebase's only naturally-daily trigger point -- no separate scheduled job needed.
-    refresh_fitness_rollup(conn, athlete_id=athlete_id)
-    refresh_insights(conn, athlete_id=athlete_id)
-    # Unlike fitness/insights above, VDOT has no rolling-window dependency on "today" -- it's a
-    # pure per-activity value, so a rest day with zero new activities has nothing to recompute.
-    # Gated on touched_dates to keep the daily cron cheap (no Parquet reads) on those days.
+    # Unlike fitness/insights below, VDOT/pace-bands/avg-GAP/running_tss have no rolling-window
+    # dependency on "today" -- they're pure per-activity values, so a rest day with zero new
+    # activities has nothing to recompute. Gated on touched_dates to keep the daily cron cheap
+    # (no Parquet reads) on those days.
     if touched_dates:
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
         refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
+        # After refresh_avg_gap, not before -- running_tss's rTSS formula consumes the
+        # grade-adjusted speed refresh_avg_gap just wrote.
+        refresh_running_tss(conn, athlete_id=athlete_id)
         # Must run before backfill_weather_titles: this corrects a still-generic-default name
         # (e.g. "Run") using Garmin's own richer activityName before the weather emoji is
         # prepended, so the emoji lands on the final title, not on the generic placeholder.
         backfill_garmin_activity_names(conn, archive_root, athlete_id=athlete_id)
         backfill_weather_titles(conn, archive_root, athlete_id=athlete_id)
+    # Unconditional, unlike the other four ingest entry points: this is the daily scheduled
+    # sync path (worker/main.py runs it once/day regardless of whether new activities were
+    # found), so the Fitness & Form series' end date must keep advancing through rest days --
+    # see fitness.py and docs/adr/0009-phase-6-calendar-rollups-fitness-health.md. Runs after
+    # the touched_dates block above (moved here so that, on a day with new activities,
+    # refresh_running_tss has already run and its rTSS values are what this rollup picks up),
+    # but stays unconditional itself. The same reasoning is why refresh_insights is
+    # unconditional here too (ADR 0012): a window like "last 30 days" shifts every day even
+    # with zero new ingests, and this daily cron run is this codebase's only naturally-daily
+    # trigger point -- no separate scheduled job needed.
+    refresh_fitness_rollup(conn, athlete_id=athlete_id)
+    refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 
     conn.execute(
