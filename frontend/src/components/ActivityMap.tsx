@@ -3,24 +3,32 @@
 // Leaflet + public OSM tile stack MapExplorerPage already verified (ADR 0011 decision 1/2), just
 // with all interaction disabled and zoomed to fit the one route via `decodePolyline()`.
 //
-// CARTO's Positron basemap (a much lower-detail vector style -- no building outlines/POI icons/
+// CARTO's Positron basemap (a much lower-detail tile set -- no building outlines/POI icons/
 // road-name clutter -- built for exactly this "route thumbnail" use) and the same 220px height
 // every other route map in the app uses (activity-map.css), everywhere a route thumbnail
 // appears -- day view's own cards fall back to this exact component/size for an activity with no
 // stream to animate yet, so the two need to actually match, not just both be called "the day
-// view map." See CartoBasemapLayer.tsx for the vector-tile layer itself.
+// view map."
 //
-// The detailed, pace-coloured, per-km-hoverable map on the activity detail page is a separate
-// component (ActivityRouteMap.tsx) built from the full-resolution stream, not this one -- a
-// thumbnail's whole job is "recognizable at a glance", a detail map's is "precise enough to
-// analyse", and trying to make one component do both would compromise both.
+// Deliberately still CARTO's *raster* tiles, not the vector basemap ActivityRouteMap.tsx/
+// MapExplorerPage.tsx moved to (CartoBasemapLayer.tsx) -- confirmed live (not theoretical) that
+// this component doesn't get that upgrade: an activity list page renders one of these thumbnails
+// per activity, and each vector basemap spins up its own MapLibre GL WebGL canvas. Chrome caps
+// live WebGL contexts at 16 per page; with more thumbnails than that on screen (completely
+// ordinary here -- a real activity list page had 31), the browser silently evicts the oldest
+// contexts to make room for new ones, and an evicted canvas never recovers -- no error anywhere,
+// it just renders nothing forever. Reproduced directly: the first 15 of 31 thumbnails came back
+// `contextLost: true` while the rest didn't. Raster tiles are plain `<img>` elements with no such
+// per-page ceiling, so this is the one map surface in the app that stays on them for real
+// architectural reasons, not just historical inertia -- see CartoBasemapLayer.tsx's own
+// docstring and CLAUDE.md's Frontend bullet for the fuller picture across all three map surfaces.
 import "leaflet/dist/leaflet.css";
 import type { LatLngBoundsExpression } from "leaflet";
-import { MapContainer, Polyline } from "react-leaflet";
+import { MapContainer, Polyline, TileLayer } from "react-leaflet";
 
+import { cartoRasterTileUrlTemplate } from "../mapBasemap";
 import { decodePolyline } from "../polyline";
 import "../styles/activity-map.css";
-import { CartoBasemapLayer } from "./CartoBasemapLayer";
 
 export function ActivityMap({
   encodedPolyline,
@@ -50,7 +58,10 @@ export function ActivityMap({
         boxZoom={false}
         keyboard={false}
       >
-        <CartoBasemapLayer style="positron" />
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url={cartoRasterTileUrlTemplate()}
+        />
         <Polyline positions={points} pathOptions={{ color, weight: 3, opacity: 0.9 }} />
       </MapContainer>
     </div>

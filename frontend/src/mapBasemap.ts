@@ -1,8 +1,13 @@
-// CARTO vector basemap style URLs, shared by every map surface (ActivityMap thumbnail,
-// ActivityRouteMap detail view, MapExplorerPage). See components/CartoBasemapLayer.tsx for the
-// react-leaflet layer that actually renders one of these styles, and mapTiles.ts for the one
-// remaining *raster* CARTO consumer (GIF-export canvas rasterization -- left on raster tiles
-// deliberately, see that file's own docstring).
+// CARTO basemap URLs (vector style JSON and raster tile template), shared by every map surface.
+// The vector style is used by ActivityRouteMap.tsx's detail view and MapExplorerPage -- each is
+// the only map on its page, so its own MapLibre GL WebGL canvas (components/CartoBasemapLayer.tsx)
+// is the only one competing for Chrome's ~16-live-context-per-page ceiling. ActivityMap.tsx's
+// thumbnail deliberately stays on the raster template instead: an activity list page renders one
+// thumbnail per activity (31 on a real page), and 31 WebGL contexts on one page silently exceeds
+// that ceiling -- confirmed live, the browser evicts the oldest contexts with no error, and an
+// evicted canvas never recovers. Same for mapTiles.ts's GIF-export canvas rasterizer, for the
+// unrelated reason documented in that file's own docstring (raster tiles are a plain
+// canvas.drawImage(), a vector/WebGL basemap needs an actual render pass).
 //
 // The key is delivered the same runtime-configured way apiBaseUrl already is (public/config.js,
 // regenerated at container start -- see docker/frontend-entrypoint.d/20-generate-config.sh) --
@@ -36,9 +41,10 @@ export function cartoStyleUrl(style: CartoBasemapStyle): string {
   return key ? `${base}?key=${encodeURIComponent(key)}` : base;
 }
 
-/** Same `?key=` param, same endpoint host, for the one remaining raster CARTO consumer
- * (mapTiles.ts's canvas rasterization). CARTO's key covers both raster and vector services
- * against the same shared quota, so every cartocdn.com request this app makes should carry it. */
+/** Same `?key=` param, same endpoint host, for this app's raster CARTO consumers
+ * (ActivityMap.tsx's thumbnail, mapTiles.ts's GIF-export canvas rasterizer). CARTO's key covers
+ * both raster and vector services against the same shared quota, so every cartocdn.com request
+ * this app makes should carry it. */
 export function cartoRasterTileUrlTemplate(style: "light_all" = "light_all"): string {
   const key = cartoApiKey();
   const suffix = key ? `?key=${encodeURIComponent(key)}` : "";
