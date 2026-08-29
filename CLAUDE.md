@@ -288,8 +288,10 @@ because you don't recognize it — stop, that's the bug.
   `athlete.last_full_export_at` is fresh enough (`PERSEVERER_EXPORT_FRESHNESS_DAYS`, default
   90). Both fire a generic JSON webhook (`PERSEVERER_STALENESS_WEBHOOK_URL`) if configured.
   The worker container (`worker/main.py`, APScheduler) runs `garmin_connect` sync + this check
-  daily (default 04:15 local, jittered); `garmin_export` is never scheduled, it's a manual
-  CLI action.
+  daily (default 04:15, jittered, resolved against `PERSEVERER_SCHEDULE_TIMEZONE` -- an IANA
+  name, default UTC, not the container's own system clock, so a wall-clock schedule like
+  "20:55 Pacific" stays correct across DST instead of drifting with a fixed UTC offset);
+  `garmin_export` is never scheduled, it's a manual CLI action.
 - **Never drop a field, concretely**: the activity FIT parser (`fit/parser.py`), health FIT
   parser (`health/fit_parser.py`), and health JSON parser (`health/json_parser.py`) all
   register every field they see into `metric_definition`, even ones they don't materialize a

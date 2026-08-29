@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     schedule_hour: int = 4
     schedule_minute: int = 15
     schedule_jitter_s: int = 600
+    # IANA name (e.g. "America/Los_Angeles"), not a fixed UTC offset -- CronTrigger resolves
+    # hour/minute against this zone's own wall clock every run, so the schedule stays correct
+    # across DST transitions instead of drifting by an hour twice a year the way a hardcoded UTC
+    # offset would. Defaults to UTC (APScheduler's own default), matching this setting's original
+    # unconfigurable behavior for anyone not overriding it -- worker/main.py's own docstring
+    # calling this "04:15 local" was previously inaccurate on any host not itself running in the
+    # athlete's own timezone (bercy's system clock is UTC, not Pacific).
+    schedule_timezone: str = "UTC"
 
     # --- Phase 3: read API auth/CORS/DuckDB ---
     # Shared secret for the X-API-Key header (api/dependencies.py::require_api_key). Unset ->

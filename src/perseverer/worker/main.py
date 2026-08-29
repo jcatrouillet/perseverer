@@ -1,5 +1,8 @@
 """Worker container entrypoint: runs the daily garmin_connect sync + staleness check on a
-cron schedule (default 04:15 local, jittered — see §6 of the project spec).
+cron schedule (default 04:15 UTC, jittered — see §6 of the project spec). The schedule resolves
+against `schedule_timezone` (an IANA name, default UTC), not the container's own system clock --
+see that setting's own docstring in config.py for why a real timezone rather than a fixed hour
+offset matters here (DST).
 
 `garmin_export` is deliberately never scheduled here — it's a one-off/occasional CLI action
 (`sync import garmin-export <path>`), not a recurring job.
@@ -93,13 +96,15 @@ def main() -> None:
             hour=settings.schedule_hour,
             minute=settings.schedule_minute,
             jitter=settings.schedule_jitter_s,
+            timezone=settings.schedule_timezone,
         ),
         id="daily_garmin_sync",
     )
     logger.info(
-        "scheduled daily sync at %02d:%02d local (+/- %ds jitter)",
+        "scheduled daily sync at %02d:%02d %s (+/- %ds jitter)",
         settings.schedule_hour,
         settings.schedule_minute,
+        settings.schedule_timezone,
         settings.schedule_jitter_s,
     )
     scheduler.start()
