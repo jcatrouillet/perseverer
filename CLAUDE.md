@@ -99,7 +99,19 @@ because you don't recognize it — stop, that's the bug.
   into the Vite build, since the reverse-proxy hostname doesn't resolve the same way inside vs.
   outside the house (double-NAT/split-horizon DNS, see `docs/DEPLOY.md`). `AuthGate` offers
   either credential path (password or a pasted API key); a background 401 clears the stored
-  credential and re-prompts automatically.
+  credential and re-prompts automatically. Every map surface (`ActivityMap` thumbnail,
+  `ActivityRouteMap` detail view, `MapExplorerPage`) renders CARTO's Positron **vector** basemap
+  (`CartoBasemapLayer.tsx`, `@maplibre/maplibre-gl-leaflet` mounting a MapLibre GL layer inside
+  the existing react-leaflet `MapContainer` — markers/polylines/popups all stay on Leaflet's own
+  renderer, only the basemap layer is MapLibre) — a revision of ADR 0011 decision 1's original
+  raster-tiles/OSM choice, made once a real CARTO API key was available. The key
+  (`window.__PERSEVERER_CONFIG__.cartoApiKey`, `mapBasemap.ts`) follows the exact same
+  runtime-config mechanism as `apiBaseUrl` above (`PERSEVERER_CARTO_API_KEY` env var), even
+  though it isn't actually secret — CARTO's basemap product is designed for client-side
+  embedding, like a Mapbox public token. `mapTiles.ts`'s canvas rasterizer for GIF export
+  deliberately stays on CARTO's *raster* tiles (just now carrying the same key) — capturing a
+  vector/WebGL basemap into a still frame needs an actual MapLibre render pass read back via
+  `getCanvas()`, a materially different problem left for if it's ever actually needed.
 - **Weekly/monthly rollups + Fitness & Form (Phase 6)**: `period_rollup`/
   `health_metric_period_rollup` are a rollup OF `day_rollup`/`health_metric_daily_rollup`
   (sum-of-sums, weighted averages), not of raw tables — `period_type` (`"week"`|`"month"`)

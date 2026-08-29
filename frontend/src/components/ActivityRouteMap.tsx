@@ -7,10 +7,11 @@
 import "leaflet/dist/leaflet.css";
 import { DivIcon, type LatLngBoundsExpression, type LatLngTuple } from "leaflet";
 import { useEffect, useMemo, useState } from "react";
-import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Polyline, useMap } from "react-leaflet";
 
 import { hexToRgb, lerpColor, type Rgb } from "../colorGradient";
 import "../styles/activity-route.css";
+import { CartoBasemapLayer } from "./CartoBasemapLayer";
 
 export interface RoutePoint {
   lat: number;
@@ -173,13 +174,10 @@ export function ActivityRouteMap({
     <div className="activity-route-map">
       <MapContainer bounds={bounds} boundsOptions={{ padding: [16, 16] }} scrollWheelZoom>
         <MapResizeHandler trigger={resizeSignal} />
-        {/* CARTO Positron -- the same lower-detail basemap ActivityMap.tsx's day-view "large"
-            thumbnail already uses (verified reachable in Phase 7); a route this detailed reads
-            better without OSM's building outlines/POI icons/road-name clutter underneath it. */}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        />
+        {/* CARTO Positron, vector -- the same basemap ActivityMap.tsx's day-view "large"
+            thumbnail already uses; a route this detailed reads better without OSM's building
+            outlines/POI icons/road-name clutter underneath it. */}
+        <CartoBasemapLayer style="positron" />
         {segments.map((seg, i) => (
           <Polyline key={i} positions={seg.positions} pathOptions={{ color: seg.color, weight: 4, opacity: 0.9 }} />
         ))}

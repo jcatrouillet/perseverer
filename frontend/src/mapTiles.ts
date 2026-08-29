@@ -1,10 +1,20 @@
-// Real Web Mercator tile math + a fetch-and-draw helper for rasterizing the same CARTO
-// Positron basemap ActivityRouteMap.tsx uses onto a plain <canvas> -- "for the GIF export, keep
-// the map background" (unlike the PNG poster, which is deliberately tile-free so the trace can
-// be laid over any photo of the user's own choosing). CARTO's tile CDN sends
-// `Access-Control-Allow-Origin: *` (confirmed with a direct request before relying on this),
-// which is what makes drawing a cross-origin tile image onto a canvas without tainting it --
-// and therefore reading pixels back out via gif.js -- possible at all.
+// Real Web Mercator tile math + a fetch-and-draw helper for rasterizing a CARTO Positron
+// basemap onto a plain <canvas> -- "for the GIF export, keep the map background" (unlike the PNG
+// poster, which is deliberately tile-free so the trace can be laid over any photo of the user's
+// own choosing). CARTO's tile CDN sends `Access-Control-Allow-Origin: *` (confirmed with a
+// direct request before relying on this), which is what makes drawing a cross-origin tile image
+// onto a canvas without tainting it -- and therefore reading pixels back out via gif.js --
+// possible at all.
+//
+// Deliberately still *raster* PNG tiles, not the vector basemap the on-screen Leaflet maps moved
+// to (CartoBasemapLayer.tsx) -- capturing a vector/WebGL basemap into a still frame needs an
+// actual MapLibre GL render pass read back via getCanvas() rather than a plain drawImage() of a
+// pre-rendered PNG, a materially different (and, for an offscreen GIF-export canvas reused
+// across every frame, riskier) implementation. Raster tiles remain a perfectly good fit for this
+// one use -- a low-zoom, small-canvas background baked once per export -- so left unchanged here
+// beyond authenticating the request with the same CARTO API key the vector maps now use (see
+// mapBasemap.ts; both services share one fair-use quota).
+import { cartoRasterTileUrlTemplate } from "./mapBasemap";
 import type { RoutePoint } from "./components/ActivityRouteMap";
 import type { ProjectedPoint } from "./routeExport";
 
@@ -103,11 +113,17 @@ export async function drawBasemapTiles(
   const tileMinY = Math.max(0, Math.floor(originY / TILE_SIZE));
   const tileMaxY = Math.min(maxTileIndex, Math.floor((originY + height) / TILE_SIZE));
 
+  const urlTemplate = cartoRasterTileUrlTemplate();
   const loads: Promise<void>[] = [];
   for (let tx = tileMinX; tx <= tileMaxX; tx++) {
     for (let ty = tileMinY; ty <= tileMaxY; ty++) {
       const sub = TILE_SUBDOMAINS[(tx + ty) % TILE_SUBDOMAINS.length];
-      const url = `https://${sub}.basemaps.cartocdn.com/light_all/${zoom}/${tx}/${ty}.png`;
+      const url = urlTemplate
+        .replace("{s}", sub!)
+        .replace("{z}", String(zoom))
+        .replace("{x}", String(tx))
+        .replace("{y}", String(ty))
+        .replace("{r}", "");
       const px = tx * TILE_SIZE - originX;
       const py = ty * TILE_SIZE - originY;
       loads.push(

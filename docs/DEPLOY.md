@@ -189,6 +189,10 @@ and outside the house.** Consequences:
   `/docker-entrypoint.d/` startup mechanism. Set `PERSEVERER_API_BASE_URL` to whichever
   hostname/URL resolves correctly for wherever the browser actually is — this is a per-deployment
   value, not a build-time constant, exactly because of the split-horizon DNS behavior above.
+  The same script/mechanism regenerates `cartoApiKey` from `PERSEVERER_CARTO_API_KEY` (the
+  CARTO basemap vector-tile API key, `frontend/src/mapBasemap.ts`) — unlike `apiBaseUrl` it isn't
+  actually a per-deployment/split-horizon value, it's just following the same runtime-config
+  mechanism so bercy's key can be rotated without a rebuild.
 - `X-Forwarded-*` headers are trusted **only** from the known reverse-proxy IP (configured
   explicitly) — trusting them from anywhere else makes rate limiting and audit logs trivially
   spoofable, and source-IP trust is meaningless once everything arrives from the proxy anyway.

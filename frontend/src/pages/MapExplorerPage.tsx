@@ -1,8 +1,12 @@
 // Phase 7 Milestone A (docs/adr/0011-phase-7-map-recaps-pwa.md): every GPS-bearing activity's
-// start point on one map. Leaflet + public OpenStreetMap tiles, not MapLibre + self-hosted
-// Protomaps -- a deliberate, user-confirmed scope reduction from the project brief (ADR 0011
-// decision 1), traded for far less setup at the cost of map-viewport tile requests going to a
-// third party (never raw GPS data, which stays server-side).
+// start point on one map. Started on Leaflet + public OpenStreetMap raster tiles -- a deliberate,
+// user-confirmed scope reduction from the project brief's original MapLibre + self-hosted
+// Protomaps proposal (ADR 0011 decision 1) -- and moved onto CARTO's vector Positron basemap
+// (CartoBasemapLayer.tsx) once a real CARTO API key made that the same low-setup, third-party-
+// hosted option ActivityMap.tsx/ActivityRouteMap.tsx already use, rather than a second, visually
+// inconsistent tile source just for this page. Still never sends raw GPS data anywhere but the
+// map-viewport tile requests themselves (which stay server-side for everything except the
+// rendered basemap).
 //
 // One bounded fetch (no filters sent to the API -- real scale is 904 points, confirmed against
 // the archive, so there's nothing to paginate), then sport/date filtering happens entirely
@@ -11,11 +15,12 @@
 import "leaflet/dist/leaflet.css";
 import type { LatLngBoundsExpression } from "leaflet";
 import { useMemo, useState } from "react";
-import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import { CircleMarker, MapContainer, Popup } from "react-leaflet";
 import { Link } from "wouter";
 
 import { useActivityMapPoints } from "../api/queries";
 import type { ActivityMapPointOut } from "../api/types";
+import { CartoBasemapLayer } from "../components/CartoBasemapLayer";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { EARLIEST_PLAUSIBLE_DATE } from "../dateUtils";
 import { sportStyle, toneColor } from "../metricStyle";
@@ -103,10 +108,7 @@ export function MapExplorerPage() {
 
       <div className="map-explorer__map">
         <MapContainer bounds={bounds} boundsOptions={{ padding: [24, 24] }} scrollWheelZoom>
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <CartoBasemapLayer style="positron" />
           {filtered.map((p) => (
             <MapPoint key={p.id} point={p} />
           ))}

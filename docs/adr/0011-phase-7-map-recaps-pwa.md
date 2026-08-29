@@ -121,6 +121,15 @@ itself was made available mid-session) rather than silently picked either direct
 
 ### 2. Map explorer: Leaflet + `react-leaflet` + a new bounded `GET /activities/map` endpoint
 
+> **Superseded (post-Phase-8):** once a real CARTO API key became available, every map surface
+> (including this one) moved from raster PNG tiles to CARTO's vector Positron basemap, rendered
+> via `@maplibre/maplibre-gl-leaflet` mounting a MapLibre GL layer *inside* the same Leaflet
+> `MapContainer` this decision set up — Leaflet itself, `react-leaflet`, and every
+> marker/polyline/popup component below are all unchanged; only the tile layer swapped. See
+> `CartoBasemapLayer.tsx` and `mapBasemap.ts`, and CLAUDE.md's Frontend bullet. The zero-API-key
+> reasoning below no longer holds now that a key exists, but the rest of this decision's
+> reasoning (Leaflet + react-leaflet over a full MapLibre-native rewrite) still does.
+
 - **Leaflet**, not MapLibre GL JS, per decision 1 — a ~40KB, MIT-licensed, zero-API-key library
   that's the standard pairing with public OSM raster tiles. `react-leaflet` (the React wrapper)
   is used rather than hand-rolling raw Leaflet DOM management inside React, matching this

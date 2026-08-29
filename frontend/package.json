@@ -15,11 +15,13 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@maplibre/maplibre-gl-leaflet": "^0.1.4",
     "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.101.4",
     "@types/gif.js": "^0.2.5",
     "gif.js": "^0.2.0",
     "leaflet": "^1.9.4",
+    "maplibre-gl": "^6.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",

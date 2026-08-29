@@ -2,6 +2,10 @@
 // before the app bundle -- see docs/adr/0008-phase-5-frontend.md.
 interface PersevererRuntimeConfig {
   apiBaseUrl: string;
+  /** CARTO basemap API key (see mapBasemap.ts) -- optional, unlike apiBaseUrl, since a map with
+   * no key still renders (just against CARTO's anonymous-tier limits) rather than failing the
+   * whole app closed. */
+  cartoApiKey?: string;
 }
 
 interface Window {

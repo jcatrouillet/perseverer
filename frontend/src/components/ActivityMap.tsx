@@ -3,12 +3,12 @@
 // Leaflet + public OSM tile stack MapExplorerPage already verified (ADR 0011 decision 1/2), just
 // with all interaction disabled and zoomed to fit the one route via `decodePolyline()`.
 //
-// CARTO's Positron basemap (a much lower-detail tile set -- no building outlines/POI icons/
-// road-name clutter -- built for exactly this "route thumbnail" use, confirmed reachable with a
-// direct tile fetch before wiring it in) and the same 220px height every other route map in the
-// app uses (activity-map.css), everywhere a route thumbnail appears -- day view's own cards fall
-// back to this exact component/size for an activity with no stream to animate yet, so the two
-// need to actually match, not just both be called "the day view map."
+// CARTO's Positron basemap (a much lower-detail vector style -- no building outlines/POI icons/
+// road-name clutter -- built for exactly this "route thumbnail" use) and the same 220px height
+// every other route map in the app uses (activity-map.css), everywhere a route thumbnail
+// appears -- day view's own cards fall back to this exact component/size for an activity with no
+// stream to animate yet, so the two need to actually match, not just both be called "the day
+// view map." See CartoBasemapLayer.tsx for the vector-tile layer itself.
 //
 // The detailed, pace-coloured, per-km-hoverable map on the activity detail page is a separate
 // component (ActivityRouteMap.tsx) built from the full-resolution stream, not this one -- a
@@ -16,10 +16,11 @@
 // analyse", and trying to make one component do both would compromise both.
 import "leaflet/dist/leaflet.css";
 import type { LatLngBoundsExpression } from "leaflet";
-import { MapContainer, Polyline, TileLayer } from "react-leaflet";
+import { MapContainer, Polyline } from "react-leaflet";
 
 import { decodePolyline } from "../polyline";
 import "../styles/activity-map.css";
+import { CartoBasemapLayer } from "./CartoBasemapLayer";
 
 export function ActivityMap({
   encodedPolyline,
@@ -49,10 +50,7 @@ export function ActivityMap({
         boxZoom={false}
         keyboard={false}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        />
+        <CartoBasemapLayer style="positron" />
         <Polyline positions={points} pathOptions={{ color, weight: 3, opacity: 0.9 }} />
       </MapContainer>
     </div>
