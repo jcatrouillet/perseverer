@@ -497,7 +497,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
                         </td>
                       )}
                       {showExpectedColumns && <td>{expectedPace}</td>}
-                      <td>{lap.avg_hr ?? "—"}</td>
+                      <td>{lap.avg_hr != null ? Math.round(lap.avg_hr) : "—"}</td>
                       <td>{lap.max_hr ?? "—"}</td>
                     </tr>
                   );
