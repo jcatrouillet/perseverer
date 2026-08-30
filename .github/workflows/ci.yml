@@ -24,6 +24,12 @@ jobs:
       - run: uv sync --frozen --all-groups
       - run: uv run ruff check .
       - run: uv run mypy
+      # Phase 9 hardening (ADR 0014): fails the build on a known-vulnerable pinned dependency.
+      # Zero findings as of this writing (confirmed by running it before wiring it in) -- no
+      # allowlist mechanism exists yet because there's nothing to allowlist; add one
+      # (`--ignore-vuln <id>`, with a one-line reason) if a real, currently-unfixable advisory
+      # ever needs to be accepted rather than blocking every push.
+      - run: uv run pip-audit
 
   test:
     runs-on: ubuntu-latest
@@ -51,6 +57,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+      # Phase 9 hardening (ADR 0014) -- see the lint job's pip-audit step for the same reasoning
+      # (zero findings as of this writing, no allowlist needed yet).
+      - run: npm audit --audit-level=high
 
   avx-smoke:
     # The DS1019+ (Celeron J3455 / Goldmont) has SSE4.2 but no AVX/AVX2. GitHub-hosted runners
@@ -78,11 +87,67 @@ jobs:
           PYBIN="$(uv run python -c 'import sys; print(sys.executable)')"
           qemu-x86_64 -cpu Westmere "$PYBIN" -m pytest tests/test_avx_smoke.py -q
 
+  backup-restore:
+    # Phase 9 acceptance criterion (ADR 0014): an automated restore-from-backup test in CI.
+    # `sync backup create --destination`/`sync backup restore` both take a plain local path here
+    # instead of a real SSH host -- rsync treats a local path and a `user@host:path` spec
+    # identically (backup.py's own docstring), so this exercises the exact same code the real
+    # scheduled job runs, just with no LAN/SSH host for a CI runner to reach anyway. rsync ships
+    # preinstalled on GitHub's ubuntu-latest image; this is the one place in CI that actually
+    # depends on that (tests/test_backup.py itself mocks rsync out, since it isn't installed in
+    # every dev environment this suite runs in -- confirmed absent on Windows/Git Bash).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen --all-groups
+      - name: Import a real fixture, back it up, wipe the data dir, restore, and verify
+        run: |
+          set -euo pipefail
+          data_dir="$(mktemp -d)/data"
+          backup_dest="$(mktemp -d)/backup"
+          export PERSEVERER_DATA_DIR="$data_dir"
+
+          uv run alembic upgrade head
+          uv run sync import fit-folder tests/fixtures/fit
+
+          count_activities() {
+            uv run python -c "import sqlite3; print(sqlite3.connect('$1').execute('SELECT COUNT(*) FROM activity').fetchone()[0])"
+          }
+          before_count=$(count_activities "$data_dir/perseverer.db")
+          before_raw=$(find "$data_dir/raw" -type f | sed "s#$data_dir/raw/##" | sort)
+          echo "before: $before_count activities, $(echo "$before_raw" | wc -l) raw files"
+
+          mkdir -p "$backup_dest"
+          uv run sync backup create --destination "$backup_dest"
+
+          # Simulate total local loss -- the actual restore scenario this test exists for.
+          rm -rf "$data_dir"
+
+          uv run sync backup restore "$backup_dest" --yes
+
+          after_count=$(count_activities "$data_dir/perseverer.db")
+          after_raw=$(find "$data_dir/raw" -type f | sed "s#$data_dir/raw/##" | sort)
+          echo "after: $after_count activities, $(echo "$after_raw" | wc -l) raw files"
+
+          if [ "$before_count" != "$after_count" ]; then
+            echo "MISMATCH: $before_count activities before wipe, $after_count after restore"
+            exit 1
+          fi
+          if [ "$before_raw" != "$after_raw" ]; then
+            echo "MISMATCH: raw archive file listing differs after restore"
+            diff <(echo "$before_raw") <(echo "$after_raw") || true
+            exit 1
+          fi
+
   build-and-push:
     name: build-and-push (${{ matrix.image }})
     # Gated on every quality job, not just its own Dockerfile building -- an image nobody
     # tested the contents of isn't worth publishing just because `docker build` succeeded.
-    needs: [lint, test, frontend, avx-smoke]
+    needs: [lint, test, frontend, avx-smoke, backup-restore]
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -49,6 +49,21 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    # Phase 9 hardening (ADR 0014) -- mirrors quadlet/perseverer-api.container's
+    # ReadOnly=true/ReadOnlyTmpfs=true/NoNewPrivileges=true, verified here first since Compose
+    # is dev's own deploy path (Windows/Podman Desktop) and bercy's production Quadlet units are
+    # the one place this can't be trial-and-errored against live data. Standard Compose Spec
+    # syntax, not a Podman-specific flag, so this works identically under `docker compose` too
+    # per this file's own header comment -- Compose has no equivalent of Podman CLI's
+    # --read-only-tmpfs auto-default, so the tmpfs mounts are listed explicitly rather than
+    # relying on an implementation-specific default.
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/tmp
+    security_opt:
+      - no-new-privileges:true
 
   worker:
     build:
@@ -67,6 +82,15 @@ services:
       PERSEVERER_DATA_DIR: /data
     volumes:
       - perseverer-data:/data
+    # See the api service's own comment above -- same reasoning, mirrors
+    # quadlet/perseverer-worker.container.
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+      - /var/tmp
+    security_opt:
+      - no-new-privileges:true
 
   frontend:
     build:

@@ -25,10 +25,19 @@ def make_duckdb_connection(
     network at request/startup time, since the NAS container has no reason to have outbound
     internet and images are never built there. Local dev (extension_dir=None) installs it
     on first use instead, which is fine off the NAS.
+
+    `temp_directory` is set explicitly under `db_path`'s own parent (i.e. `/data` in production)
+    rather than left at DuckDB's own default (the current working directory) -- Phase 9's
+    container hardening (ADR 0014) makes the API container's root filesystem read-only, and
+    `/data` is the one bind mount that stays writable, so a query large enough to spill to disk
+    needs an explicit writable path or it would otherwise try (and fail) to write under the
+    now-read-only `/app`.
     """
-    config: dict[str, str | bool | int | float | list[str]] = (
-        {"extension_directory": str(extension_dir)} if extension_dir else {}
-    )
+    config: dict[str, str | bool | int | float | list[str]] = {
+        "temp_directory": str(db_path.parent / "duckdb_tmp"),
+    }
+    if extension_dir:
+        config["extension_directory"] = str(extension_dir)
     con = duckdb.connect(":memory:", config=config)
     if extension_dir is None:
         con.execute("INSTALL sqlite")

@@ -314,6 +314,14 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
   `detail` is a JSON blob of rule-specific context. See
   `docs/adr/0012-phase-8-strava-merge-insights.md` for the full dimension/window table and the
   load/health rules' thresholds.
+- **`auth_login_attempt`** (Phase 9) — one row per `POST /auth/login` attempt (`username`,
+  `attempted_at`, `success`), backing the login brute-force lockout (`auth/lockout.py`):
+  `MAX_FAILED_ATTEMPTS` (5) failures for one username within `LOCKOUT_WINDOW` (15 minutes)
+  locks that username out, returning the exact same 401 a wrong password would. Exempt from
+  athlete-scoping — a failed attempt against a nonexistent username has no athlete row to
+  attach to, and must still be counted. Opportunistically
+  pruned of rows older than 24h on every insert, not a separate scheduled job. See
+  `docs/adr/0014-phase-9-backup-hardening.md`.
 
 ## Metric registry
 
@@ -809,3 +817,16 @@ Frontend: `boulderingRoutes.ts` turns the flat `SplitOut[]` into one row per rou
 `BoulderingRoutesTable.tsx` renders it as a new "Routes" section on the activity detail page,
 right after Intervals and before Charts -- self-gating (renders nothing) for any activity with
 no climb splits, so no explicit sport check is needed at the page level.
+
+## Backup + restore automation, login lockout, dependency scanning (Phase 9)
+
+No new athlete-facing data, but two new tables (see the Ops section above for
+`auth_login_attempt`) and one new file-level artifact worth recording here since it isn't a
+database table at all: `<data_dir>/backups/perseverer-<timestamp>.db`, a `VACUUM INTO` snapshot
+of the live SQLite database, rsync'd (along with the raw archive and Parquet trees, unchanged)
+to a second host over SSH. `src/perseverer/backup.py` is the one module that owns this; see
+`docs/adr/0014-phase-9-backup-hardening.md` and `docs/DEPLOY.md`'s Backups section for the full
+mechanism, scheduling, and the CI restore-from-backup test. The LLM narrative layer originally
+scoped for this phase (a rewrite of `insight` rows into prose, cached in DB) was deliberately
+deferred -- no new tables or fields exist for it yet, see the ADR's own "Deliberately out of
+scope" section for the reasoning and the reference design kept for whenever it's picked back up.

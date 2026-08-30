@@ -10,8 +10,13 @@ Container Manager vs. Podman in dev) that no longer applies now that both dev an
 Podman. Production is deployed as systemd Quadlet units (`quadlet/`), not Compose — see
 `docs/DEPLOY.md`.
 
-**Current phase: 8 (strava_export importer, merge visibility/split, rules-based insight engine —
-see `docs/adr/0012-phase-8-strava-merge-insights.md`). Phase 7 (map explorer, recaps, PWA/offline
+**Current phase: 9 — backup + restore automation and hardening (dependency-vulnerability
+scanning in CI, login brute-force lockout, container hardening for `api`/`worker`) are shipped;
+see `docs/adr/0014-phase-9-backup-hardening.md`. This phase's third original thread, an LLM
+narrative layer over the rules-based `insight` table, is deliberately deferred (not built) —
+see that ADR's decision 1 for the reference design and why. Phase 8 (strava_export importer,
+merge visibility/split, rules-based insight engine — see
+`docs/adr/0012-phase-8-strava-merge-insights.md`), Phase 7 (map explorer, recaps, PWA/offline
 shell — see `docs/adr/0011-phase-7-map-recaps-pwa.md`; image export was scoped in but dropped
 after verification showed the chosen library hangs on this app's Recharts-heavy pages, and PWA
 service-worker registration itself still needs verification on a real device, not just the
@@ -304,6 +309,37 @@ because you don't recognize it — stop, that's the bug.
   name, default UTC, not the container's own system clock, so a wall-clock schedule like
   "20:55 Pacific" stays correct across DST instead of drifting with a fixed UTC offset);
   `garmin_export` is never scheduled, it's a manual CLI action.
+- **Backup + restore automation (Phase 9)**: `perseverer/backup.py`'s `create_backup` snapshots
+  the SQLite database via `VACUUM INTO` and rsyncs it plus the raw archive and Parquet trees to
+  a second host over SSH (`PERSEVERER_BACKUP_HOST`/`USER`/`PATH`, all-or-nothing optional — skips
+  with a log line when unset, same contract as the Eufy credentials), on its own daily worker
+  schedule (`PERSEVERER_BACKUP_SCHEDULE_HOUR`/`MINUTE`, default 03:30 UTC) separate from the
+  Garmin sync's. `destination`/`source` are a plain string (`user@host:path` or a bare local
+  path) throughout — rsync treats both identically, which is what lets the CI
+  restore-from-backup job exercise the exact same code against a local temp dir instead of
+  needing a real SSH host. `sync backup restore` is deliberately CLI-only, never a Settings-page
+  button — unlike `rebuild` (additive, replays the raw archive), a restore overwrites live data
+  with an older snapshot, matching `sync auth login`'s own precedent for dangerous,
+  human-initiated actions. See `docs/adr/0014-phase-9-backup-hardening.md`.
+- **Login brute-force lockout (Phase 9)**: `auth/lockout.py`, DB-backed (not in-memory — `api`
+  runs 2 uvicorn workers that don't share process memory, but do share the one SQLite file),
+  keyed on username (not source IP, since only the trusted reverse-proxy IP is ever visible
+  server-side). `MAX_FAILED_ATTEMPTS` (5) failures in `LOCKOUT_WINDOW` (15 min) locks a username
+  out, returning the same generic 401 a wrong password would; `is_locked_out()` runs
+  unconditionally before the credential check so a locked-out response costs the same amount of
+  work as a wrong-password one, preserving `/auth/login`'s existing constant-time-comparison
+  discipline (ADR 0008) rather than reopening that same timing side-channel.
+- **Container hardening (Phase 9)**: `api`/`worker` Quadlet units run with
+  `ReadOnly=true`/`ReadOnlyTmpfs=true`/`NoNewPrivileges=true` — verified every real write path
+  each container has funnels through `/data` first (the bulk-upload endpoint's temp path,
+  DuckDB's `temp_directory`, both explicitly pointed under `/data`). `frontend` is deliberately
+  NOT hardened this way yet — its entrypoint rewrites `config.js` in place under
+  `/usr/share/nginx/html` at every container start (the mechanism that makes the API base URL
+  runtime-configurable, ADR 0008), which isn't one of Podman's auto-tmpfs'd paths and shares a
+  directory with the real static assets, so read-only support there needs an nginx.conf change
+  not yet made. See ADR 0014 decisions 6-7 (including a real historical Quadlet bug where
+  `ReadOnly=` silently forced `--read-only-tmpfs=false`, verified fixed in current Podman via its
+  own docs before relying on the default).
 - **Never drop a field, concretely**: the activity FIT parser (`fit/parser.py`), health FIT
   parser (`health/fit_parser.py`), and health JSON parser (`health/json_parser.py`) all
   register every field they see into `metric_definition`, even ones they don't materialize a
@@ -339,6 +375,8 @@ uv run sync report counts                # per-source activity counts + unmatche
 uv run sync rebuild                      # wipe derived tables, replay the entire raw archive
 uv run sync athlete set-password         # interactive: set an athlete's username/password
 uv run sync athlete create-key           # generate a per-athlete API key (printed once)
+uv run sync backup create                # VACUUM INTO snapshot + rsync to PERSEVERER_BACKUP_*
+uv run sync backup restore <path>        # CLI-only, human-initiated -- overwrites live data
 
 # Frontend
 cd frontend && npm install

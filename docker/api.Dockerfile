@@ -51,6 +51,11 @@ COPY alembic ./alembic
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
+    # Phase 9 hardening (ADR 0014): the Quadlet unit runs this with ReadOnly=true, so a .pyc
+    # write attempt under /app on first import would just silently fail anyway (CPython catches
+    # that and proceeds uncached, never fatal) -- this skips the attempt outright instead of
+    # relying on that fallback.
+    PYTHONDONTWRITEBYTECODE=1 \
     PERSEVERER_DUCKDB_EXTENSION_DIR=/app/.duckdb_extensions
 
 USER perseverer

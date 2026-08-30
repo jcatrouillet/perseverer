@@ -40,6 +40,7 @@ dev = [
   "pytest-asyncio>=0.24",
   "fitdecode>=0.10",
   "hypothesis>=6.115",
+  "pip-audit>=2.10.1",
 ]
 
 [build-system]

@@ -1,11 +1,13 @@
 """Worker container entrypoint: runs the daily garmin_connect sync + staleness check on a
-cron schedule (default 04:15 UTC, jittered — see §6 of the project spec). The schedule resolves
+cron schedule (default 04:15 UTC, jittered — see §6 of the project spec), and a separate daily
+backup job (Phase 9, ADR 0014, default 03:30 UTC — see backup.py). Both schedules resolve
 against `schedule_timezone` (an IANA name, default UTC), not the container's own system clock --
 see that setting's own docstring in config.py for why a real timezone rather than a fixed hour
 offset matters here (DST).
 
 `garmin_export` is deliberately never scheduled here — it's a one-off/occasional CLI action
-(`sync import garmin-export <path>`), not a recurring job.
+(`sync import garmin-export <path>`), not a recurring job. Same for `sync backup restore` --
+CLI-only, human-initiated, never automated (see backup.py's own docstring for why).
 """
 
 import logging
@@ -15,6 +17,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from perseverer.adapters.eufy import sync_eufy
 from perseverer.adapters.garmin_connect import RateLimitSettings, sync_garmin_connect
+from perseverer.backup import create_backup
 from perseverer.config import get_settings
 from perseverer.db.engine import make_engine
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
@@ -84,6 +87,40 @@ def run_daily_sync() -> None:
                 notify_webhook(settings.staleness_webhook_url, alert)
 
 
+def run_daily_backup() -> None:
+    """Separate scheduled job (its own hour/minute, see main() below), not folded into
+    run_daily_sync -- a backup is independent of whether the Garmin/Eufy sync above succeeded or
+    failed, and giving it its own cron time keeps it off the sync's own I/O-heavy window."""
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    logger.info("starting scheduled backup")
+    try:
+        result = create_backup(
+            engine,
+            settings.raw_archive_dir,
+            settings.parquet_dir,
+            settings.backups_dir,
+            backup_user=settings.backup_user,
+            backup_host=settings.backup_host,
+            backup_path=settings.backup_path,
+            ssh_key_path=settings.backup_ssh_key_path,
+            known_hosts_path=str(settings.backup_known_hosts_path),
+            keep_local_snapshots=settings.backup_keep_local_snapshots,
+        )
+    except Exception:
+        logger.exception("scheduled backup failed unexpectedly")
+        return
+    if result is None:
+        logger.info("scheduled backup skipped: not configured")
+    else:
+        logger.info(
+            "scheduled backup finished: snapshot=%s destination=%s pruned_local=%d",
+            result.snapshot_path.name,
+            result.destination,
+            result.pruned_local_snapshots,
+        )
+
+
 def main() -> None:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
@@ -106,6 +143,21 @@ def main() -> None:
         settings.schedule_minute,
         settings.schedule_timezone,
         settings.schedule_jitter_s,
+    )
+    scheduler.add_job(
+        run_daily_backup,
+        trigger=CronTrigger(
+            hour=settings.backup_schedule_hour,
+            minute=settings.backup_schedule_minute,
+            timezone=settings.schedule_timezone,
+        ),
+        id="daily_backup",
+    )
+    logger.info(
+        "scheduled daily backup at %02d:%02d %s",
+        settings.backup_schedule_hour,
+        settings.backup_schedule_minute,
+        settings.schedule_timezone,
     )
     scheduler.start()
 

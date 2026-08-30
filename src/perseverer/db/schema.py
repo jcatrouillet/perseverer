@@ -873,8 +873,26 @@ share_link = Table(
     Index("ix_share_link_athlete", "athlete_id"),
 )
 
+# --- Login brute-force lockout (Phase 9 hardening, ADR 0014) -- see auth/lockout.py ------
+
+auth_login_attempt = Table(
+    "auth_login_attempt",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    # Deliberately no athlete_id / FK to athlete: a login attempt against a nonexistent
+    # username must still be counted (that's exactly the case a brute-force attempt usually
+    # is), and there's no athlete row to attach it to until/unless the username is real -- see
+    # EXEMPT_FROM_ATHLETE_SCOPING below.
+    Column("username", String, nullable=False),
+    Column("attempted_at", DateTime(), nullable=False),
+    Column("success", Boolean, nullable=False),
+    Index("ix_auth_login_attempt_username_time", "username", "attempted_at"),
+)
+
 # --- Athlete-scoping bookkeeping, enforced by tests/db/test_schema.py -----------
 
 #: Tables that intentionally do NOT carry athlete_id because they are shared catalogs, not an
 #: individual athlete's data. Any table not in this set and not carrying athlete_id is a bug.
-EXEMPT_FROM_ATHLETE_SCOPING = frozenset({"athlete", "metric_definition"})
+EXEMPT_FROM_ATHLETE_SCOPING = frozenset(
+    {"athlete", "metric_definition", "auth_login_attempt"}
+)

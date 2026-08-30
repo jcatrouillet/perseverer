@@ -19,8 +19,34 @@ Environment=PERSEVERER_DATA_DIR=/data
 # enough, no package install needed.
 Environment=TZ=America/Los_Angeles
 Volume=/home/prez/perseverer/data:/data
+# SSH key for the Phase 9 daily backup job (ADR 0014, backup.py) -- mounted read-only at the
+# container's default `.ssh` lookup path so plain `ssh`/`rsync` pick up the key with no extra
+# flags. Deliberately :ro even though ssh's own accept-new host-key trust would normally want to
+# *write* a newly-seen host's key into a known_hosts file here -- backup.py explicitly redirects
+# that write to a separate file under /data instead (see PERSEVERER_DATA_DIR/backup_known_hosts,
+# config.py::backup_known_hosts_path), so the private key mount itself can stay read-only even
+# with ReadOnly=true below. One-time host setup, same "podman unshare chown" pattern as /data
+# above (the container's uid 1000 needs to own/read these files under rootless Podman's
+# user-namespace remapping) -- see docs/DEPLOY.md's Backups section for the exact commands. Only
+# takes effect once PERSEVERER_BACKUP_HOST/USER/PATH are actually set in perseverer.env;
+# create_backup() skips gracefully otherwise, so this mount is harmless to leave in place even
+# before that's configured.
+Volume=/home/prez/perseverer/backup-ssh:/home/perseverer/.ssh:ro
 # Ingestion must never starve the API or the host -- matches compose.nas.yml's own cap.
 PodmanArgs=--cpus=1.0 --memory=512m
+# Phase 9 hardening (ADR 0014): the only path this container ever writes to is /data (bind
+# mounted above) -- confirmed against every write site in the code it runs (backup.py's own
+# snapshot/rsync/known_hosts paths, the Garmin token store, the SQLite WAL files). ReadOnly=true
+# + NoNewPrivileges=true cost nothing here and close off an entire class of "a compromised
+# process modifies its own image" attack. ReadOnlyTmpfs= defaults to true (confirmed against
+# Podman's own current docs, not assumed -- an older Podman had a real bug where Quadlet's
+# ReadOnly= silently forced --read-only-tmpfs=false, github.com/containers/podman#20439, fixed
+# well before the Podman version bercy's Ubuntu 26.04 actually ships), which is what mounts a
+# writable tmpfs over /dev, /run, /tmp, and /var/tmp -- set explicitly anyway so this unit's own
+# intent doesn't quietly depend on whichever default a future Podman version ships.
+ReadOnly=true
+ReadOnlyTmpfs=true
+NoNewPrivileges=true
 
 [Service]
 Restart=always

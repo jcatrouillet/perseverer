@@ -17,6 +17,11 @@ COPY config ./config
 RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.12-slim AS runtime
+# rsync + ssh client: backup.py shells out to both for the Phase 9 daily backup job (ADR 0014).
+# Neither ships in the slim base image. No server-side sshd needed here -- this container only
+# ever connects *out* to the backup host, never accepts inbound connections.
+RUN apt-get update && apt-get install -y --no-install-recommends rsync openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin perseverer
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
@@ -24,9 +29,12 @@ COPY --from=builder /app/src /app/src
 COPY --from=builder /app/config /app/config
 
 ENV PATH="/app/.venv/bin:${PATH}" \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    # See api.Dockerfile's own comment -- same ReadOnly=true Quadlet unit, same reasoning.
+    PYTHONDONTWRITEBYTECODE=1
 
 USER perseverer
 
-# No scheduled jobs yet (Phase 0 placeholder) — see perseverer/worker/main.py.
+# Daily garmin_connect/Eufy sync + daily backup, each on its own cron schedule -- see
+# perseverer/worker/main.py.
 CMD ["python", "-m", "perseverer.worker.main"]

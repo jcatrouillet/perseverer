@@ -265,8 +265,49 @@ regardless), only the API calls it makes afterward fail.
   skip — nothing reads that prefix anymore — but leaves 9700+ orphaned rows behind). Not needed
   for a fresh install or any database created after the rename.
 
-## Backups (Phase 9)
+## Backups (Phase 9, ADR 0014)
 
-TODO: `VACUUM INTO` snapshot schedule, rsync of the raw archive + Parquet trees, and an
-automated restore-from-backup test wired into CI. Not built yet — recorded here so the shape
-of this section doesn't get forgotten.
+`src/perseverer/backup.py` snapshots the SQLite database via `VACUUM INTO` (a live, consistent
+snapshot — no need to stop the app) and rsyncs it plus the raw archive and Parquet trees to a
+second host over SSH. Scheduled daily in the worker container (`PERSEVERER_BACKUP_SCHEDULE_HOUR`/
+`MINUTE`, default 03:30 UTC — its own cron job, separate from the Garmin sync's schedule), and
+runnable by hand: `podman exec perseverer-worker sync backup create`.
+
+**Configuration** (`quadlet/perseverer.env.example`): `PERSEVERER_BACKUP_HOST`,
+`PERSEVERER_BACKUP_USER`, `PERSEVERER_BACKUP_PATH` (all three required together — unset means
+`create_backup()` logs and skips, same graceful-degradation contract as the Eufy credentials),
+`PERSEVERER_BACKUP_SSH_KEY_PATH` (optional, only needed for a non-default key),
+`PERSEVERER_BACKUP_KEEP_LOCAL_SNAPSHOTS` (default 7 — bounds *local* disk usage on bercy; the
+remote copy is the real backup and is deliberately left to accumulate full history).
+
+**One-time host setup** (this app has no way to provision credentials on a host it doesn't
+control, so this step is manual):
+```bash
+# On bercy, as the user the worker container's rootless Podman runs under:
+mkdir -p /home/prez/perseverer/backup-ssh
+ssh-keygen -t ed25519 -f /home/prez/perseverer/backup-ssh/id_ed25519 -N ""
+ssh-copy-id -i /home/prez/perseverer/backup-ssh/id_ed25519.pub <backup_user>@<backup_host>
+# The container's uid 1000 needs to read these under rootless Podman's user-namespace remapping
+# -- same "podman unshare chown" pattern the /data bind mount already uses.
+podman unshare chown -R 1000:1000 /home/prez/perseverer/backup-ssh
+chmod 700 /home/prez/perseverer/backup-ssh
+chmod 600 /home/prez/perseverer/backup-ssh/id_ed25519
+```
+The Quadlet worker unit mounts this directory read-only at the container's default `~/.ssh`
+lookup path, so plain `ssh`/`rsync` pick up the key with no extra flags once
+`PERSEVERER_BACKUP_HOST`/`USER`/`PATH` are filled in.
+
+**Restore** is deliberately CLI-only, never a Settings-page button — unlike `rebuild` (additive,
+replays the raw archive, never destructive), a restore overwrites whatever is currently at this
+host's data directory with an older snapshot. Human-initiated, one-shot, matching
+`sync auth login`'s own precedent for dangerous actions:
+```bash
+podman exec -it perseverer-worker sync backup restore <path-or-user@host:path>
+```
+
+**Automated restore-from-backup test**: wired into CI (`.github/workflows/ci.yml`'s
+`backup-restore` job) — imports a real fixture, backs it up to a local temp directory (rsync
+treats a local path and a `user@host:path` spec identically, so this exercises the exact same
+code with no LAN/SSH host for a CI runner to reach), wipes the data directory entirely, restores,
+and asserts the activity count and raw-archive file listing both match exactly. This is the
+literal Phase 9 acceptance criterion.

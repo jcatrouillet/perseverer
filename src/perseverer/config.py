@@ -91,6 +91,26 @@ class Settings(BaseSettings):
     eufy_device_id: str | None = None
     eufy_customer_id: str | None = None
 
+    # --- Backup + restore automation (Phase 9, backup.py) ---
+    # All optional and unset by default -- create_backup() logs and skips (not an error) when
+    # unconfigured, same graceful-degradation contract as the Eufy block above. rsync over SSH to
+    # a second host, not a cloud target: this is a home-lab single-NUC deployment (bercy), and
+    # the user already has a second LAN host to rsync to. The one-time SSH key exchange
+    # (`ssh-copy-id`) is a manual runbook step in docs/DEPLOY.md -- this app has no way to
+    # provision credentials on a host it doesn't control.
+    backup_host: str | None = None
+    backup_user: str | None = None
+    backup_path: str | None = None
+    # Defaults to the invoking user's own default key (~/.ssh/id_ed25519 etc.) when unset --
+    # only needed if the backup step must use a specific, dedicated key.
+    backup_ssh_key_path: str | None = None
+    backup_schedule_hour: int = 3
+    backup_schedule_minute: int = 30
+    # How many local timestamped DB snapshots to keep under <data_dir>/backups/ before pruning --
+    # the remote rsync copy is the real backup; local snapshots only exist to be rsync'd from, so
+    # there's no reason to let them accumulate forever.
+    backup_keep_local_snapshots: int = 7
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "perseverer.db"
@@ -106,6 +126,18 @@ class Settings(BaseSettings):
     @property
     def garmin_tokenstore_dir(self) -> Path:
         return self.data_dir / "garmin_tokens"
+
+    @property
+    def backups_dir(self) -> Path:
+        return self.data_dir / "backups"
+
+    @property
+    def backup_known_hosts_path(self) -> Path:
+        # A dedicated known_hosts file under /data (always writable), not backup.py's own
+        # read-only-mounted SSH key directory -- see backup.py::_rsync's own docstring for why
+        # accept-new's first-contact write needs a genuinely writable path once the worker
+        # container's root filesystem is read-only (Phase 9 container hardening, ADR 0014).
+        return self.data_dir / "backup_known_hosts"
 
     @property
     def cors_origins_list(self) -> list[str]:

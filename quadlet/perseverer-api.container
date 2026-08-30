@@ -36,6 +36,14 @@ HealthStartPeriod=10s
 # export.xml into memory before archiving it) got OOM-killed under the old limit. 2g covers that
 # with headroom without meaningfully denting bercy's real budget.
 PodmanArgs=--memory=2g
+# Phase 9 hardening (ADR 0014): the only path this container writes to is /data (bind mounted
+# above) -- the bulk-import upload endpoint streams to `settings.data_dir / "tmp"`, not the
+# OS /tmp, and DuckDB's own temp_directory is explicitly pointed under /data too
+# (api/duckdb_conn.py) specifically because of this. See perseverer-worker.container's own
+# comment for why ReadOnlyTmpfs= is set explicitly rather than left to default.
+ReadOnly=true
+ReadOnlyTmpfs=true
+NoNewPrivileges=true
 
 [Service]
 Restart=always

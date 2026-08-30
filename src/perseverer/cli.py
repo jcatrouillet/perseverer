@@ -45,6 +45,7 @@ from perseverer.auth.passwords import hash_password
 from perseverer.backfill_lap_moving_duration import backfill_lap_moving_duration
 from perseverer.backfill_locations import backfill_locations
 from perseverer.backfill_workouts import backfill_workouts
+from perseverer.backup import create_backup, restore_backup
 from perseverer.config import get_settings
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import activity, activity_source_link
@@ -66,11 +67,13 @@ watch_app = typer.Typer(help="Continuously poll a source on an interval")
 auth_app = typer.Typer(help="Garmin Connect authentication")
 report_app = typer.Typer(help="Reports over the ingested data")
 athlete_app = typer.Typer(help="Manage athlete login credentials (Phase 5 -- see ADR 0008)")
+backup_app = typer.Typer(help="Backup + restore automation (Phase 9 -- see ADR 0014)")
 app.add_typer(import_app, name="import")
 app.add_typer(watch_app, name="watch")
 app.add_typer(auth_app, name="auth")
 app.add_typer(report_app, name="report")
 app.add_typer(athlete_app, name="athlete")
+app.add_typer(backup_app, name="backup")
 
 
 FolderArg = Annotated[
@@ -295,9 +298,7 @@ def auth_login() -> None:
     """
     settings = get_settings()
     email = os.environ.get("GARMIN_EMAIL") or typer.prompt("Garmin email")
-    password = os.environ.get("GARMIN_PASSWORD") or typer.prompt(
-        "Garmin password", hide_input=True
-    )
+    password = os.environ.get("GARMIN_PASSWORD") or typer.prompt("Garmin password", hide_input=True)
     login_with_credentials(
         email,
         password,
@@ -370,6 +371,79 @@ def athlete_create_key(
         raise typer.Exit(code=1)
     typer.echo("API key created -- save it now, it will not be shown again:")
     typer.echo(raw_key)
+
+
+@backup_app.command("create")
+def backup_create(
+    destination: Annotated[
+        str | None,
+        typer.Option(
+            help="Override the destination (local path or user@host:path) instead of"
+            " PERSEVERER_BACKUP_HOST/USER/PATH -- mainly for an ad-hoc one-off backup, or a"
+            " local-only test run (see the CI restore-from-backup job)."
+        ),
+    ] = None,
+) -> None:
+    """Snapshot the DB (VACUUM INTO) and rsync it plus the raw archive + Parquet trees to
+    PERSEVERER_BACKUP_HOST/USER/PATH. This is what the worker's daily schedule also calls --
+    runnable by hand for an on-demand backup. Skips (logs, exits 0) when unconfigured and no
+    --destination override is given.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    result = create_backup(
+        engine,
+        settings.raw_archive_dir,
+        settings.parquet_dir,
+        settings.backups_dir,
+        destination=destination,
+        backup_user=settings.backup_user,
+        backup_host=settings.backup_host,
+        backup_path=settings.backup_path,
+        ssh_key_path=settings.backup_ssh_key_path,
+        known_hosts_path=str(settings.backup_known_hosts_path),
+        keep_local_snapshots=settings.backup_keep_local_snapshots,
+    )
+    if result is None:
+        typer.echo("Backup skipped: PERSEVERER_BACKUP_HOST/USER/PATH not configured.")
+        return
+    typer.echo(f"Backup complete: {result.snapshot_path.name} -> {result.destination}")
+
+
+@backup_app.command("restore")
+def backup_restore(
+    source: Annotated[
+        str,
+        typer.Argument(
+            help="Backup location to restore from -- a local path or a user@host:path rsync"
+            " spec, matching whatever `sync backup create` was pointed at."
+        ),
+    ],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Skip the confirmation prompt (for scripted/CI use)."),
+    ] = False,
+) -> None:
+    """Restore the DB + raw archive + Parquet trees from a backup, overwriting whatever is
+    currently at this host's own data directory. CLI-only, deliberately not exposed via the
+    Settings web UI -- this overwrites live data with an older snapshot, unlike the additive,
+    non-destructive `rebuild` command (see backup.py's own module docstring). Human-initiated,
+    one-shot, same as `sync auth login`.
+    """
+    settings = get_settings()
+    if not yes and not typer.confirm(
+        f"This will overwrite {settings.data_dir} with the backup at {source}. Continue?"
+    ):
+        raise typer.Exit(code=1)
+    result = restore_backup(
+        source,
+        db_path=settings.db_path,
+        raw_archive_dir=settings.raw_archive_dir,
+        parquet_dir=settings.parquet_dir,
+        ssh_key_path=settings.backup_ssh_key_path,
+        known_hosts_path=str(settings.backup_known_hosts_path),
+    )
+    typer.echo(f"Restored {result.restored_db_path} from snapshot {result.source_snapshot}.")
 
 
 @report_app.command("counts")

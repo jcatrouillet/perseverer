@@ -8,6 +8,7 @@ from sqlalchemy import Engine
 
 from perseverer.api.dependencies import get_duckdb, get_engine
 from perseverer.api.main import app
+from perseverer.auth.lockout import MAX_FAILED_ATTEMPTS
 from perseverer.auth.passwords import hash_password
 from perseverer.auth.tokens import verify_session_token
 from perseverer.config import Settings, get_settings
@@ -73,6 +74,61 @@ def test_login_unknown_username_401(
             "/api/v1/auth/login", json={"username": "nobody", "password": "whatever"}
         )
         assert r.status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_login_locks_out_after_max_failed_attempts(
+    tmp_path: Path, engine: Engine, duckdb_con: duckdb.DuckDBPyConnection
+) -> None:
+    """The MAX_FAILED_ATTEMPTS'th wrong password still 401s normally (that's just a wrong
+    password); the *next* attempt is locked out even with the *correct* password -- proving the
+    lockout, not the password check, is what's rejecting it."""
+    _set_password(engine, "jerome", "hunter2")
+    client = _client_with_jwt_secret(tmp_path, engine, duckdb_con, JWT_SECRET)
+    try:
+        for _ in range(MAX_FAILED_ATTEMPTS):
+            r = client.post(
+                "/api/v1/auth/login", json={"username": "jerome", "password": "wrong"}
+            )
+            assert r.status_code == 401
+
+        r = client.post("/api/v1/auth/login", json={"username": "jerome", "password": "hunter2"})
+        assert r.status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_login_not_locked_out_below_the_threshold(
+    tmp_path: Path, engine: Engine, duckdb_con: duckdb.DuckDBPyConnection
+) -> None:
+    _set_password(engine, "jerome", "hunter2")
+    client = _client_with_jwt_secret(tmp_path, engine, duckdb_con, JWT_SECRET)
+    try:
+        for _ in range(MAX_FAILED_ATTEMPTS - 1):
+            r = client.post(
+                "/api/v1/auth/login", json={"username": "jerome", "password": "wrong"}
+            )
+            assert r.status_code == 401
+
+        r = client.post("/api/v1/auth/login", json={"username": "jerome", "password": "hunter2"})
+        assert r.status_code == 200
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_login_lockout_is_scoped_to_one_username(
+    tmp_path: Path, engine: Engine, duckdb_con: duckdb.DuckDBPyConnection
+) -> None:
+    """A brute-force run against one username must never lock out a different, real athlete."""
+    _set_password(engine, "jerome", "hunter2")
+    client = _client_with_jwt_secret(tmp_path, engine, duckdb_con, JWT_SECRET)
+    try:
+        for _ in range(MAX_FAILED_ATTEMPTS + 2):
+            client.post("/api/v1/auth/login", json={"username": "someone-else", "password": "x"})
+
+        r = client.post("/api/v1/auth/login", json={"username": "jerome", "password": "hunter2"})
+        assert r.status_code == 200
     finally:
         app.dependency_overrides.clear()
 
