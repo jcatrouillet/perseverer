@@ -545,6 +545,79 @@ activity_workout_step = Table(
     ),
 )
 
+# A *future*, athlete-authored workout scheduled on the calendar (Phase 10-ish, "scheduled
+# workouts") -- NOT the same table as activity_workout/activity_workout_step above, even though
+# the column shape (duration/target/repeat) deliberately mirrors it: those two are retrospective,
+# keyed 1:1 on a completed activity_id, parsed out of a device's own recorded FIT workout_mesgs;
+# these are prospective, keyed on a future local_date, authored by the athlete as free text
+# (workout_syntax.py) and pushed to a Garmin watch as a real structured workout -- a push
+# lifecycle activity_workout has no concept of. One row per athlete per day (v1) -- Garmin's own
+# schedule_workout() is itself date-granular, so there's no finer grain to support yet. sport is
+# an open string, not an enum, so a 5th sport later (see workout_syntax.py's own docstring for
+# the "running first" scoping) needs a data-only addition, matching the project's own additive-
+# schema-evolution principle.
+planned_workout = Table(
+    "planned_workout",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("local_date", String, nullable=False),
+    Column("sport", String, nullable=False),  # "running" | "yoga" | "bouldering" | "fitness"
+    Column("name", String, nullable=True),
+    # The athlete's own typed text, kept verbatim -- raw-first-adjacent: never lose what they
+    # actually authored even if the parser or step model changes later. Re-parsed into
+    # planned_workout_step on every save, not just the first.
+    Column("source_text", Text, nullable=True),
+    Column("estimated_duration_s", Float, nullable=True),
+    Column("garmin_workout_id", Integer, nullable=True),
+    Column("garmin_scheduled_at", DateTime(), nullable=True),
+    Column("push_status", String, nullable=False),  # "draft" | "pushed" | "push_failed"
+    Column("push_error", Text, nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    UniqueConstraint("athlete_id", "local_date", name="uq_planned_workout_identity"),
+)
+
+# One row per planned step, in workout_syntax.py's own parse order -- unexpanded, same
+# "repeat block is itself one row describing [repeat_from_step..step_index-1] x repeat_count"
+# convention as activity_workout_step (see its own docstring), reused deliberately so the
+# frontend's existing expandWorkoutSteps/groupWorkoutStepsForDisplay (workoutSteps.ts) work
+# unmodified against either table's rows.
+planned_workout_step = Table(
+    "planned_workout_step",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("planned_workout_id", Integer, ForeignKey("planned_workout.id"), nullable=False),
+    Column("step_index", Integer, nullable=False),
+    # "time" | "distance" | "repeat_until_steps_cmplt"
+    Column("duration_type", String, nullable=True),
+    Column("duration_time_s", Float, nullable=True),
+    Column("duration_distance_m", Float, nullable=True),
+    Column("target_type", String, nullable=True),  # "pace" | "heart_rate" | None (open/no target)
+    # Unit depends on target_type: m/s for "pace", bpm for "heart_rate" -- same convention as
+    # activity_workout_step.target_low_mps/target_high_mps, just widened to cover HR too since a
+    # planned step (unlike a recorded one) can target either.
+    Column("target_low", Float, nullable=True),
+    Column("target_high", Float, nullable=True),
+    # Alternative to target_low/high for an HR target expressed as "Z2 HR" rather than an
+    # absolute bpm range -- resolved against the athlete's own athlete_hr_zone_config at push
+    # time (hr_zones.py::compute_hr_zone_boundaries), not a hardcoded %-of-max scheme.
+    Column("target_hr_zone", Integer, nullable=True),
+    Column("cadence_low", Integer, nullable=True),
+    Column("cadence_high", Integer, nullable=True),
+    Column("intensity", String, nullable=True),  # warmup|active|recovery|cooldown|rest -- same
+    # vocabulary activity_workout_step.intensity already uses.
+    Column("repeat_from_step", Integer, nullable=True),
+    Column("repeat_count", Integer, nullable=True),
+    UniqueConstraint(
+        "athlete_id",
+        "planned_workout_id",
+        "step_index",
+        name="uq_planned_workout_step_identity",
+    ),
+)
+
 # --- Health (schema created now; population starts Phase 2) --------------------
 
 health_observation = Table(

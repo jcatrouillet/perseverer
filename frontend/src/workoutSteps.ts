@@ -10,17 +10,33 @@
 //   - `groupWorkoutStepsForDisplay`: a nested Warmup/5x[interval, recovery]/Cooldown grouping
 //     for a human-readable panel -- matching how Garmin Connect itself presents a workout, not
 //     a flat expanded list.
-import type { ActivityWorkoutStepOut } from "./api/types";
+import type { ActivityWorkoutStepOut, PlannedWorkoutStepOut } from "./api/types";
 import { formatMinPerKm, isPaceSport, streamSpeedValue } from "./runningStats";
 
-function sortedBySteps(steps: ActivityWorkoutStepOut[]): ActivityWorkoutStepOut[] {
+// Generalized over the two step shapes this app has: ActivityWorkoutStepOut (recorded, parsed
+// from a device's own FIT workout_mesgs, target_low_mps/target_high_mps, speed-only) and
+// PlannedWorkoutStepOut (authored on the calendar, workout_syntax.py, target_low/target_high in
+// pace-or-HR units plus target_hr_zone/cadence). Both share the same repeat-block/step_index/
+// intensity shape (deliberately -- see db/schema.py::planned_workout_step's own docstring), so
+// expand/group need only this common subset, not either concrete type -- letting the planned-
+// workout schedule form reuse the exact same grouping/expansion this file already had for
+// recorded activities, per docs/adr/0015-scheduled-workouts.md.
+interface WorkoutStepLike {
+  step_index: number;
+  duration_type: string | null;
+  intensity: string | null;
+  repeat_from_step: number | null;
+  repeat_count: number | null;
+}
+
+function sortedBySteps<T extends WorkoutStepLike>(steps: T[]): T[] {
   return [...steps].sort((a, b) => a.step_index - b.step_index);
 }
 
 /** Step indices absorbed into some repeat block -- computed as its own pass since a repeat
  * step's children appear *before* it in step_index order, so "is this consumed" can't be
  * determined while walking forward in a single pass. */
-function consumedByRepeats(sorted: ActivityWorkoutStepOut[]): Set<number> {
+function consumedByRepeats<T extends WorkoutStepLike>(sorted: T[]): Set<number> {
   const consumed = new Set<number>();
   for (const step of sorted) {
     if (
@@ -36,10 +52,10 @@ function consumedByRepeats(sorted: ActivityWorkoutStepOut[]): Set<number> {
 
 /** The actual executed sequence: every repeat block replaced by `repeat_count` copies of the
  * steps it repeats, in order. A step with no repeat wrapping it passes through unchanged. */
-export function expandWorkoutSteps(steps: ActivityWorkoutStepOut[]): ActivityWorkoutStepOut[] {
+export function expandWorkoutSteps<T extends WorkoutStepLike>(steps: T[]): T[] {
   const sorted = sortedBySteps(steps);
   const consumed = consumedByRepeats(sorted);
-  const expanded: ActivityWorkoutStepOut[] = [];
+  const expanded: T[] = [];
   for (const step of sorted) {
     if (consumed.has(step.step_index)) continue;
     if (
@@ -58,14 +74,14 @@ export function expandWorkoutSteps(steps: ActivityWorkoutStepOut[]): ActivityWor
   return expanded;
 }
 
-export interface WorkoutDisplayGroup {
+export interface WorkoutDisplayGroup<T extends WorkoutStepLike> {
   // "Warmup" / "Cooldown" / "5x" / a capitalized intensity -- always a real label, never blank,
   // so the text panel never renders an unheaded bullet.
   label: string;
   // Set only for a repeat group -- distinguishes "5x" (a real repeat count) from a plain
   // single-step group sharing the same rendering otherwise.
   repeatCount: number | null;
-  steps: ActivityWorkoutStepOut[];
+  steps: T[];
 }
 
 /** "Warmup" / "Active" / "Recovery" / "Cooldown" / "Rest" -- a step's own planned intensity,
@@ -79,10 +95,12 @@ export function labelForIntensity(intensity: string | null): string {
 /** The nested Warmup/5x[...]/Cooldown grouping for a human-readable panel -- a repeat block's
  * own children are rendered once, as the repeat group's `steps`, not flattened into the
  * top-level list (contrast `expandWorkoutSteps`, which does flatten, for chart alignment). */
-export function groupWorkoutStepsForDisplay(steps: ActivityWorkoutStepOut[]): WorkoutDisplayGroup[] {
+export function groupWorkoutStepsForDisplay<T extends WorkoutStepLike>(
+  steps: T[],
+): WorkoutDisplayGroup<T>[] {
   const sorted = sortedBySteps(steps);
   const consumed = consumedByRepeats(sorted);
-  const groups: WorkoutDisplayGroup[] = [];
+  const groups: WorkoutDisplayGroup<T>[] = [];
   for (const step of sorted) {
     if (consumed.has(step.step_index)) continue;
     if (
@@ -162,10 +180,17 @@ export function formatStepDistanceKm(meters: number): string {
   return km < 1 ? `${km.toFixed(2)}km` : `${km.toFixed(1)}km`;
 }
 
+interface DurationStepLike {
+  duration_type: string | null;
+  duration_time_s: number | null;
+  duration_distance_m: number | null;
+}
+
 /** "15m" / "75s" -- Garmin's own convention, confirmed against real figures: an exact multiple
  * of 60s is shown in minutes (900s -> "15m", 600s -> "10m"), anything else in raw seconds (75s
- * stays "75s", not "1m15s" or "1.25m"). */
-export function formatStepDurationLabel(step: ActivityWorkoutStepOut): string | null {
+ * stays "75s", not "1m15s" or "1.25m"). Generalized (see WorkoutStepLike above) so the planned-
+ * workout schedule form's own preview reuses this rather than a second duration formatter. */
+export function formatStepDurationLabel(step: DurationStepLike): string | null {
   if (step.duration_type === "distance" && step.duration_distance_m != null) {
     const km = step.duration_distance_m / 1000;
     return `${Number.isInteger(km) ? km : km.toFixed(2)}km`;
@@ -176,4 +201,39 @@ export function formatStepDurationLabel(step: ActivityWorkoutStepOut): string | 
       : `${Math.round(step.duration_time_s)}s`;
   }
   return null;
+}
+
+// --- Planned-workout-specific target rendering -- PlannedWorkoutStepOut can target pace *or*
+// heart rate (an absolute range or a "Z2"-style zone) *and* carry a cadence range alongside
+// either, which ActivityWorkoutStepOut's speed-only target never could -- see
+// db/schema.py::planned_workout_step's own docstring. Kept separate from targetPaceRangeLabel
+// above rather than folded in: the two step shapes' target semantics genuinely differ (m/s vs.
+// bpm vs. zone number), and one function trying to branch across both would obscure more than
+// it'd share.
+
+/** "5:00-5:10/km" / "5:10/km" (pace), "140-150 bpm" / "150 bpm" (absolute HR), or "Z2" (a zone)
+ * -- whichever the step actually targets, or null for an open/no-target step. */
+export function plannedTargetLabel(step: PlannedWorkoutStepOut): string | null {
+  if (step.target_type === "pace" && step.target_low != null && step.target_high != null) {
+    const fast = formatMinPerKm(1000 / step.target_high / 60);
+    const slow = formatMinPerKm(1000 / step.target_low / 60);
+    return fast === slow ? `${fast}/km` : `${fast}-${slow}/km`;
+  }
+  if (step.target_type === "heart_rate") {
+    if (step.target_hr_zone != null) return `Z${step.target_hr_zone}`;
+    if (step.target_low != null && step.target_high != null) {
+      return step.target_low === step.target_high
+        ? `${step.target_low} bpm`
+        : `${step.target_low}-${step.target_high} bpm`;
+    }
+  }
+  return null;
+}
+
+/** "170-180 spm" / "175 spm" -- null when the step has no cadence target at all. */
+export function plannedCadenceLabel(step: PlannedWorkoutStepOut): string | null {
+  if (step.cadence_low == null || step.cadence_high == null) return null;
+  return step.cadence_low === step.cadence_high
+    ? `${step.cadence_low} spm`
+    : `${step.cadence_low}-${step.cadence_high} spm`;
 }

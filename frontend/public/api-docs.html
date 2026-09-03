@@ -451,7 +451,7 @@
 
     <section class="doc-section" id="overview">
       <h2>Overview</h2>
-      <p>The API is organized around ten resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
+      <p>The API is organized around eleven resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Planned Workouts</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
       <p>There is exactly one athlete per deployment credential — every endpoint is implicitly scoped to the athlete resolved from your auth credential, so there is never an <code>athlete_id</code> parameter to pass yourself.</p>
       <div class="callout"><strong>Base URL is deployment-specific.</strong> This API has no public multi-tenant host — you run it yourself (Docker/Podman), and the origin depends on how you've exposed it (a reverse-proxy hostname, a local port, a Tailscale address). Substitute your own origin for <code>https://your-perseverer-host</code> in every example on this page.</div>
     </section>
@@ -578,6 +578,7 @@ const EX = {
   ACT2: "01HZXK5M2R7Y8ZQF3N9C1WGTBH",
   LINK: 2,
   GOAL: 14,
+  PLANNED_DATE: "2026-09-01",
 };
 
 // ---------------------------------------------------------------------------
@@ -1037,6 +1038,51 @@ const SCHEMAS = [
   { name: "RevokeShareOut", note: "Returned by POST /share/{id}/revoke.", fields: [
       ["revoked","boolean","False (not an error) if the id doesn't exist or isn't owned by the authenticated athlete — never leaks which."],
     ] },
+  { name: "PlannedWorkoutListItemOut", note: "One row of GET /planned-workouts — the calendar grid's own per-day indicator.", fields: [
+      ["local_date","string(date)",""],
+      ["id","integer",""],
+      ["sport","string",""],
+      ["name","string|null",""],
+      ["push_status","string","draft | pushed | push_failed."],
+    ] },
+  { name: "PlannedWorkoutOut", note: "Returned by GET/PUT /planned-workouts/{local_date}. See “available: false” in Conventions.", fields: [
+      ["available","boolean","required"],
+      ["id","integer|null","optional — omitted when available is false","opt"],
+      ["local_date","string(date)|null","optional","opt"],
+      ["sport","string|null","optional","opt"],
+      ["name","string|null","optional","opt"],
+      ["source_text","string|null","The athlete's own typed text, verbatim.","opt"],
+      ["estimated_duration_s","number|null","An estimate — a distance-based step's real duration depends on the athlete's actual pace.","opt"],
+      ["steps","array<PlannedWorkoutStepOut>","Defaults to []. Raw, unexpanded (repeat-block markers included).","opt"],
+      ["parse_errors","array<ParseErrorOut>","Defaults to []. From re-parsing the currently-stored source_text.","opt"],
+      ["push_status","string|null","draft | pushed | push_failed.","opt"],
+      ["push_error","string|null","","opt"],
+      ["garmin_workout_id","integer|null","","opt"],
+      ["garmin_scheduled_at","string(date-time)|null","","opt"],
+    ] },
+  { name: "PlannedWorkoutStepOut", fields: [
+      ["step_index","integer",""],
+      ["duration_type","string|null","time | distance | repeat_until_steps_cmplt."],
+      ["duration_time_s","number|null",""],
+      ["duration_distance_m","number|null",""],
+      ["target_type","string|null","pace | heart_rate."],
+      ["target_low","number|null","m/s for pace, bpm for heart_rate."],
+      ["target_high","number|null","m/s for pace, bpm for heart_rate."],
+      ["target_hr_zone","integer|null","Alternative to target_low/target_high — resolved against the athlete's own configured HR zones at push time."],
+      ["cadence_low","integer|null","Steps/min."],
+      ["cadence_high","integer|null","Steps/min."],
+      ["intensity","string|null","e.g. warmup, active, recovery, cooldown, rest."],
+      ["repeat_from_step","integer|null","For a repeat-block step: the step_index it loops back to."],
+      ["repeat_count","integer|null",""],
+    ] },
+  { name: "ParseErrorOut", fields: [
+      ["line_no","integer","1-indexed."],
+      ["message","string",""],
+    ] },
+  { name: "RecurringWorkoutOut", note: "Returned by POST /planned-workouts/recurring.", fields: [
+      ["created_dates","array<string(date)>",""],
+      ["skipped_dates","array<string(date)>","Already had a planned workout — left untouched, not overwritten."],
+    ] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1485,6 +1531,72 @@ const GROUPS = [
       responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "goal not found"' } ],
       example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/goals/${EX.GOAL} \\
   -H "X-API-Key: YOUR_API_KEY"` }
+    },
+  ]},
+
+  { id: "planned-workouts", title: "Planned Workouts", endpoints: [
+    { method: "GET", path: "/api/v1/planned-workouts", summary: "List scheduled workouts in a date range.",
+      description: "The calendar grid's own per-day indicator — not the full workout, just enough to render one.",
+      params: [
+        ["start_date","query","req","string","—","Inclusive."],
+        ["end_date","query","req","string","—","Inclusive."],
+      ],
+      responses: [ { code: 200, ref: "array&lt;PlannedWorkoutListItemOut&gt;" } ],
+      example: { qs: "?start_date=2026-09-01&end_date=2026-09-30" }
+    },
+    { method: "GET", path: "/api/v1/planned-workouts/{local_date}", summary: "Get one day's planned workout.",
+      description: "Its parsed steps plus any parse errors from the currently-stored source_text. available: false (not 404) when nothing is scheduled for that date.",
+      params: [ ["local_date","path","req","string","—","ISO date."] ],
+      responses: [ { code: 200, ref: "PlannedWorkoutOut" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_DATE} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "PUT", path: "/api/v1/planned-workouts/{local_date}", summary: "Create or replace the planned workout for one date.",
+      description: "Upsert keyed on (athlete_id, local_date) — re-parses source_text into a fresh set of steps every time. Editing a workout that was already \"pushed\" resets push_status back to \"draft\" (the old Garmin copy is stale and gets re-pushed fresh on the next push).",
+      params: [ ["local_date","path","req","string","—","ISO date."] ],
+      body: { schema: "PlannedWorkoutIn", fields: [
+        ["sport","string","req","","running | yoga | bouldering | fitness — open string, not an enum."],
+        ["name","string|null","opt","",""],
+        ["source_text","string|null","opt","","A malformed line doesn't reject the save — it's still stored, and the resulting parse_errors come back in the response."],
+      ]},
+      responses: [ { code: 200, ref: "PlannedWorkoutOut" } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_DATE} \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"sport": "running", "name": "Tempo run", "source_text": "Warmup 10m\\n\\n4x\\n3m 5:00-5:10/km Pace\\n2m Z2 HR\\n\\nCooldown 5m"}'` }
+    },
+    { method: "DELETE", path: "/api/v1/planned-workouts/{local_date}", summary: "Delete a planned workout.",
+      description: "If it was already pushed, also best-effort deletes the Garmin-side workout template — a Garmin-side failure there never blocks the local delete.",
+      params: [ ["local_date","path","req","string","—","ISO date."] ],
+      responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "planned workout not found"' } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_DATE} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/planned-workouts/{local_date}/push", summary: "Push one workout to Garmin now.",
+      description: "The manual override alongside the worker's own automatic push for anything due within the coming week (PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS, default 7). Runs in the background; poll GET /planned-workouts/{local_date} afterward for the updated push_status/push_error.",
+      params: [ ["local_date","path","req","string","—","ISO date."] ],
+      responses: [ { code: 200, ref: "JobTriggerOut" }, { code: 404, note: 'detail: "planned workout not found"' } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_DATE}/push \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/planned-workouts/recurring", summary: "Schedule the same workout on a repeating set of dates.",
+      description: "Creates one independent planned_workout row per occurrence date — not a recurring-rule object; each row can be edited or deleted independently afterward. A date that already has a planned workout is skipped, not overwritten, and reported back in skipped_dates.",
+      body: { schema: "RecurringWorkoutIn", fields: [
+        ["local_date","string","req","","First occurrence, ISO date."],
+        ["sport","string","req","",""],
+        ["name","string|null","opt","",""],
+        ["source_text","string|null","opt","",""],
+        ["frequency","string","req","","weekly | every_n_days | monthly."],
+        ["interval_days","integer","req for every_n_days","",">= 1."],
+        ["count","integer","exactly one of count/until","","Total occurrences, including the first."],
+        ["until","string","exactly one of count/until","","ISO date, inclusive."],
+      ]},
+      responses: [
+        { code: 200, ref: "RecurringWorkoutOut" },
+        { code: 422, note: "Invalid frequency, missing interval_days for every_n_days, or neither/both of count/until given. detail is a plain string." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/recurring \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"local_date": "2026-09-01", "sport": "running", "source_text": "Warmup 10m", "frequency": "weekly", "count": 8}'` }
     },
   ]},
 

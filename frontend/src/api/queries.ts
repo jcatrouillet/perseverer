@@ -46,6 +46,9 @@ import type {
   PaceBandOut,
   Page,
   PeriodCalendarResponse,
+  PlannedWorkoutListItemOut,
+  PlannedWorkoutOut,
+  RecurringWorkoutOut,
   RevokeShareOut,
   RunningLoadConfigIn,
   RunningLoadConfigOut,
@@ -818,6 +821,96 @@ export function useDeleteGoal() {
       void queryClient.invalidateQueries({
         queryKey: ["goal-progress", goal.period_type, goal.period_start],
       });
+    },
+  });
+}
+
+// --- Scheduled workouts (planned_workout) -- see api/routers/planned_workouts.py and
+// docs/adr/0015-scheduled-workouts.md. `usePlannedWorkoutsList` backs the calendar grid's own
+// per-day indicator; `usePlannedWorkout` backs the day panel/schedule form once a day is
+// expanded.
+
+export function usePlannedWorkoutsList(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["planned-workouts", startDate, endDate],
+    queryFn: () =>
+      apiGet<PlannedWorkoutListItemOut[]>(
+        `/api/v1/planned-workouts${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+export function usePlannedWorkout(localDate: string) {
+  return useQuery({
+    queryKey: ["planned-workout", localDate],
+    queryFn: () => apiGet<PlannedWorkoutOut>(`/api/v1/planned-workouts/${localDate}`),
+  });
+}
+
+export interface SavePlannedWorkoutInput {
+  localDate: string;
+  sport: string;
+  name: string | null;
+  source_text: string | null;
+}
+
+export function useSavePlannedWorkout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SavePlannedWorkoutInput) =>
+      apiPut<PlannedWorkoutOut>(`/api/v1/planned-workouts/${body.localDate}`, {
+        sport: body.sport,
+        name: body.name,
+        source_text: body.source_text,
+      }),
+    onSuccess: (_workout, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-workout", variables.localDate] });
+      void queryClient.invalidateQueries({ queryKey: ["planned-workouts"] });
+    },
+  });
+}
+
+export function useDeletePlannedWorkout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (localDate: string) => apiDelete<void>(`/api/v1/planned-workouts/${localDate}`),
+    onSuccess: (_void, localDate) => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-workout", localDate] });
+      void queryClient.invalidateQueries({ queryKey: ["planned-workouts"] });
+    },
+  });
+}
+
+export function usePushPlannedWorkout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (localDate: string) =>
+      apiPost<JobTriggerOut>(`/api/v1/planned-workouts/${localDate}/push`, {}),
+    onSuccess: (_result, localDate) => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-workout", localDate] });
+    },
+  });
+}
+
+export interface RecurringPlannedWorkoutInput {
+  local_date: string;
+  sport: string;
+  name: string | null;
+  source_text: string | null;
+  frequency: "weekly" | "every_n_days" | "monthly";
+  interval_days?: number;
+  count?: number;
+  until?: string;
+}
+
+export function useCreateRecurringPlannedWorkouts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: RecurringPlannedWorkoutInput) =>
+      apiPost<RecurringWorkoutOut>("/api/v1/planned-workouts/recurring", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-workouts"] });
+      void queryClient.invalidateQueries({ queryKey: ["planned-workout"] });
     },
   });
 }

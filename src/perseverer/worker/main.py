@@ -1,9 +1,10 @@
 """Worker container entrypoint: runs the daily garmin_connect sync + staleness check on a
-cron schedule (default 04:15 UTC, jittered — see §6 of the project spec), and a separate daily
-backup job (Phase 9, ADR 0014, default 03:30 UTC — see backup.py). Both schedules resolve
-against `schedule_timezone` (an IANA name, default UTC), not the container's own system clock --
-see that setting's own docstring in config.py for why a real timezone rather than a fixed hour
-offset matters here (DST).
+cron schedule (default 04:15 UTC, jittered — see §6 of the project spec), a separate daily
+backup job (Phase 9, ADR 0014, default 03:30 UTC — see backup.py), and a separate daily
+scheduled-workout push job (default 04:45 UTC, right after the sync — see planned_workouts.py).
+All three schedules resolve against `schedule_timezone` (an IANA name, default UTC), not the
+container's own system clock -- see that setting's own docstring in config.py for why a real
+timezone rather than a fixed hour offset matters here (DST).
 
 `garmin_export` is deliberately never scheduled here — it's a one-off/occasional CLI action
 (`sync import garmin-export <path>`), not a recurring job. Same for `sync backup restore` --
@@ -11,16 +12,24 @@ CLI-only, human-initiated, never automated (see backup.py's own docstring for wh
 """
 
 import logging
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import select
 
 from perseverer.adapters.eufy import sync_eufy
-from perseverer.adapters.garmin_connect import RateLimitSettings, sync_garmin_connect
+from perseverer.adapters.garmin_connect import (
+    GarminRateLimitAborted,
+    RateLimitSettings,
+    sync_garmin_connect,
+)
 from perseverer.backup import create_backup
 from perseverer.config import get_settings
 from perseverer.db.engine import make_engine
+from perseverer.db.schema import planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.planned_workouts import push_planned_workout
 from perseverer.staleness import check_staleness, notify_webhook
 
 logger = logging.getLogger("perseverer.worker")
@@ -121,6 +130,63 @@ def run_daily_backup() -> None:
         )
 
 
+def run_daily_workout_push() -> None:
+    """Separate scheduled job (its own hour/minute, see main() below), right after the daily
+    sync -- automatically pushes every `planned_workout` due within the coming
+    `planned_workout_push_window_days` days (default 7, "push it if it's within the coming
+    week" -- the athlete's own choice, see docs/adr/0015-scheduled-workouts.md) that hasn't been
+    pushed yet (`push_status != "pushed"`). `push_planned_workout` already catches and records
+    every per-workout failure itself (`push_status="push_failed"` + `push_error`) -- see its own
+    docstring -- so this loop only needs to handle the one exception it deliberately lets
+    through: `GarminRateLimitAborted`, which means the whole session hit Garmin's rate limit, not
+    that any specific workout is broken, and stops this run entirely (same "no retry, let the
+    next scheduled run continue" precedent as `run_daily_sync`)."""
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    today = datetime.now(UTC).date()
+    window_end = today + timedelta(days=settings.planned_workout_push_window_days)
+
+    rate_limits = RateLimitSettings(
+        request_interval_s=settings.garmin_request_interval_s,
+        max_requests_per_hour=settings.garmin_max_requests_per_hour,
+    )
+
+    with engine.connect() as conn:
+        due = conn.execute(
+            select(planned_workout.c.id, planned_workout.c.local_date).where(
+                planned_workout.c.athlete_id == DEFAULT_ATHLETE_ID,
+                planned_workout.c.push_status != "pushed",
+                planned_workout.c.local_date >= today.isoformat(),
+                planned_workout.c.local_date <= window_end.isoformat(),
+            )
+        ).fetchall()
+
+        logger.info("starting scheduled workout push: %d workout(s) due", len(due))
+        pushed = 0
+        for row in due:
+            try:
+                result = push_planned_workout(
+                    conn,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    planned_workout_id=row.id,
+                    tokenstore_dir=settings.garmin_tokenstore_dir,
+                    rate_limits=rate_limits,
+                )
+                if result.success:
+                    pushed += 1
+                else:
+                    logger.warning(
+                        "workout push failed for planned_workout %s (%s): %s",
+                        row.id,
+                        row.local_date,
+                        result.error,
+                    )
+            except GarminRateLimitAborted as e:
+                logger.warning("scheduled workout push run aborted by rate limit: %s", e)
+                break
+        logger.info("scheduled workout push finished: pushed=%d of %d due", pushed, len(due))
+
+
 def main() -> None:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
@@ -158,6 +224,22 @@ def main() -> None:
         settings.backup_schedule_hour,
         settings.backup_schedule_minute,
         settings.schedule_timezone,
+    )
+    scheduler.add_job(
+        run_daily_workout_push,
+        trigger=CronTrigger(
+            hour=settings.workout_push_schedule_hour,
+            minute=settings.workout_push_schedule_minute,
+            timezone=settings.schedule_timezone,
+        ),
+        id="daily_workout_push",
+    )
+    logger.info(
+        "scheduled daily workout push at %02d:%02d %s (window=%d days)",
+        settings.workout_push_schedule_hour,
+        settings.workout_push_schedule_minute,
+        settings.schedule_timezone,
+        settings.planned_workout_push_window_days,
     )
     scheduler.start()
 

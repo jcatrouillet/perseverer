@@ -51,6 +51,7 @@ import { ActivityTrimControls } from "../components/ActivityTrimControls";
 import { ActivityWeather } from "../components/ActivityWeather";
 import { BoulderingRoutesTable } from "../components/BoulderingRoutesTable";
 import { ChartFullscreen } from "../components/ChartFullscreen";
+import { CopyWorkoutButton } from "../components/CopyWorkoutButton";
 import { ClimbComparisonTable } from "../components/ClimbComparisonTable";
 import { ClimbGradeChart } from "../components/ClimbGradeChart";
 import { Icon } from "../components/Icon";
@@ -568,6 +569,14 @@ export function ActivityDetailPage({ id }: { id: string }) {
         <h2>Share</h2>
         <p className="chart-note">Generate a link anyone can open without signing in.</p>
         <ActivityShareButton activityId={id} />
+      </section>
+
+      <section className="card">
+        <h2>Schedule</h2>
+        <p className="chart-note">
+          Copy this activity, then paste it onto any calendar day to schedule a repeat.
+        </p>
+        <CopyWorkoutButton sport={sport} name={displayName} steps={workout.data?.steps} />
       </section>
 
       <section className="card">

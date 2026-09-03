@@ -1,0 +1,106 @@
+/* ScheduleWorkoutForm -- the "Planned workout" section of MonthView's expanded-day card. */
+
+.planned-workout__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.planned-workout__summary-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.planned-workout__status {
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+}
+
+.planned-workout__status--pushed {
+  background: var(--color-success-bg, var(--color-surface-raised));
+  color: var(--color-success, var(--color-text));
+}
+
+.planned-workout__status--push_failed {
+  background: var(--color-danger-bg, var(--color-surface-raised));
+  color: var(--color-danger, var(--color-text));
+}
+
+.planned-workout__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.planned-workout-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.planned-workout-form__row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.planned-workout-form__row .field {
+  flex: 1;
+}
+
+.planned-workout-form__textarea {
+  min-height: 8rem;
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-sm);
+}
+
+.planned-workout-form__errors {
+  color: var(--color-danger, var(--color-text));
+  font-size: var(--font-size-sm);
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.planned-workout-form__preview {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.planned-workout-form__preview-group ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+}
+
+.planned-workout-form__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.planned-workout-form__recurrence {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* month-grid__summary already exists for activity-count -- this mirrors it for a scheduled
+   workout's own indicator, distinct color so it reads as "planned", not "happened". */
+.month-grid__planned {
+  font-size: var(--font-size-sm);
+  color: var(--color-accent, var(--color-text-muted));
+}

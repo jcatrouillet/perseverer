@@ -111,6 +111,19 @@ class Settings(BaseSettings):
     # there's no reason to let them accumulate forever.
     backup_keep_local_snapshots: int = 7
 
+    # --- Scheduled workouts: automatic Garmin push (worker/main.py::run_daily_workout_push) ---
+    # A planned workout gets automatically pushed once its local_date is within this many days --
+    # the user's own choice ("push it if it's within the coming week"), not a full-calendar push
+    # (pushing a workout scheduled months out would just clutter the watch's own workout list
+    # long before the athlete cares). "Push now" (POST /planned-workouts/{date}/push) bypasses
+    # this window entirely for a manual override.
+    planned_workout_push_window_days: int = 7
+    # Its own hour/minute, right after the daily Garmin sync (default 04:15) -- late enough that
+    # any workout scheduled *today* by the athlete overnight is still caught by the same
+    # rolling-window check on tomorrow's run if this run's own DB read happened to race it.
+    workout_push_schedule_hour: int = 4
+    workout_push_schedule_minute: int = 45
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "perseverer.db"

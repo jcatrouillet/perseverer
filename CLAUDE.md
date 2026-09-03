@@ -287,6 +287,24 @@ because you don't recognize it — stop, that's the bug.
   the current run immediately — no retry, ever, anywhere. Garmin's SSO 429-locks per account
   with no recovery path; see `docs/adr/0003-phase-2-garmin-adapters.md` for how this is enforced
   structurally, not just by convention.
+- **Scheduled workouts (`planned_workout`/`planned_workout_step`, running only so far)**: the
+  *one* place this app writes to a third-party account rather than only reading from it —
+  `GarminConnectAdapter.push_planned_workout` uploads a real Garmin `RunningWorkout`
+  (`planned_workouts.py::build_running_workout`) and schedules it via `schedule_workout()`,
+  following the adapter's existing safety contract exactly (never a credentialed client of its
+  own, rate-limited per call, abort-no-retry on 429). The athlete authors a workout as free text
+  on the calendar (a real subset of intervals.icu's own workout-builder syntax — duration, a
+  pace/HR/zone target, cadence, a simple `Nx` repeat block), parsed by two independent
+  implementations kept in sync via one shared fixture table — `workout_syntax.py` (authoritative,
+  server-side) and `workoutSyntax.ts` (instant client-side preview), same `gap.ts`/`gap.py`
+  precedent. Push is automatic for anything due within
+  `PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS` (default 7) days
+  (`worker/main.py::run_daily_workout_push`, its own daily schedule), plus a manual
+  `POST /planned-workouts/{date}/push` override. Live-verified end to end (2026-09-03, a real
+  push + read-back against the author's own Garmin account): a cadence target riding alongside a
+  pace target on the same step (`_cadence_extra`, an initially-undocumented Garmin field) does
+  reach and round-trip correctly — Garmin's server echoes it back as `workoutTargetTypeKey:
+  "cadence"` on read. See `docs/adr/0015-scheduled-workouts.md`.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

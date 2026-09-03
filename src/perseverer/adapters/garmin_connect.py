@@ -39,6 +39,7 @@ from garminconnect import (
     GarminConnectAuthenticationError,
     GarminConnectTooManyRequestsError,
 )
+from garminconnect.workout import RunningWorkout
 from sqlalchemy import Connection
 
 from perseverer.adapters.base import AdapterHealth
@@ -603,6 +604,58 @@ class GarminConnectAdapter:
             batch=parse_daily_stress_json(content),
         )
 
+    def delete_workout(self, workout_id: int) -> None:
+        """Deletes one workout template from the athlete's Garmin workout library. Used both by
+        `push_planned_workout` below (replacing a stale copy on edit) and directly by
+        `DELETE /planned-workouts/{date}` (best-effort cleanup when a scheduled workout is
+        deleted locally, see that route's own docstring for why a Garmin-side failure there must
+        never block the local delete)."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            self._client.delete_workout(workout_id)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while deleting workout {workout_id}"
+            ) from e
+
+    def push_planned_workout(
+        self, workout: RunningWorkout, local_date: str, *, existing_workout_id: int | None = None
+    ) -> int:
+        """Push a scheduled-workout RunningWorkout (built by `planned_workouts.py::
+        build_running_workout` -- this method knows nothing about how it was constructed) to the
+        athlete's Garmin account: delete any stale existing copy first (the "edit an
+        already-pushed workout" case -- v1 keeps this simple, a full re-push rather than a
+        partial `update_workout`, matching this project's general full-recompute-over-
+        incremental-patch preference elsewhere -- fitness rollup, insights engine -- applied to
+        this new domain), then upload and schedule the new one. Returns the new Garmin workout
+        id. Same rate-limited-per-call, abort-on-first-429-no-retry pattern as every other
+        method on this class (see module docstring) -- three separate real HTTP calls here, so
+        three separate rate_limiter.wait()/429 checks, not one.
+
+        The only place this app writes to a third-party account rather than only reading from
+        it -- see docs/adr/0015-scheduled-workouts.md.
+        """
+        assert self._client is not None, "call authenticate() first"
+        if existing_workout_id is not None:
+            self.delete_workout(existing_workout_id)
+
+        self.rate_limiter.wait()
+        try:
+            uploaded = self._client.upload_running_workout(workout)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted("429 from Garmin while uploading workout") from e
+        workout_id = int(uploaded["workoutId"])
+
+        self.rate_limiter.wait()
+        try:
+            self._client.schedule_workout(workout_id, local_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while scheduling workout {workout_id} on {local_date}"
+            ) from e
+        return workout_id
+
 
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
@@ -700,9 +753,7 @@ def sync_garmin_connect(
                 touched_dates |= health_result.affected_local_dates
             except GarminRateLimitAborted as e:
                 conn.rollback()
-                summary.errors.append(
-                    {"wellness_date": wellness_date.isoformat(), "error": str(e)}
-                )
+                summary.errors.append({"wellness_date": wellness_date.isoformat(), "error": str(e)})
                 break  # no retry loop — same contract as the activity loop above
             wellness_date += timedelta(days=1)
 
