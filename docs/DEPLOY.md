@@ -311,3 +311,22 @@ treats a local path and a `user@host:path` spec identically, so this exercises t
 code with no LAN/SSH host for a CI runner to reach), wipes the data directory entirely, restores,
 and asserts the activity count and raw-archive file listing both match exactly. This is the
 literal Phase 9 acceptance criterion.
+
+## Scheduled workouts (ADR 0015)
+
+`worker/main.py::run_daily_workout_push` runs on its own daily schedule
+(`PERSEVERER_WORKOUT_PUSH_SCHEDULE_HOUR`/`MINUTE`, default 04:45 UTC, right after the Garmin
+sync's own 04:15) and automatically pushes any `planned_workout` whose date is within
+`PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS` (default 7) days and hasn't been pushed yet — no
+one-time host setup needed, it reuses the same Garmin token store
+(`sync auth login`/`data/garmin_tokens/`) the daily sync already depends on. A manual push
+(`POST /planned-workouts/{date}/push`, exposed as a button in the calendar UI) bypasses the
+window for wanting a specific workout on the watch immediately.
+
+**Live verification not yet done** (writes to a real Garmin account, needs explicit
+confirmation first): schedule one real running workout with a pace range, an HR-range interval
+block, and cadence; push it; confirm in the actual Garmin Connect app/website that it appears
+correctly structured and scheduled on the right date. See
+`docs/adr/0015-scheduled-workouts.md`'s own Verification section for the one thing that can't be
+checked any other way — whether a cadence target riding alongside a pace target on the same step
+actually reaches and functions on a real device.

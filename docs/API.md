@@ -766,6 +766,107 @@ Deletes a goal by id.
 
 ---
 
+## Planned Workouts
+
+Scheduled (future) workouts authored on the calendar and pushed to the Garmin watch. Running
+only, v1 — a non-running `sport` saves and lists fine but `POST .../push` fails cleanly
+(`push_status: "push_failed"`) since there's no step-level structure to build a Garmin workout
+from yet. See `docs/adr/0015-scheduled-workouts.md` and the workout-syntax text format described
+there (duration, a pace/HR/zone target, cadence, a simple `Nx` repeat block).
+
+### `GET /planned-workouts`
+
+Date-range list for the calendar grid's own per-day indicator — not the full workout, just
+enough to render one (see `GET /planned-workouts/{local_date}` for the rest).
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `start_date` | query | **required** | string (date) | Inclusive. |
+| `end_date` | query | **required** | string (date) | Inclusive. |
+
+**Response `200`:** array\<`PlannedWorkoutListItemOut`\>.
+
+### `GET /planned-workouts/{local_date}`
+
+One day's planned workout, its parsed steps, and any parse errors from the currently-stored
+`source_text`. `available: false` (not `404`) when nothing is scheduled for that date.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `local_date` | path | **required** | string (date) | |
+
+**Response `200`:** `PlannedWorkoutOut`.
+
+### `PUT /planned-workouts/{local_date}`
+
+Creates or replaces the planned workout for one date. Upsert keyed on `(athlete_id, local_date)`
+— calling this again for the same date replaces the existing workout (and re-parses
+`source_text` into a fresh set of steps) rather than creating a second one. Editing a workout
+that was already `"pushed"` resets `push_status` back to `"draft"` — the old Garmin copy is now
+stale and gets re-pushed fresh on the next push.
+
+**Request body** (`PlannedWorkoutIn`):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `sport` | string | required | `running` / `yoga` / `bouldering` / `fitness` — open string, not an enum. |
+| `name` | string, nullable | optional | |
+| `source_text` | string, nullable | optional | The athlete's own workout-syntax text. A malformed line doesn't reject the save — it's still stored, and the resulting `parse_errors` come back in the response. |
+
+**Response `200`:** `PlannedWorkoutOut`.
+
+### `DELETE /planned-workouts/{local_date}`
+
+Deletes the planned workout for one date. If it was already pushed, also best-effort deletes the
+Garmin-side workout template — a Garmin-side failure there (e.g. unreachable, no token store)
+never blocks the local delete.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `local_date` | path | **required** | string (date) | |
+
+**Responses:** `200` (no response body). `404` → `detail: "planned workout not found"`.
+
+### `POST /planned-workouts/{local_date}/push`
+
+Manually pushes one workout to Garmin right now, regardless of date — the override alongside the
+worker's own automatic push for anything due within the coming week
+(`PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS`, default 7). Runs in the background; poll
+`GET /planned-workouts/{local_date}` afterward for the updated `push_status`/`push_error`, since
+that status lives on the workout row itself, not a generic job log.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `local_date` | path | **required** | string (date) | |
+
+**Responses:** `200` → `JobTriggerOut`. `404` → `detail: "planned workout not found"`.
+
+### `POST /planned-workouts/recurring`
+
+Creates one independent `planned_workout` row per occurrence date — not a recurring-rule object;
+each row is a full copy of the same content and can be edited or deleted independently of the
+others afterward. A date that already has a planned workout is skipped, not overwritten, and
+reported back in `skipped_dates`.
+
+**Request body** (`RecurringWorkoutIn`):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `local_date` | string (date) | required | First occurrence. |
+| `sport` | string | required | |
+| `name` | string, nullable | optional | |
+| `source_text` | string, nullable | optional | |
+| `frequency` | string | required | `weekly` / `every_n_days` / `monthly`. |
+| `interval_days` | integer | required for `every_n_days` | `>= 1`. |
+| `count` | integer | exactly one of `count`/`until` | Total occurrences, including the first. |
+| `until` | string (date) | exactly one of `count`/`until` | Inclusive. |
+
+**Responses:** `200` → `RecurringWorkoutOut`. `422` → invalid `frequency`, missing
+`interval_days` for `every_n_days`, or neither/both of `count`/`until` given. `detail` is a plain
+string.
+
+---
+
 ## Settings
 
 ### `GET /settings/hr-zones`
@@ -1400,3 +1501,51 @@ date-time).
 See `POST /activities/{activity_id}/share` and `POST /share/{id}/revoke` under **Sharing**
 above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `RevokeShareOut`:
 `revoked` (bool).
+
+### PlannedWorkoutListItemOut
+
+`local_date` (string, date), `id` (integer), `sport` (string), `name` (string, nullable),
+`push_status` (`draft`/`pushed`/`push_failed`).
+
+### PlannedWorkoutOut
+
+`available` (boolean, required); when `false`, every field below is `null`/empty:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | integer, nullable | |
+| `local_date` | string (date), nullable | |
+| `sport` | string, nullable | |
+| `name` | string, nullable | |
+| `source_text` | string, nullable | The athlete's own typed text, verbatim. |
+| `estimated_duration_s` | number, nullable | An estimate — a distance-based step's real duration depends on the athlete's actual pace. |
+| `steps` | array\<`PlannedWorkoutStepOut`\> | Defaults to `[]`. Raw, unexpanded (repeat-block markers included). |
+| `parse_errors` | array\<`ParseErrorOut`\> | Defaults to `[]`. From re-parsing the currently-stored `source_text`. |
+| `push_status` | string, nullable | `draft` / `pushed` / `push_failed`. |
+| `push_error` | string, nullable | |
+| `garmin_workout_id` | integer, nullable | |
+| `garmin_scheduled_at` | string (date-time), nullable | |
+
+### PlannedWorkoutStepOut
+
+| Field | Type | Description |
+|---|---|---|
+| `step_index` | integer | |
+| `duration_type` | string, nullable | `time` / `distance` / `repeat_until_steps_cmplt`. |
+| `duration_time_s`, `duration_distance_m` | number, nullable | |
+| `target_type` | string, nullable | `pace` / `heart_rate`. |
+| `target_low`, `target_high` | number, nullable | m/s for `pace`, bpm for `heart_rate`. |
+| `target_hr_zone` | integer, nullable | Alternative to `target_low`/`target_high` — resolved against the athlete's own configured HR zones at push time. |
+| `cadence_low`, `cadence_high` | integer, nullable | Steps/min. |
+| `intensity` | string, nullable | e.g. `warmup`, `active`, `recovery`, `cooldown`, `rest`. |
+| `repeat_from_step` | integer, nullable | For a repeat-block step: the `step_index` it loops back to. |
+| `repeat_count` | integer, nullable | |
+
+### ParseErrorOut
+
+`line_no` (integer, 1-indexed), `message` (string).
+
+### RecurringWorkoutOut
+
+`created_dates` (array\<string\>, dates), `skipped_dates` (array\<string\>, dates — already had a
+planned workout, left untouched).

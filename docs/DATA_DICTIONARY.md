@@ -322,6 +322,22 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
   attach to, and must still be counted. Opportunistically
   pruned of rows older than 24h on every insert, not a separate scheduled job. See
   `docs/adr/0014-phase-9-backup-hardening.md`.
+- **`planned_workout`**/**`planned_workout_step`** (scheduled workouts) — a *future*,
+  athlete-authored workout on the calendar, pushed to the Garmin watch, and its unexpanded
+  steps. One `planned_workout` per athlete per `local_date` (Garmin's own `schedule_workout()`
+  is itself date-granular). `source_text` is the athlete's own typed workout-syntax text, kept
+  verbatim and re-parsed into `planned_workout_step` rows on every save (`workout_syntax.py`).
+  `push_status` (`draft`/`pushed`/`push_failed`) + `push_error` + `garmin_workout_id` +
+  `garmin_scheduled_at` track the push lifecycle `activity_workout` (the retrospective,
+  FIT-parsed workout-plan table from Phase 1, one-to-one with a completed `activity_id`) has no
+  concept of. `planned_workout_step` mirrors `activity_workout_step`'s own unexpanded-
+  repeat-block shape (a `repeat_until_steps_cmplt` row describing
+  `[repeat_from_step..step_index-1] x repeat_count`, not pre-flattened) so `workoutSteps.ts`'s
+  expand/group helpers work across both tables unmodified, but widens `target_type` to
+  `"pace"`/`"heart_rate"` (an absolute range, or `target_hr_zone` resolved against the
+  athlete's own `athlete_hr_zone_config` at push time) plus an independent `cadence_low`/
+  `cadence_high` — a recorded step's `target_type` is speed-only. See
+  `docs/adr/0015-scheduled-workouts.md`.
 
 ## Metric registry
 
@@ -830,3 +846,28 @@ mechanism, scheduling, and the CI restore-from-backup test. The LLM narrative la
 scoped for this phase (a rewrite of `insight` rows into prose, cached in DB) was deliberately
 deferred -- no new tables or fields exist for it yet, see the ADR's own "Deliberately out of
 scope" section for the reasoning and the reference design kept for whenever it's picked back up.
+
+## Scheduled workouts: author on the calendar, push to the Garmin watch (running first)
+
+New tables `planned_workout`/`planned_workout_step` (see the Core section above) plus one new
+adapter method that writes to a third-party account rather than only reading from it --
+`GarminConnectAdapter.push_planned_workout` (`adapters/garmin_connect.py`), which uploads a real
+Garmin `RunningWorkout` (`planned_workouts.py::build_running_workout`) and schedules it on the
+athlete's calendar via `schedule_workout()`. The athlete authors a workout as free text
+(`Warmup 10m`, `4x` repeat blocks, `5:00-5:20/km Pace`, `Z2 HR`, trailing `170-180spm` cadence --
+a real subset of intervals.icu's own workout-builder syntax), parsed by
+`workout_syntax.py`/`workoutSyntax.ts` -- one authoritative Python parse on save, one TS twin for
+an instant client-side preview, both exercised against the same shared JSON fixture table
+(`tests/fixtures/workout_syntax_cases.json`) rather than trusted to agree by inspection.
+
+Push is automatic for anything due within `PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS` (default
+7) days, via `worker/main.py::run_daily_workout_push`, its own daily schedule right after the
+Garmin sync; `POST /planned-workouts/{date}/push` covers a manual "push now" regardless of date.
+Calendar UI: `MonthView.tsx`'s expanded-day card gets a new "Planned workout" section
+(`ScheduleWorkoutForm.tsx`) plus a day-grid indicator; `ActivityDetailPage.tsx` gets a "Copy
+workout" button (`CopyWorkoutButton.tsx`) that writes a recorded activity's steps, converted back
+to syntax text, into a localStorage clipboard (`workoutClipboard.ts`) any calendar day's "Paste"
+action can read; `StepBuilderModal.tsx` is a GUI wizard alternative to typing the syntax by hand,
+generating text and inserting it at the textarea cursor rather than maintaining separate state.
+See `docs/adr/0015-scheduled-workouts.md` for the full design and the vendor-API facts (verified
+directly against the installed `garminconnect` package's own source) this was built against.

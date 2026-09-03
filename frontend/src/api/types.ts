@@ -409,6 +409,62 @@ export interface ActivityWorkoutStepOut {
   repeat_count: number | null;
 }
 
+// --- Scheduled workouts (planned_workout/planned_workout_step) -- see db/schema.py's own
+// docstring for the storage shape and workout_syntax.py for the text syntax these steps come
+// from. Deliberately a separate type from ActivityWorkoutStepOut above (they're populated from
+// different sources -- an authored text parse vs. a device's own recorded FIT workout_mesgs --
+// and a planned step can target heart rate or a zone, which a recorded step never could), though
+// workoutSteps.ts's expand/group helpers work across both (see that file's own WorkoutStepLike).
+export interface PlannedWorkoutStepOut {
+  step_index: number;
+  duration_type: string | null;
+  duration_time_s: number | null;
+  duration_distance_m: number | null;
+  target_type: string | null; // "pace" | "heart_rate" | null
+  target_low: number | null; // m/s for pace, bpm for heart_rate
+  target_high: number | null;
+  target_hr_zone: number | null;
+  cadence_low: number | null;
+  cadence_high: number | null;
+  intensity: string | null;
+  repeat_from_step: number | null;
+  repeat_count: number | null;
+}
+
+export interface ParseErrorOut {
+  line_no: number;
+  message: string;
+}
+
+export interface PlannedWorkoutOut {
+  available: boolean;
+  id: number | null;
+  local_date: string | null;
+  sport: string | null;
+  name: string | null;
+  source_text: string | null;
+  estimated_duration_s: number | null;
+  steps: PlannedWorkoutStepOut[];
+  parse_errors: ParseErrorOut[];
+  push_status: "draft" | "pushed" | "push_failed" | null;
+  push_error: string | null;
+  garmin_workout_id: number | null;
+  garmin_scheduled_at: string | null;
+}
+
+export interface PlannedWorkoutListItemOut {
+  local_date: string;
+  id: number;
+  sport: string;
+  name: string | null;
+  push_status: "draft" | "pushed" | "push_failed";
+}
+
+export interface RecurringWorkoutOut {
+  created_dates: string[];
+  skipped_dates: string[];
+}
+
 export interface ActivityWorkoutOut {
   name: string | null;
   description: string | null;

@@ -1,0 +1,54 @@
+/* StepBuilderModal -- the GUI alternative to typing workout-syntax lines by hand. */
+
+.step-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.step-builder__step {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.step-builder__step legend,
+.step-builder__target legend {
+  font-weight: 600;
+  padding: 0 var(--space-1);
+}
+
+.step-builder__target {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.step-builder__row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.step-builder__row .input,
+.step-builder__row .field {
+  flex: 1;
+}
+
+.step-builder__checkboxes {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.step-builder__checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: normal;
+}

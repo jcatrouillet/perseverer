@@ -10,6 +10,7 @@ import {
   useClimbingSummary,
   useFitness,
   useHealthDashboard,
+  usePlannedWorkoutsList,
   useSleep,
 } from "../../api/queries";
 import { ChartFullscreen } from "../../components/ChartFullscreen";
@@ -25,6 +26,7 @@ import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { NotesPanel } from "../../components/NotesPanel";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
+import { ScheduleWorkoutForm } from "../../components/ScheduleWorkoutForm";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { eachDate, monthGridWeeks, monthName, monthRange, parseIsoDate } from "../../dateUtils";
 import { anyMetricHasData } from "../../healthStats";
@@ -72,9 +74,14 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   // Query the padded grid range, not just the month's own start/end -- otherwise the first/last
   // row's week total is missing whenever that week's Monday falls in the adjacent month.
   const weeks = useCalendarWeeks(weekRows[0]![0]!, weekRows[weekRows.length - 1]![6]!);
+  const plannedWorkouts = usePlannedWorkoutsList(
+    weekRows[0]![0]!,
+    weekRows[weekRows.length - 1]![6]!,
+  );
 
   const dayByDate = new Map(calendar.data?.days.map((d) => [d.local_date, d]));
   const weekByStart = new Map(weeks.data?.periods.map((p) => [p.period_start, p]));
+  const plannedByDate = new Map(plannedWorkouts.data?.map((w) => [w.local_date, w]));
 
   const all = allActivities.data?.items ?? [];
   const busiestWeek = busiestWeekStart(all);
@@ -215,6 +222,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                 {week.map((date) => {
                   const inMonth = date >= start && date <= end;
                   const day = dayByDate.get(date);
+                  const planned = plannedByDate.get(date);
                   if (!inMonth) return <td key={date} />;
                   return (
                     <td key={date}>
@@ -233,6 +241,9 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                           {day.activity_moving_duration_s != null &&
                             ` · ${(day.activity_moving_duration_s / 3600).toFixed(1)}h`}
                         </div>
+                      )}
+                      {planned && (
+                        <div className="month-grid__planned">📅 {planned.name || planned.sport}</div>
                       )}
                     </td>
                   );
@@ -254,6 +265,8 @@ export function MonthView({ year, month }: { year: number; month: number }) {
       {expandedDate && (
         <section className="card">
           <h2>{expandedDate}</h2>
+          <h3>Planned workout</h3>
+          <ScheduleWorkoutForm localDate={expandedDate} />
           <NotesPanel entityType="day" entityId={expandedDate} />
         </section>
       )}

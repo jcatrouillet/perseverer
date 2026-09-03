@@ -89,3 +89,29 @@ def compute_hr_zone_boundaries(
     zone4_high_raw = round(threshold_hr_bpm * Z4_THRESHOLD_FRACTION)
     zone4_high = max(zone4_high_raw, zone3_high + _MIN_ZONE_WIDTH_BPM)
     return (zone1_high, zone2_high, zone3_high, zone4_high)
+
+
+def resolve_hr_zone_bpm(
+    zone_number: int, boundaries: tuple[int, int, int, int], max_hr_bpm: float
+) -> tuple[float, float]:
+    """(low, high) bpm for one of the 5 zones `compute_hr_zone_boundaries` defines -- used to
+    turn a planned-workout step's `target_hr_zone` (e.g. "Z2 HR", `workout_syntax.py`) into the
+    absolute bpm range Garmin's own `heart.rate.zone` target actually wants
+    (`adapters/garmin_connect.py::push_planned_workout`); Garmin has no concept of *this app's*
+    zone numbering, only a bpm range or one of *its own* configured zone slots, so resolving to
+    bpm here (rather than trying to map onto Garmin's own zoneNumber) is what lets this work
+    regardless of whether the athlete has ever configured zones on the Garmin side at all.
+
+    Zone 1's floor is 0 (this blended model has no lower reference point below resting HR to
+    anchor it to -- Z1 is simply "below zone1_high"). Zone 5 is open-ended in
+    `compute_hr_zone_boundaries` itself (see its own docstring); here it's closed at
+    `max_hr_bpm` (or `zone4_high + 1`, whichever is higher, so a configured max_hr_bpm lower than
+    the computed zone4_high -- an inconsistent but not impossible configuration -- still yields a
+    valid, non-empty range) since a push to Garmin needs a real upper bound, not "no limit"."""
+    if not 1 <= zone_number <= 5:
+        raise ValueError(f"zone_number must be 1-5, got {zone_number}")
+    zone1_high, zone2_high, zone3_high, zone4_high = boundaries
+    ceilings = (zone1_high, zone2_high, zone3_high, zone4_high, max(max_hr_bpm, zone4_high + 1))
+    low = 0.0 if zone_number == 1 else float(ceilings[zone_number - 2] + 1)
+    high = float(ceilings[zone_number - 1])
+    return (low, high)

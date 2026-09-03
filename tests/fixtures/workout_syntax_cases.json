@@ -1,0 +1,266 @@
+[
+  {
+    "name": "warmup_time_only_no_target",
+    "text": "Warmup 10m",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "time",
+        "duration_time_s": 600,
+        "duration_distance_m": null,
+        "target_type": null,
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": "warmup",
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "distance_km_pace_range_and_cadence",
+    "text": "2km 5:00-5:20/km Pace 170-180spm",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "distance",
+        "duration_time_s": null,
+        "duration_distance_m": 2000,
+        "target_type": "pace",
+        "target_low": 3.125,
+        "target_high": 3.3333333333333335,
+        "target_hr_zone": null,
+        "cadence_low": 170,
+        "cadence_high": 180,
+        "intensity": null,
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "pace_single_value",
+    "text": "1mi 5:10/km Pace",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "distance",
+        "duration_time_s": null,
+        "duration_distance_m": 1609.34,
+        "target_type": "pace",
+        "target_low": 3.225806451612903,
+        "target_high": 3.225806451612903,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": null,
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "hr_absolute_range_and_mtr_distance",
+    "text": "800mtr 140-150 HR",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "distance",
+        "duration_time_s": null,
+        "duration_distance_m": 800,
+        "target_type": "heart_rate",
+        "target_low": 140,
+        "target_high": 150,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": null,
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "hr_zone_and_combined_minutes_seconds",
+    "text": "Recovery 5m30s Z2 HR",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "time",
+        "duration_time_s": 330,
+        "duration_distance_m": null,
+        "target_type": "heart_rate",
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": 2,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": "recovery",
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "single_cadence_value",
+    "text": "90s 175spm",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "time",
+        "duration_time_s": 90,
+        "duration_distance_m": null,
+        "target_type": null,
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": null,
+        "cadence_low": 175,
+        "cadence_high": 175,
+        "intensity": null,
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "repeat_block_two_children",
+    "text": "Warmup 10m\n\n4x\n3m 5:00-5:10/km Pace\n2m Z2 HR\n\nCooldown 5m",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "time",
+        "duration_time_s": 600,
+        "duration_distance_m": null,
+        "target_type": null,
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": "warmup",
+        "repeat_from_step": null,
+        "repeat_count": null
+      },
+      {
+        "step_index": 1,
+        "duration_type": "time",
+        "duration_time_s": 180,
+        "duration_distance_m": null,
+        "target_type": "pace",
+        "target_low": 3.2258064516129035,
+        "target_high": 3.3333333333333335,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": null,
+        "repeat_from_step": null,
+        "repeat_count": null
+      },
+      {
+        "step_index": 2,
+        "duration_type": "time",
+        "duration_time_s": 120,
+        "duration_distance_m": null,
+        "target_type": "heart_rate",
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": 2,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": null,
+        "repeat_from_step": null,
+        "repeat_count": null
+      },
+      {
+        "step_index": 3,
+        "duration_type": "repeat_until_steps_cmplt",
+        "duration_time_s": null,
+        "duration_distance_m": null,
+        "target_type": null,
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": null,
+        "repeat_from_step": 1,
+        "repeat_count": 4
+      },
+      {
+        "step_index": 4,
+        "duration_type": "time",
+        "duration_time_s": 300,
+        "duration_distance_m": null,
+        "target_type": null,
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": "cooldown",
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "malformed_duration_produces_no_step",
+    "text": "banana",
+    "steps": [],
+    "error_line_nos": [1]
+  },
+  {
+    "name": "unrecognized_trailing_token_still_yields_step",
+    "text": "10m sparkles",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "time",
+        "duration_time_s": 600,
+        "duration_distance_m": null,
+        "target_type": null,
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": null,
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": [1]
+  },
+  {
+    "name": "empty_repeat_block_records_error_and_no_repeat_step",
+    "text": "3x\n\nCooldown 5m",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "time",
+        "duration_time_s": 300,
+        "duration_distance_m": null,
+        "target_type": null,
+        "target_low": null,
+        "target_high": null,
+        "target_hr_zone": null,
+        "cadence_low": null,
+        "cadence_high": null,
+        "intensity": "cooldown",
+        "repeat_from_step": null,
+        "repeat_count": null
+      }
+    ],
+    "error_line_nos": [1]
+  }
+]
