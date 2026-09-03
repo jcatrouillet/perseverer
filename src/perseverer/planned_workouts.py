@@ -169,19 +169,21 @@ def _target_fields(
 
 
 def _cadence_extra(step: PlannedStepLike) -> dict[str, Any]:
-    """Best-effort "ride cadence alongside the primary pace/HR target" -- **not confirmed**
-    against a real device (flagged explicitly in docs/adr/0015-scheduled-workouts.md's own
-    Verification section). Garmin's web API has no publicly documented secondary-target field;
-    this is a plausible-shaped guess (mirroring the primary target's own `targetType`/
-    `targetValueOne`/`targetValueTwo` shape) that `ExecutableStep`'s `extra="allow"` config lets
-    through either way. If a real push shows cadence doesn't actually reach the device this way,
-    this is the one function to fix."""
+    """"Ride cadence alongside the primary pace/HR target" via a `secondaryTargetType`/
+    `secondaryTargetValueOne`/`secondaryTargetValueTwo` triple -- **live-verified** (2026-09-03,
+    a real push + `get_workout_by_id` read-back against the athlete's own Garmin account, see
+    docs/adr/0015-scheduled-workouts.md's Verification section): Garmin's server accepts and
+    correctly stores this shape, echoing `workoutTargetTypeKey: "cadence"` back on read (not
+    `"cadence.zone"`, this function's own first guess before that verification -- matched here
+    for round-trip fidelity even though Garmin's server tolerated the original guess too).
+    `ExecutableStep`'s `extra="allow"` config is what lets an undocumented field like this
+    through at all."""
     if step.cadence_low is None or step.cadence_high is None:
         return {}
     return {
         "secondaryTargetType": {
             "workoutTargetTypeId": TargetType.CADENCE,
-            "workoutTargetTypeKey": "cadence.zone",
+            "workoutTargetTypeKey": "cadence",
             "displayOrder": 3,
         },
         "secondaryTargetValueOne": float(step.cadence_low),

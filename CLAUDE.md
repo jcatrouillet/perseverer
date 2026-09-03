@@ -300,10 +300,11 @@ because you don't recognize it — stop, that's the bug.
   precedent. Push is automatic for anything due within
   `PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS` (default 7) days
   (`worker/main.py::run_daily_workout_push`, its own daily schedule), plus a manual
-  `POST /planned-workouts/{date}/push` override. See
-  `docs/adr/0015-scheduled-workouts.md` — including the one thing not yet verified live: whether
-  a cadence target riding alongside a pace target on the same step (`_cadence_extra`, a
-  plausible-shaped guess at an undocumented Garmin field) actually reaches a real device.
+  `POST /planned-workouts/{date}/push` override. Live-verified end to end (2026-09-03, a real
+  push + read-back against the author's own Garmin account): a cadence target riding alongside a
+  pace target on the same step (`_cadence_extra`, an initially-undocumented Garmin field) does
+  reach and round-trip correctly — Garmin's server echoes it back as `workoutTargetTypeKey:
+  "cadence"` on read. See `docs/adr/0015-scheduled-workouts.md`.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

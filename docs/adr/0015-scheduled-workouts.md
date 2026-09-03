@@ -2,7 +2,10 @@
 
 ## Status
 
-Shipped for running (the user's own scoping choice — see decision 1). Yoga/bouldering/fitness
+Shipped and live-verified for running (the user's own scoping choice — see decision 1) — a real
+push against the author's own Garmin account (2026-09-03) confirmed the full round trip: pace
+range, absolute HR range, and cadence riding alongside pace on the same step all stored and
+read back correctly (see Verification). Yoga/bouldering/fitness
 share the same `planned_workout` schema (additive, no migration needed to add them) and the same
 push orchestration, but have no step-level syntax to parse yet — that's the next slice, not part
 of this round.
@@ -118,15 +121,20 @@ so `workoutSteps.ts`'s expand/group helpers work across both (see decision 6), c
 and avoid retrofitting push-lifecycle columns onto a table with a different, load-bearing
 identity contract.
 
-### 4. Cadence-alongside-pace: implemented as a best-effort guess, flagged for live verification
+### 4. Cadence-alongside-pace: a best-effort guess, live-verified correct
 
 `ExecutableStep`'s `extra="allow"` lets arbitrary extra fields through, but there's no publicly
 documented "secondary target" field for e.g. cadence riding alongside a primary pace target on
 the same step. `planned_workouts.py::_cadence_extra` sends a plausible-shaped guess
 (`secondaryTargetType`/`secondaryTargetValueOne`/`secondaryTargetValueTwo`, mirroring the primary
 target's own shape) rather than omitting cadence entirely — deliberately isolated to one function
-so it's the one place to fix if a real device push shows it doesn't actually reach the watch this
-way. Not yet verified live (see Verification below).
+so it'd be the one place to fix if a real push showed it didn't reach the watch. **Live-verified
+2026-09-03** (see Verification below): a real push against the author's own Garmin account
+correctly stored both the pace target and the cadence secondary target on the same step;
+`get_workout_by_id` read the pushed workout back with `secondaryTargetType.workoutTargetTypeKey:
+"cadence"` (Garmin's own canonical key — the function originally guessed `"cadence.zone"`, which
+the server tolerated on write but never echoes back on read; updated to send `"cadence"` directly
+for round-trip fidelity) and the exact `170`/`180` spm values submitted.
 
 ### 5. Copy/paste and recurrence were added after the user rejected the first plan draft
 
@@ -168,10 +176,20 @@ occurrence afterward is completely independent of the others.
 `uv run pytest -q` (927 passed), `uv run ruff check .`, `uv run mypy` (clean), `cd frontend && npm
 run typecheck && npm run build` (clean), `npx vitest run` (554 passed) — all green.
 
-**Not yet done**: a live push against the user's real Garmin account. This needs explicit
-confirmation before the first real push (it writes to a live third-party account) and should
-schedule one real running workout with a pace range, an HR-range interval block, and cadence, then
-confirm in the actual Garmin Connect app/website that it appears correctly structured and
-scheduled on the right date — the one thing that can't be verified from documentation alone is
-whether a cadence target alongside a pace target on the same step (decision 4) actually reaches
-and functions on a real device, adjusting `_cadence_extra` if it doesn't.
+**Live push, with the user's explicit go-ahead (2026-09-03)**: scheduled a real running workout
+("CLAUDE TEST — safe to delete", 2026-09-05) against the author's own Garmin account —
+`Warmup 10m` (no target), a `3x` block combining `5:00-5:20/km Pace` *and* `170-180spm` cadence on
+the same step, plus a `140-150 HR` interval, `Cooldown 5m`. `push_planned_workout` returned
+`success=True` with a real `garmin_workout_id`; the local `planned_workout` row correctly recorded
+`push_status="pushed"` and `garmin_scheduled_at`. Read back via `get_workout_by_id` (not just
+trusted from the upload response) and diffed against what was sent: `targetValueOne`/
+`targetValueTwo` for both the pace range (3.125–3.3333 m/s, exactly `5:00-5:20/km`) and the HR
+range (140–150 bpm) round-tripped exactly, and — the one thing that couldn't be verified from
+documentation alone — the cadence secondary target also round-tripped exactly (170/180 spm),
+confirming decision 4's guess was correct in shape; the one adjustment made from this
+verification was switching `_cadence_extra`'s `workoutTargetTypeKey` from the original guess
+(`"cadence.zone"`, which the server tolerated on write) to `"cadence"` (what it actually echoes
+back on read), for exact round-trip fidelity. Visual confirmation in the Garmin Connect app/
+website itself (that the workout renders and would actually prompt correctly on a real device
+during a run) is still up to the user to glance at — the API-level round-trip above is as far as
+this session can verify directly.
