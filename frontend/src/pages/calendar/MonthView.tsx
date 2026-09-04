@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 
 import {
@@ -69,6 +69,13 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
   const allTimeRunning = useAllActivities({ sport: "running" });
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  // Navigating month-to-month (DateNavigator, prev/next) re-renders this same MonthView
+  // instance with new year/month props rather than mounting a fresh one, so expandedDate would
+  // otherwise keep pointing at a day from whichever month was previously open -- confirmed real
+  // (reported): the expanded card kept showing a date no longer even in the visible grid.
+  useEffect(() => {
+    setExpandedDate(null);
+  }, [year, month]);
 
   const weekRows = monthGridWeeks(year, month);
   // Query the padded grid range, not just the month's own start/end -- otherwise the first/last

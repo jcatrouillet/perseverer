@@ -3,7 +3,7 @@
 // MonthView (and the GoalButton/PeriodShareButton it renders unconditionally) needs is stubbed
 // to an empty/loading-free state so those panels render nothing, keeping this test's mock
 // surface bounded to what the indicator itself actually needs.
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { PlannedWorkoutListItemOut } from "../../api/types";
@@ -68,6 +68,19 @@ vi.mock("../../api/queries", () => ({
   useCreatePeriodShare: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
   useCreateActivityShare: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
   useActivityYears: () => ({ data: undefined, isLoading: false, isError: false }),
+  // Needed once a day is expanded -- ScheduleWorkoutForm and NotesPanel both render inside the
+  // expanded-date card (see the "expandedDate resets on month change" test below).
+  usePlannedWorkout: () => ({
+    data: { available: false, steps: [] },
+    isLoading: false,
+    isError: false,
+  }),
+  useSavePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeletePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
+  usePushPlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateRecurringPlannedWorkouts: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
+  useNotes: () => ({ data: [], isLoading: false, isError: false }),
+  useCreateNote: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const PLANNED: PlannedWorkoutListItemOut = {
@@ -103,5 +116,25 @@ describe("MonthView day-cell planned-workout indicator", () => {
     });
     render(<MonthView year={2026} month={9} />);
     expect(screen.getByText(/running/)).toBeInTheDocument();
+  });
+});
+
+describe("MonthView expanded-date card", () => {
+  it("resets to collapsed when the month changes, rather than keeping the old date expanded", () => {
+    // wouter re-renders this same MonthView instance with new year/month props when navigating
+    // month-to-month (DateNavigator) -- rerender() reproduces exactly that, unlike a fresh
+    // render() per month, which would never have caught this (reported) bug.
+    mockUsePlannedWorkoutsList.mockReturnValue({ data: [], isLoading: false, isError: false });
+    const { rerender } = render(<MonthView year={2026} month={9} />);
+
+    const dayButtons = document.querySelectorAll(".month-grid__day-btn");
+    const day15 = [...dayButtons].find((b) => b.textContent === "15");
+    expect(day15).toBeTruthy();
+    fireEvent.click(day15!);
+    expect(screen.getByText("2026-09-15")).toBeInTheDocument();
+
+    rerender(<MonthView year={2026} month={10} />);
+
+    expect(screen.queryByText("2026-09-15")).not.toBeInTheDocument();
   });
 });
