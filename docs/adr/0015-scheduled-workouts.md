@@ -48,8 +48,12 @@ applied to a new domain.
 plus a manual "Push now" override (`POST /planned-workouts/{date}/push`) — the user's own explicit
 choice over a fully-manual or fully-automatic scheme.
 
-**Calendar UI**: a "Planned workout" section in `MonthView.tsx`'s existing expanded-day card
-(`ScheduleWorkoutForm.tsx`), a small day-grid indicator, a "Copy" action on a completed activity
+**Calendar UI**: `ScheduleWorkoutForm.tsx` — a "Planned workout" section — is shared by both
+places a day is actually viewed: `MonthView.tsx`'s expanded-day card, and `DayViewPage.tsx`
+(`/day/:date`, the page `DateNavigator`'s own day picker and `RunningStats`' heatmap cells link
+to). Originally wired into `MonthView.tsx` alone; a user report ("no button for that" on
+`/day/:date`) caught the gap before `DayViewPage.tsx` got the same section — see decision 8.
+Plus a small month-grid day-cell indicator, a "Copy" action on a completed activity
 (`CopyWorkoutButton.tsx`) that round-trips its recorded steps back into syntax text via a
 localStorage clipboard (`workoutClipboard.ts`) a "Paste" action on any day picks up, a "Repeat
 this schedule" recurrence control (`POST /planned-workouts/recurring`) that materializes N
@@ -61,8 +65,9 @@ review feedback before implementation started (see decision 5).
 
 Full test coverage: 927 backend tests (workout-syntax fixture parity, adapter push mechanics, the
 `planned_workouts.py` orchestration, the API router, the worker job's window/status filtering) and
-554 frontend tests (the TS parser against the same shared fixtures, the schedule form, the
-day-cell indicator, `StepBuilderModal`) — all green, `ruff`/`mypy`/`tsc --noEmit` clean.
+556 frontend tests (the TS parser against the same shared fixtures, the schedule form on both
+`MonthView` and `DayViewPage`, the day-cell indicator, `StepBuilderModal`) — all green,
+`ruff`/`mypy`/`tsc --noEmit` clean.
 
 ## Vendor facts verified directly (not assumed)
 
@@ -171,10 +176,24 @@ recompute). A date that already has a planned workout is skipped, not overwritte
 back so the athlete can see which dates didn't get the new content. Editing or deleting one
 occurrence afterward is completely independent of the others.
 
+### 8. A real user-reported gap: `ScheduleWorkoutForm` was missing from `DayViewPage.tsx`
+
+The initial implementation added `ScheduleWorkoutForm.tsx` only to `MonthView.tsx`'s expanded-
+day card — the calendar page's own inline day-detail view. It missed that `DayViewPage.tsx`
+(`/day/:date`) is a *second*, separate page for viewing one day, and the one `DateNavigator`'s
+own day-picker and `RunningStats`' heatmap cells actually link to — plausibly the more common
+way to land on a future date at all. Caught by direct user report ("I went in calendar view at
+a future day to create a workout but there's no button for that"), not by testing (this session's
+own frontend tests exercised `MonthView` and `ScheduleWorkoutForm` in isolation, never a real
+navigation path through `DateNavigator` into `DayViewPage`). Fixed by mounting the same
+`ScheduleWorkoutForm` component in both places rather than writing two — it already fetches its
+own data by `localDate` prop, so no parent-level wiring beyond the one `<ScheduleWorkoutForm
+localDate={date} />` line was needed in either page.
+
 ## Verification
 
 `uv run pytest -q` (927 passed), `uv run ruff check .`, `uv run mypy` (clean), `cd frontend && npm
-run typecheck && npm run build` (clean), `npx vitest run` (554 passed) — all green.
+run typecheck && npm run build` (clean), `npx vitest run` (556 passed) — all green.
 
 **Live push, with the user's explicit go-ahead (2026-09-03)**: scheduled a real running workout
 ("CLAUDE TEST — safe to delete", 2026-09-05) against the author's own Garmin account —

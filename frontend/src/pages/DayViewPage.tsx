@@ -35,6 +35,7 @@ import { DayViewActivityRoute } from "../components/DayViewActivityRoute";
 import { Icon } from "../components/Icon";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { NotesPanel } from "../components/NotesPanel";
+import { ScheduleWorkoutForm } from "../components/ScheduleWorkoutForm";
 import { StatTile } from "../components/StatTile";
 import { mondayOf, parseIsoDate } from "../dateUtils";
 import { latestObservation, valueForDate } from "../healthStats";
@@ -310,6 +311,11 @@ export function DayViewPage({ date }: { date: string }) {
           />
         </section>
       )}
+
+      <section className="card">
+        <h2>Planned workout</h2>
+        <ScheduleWorkoutForm localDate={date} />
+      </section>
 
       <section className="card">
         <h2>Notes</h2>

@@ -863,9 +863,11 @@ an instant client-side preview, both exercised against the same shared JSON fixt
 Push is automatic for anything due within `PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS` (default
 7) days, via `worker/main.py::run_daily_workout_push`, its own daily schedule right after the
 Garmin sync; `POST /planned-workouts/{date}/push` covers a manual "push now" regardless of date.
-Calendar UI: `MonthView.tsx`'s expanded-day card gets a new "Planned workout" section
-(`ScheduleWorkoutForm.tsx`) plus a day-grid indicator; `ActivityDetailPage.tsx` gets a "Copy
-workout" button (`CopyWorkoutButton.tsx`) that writes a recorded activity's steps, converted back
+Calendar UI: a new "Planned workout" section (`ScheduleWorkoutForm.tsx`) in both
+`MonthView.tsx`'s expanded-day card and `DayViewPage.tsx` (`/day/:date`, the page
+`DateNavigator`'s day picker actually links to) plus a month-grid day indicator;
+`ActivityDetailPage.tsx` gets a "Copy workout" button (`CopyWorkoutButton.tsx`) that writes a
+recorded activity's steps, converted back
 to syntax text, into a localStorage clipboard (`workoutClipboard.ts`) any calendar day's "Paste"
 action can read; `StepBuilderModal.tsx` is a GUI wizard alternative to typing the syntax by hand,
 generating text and inserting it at the textarea cursor rather than maintaining separate state.
