@@ -318,11 +318,19 @@ def build_running_workout(
 
 
 # sport -> (sportTypeId, sportTypeKey) for the placeholder sports. "yoga" has a real Garmin
-# sport type; "bouldering" doesn't (confirmed directly against the installed garminconnect
-# package -- no climbing/bouldering entry in SportType at all), so it maps to SportType.OTHER --
-# a documented, real vendor limitation (see docs/adr/0015-scheduled-workouts.md), not a bug: the
-# workout still pushes and schedules fine, it just shows as "Other" rather than "Bouldering" in
-# Garmin Connect/on the watch.
+# sport type; "bouldering" doesn't -- confirmed live against Garmin's own
+# GET /workout-service/workout/types (not just the garminconnect package's own hardcoded
+# SportType class): the real workout-service sport list is running/cycling/swimming/
+# strength_training/cardio_training/yoga/pilates/hiit/other/multi_sport/mobility/rucking, with no
+# climbing entry at all. This app already knows bouldering is really a rock-climbing sub-
+# discipline for *recorded* activities (garmin_activity_summary.py's own
+# sport="rock_climbing"/sub_sport="bouldering" pair, Garmin's real activity-type taxonomy) --
+# it's specifically the *Workout Builder* service used to push a *planned* workout that has no
+# slot for it, a real constraint of that one Garmin subsystem, not a gap this app's own data
+# model or this library introduced. Falls back to SportType.OTHER (see
+# docs/adr/0015-scheduled-workouts.md decision 9): the workout still pushes and schedules fine,
+# it just shows as "Other" rather than "Bouldering" in Garmin Connect/on the watch -- the
+# workout's own `name` field still says "Bouldering" regardless.
 _PLACEHOLDER_SPORT_TYPES: dict[str, tuple[int, str]] = {
     "yoga": (SportType.YOGA, "yoga"),
     "bouldering": (SportType.OTHER, "other"),

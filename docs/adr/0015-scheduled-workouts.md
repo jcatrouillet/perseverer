@@ -206,9 +206,18 @@ limitation documented for running from day one. `build_placeholder_workout` cons
 no-target step spanning the whole duration, wrapped in a plain `BaseWorkout` (no
 `YogaWorkout`/`BoulderingWorkout` subclass exists in `garminconnect.workout`, unlike
 `RunningWorkout` — constructing `BaseWorkout` directly with an explicit `sportType` works the
-same way) — yoga gets a real Garmin sport type, bouldering has none and maps to `SportType.OTHER`
-(a documented vendor limitation, not a bug: the workout still pushes and schedules correctly,
-just shows as "Other" rather than "Bouldering").
+same way) — yoga gets a real Garmin sport type; bouldering, a real sub-discipline of rock
+climbing (this app already knows that for *recorded* activities —
+`garmin_activity_summary.py`'s own `sport="rock_climbing"`/`sub_sport="bouldering"` pair, Garmin's
+real activity-type taxonomy), has no slot in the *Workout Builder*'s own, separate sport list —
+confirmed live against Garmin's real `GET /workout-service/workout/types` response (not just the
+`garminconnect` package's own hardcoded `SportType` class): the actual workout-service sport
+types are running/cycling/swimming/strength_training/cardio_training/yoga/pilates/hiit/other/
+multi_sport/mobility/rucking, no climbing entry at all. A real constraint of that one Garmin
+subsystem, not a gap this app's own data model or the library introduced — falls back to
+`SportType.OTHER`: the workout still pushes and schedules correctly, just shows as "Other" rather
+than "Bouldering" in Garmin Connect/on the watch (the workout's own `name` field still says
+"Bouldering" regardless).
 
 This surfaced one real, pre-existing bug in `GarminConnectAdapter.push_planned_workout`: it
 called the sport-specific `upload_running_workout`, which raises `TypeError` for anything but a
@@ -249,9 +258,17 @@ this session can verify directly.
 **Yoga/bouldering (decision 9)**: `uv run pytest -q` (934 passed), `uv run ruff check .`,
 `uv run mypy` (clean), `cd frontend && npm run typecheck && npm run build` (clean), `npx vitest
 run` (562 passed) — all green, including the two real bugs decision 9 describes (both caught by
-tests before shipping, not live). Not yet live-pushed against a real Garmin account the way
-running was — the `upload_workout`/`BaseWorkout` path is exercised end-to-end by
-`tests/adapters/test_garmin_connect_push.py::test_a_plain_baseworkout_pushes_fine_via_the_generic_upload`
-against a fake client, not a real one; a real push would additionally confirm bouldering's
-"Other" sport type and a no-target single step actually render sensibly in the Garmin Connect
-app.
+tests before shipping, not live).
+
+Also live-verified against the author's own Garmin account (2026-09-04), prompted by a user
+correction that bouldering's `SportType.OTHER` mapping needed checking against the real API
+rather than trusted from the `garminconnect` package's own hardcoded `SportType` class — which is
+exactly what surfaced the `GET /workout-service/workout/types` confirmation in decision 9's own
+vendor-facts update. Pushed a real "CLAUDE TEST — bouldering — safe to delete" placeholder
+(90 min, `scheduled_time="19:00"`, no `source_text`); `push_planned_workout` returned
+`success=True` with a real `garmin_workout_id`, and `get_workout_by_id` confirmed the exact
+structure sent: `estimatedDurationInSecs: 5400`, a single step with `endConditionValue: 5400.0`
+and `targetType: "no.target"`, `sportType: {"sportTypeId": 3, "sportTypeKey": "other"}` — the
+workout's own `workoutName` still reads "CLAUDE TEST — bouldering — safe to delete" regardless of
+the generic sport type. Deleted afterward via the same `adapter.delete_workout` path
+`DELETE /planned-workouts/{date}` uses.

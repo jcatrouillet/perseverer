@@ -885,8 +885,12 @@ structured syntax at all -- `planned_workouts.py::PLACEHOLDER_SPORTS` skips
 `workout_syntax.py` parsing entirely, taking a `duration_minutes` and a display-only
 `scheduled_time` ("HH:MM", new `planned_workout` column) directly instead. Pushed via
 `build_placeholder_workout` -- a single no-target step spanning the whole duration, wrapped in a
-plain `BaseWorkout` (yoga gets a real Garmin sport type; bouldering has none and maps to
-`SportType.OTHER`, a documented vendor limitation). This surfaced two real bugs, both fixed:
+plain `BaseWorkout` (yoga gets a real Garmin sport type; bouldering -- really a rock-climbing
+sub-discipline, same taxonomy this app already uses for *recorded* activities via
+`garmin_activity_summary.py`'s `sport="rock_climbing"`/`sub_sport="bouldering"` pair -- has no
+slot in the Workout Builder's own separate sport list at all, confirmed live against
+`GET /workout-service/workout/types`, so it falls back to `SportType.OTHER`). This surfaced two
+real bugs, both fixed:
 `GarminConnectAdapter.push_planned_workout` called the sport-specific `upload_running_workout`
 (which rejects anything but a real `RunningWorkout`, confirmed by reading the check inside the
 installed package) -- switched to the generic `upload_workout(workout.to_dict())`; and

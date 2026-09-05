@@ -299,8 +299,13 @@ because you don't recognize it — stop, that's the bug.
   deliberately simpler — a name, a `duration_minutes`, and a display-only `scheduled_time`
   ("HH:MM", Garmin's own `schedule_workout()` has no time-of-day API at all), no structured
   syntax at all, pushed as a single no-target step for the whole duration
-  (`build_placeholder_workout`; yoga gets a real Garmin sport type, bouldering maps to
-  `SportType.OTHER`, a documented vendor limitation). Both tiers push via the same
+  (`build_placeholder_workout`; yoga gets a real Garmin sport type. Bouldering is really a
+  rock-climbing sub-discipline — this app already knows that for *recorded* activities
+  (`garmin_activity_summary.py`'s own `sport="rock_climbing"`/`sub_sport="bouldering"` pair) —
+  but has no slot in the Workout Builder's own separate sport list at all, confirmed live against
+  Garmin's real `GET /workout-service/workout/types` response (not the `garminconnect` package's
+  own hardcoded `SportType` class): falls back to `SportType.OTHER`, a real constraint of that one
+  Garmin subsystem, not a gap this app introduced). Both tiers push via the same
   `GarminConnectAdapter.push_planned_workout`, following the adapter's existing safety contract
   exactly (never a credentialed client of its own, rate-limited per call, abort-no-retry on
   429) — via the generic `upload_workout(workout.to_dict())`, not the sport-specific
