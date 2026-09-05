@@ -28,6 +28,7 @@ from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.planned_workouts import (
     PlannedStepLike,
     WorkoutBuildError,
+    build_exercise_workout,
     build_running_workout,
     push_planned_workout,
 )
@@ -135,6 +136,136 @@ class TestBuildRunningWorkout:
     def test_no_steps_raises(self) -> None:
         with pytest.raises(WorkoutBuildError):
             build_running_workout("Run", [], 0, hr_boundaries=None, max_hr_bpm=None)
+
+
+class TestBuildExerciseWorkout:
+    """hiit/strength_training: real, named Garmin exercises -- wire format live-verified
+    (2026-09-05, see docs/adr/0015-scheduled-workouts.md) against the athlete's own account."""
+
+    def test_reps_based_step_with_weight(self) -> None:
+        steps = [
+            PlannedStepLike(
+                0,
+                "reps",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                duration_reps=10,
+                exercise_category="BENCH_PRESS",
+                exercise_name="",
+                weight_kg=60,
+            )
+        ]
+        workout = build_exercise_workout("strength_training", "Push day", steps, 300)
+        assert workout.sportType["sportTypeKey"] == "strength_training"
+        step = workout.workoutSegments[0].workoutSteps[0].model_dump()
+        assert step["endCondition"]["conditionTypeKey"] == "reps"
+        assert step["endConditionValue"] == 10.0
+        assert step["category"] == "BENCH_PRESS"
+        assert step["exerciseName"] == ""
+        assert step["weightValue"] == 60000.0
+        assert step["weightUnit"]["unitKey"] == "kilogram"
+
+    def test_time_based_step_with_no_weight(self) -> None:
+        steps = [
+            PlannedStepLike(
+                0,
+                "time",
+                45,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                exercise_category="BURPEE",
+                exercise_name="",
+            )
+        ]
+        workout = build_exercise_workout("hiit", "HIIT circuit", steps, 300)
+        assert workout.sportType["sportTypeKey"] == "hiit"
+        step = workout.workoutSegments[0].workoutSteps[0].model_dump()
+        assert step["endCondition"]["conditionTypeKey"] == "time"
+        assert step["endConditionValue"] == 45.0
+        assert step["category"] == "BURPEE"
+        assert step.get("weightValue") is None
+
+    def test_rest_step_has_no_exercise_fields(self) -> None:
+        steps = [
+            PlannedStepLike(
+                0, "time", 90, None, None, None, None, None, None, None, "rest", None, None
+            )
+        ]
+        workout = build_exercise_workout("strength_training", "Rest", steps, 90)
+        step = workout.workoutSegments[0].workoutSteps[0].model_dump()
+        assert step["stepType"]["stepTypeKey"] == "rest"
+        assert step.get("category") is None
+
+    def test_sets_wrap_in_a_repeat_group(self) -> None:
+        steps = [
+            PlannedStepLike(
+                0,
+                "reps",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                duration_reps=10,
+                exercise_category="SQUAT",
+                exercise_name="",
+            ),
+            PlannedStepLike(
+                1, "time", 90, None, None, None, None, None, None, None, "rest", None, None
+            ),
+            PlannedStepLike(
+                2,
+                "repeat_until_steps_cmplt",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                0,
+                3,
+            ),
+        ]
+        workout = build_exercise_workout("strength_training", "Leg day", steps, 600)
+        top_level = workout.workoutSegments[0].workoutSteps
+        assert len(top_level) == 1
+        repeat_group = top_level[0]
+        assert repeat_group.numberOfIterations == 3
+        assert len(repeat_group.workoutSteps) == 2
+
+    def test_unknown_sport_raises(self) -> None:
+        with pytest.raises(WorkoutBuildError):
+            build_exercise_workout("fitness", "Whatever", [], 0)
+
+    def test_no_steps_raises(self) -> None:
+        with pytest.raises(WorkoutBuildError):
+            build_exercise_workout("hiit", "Empty", [], 0)
 
 
 class FakePushGarminClient:
@@ -310,6 +441,29 @@ def test_yoga_pushes_as_a_placeholder_workout(tmp_path: Path) -> None:
         )
         assert result.success
         assert client.uploaded[0]["sportType"]["sportTypeKey"] == "yoga"
+        row = conn.execute(
+            select(planned_workout).where(planned_workout.c.id == workout_id)
+        ).fetchone()
+        assert row is not None
+        assert row.push_status == "pushed"
+
+
+def test_strength_training_pushes_a_structured_exercise_workout(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    workout_id = _insert_planned_workout(engine, sport="strength_training")
+    client = FakePushGarminClient()
+
+    with engine.connect() as conn:
+        result = push_planned_workout(
+            conn,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            planned_workout_id=workout_id,
+            tokenstore_dir=tmp_path / "tokens",
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=lambda: client,
+        )
+        assert result.success
+        assert client.uploaded[0]["sportType"]["sportTypeKey"] == "strength_training"
         row = conn.execute(
             select(planned_workout).where(planned_workout.c.id == workout_id)
         ).fetchone()

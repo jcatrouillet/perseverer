@@ -9,18 +9,28 @@ building the actual Garmin workout JSON needs `hr_zones.py` (to resolve a "Z2 HR
 against the athlete's own configured zones) and the adapter's push path, more than a router
 layer should carry.
 
-Two sport tiers, not one: **running** gets the full structured-syntax treatment
-(`build_running_workout`, parsed via `workout_syntax.py`); **yoga/bouldering** are deliberately
-simpler placeholders -- a name, a duration, and a display-only time of day, no step syntax at
-all (`build_placeholder_workout`, a single no-target step for the whole duration) -- per the
-user's own explicit scoping ("no structured text syntax needed, it's just to put placeholder for
-those sports"). `fitness` isn't built yet (still `push not supported`). See
-docs/adr/0015-scheduled-workouts.md.
+Three sport tiers, not one:
+
+- **running** gets the full structured-syntax treatment (`build_running_workout`, parsed via
+  `workout_syntax.py`).
+- **yoga/bouldering** (`PLACEHOLDER_SPORTS`) are deliberately simpler placeholders -- a name, a
+  duration, and a display-only time of day, no step syntax at all (`build_placeholder_workout`,
+  a single no-target step for the whole duration) -- per the user's own explicit scoping ("no
+  structured text syntax needed, it's just to put placeholder for those sports").
+- **hiit/strength_training** (`EXERCISE_SPORTS`) get real, named Garmin exercises
+  (`build_exercise_workout`) -- the athlete picks from Garmin's own 1,527-exercise catalog
+  (`garminconnect.exercises`) per the user's own choice over a simpler placeholder or a free-text
+  syntax. Steps are supplied already-structured by the caller (the frontend's exercise picker),
+  never parsed from text -- there's no natural "text syntax" for naming a specific Garmin
+  exercise the way there is for a pace or HR target.
+
+See docs/adr/0015-scheduled-workouts.md.
 """
 
 from __future__ import annotations
 
 import calendar
+from collections.abc import Callable
 from dataclasses import dataclass, fields
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -28,6 +38,7 @@ from typing import Any
 
 from garminconnect import Garmin
 from garminconnect.workout import (
+    WEIGHT_UNIT_KILOGRAM,
     BaseWorkout,
     ConditionType,
     ExecutableStep,
@@ -35,6 +46,7 @@ from garminconnect.workout import (
     RunningWorkout,
     SportType,
     StepType,
+    StrengthWorkout,
     TargetType,
     WorkoutSegment,
 )
@@ -90,6 +102,12 @@ class PlannedStepLike:
     intensity: str | None
     repeat_from_step: int | None
     repeat_count: int | None
+    # hiit/strength_training only (see EXERCISE_SPORTS) -- appended rather than interleaved
+    # above so every existing positional construction (tests, mainly) stays valid unchanged.
+    duration_reps: int | None = None
+    exercise_category: str | None = None
+    exercise_name: str | None = None
+    weight_kg: float | None = None
 
 
 _PLANNED_STEP_FIELD_NAMES = [f.name for f in fields(PlannedStepLike)]
@@ -217,17 +235,24 @@ def _build_executable_step(
     )
 
 
+# A single step, at whatever stepOrder build_workout_segment has assigned it. running and
+# hiit/strength_training each have their own step_builder (different target/exercise semantics),
+# sharing this one repeat-group assembly rather than duplicating it -- see build_workout_segment.
+StepBuilder = Callable[[PlannedStepLike, int], ExecutableStep]
+
+
 def build_workout_segment(
     steps: list[PlannedStepLike],
-    *,
-    hr_boundaries: tuple[int, int, int, int] | None,
-    max_hr_bpm: float | None,
+    step_builder: StepBuilder,
 ) -> list[ExecutableStep | RepeatGroup]:
     """The unexpanded `planned_workout_step` rows (repeat children preceding their own summary
     row -- see module docstring) into Garmin's own `ExecutableStep`/`RepeatGroup` tree.
     `stepOrder` is one flat, ascending counter across the whole segment, matching the reference
     `create_strength_set` helper's own convention: a repeat group's `stepOrder` comes *before*
-    its children's (group=N, children=N+1, N+2, ...), not after."""
+    its children's (group=N, children=N+1, N+2, ...), not after. `step_builder` builds one leaf
+    `ExecutableStep` at a given `stepOrder` -- this function only ever handles the repeat-group
+    shape, not any target/exercise-specific fields, so running and hiit/strength_training share
+    it via two different `step_builder`s (`build_running_workout`/`build_exercise_workout`)."""
     sorted_steps = sorted(steps, key=lambda s: s.step_index)
     by_index = {s.step_index: s for s in sorted_steps}
     consumed: set[int] = set()
@@ -252,11 +277,7 @@ def build_workout_segment(
                 child = by_index.get(idx)
                 if child is None:
                     continue
-                children.append(
-                    _build_executable_step(
-                        child, counter, hr_boundaries=hr_boundaries, max_hr_bpm=max_hr_bpm
-                    )
-                )
+                children.append(step_builder(child, counter))
                 counter += 1
             if not children:
                 continue
@@ -280,11 +301,7 @@ def build_workout_segment(
                 )
             )
         else:
-            segment_steps.append(
-                _build_executable_step(
-                    s, counter, hr_boundaries=hr_boundaries, max_hr_bpm=max_hr_bpm
-                )
-            )
+            segment_steps.append(step_builder(s, counter))
             counter += 1
     return segment_steps
 
@@ -297,7 +314,12 @@ def build_running_workout(
     hr_boundaries: tuple[int, int, int, int] | None,
     max_hr_bpm: float | None,
 ) -> RunningWorkout:
-    segment_steps = build_workout_segment(steps, hr_boundaries=hr_boundaries, max_hr_bpm=max_hr_bpm)
+    def step_builder(step: PlannedStepLike, step_order: int) -> ExecutableStep:
+        return _build_executable_step(
+            step, step_order, hr_boundaries=hr_boundaries, max_hr_bpm=max_hr_bpm
+        )
+
+    segment_steps = build_workout_segment(steps, step_builder)
     if not segment_steps:
         raise WorkoutBuildError("workout has no steps -- nothing to push")
     return RunningWorkout(
@@ -382,6 +404,110 @@ def build_placeholder_workout(sport: str, name: str, estimated_duration_s: float
     )
 
 
+# sport -> (sportTypeId, sportTypeKey, workout class) for the exercise sports. Both are real
+# Garmin workout-service sport types -- confirmed live against GET /workout-service/workout/types
+# (unlike bouldering, see decision 9): hiit=9, strength_training=5. `garminconnect.workout` has a
+# real `StrengthWorkout` subclass; there's no `HiitWorkout`, so HIIT uses the same plain
+# `BaseWorkout` pattern `build_placeholder_workout` already does for yoga.
+_EXERCISE_SPORT_TYPES: dict[str, tuple[int, str, type[BaseWorkout]]] = {
+    "hiit": (SportType.HIIT, "hiit", BaseWorkout),
+    "strength_training": (SportType.STRENGTH_TRAINING, "strength_training", StrengthWorkout),
+}
+EXERCISE_SPORTS = frozenset(_EXERCISE_SPORT_TYPES)
+
+# A rough guess (a controlled-tempo rep commonly takes 2-4s) used only for estimated_duration_s's
+# own display purposes on a "reps" step -- never sent to Garmin, which needs no duration estimate
+# for a reps-based step at all (the real time depends entirely on how the athlete actually moves).
+_ASSUMED_SECONDS_PER_REP = 3.0
+
+
+def _build_exercise_step(step: PlannedStepLike, step_order: int) -> ExecutableStep:
+    """One exercise or rest step for hiit/strength_training -- reps-based (a set: "10 reps of
+    bench press") when `duration_type == "reps"`, otherwise time-based (a HIIT circuit interval,
+    or a rest step between sets). Wire format for `category`/`exerciseName`/`weightValue`/
+    `weightUnit` confirmed live (2026-09-05, a real push + `get_workout_by_id` read-back against
+    the athlete's own Garmin account, matching `create_strength_exercise_step`'s own reference
+    shape exactly) -- `weightValue` is grams, not kg, despite `weight_kg`'s own storage unit."""
+    if step.duration_type == "reps" and step.duration_reps is not None:
+        end_condition = {
+            "conditionTypeId": ConditionType.REPS,
+            "conditionTypeKey": "reps",
+            "displayOrder": 10,
+            "displayable": True,
+        }
+        end_value = float(step.duration_reps)
+    else:
+        end_condition = {
+            "conditionTypeId": ConditionType.TIME,
+            "conditionTypeKey": "time",
+            "displayOrder": 2,
+            "displayable": True,
+        }
+        end_value = step.duration_time_s or 0.0
+
+    extra: dict[str, Any] = {}
+    if step.exercise_category is not None:
+        extra["category"] = step.exercise_category
+        extra["exerciseName"] = step.exercise_name or ""
+        if step.weight_kg is not None:
+            extra["weightValue"] = float(step.weight_kg) * 1000.0
+            extra["weightUnit"] = dict(WEIGHT_UNIT_KILOGRAM)
+
+    return ExecutableStep(
+        stepOrder=step_order,
+        stepType=_step_type_dict(step.intensity),
+        endCondition=end_condition,
+        endConditionValue=end_value,
+        targetType=_NO_TARGET,
+        **extra,
+    )
+
+
+def build_exercise_workout(
+    sport: str, name: str, steps: list[PlannedStepLike], estimated_duration_s: float
+) -> BaseWorkout:
+    """The hiit/strength_training case: real, named Garmin exercises the athlete picked from
+    Garmin's own catalog (`garminconnect.exercises`) -- steps arrive already-structured (from the
+    frontend's exercise picker), never parsed from text (there's no natural text syntax for
+    naming a specific Garmin exercise the way there is for a pace/HR target)."""
+    sport_info = _EXERCISE_SPORT_TYPES.get(sport)
+    if sport_info is None:
+        raise WorkoutBuildError(f"no exercise workout builder for sport {sport!r}")
+    sport_type_id, sport_type_key, workout_cls = sport_info
+    sport_type_dict = {
+        "sportTypeId": sport_type_id,
+        "sportTypeKey": sport_type_key,
+        "displayOrder": 1,
+    }
+
+    segment_steps = build_workout_segment(steps, _build_exercise_step)
+    if not segment_steps:
+        raise WorkoutBuildError("workout has no steps -- nothing to push")
+    return workout_cls(
+        workoutName=name,
+        sportType=sport_type_dict,
+        estimatedDurationInSecs=max(0, round(estimated_duration_s)),
+        workoutSegments=[
+            WorkoutSegment(segmentOrder=1, sportType=sport_type_dict, workoutSteps=segment_steps)
+        ],
+    )
+
+
+def _fetch_steps(conn: Connection, planned_workout_id: int) -> list[PlannedStepLike]:
+    """Every `planned_workout_step` row for one workout, in `step_index` order -- shared by
+    running and hiit/strength_training, which both keep their unexpanded steps in this same
+    table (just populating a different subset of columns each)."""
+    step_rows = conn.execute(
+        select(planned_workout_step)
+        .where(planned_workout_step.c.planned_workout_id == planned_workout_id)
+        .order_by(planned_workout_step.c.step_index)
+    ).fetchall()
+    return [
+        PlannedStepLike(**{name: getattr(r, name) for name in _PLANNED_STEP_FIELD_NAMES})
+        for r in step_rows
+    ]
+
+
 @dataclass
 class PushResult:
     success: bool
@@ -432,20 +558,12 @@ def push_planned_workout(
         conn.commit()
         return PushResult(success=False, garmin_workout_id=None, error=message)
 
-    if row.sport not in ("running", *_PLACEHOLDER_SPORT_TYPES):
+    if row.sport not in ("running", *_PLACEHOLDER_SPORT_TYPES, *EXERCISE_SPORTS):
         return _mark_failed(f"push not supported yet for sport {row.sport!r}")
 
     try:
         if row.sport == "running":
-            step_rows = conn.execute(
-                select(planned_workout_step)
-                .where(planned_workout_step.c.planned_workout_id == planned_workout_id)
-                .order_by(planned_workout_step.c.step_index)
-            ).fetchall()
-            steps = [
-                PlannedStepLike(**{name: getattr(r, name) for name in _PLANNED_STEP_FIELD_NAMES})
-                for r in step_rows
-            ]
+            steps = _fetch_steps(conn, planned_workout_id)
 
             zone_row = conn.execute(
                 select(athlete_hr_zone_config).where(
@@ -466,6 +584,14 @@ def push_planned_workout(
                 row.estimated_duration_s or 0.0,
                 hr_boundaries=hr_boundaries,
                 max_hr_bpm=max_hr_bpm,
+            )
+        elif row.sport in EXERCISE_SPORTS:
+            steps = _fetch_steps(conn, planned_workout_id)
+            workout = build_exercise_workout(
+                row.sport,
+                row.name or f"{row.sport.replace('_', ' ').capitalize()} - {row.local_date}",
+                steps,
+                row.estimated_duration_s or 0.0,
             )
         else:
             workout = build_placeholder_workout(
@@ -518,6 +644,39 @@ class SavedWorkout:
 PLACEHOLDER_SPORTS = frozenset({"yoga", "bouldering"})
 
 
+def _estimate_exercise_duration_s(steps: list[PlannedStepLike]) -> float:
+    """Same repeat-expansion shape as `workout_syntax.py`'s own duration estimator, adapted for
+    reps-based steps (`_ASSUMED_SECONDS_PER_REP`) alongside time-based ones -- display only, see
+    `_build_exercise_step`'s own docstring for why this never reaches Garmin."""
+    by_index = {s.step_index: s for s in steps}
+    consumed: set[int] = set()
+    for s in steps:
+        if s.duration_type == "repeat_until_steps_cmplt" and s.repeat_from_step is not None:
+            consumed.update(range(s.repeat_from_step, s.step_index))
+
+    def step_estimate(s: PlannedStepLike) -> float:
+        if s.duration_type == "reps" and s.duration_reps is not None:
+            return s.duration_reps * _ASSUMED_SECONDS_PER_REP
+        return s.duration_time_s or 0.0
+
+    total = 0.0
+    for s in steps:
+        if s.step_index in consumed:
+            continue
+        if (
+            s.duration_type == "repeat_until_steps_cmplt"
+            and s.repeat_from_step is not None
+            and s.repeat_count is not None
+        ):
+            children = [
+                by_index[i] for i in range(s.repeat_from_step, s.step_index) if i in by_index
+            ]
+            total += sum(step_estimate(c) for c in children) * s.repeat_count
+        else:
+            total += step_estimate(s)
+    return total
+
+
 def save_planned_workout(
     conn: Connection,
     *,
@@ -528,15 +687,21 @@ def save_planned_workout(
     source_text: str | None,
     scheduled_time: str | None = None,
     duration_minutes: float | None = None,
+    steps: list[PlannedStepLike] | None = None,
 ) -> SavedWorkout:
-    """Upserts one `planned_workout` row by (athlete_id, local_date). Two sport tiers:
+    """Upserts one `planned_workout` row by (athlete_id, local_date). Three sport tiers (see
+    module docstring):
 
     - **running**: `source_text` is the athlete's own workout-syntax text, re-parsed on every
-      save (not just the first) into fresh `planned_workout_step` rows -- `duration_minutes` is
-      ignored, `estimated_duration_s` comes from the parse.
+      save (not just the first) into fresh `planned_workout_step` rows -- `duration_minutes`/
+      `steps` are ignored, `estimated_duration_s` comes from the parse.
     - **yoga/bouldering** (`PLACEHOLDER_SPORTS`): no syntax to parse at all -- `source_text`, if
       given, is just freeform athlete notes; no `planned_workout_step` rows are ever created;
       `estimated_duration_s` is set directly from `duration_minutes` instead of being derived.
+    - **hiit/strength_training** (`EXERCISE_SPORTS`): `steps` are already-structured
+      `PlannedStepLike` rows (from the frontend's exercise picker, converted from the API's own
+      `PlannedWorkoutStepIn` at the router layer) -- stored as given, no parsing at all;
+      `estimated_duration_s` is computed from them (`_estimate_exercise_duration_s`).
 
     `scheduled_time` ("HH:MM", validated by the API schema layer) is stored either way -- it's
     Perseverer's own calendar display metadata, orthogonal to which sport tier a workout is in.
@@ -546,12 +711,19 @@ def save_planned_workout(
     the next time it runs, matching `GarminConnectAdapter.push_planned_workout`'s own "edit means
     full re-push, not a partial update" contract."""
     is_running = sport == "running"
+    is_exercise = sport in EXERCISE_SPORTS
     parsed = parse_workout_syntax(source_text or "") if is_running else None
-    estimated_duration_s = (
-        parsed.estimated_duration_s
-        if parsed is not None
-        else (duration_minutes * 60.0 if duration_minutes is not None else None)
-    )
+
+    rows_to_insert: list[Any] = []
+    if parsed is not None:
+        estimated_duration_s: float | None = parsed.estimated_duration_s
+        rows_to_insert = list(parsed.steps)
+    elif is_exercise and steps:
+        estimated_duration_s = _estimate_exercise_duration_s(steps)
+        rows_to_insert = list(steps)
+    else:
+        estimated_duration_s = duration_minutes * 60.0 if duration_minutes is not None else None
+
     now = datetime.now(UTC).replace(tzinfo=None)
 
     existing = conn.execute(
@@ -600,7 +772,7 @@ def save_planned_workout(
             )
         )
 
-    if parsed is not None and parsed.steps:
+    if rows_to_insert:
         conn.execute(
             planned_workout_step.insert(),
             [
@@ -610,18 +782,26 @@ def save_planned_workout(
                     "step_index": s.step_index,
                     "duration_type": s.duration_type,
                     "duration_time_s": s.duration_time_s,
-                    "duration_distance_m": s.duration_distance_m,
-                    "target_type": s.target_type,
-                    "target_low": s.target_low,
-                    "target_high": s.target_high,
-                    "target_hr_zone": s.target_hr_zone,
-                    "cadence_low": s.cadence_low,
-                    "cadence_high": s.cadence_high,
+                    "duration_distance_m": getattr(s, "duration_distance_m", None),
+                    "duration_reps": getattr(s, "duration_reps", None),
+                    "target_type": getattr(s, "target_type", None),
+                    "target_low": getattr(s, "target_low", None),
+                    "target_high": getattr(s, "target_high", None),
+                    "target_hr_zone": getattr(s, "target_hr_zone", None),
+                    "cadence_low": getattr(s, "cadence_low", None),
+                    "cadence_high": getattr(s, "cadence_high", None),
                     "intensity": s.intensity,
                     "repeat_from_step": s.repeat_from_step,
                     "repeat_count": s.repeat_count,
+                    "exercise_category": getattr(s, "exercise_category", None),
+                    "exercise_name": getattr(s, "exercise_name", None),
+                    "weight_kg": getattr(s, "weight_kg", None),
                 }
-                for s in parsed.steps
+                # rows_to_insert holds either workout_syntax.ParsedStep (running) or
+                # PlannedStepLike (hiit/strength_training) -- getattr() above covers whichever
+                # fields the other type doesn't have, rather than a second near-identical insert
+                # block per type.
+                for s in rows_to_insert
             ],
         )
 

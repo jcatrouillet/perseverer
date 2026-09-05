@@ -601,10 +601,14 @@ planned_workout_step = Table(
     Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
     Column("planned_workout_id", Integer, ForeignKey("planned_workout.id"), nullable=False),
     Column("step_index", Integer, nullable=False),
-    # "time" | "distance" | "repeat_until_steps_cmplt"
+    # "time" | "distance" | "reps" | "repeat_until_steps_cmplt"
     Column("duration_type", String, nullable=True),
     Column("duration_time_s", Float, nullable=True),
     Column("duration_distance_m", Float, nullable=True),
+    # hiit/strength_training only ("reps" duration_type) -- a rep-counted set, e.g. "10 reps of
+    # bench press". Running never uses this (its own repeat counts live in repeat_count below,
+    # a different concept: "do this whole block N times", not "do this one step N reps").
+    Column("duration_reps", Integer, nullable=True),
     Column("target_type", String, nullable=True),  # "pace" | "heart_rate" | None (open/no target)
     # Unit depends on target_type: m/s for "pace", bpm for "heart_rate" -- same convention as
     # activity_workout_step.target_low_mps/target_high_mps, just widened to cover HR too since a
@@ -621,6 +625,14 @@ planned_workout_step = Table(
     # vocabulary activity_workout_step.intensity already uses.
     Column("repeat_from_step", Integer, nullable=True),
     Column("repeat_count", Integer, nullable=True),
+    # hiit/strength_training only -- a specific Garmin exercise (garminconnect.exercises'
+    # (category, exercise) enum pair, e.g. ("BENCH_PRESS", "") or ("CURL", "HAMMER_CURL")).
+    # exercise_name is "" (not null) when the step is just the category with no specific variant
+    # -- matches Garmin's own convention (see garminconnect.exercises' own docstring) so an empty
+    # exercise_name round-trips identically rather than colliding with "no exercise at all".
+    Column("exercise_category", String, nullable=True),
+    Column("exercise_name", String, nullable=True),
+    Column("weight_kg", Float, nullable=True),
     UniqueConstraint(
         "athlete_id",
         "planned_workout_id",

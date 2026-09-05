@@ -34,6 +34,35 @@ class PlannedWorkoutStepOut(BaseModel):
     intensity: str | None
     repeat_from_step: int | None
     repeat_count: int | None
+    # hiit/strength_training only (EXERCISE_SPORTS, planned_workouts.py) -- a specific Garmin
+    # exercise picked from garminconnect.exercises' catalog, plus a rep count in place of
+    # duration_time_s/duration_distance_m (duration_type == "reps").
+    duration_reps: int | None = None
+    exercise_category: str | None = None
+    exercise_name: str | None = None
+    weight_kg: float | None = None
+
+
+class PlannedWorkoutStepIn(BaseModel):
+    """One step of a hiit/strength_training workout, as authored by the frontend's exercise
+    picker (EXERCISE_SPORTS, planned_workouts.py) -- never parsed from text, unlike running's
+    source_text. Converted to a `planned_workouts.PlannedStepLike` at the router layer."""
+
+    step_index: int
+    # "reps" (a counted set, e.g. "10 reps of bench press") | "time" (e.g. a plank hold) | "rest"
+    duration_type: str
+    duration_time_s: float | None = None
+    duration_reps: int | None = None
+    intensity: str | None = None  # "active" | "rest" -- same vocabulary every other tier uses
+    repeat_from_step: int | None = None
+    repeat_count: int | None = None
+    # The exact (category, exercise) pair from garminconnect.exercises, e.g.
+    # ("BENCH_PRESS", "") or ("CURL", "HAMMER_CURL") -- exercise_name is "" (not None) when the
+    # step names just the category with no specific variant, matching Garmin's own convention
+    # (see db/schema.py::planned_workout_step's own docstring). Absent entirely for a rest step.
+    exercise_category: str | None = None
+    exercise_name: str | None = None
+    weight_kg: float | None = None
 
 
 class ParseErrorOut(BaseModel):
@@ -42,18 +71,22 @@ class ParseErrorOut(BaseModel):
 
 
 class PlannedWorkoutIn(BaseModel):
-    sport: str  # "running" | "yoga" | "bouldering" | "fitness" -- open string, not an enum
+    sport: str  # "running" | "yoga" | "bouldering" | "fitness" | "hiit" | "strength_training"
     name: str | None = None
     # running: the athlete's own workout-syntax text. yoga/bouldering (PLACEHOLDER_SPORTS,
     # planned_workouts.py): freeform notes only, never parsed -- no structured syntax for these.
+    # hiit/strength_training: ignored -- steps below carries the structured content instead.
     source_text: str | None = None
     # "HH:MM", 24h -- Perseverer's own calendar display metadata only (Garmin's own
     # schedule_workout() has no time-of-day API at all, see docs/adr/0015-scheduled-workouts.md).
     scheduled_time: str | None = None
     # yoga/bouldering only: sets estimated_duration_s directly (there's no syntax to derive a
-    # duration from). Ignored for running, where estimated_duration_s comes from parsing
-    # source_text instead.
+    # duration from). Ignored for running/hiit/strength_training, where estimated_duration_s is
+    # derived instead (from source_text or steps respectively).
     duration_minutes: float | None = None
+    # hiit/strength_training only (EXERCISE_SPORTS) -- the exercise-picker steps. Ignored for
+    # every other sport.
+    steps: list[PlannedWorkoutStepIn] | None = None
 
     _validate_scheduled_time = field_validator("scheduled_time")(_validate_scheduled_time)
 
@@ -99,6 +132,8 @@ class RecurringWorkoutIn(BaseModel):
     source_text: str | None = None
     scheduled_time: str | None = None
     duration_minutes: float | None = None  # yoga/bouldering only, see PlannedWorkoutIn
+    # hiit/strength_training only, see PlannedWorkoutIn
+    steps: list[PlannedWorkoutStepIn] | None = None
     frequency: str  # "weekly" | "every_n_days" | "monthly"
     interval_days: int | None = None  # required (>=1) when frequency == "every_n_days"
     # Exactly one of count/until -- an unambiguous stop condition, not a guess. `count` includes

@@ -159,6 +159,115 @@ class TestYogaAndBoulderingPlaceholders:
         assert "not supported" not in (get.json()["push_error"] or "")
 
 
+class TestExerciseSports:
+    """hiit/strength_training (EXERCISE_SPORTS, planned_workouts.py) -- steps come pre-structured
+    from the exercise picker (PlannedWorkoutStepIn), never parsed from source_text."""
+
+    def test_put_stores_and_reads_back_exercise_steps(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        put = client.put(
+            "/api/v1/planned-workouts/2026-09-01",
+            json={
+                "sport": "strength_training",
+                "name": "Push day",
+                "steps": [
+                    {
+                        "step_index": 0,
+                        "duration_type": "reps",
+                        "duration_reps": 10,
+                        "intensity": "active",
+                        "exercise_category": "BENCH_PRESS",
+                        "exercise_name": "",
+                        "weight_kg": 60.0,
+                    },
+                    {
+                        "step_index": 1,
+                        "duration_type": "time",
+                        "duration_time_s": 60,
+                        "intensity": "rest",
+                    },
+                ],
+            },
+            headers=auth_headers,
+        )
+        assert put.status_code == 200
+        body = put.json()
+        assert body["sport"] == "strength_training"
+        assert body["source_text"] is None
+        assert body["parse_errors"] == []
+        assert len(body["steps"]) == 2
+        assert body["steps"][0]["exercise_category"] == "BENCH_PRESS"
+        assert body["steps"][0]["exercise_name"] == ""
+        assert body["steps"][0]["weight_kg"] == 60.0
+        assert body["steps"][0]["duration_reps"] == 10
+        assert body["steps"][1]["intensity"] == "rest"
+        assert body["steps"][1]["exercise_category"] is None
+        assert body["estimated_duration_s"] and body["estimated_duration_s"] > 0
+
+        get = client.get("/api/v1/planned-workouts/2026-09-01", headers=auth_headers)
+        assert get.status_code == 200
+        get_body = get.json()
+        assert len(get_body["steps"]) == 2
+        assert get_body["steps"][0]["exercise_category"] == "BENCH_PRESS"
+        assert get_body["steps"][0]["weight_kg"] == 60.0
+
+    def test_hiit_steps_wrap_in_a_repeat_group(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        put = client.put(
+            "/api/v1/planned-workouts/2026-09-01",
+            json={
+                "sport": "hiit",
+                "steps": [
+                    {
+                        "step_index": 0,
+                        "duration_type": "time",
+                        "duration_time_s": 30,
+                        "intensity": "active",
+                        "exercise_category": "BURPEE",
+                        "exercise_name": "",
+                        "repeat_from_step": 0,
+                        "repeat_count": 3,
+                    },
+                ],
+            },
+            headers=auth_headers,
+        )
+        assert put.status_code == 200
+        body = put.json()
+        assert body["steps"][0]["repeat_count"] == 3
+
+    def test_push_reaches_garmin_for_exercise_sports(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        client.put(
+            "/api/v1/planned-workouts/2026-09-01",
+            json={
+                "sport": "hiit",
+                "steps": [
+                    {
+                        "step_index": 0,
+                        "duration_type": "reps",
+                        "duration_reps": 15,
+                        "intensity": "active",
+                        "exercise_category": "BURPEE",
+                        "exercise_name": "",
+                    },
+                ],
+            },
+            headers=auth_headers,
+        )
+        push = client.post("/api/v1/planned-workouts/2026-09-01/push", headers=auth_headers)
+        assert push.status_code == 200
+
+        # No Garmin token store in this test's tmp_path, so the push still fails -- but it must
+        # fail from the auth step, never from an early "sport not supported" gate.
+        get = client.get("/api/v1/planned-workouts/2026-09-01", headers=auth_headers)
+        assert get.json()["push_status"] == "push_failed"
+        assert "not supported" not in (get.json()["push_error"] or "")
+
+
 def test_editing_a_pushed_workout_resets_status_to_draft(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:

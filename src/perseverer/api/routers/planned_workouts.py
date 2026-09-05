@@ -23,6 +23,7 @@ from perseverer.api.schemas.planned_workouts import (
     PlannedWorkoutIn,
     PlannedWorkoutListItemOut,
     PlannedWorkoutOut,
+    PlannedWorkoutStepIn,
     PlannedWorkoutStepOut,
     RecurringWorkoutIn,
     RecurringWorkoutOut,
@@ -30,6 +31,7 @@ from perseverer.api.schemas.planned_workouts import (
 from perseverer.api.schemas.settings import JobTriggerOut
 from perseverer.db.schema import planned_workout, planned_workout_step
 from perseverer.planned_workouts import (
+    PlannedStepLike,
     compute_recurrence_dates,
     push_planned_workout,
     save_planned_workout,
@@ -77,6 +79,35 @@ def list_planned_workouts(
     ]
 
 
+def _steps_in_to_planned_step_like(steps: list[PlannedWorkoutStepIn]) -> list[PlannedStepLike]:
+    """Converts the exercise picker's own request shape into the plain dataclass
+    `save_planned_workout` stores -- pace/HR-only fields (target_type/target_low/target_high/
+    target_hr_zone/cadence_low/cadence_high, duration_distance_m) never apply to a hiit/
+    strength_training step, so they're always None here."""
+    return [
+        PlannedStepLike(
+            step_index=s.step_index,
+            duration_type=s.duration_type,
+            duration_time_s=s.duration_time_s,
+            duration_distance_m=None,
+            target_type=None,
+            target_low=None,
+            target_high=None,
+            target_hr_zone=None,
+            cadence_low=None,
+            cadence_high=None,
+            intensity=s.intensity,
+            repeat_from_step=s.repeat_from_step,
+            repeat_count=s.repeat_count,
+            duration_reps=s.duration_reps,
+            exercise_category=s.exercise_category,
+            exercise_name=s.exercise_name,
+            weight_kg=s.weight_kg,
+        )
+        for s in steps
+    ]
+
+
 def _to_out(row: Row, steps: list[Row], parse_errors: list[ParseError]) -> PlannedWorkoutOut:  # type: ignore[type-arg]
     return PlannedWorkoutOut(
         available=True,
@@ -102,6 +133,10 @@ def _to_out(row: Row, steps: list[Row], parse_errors: list[ParseError]) -> Plann
                 intensity=s.intensity,
                 repeat_from_step=s.repeat_from_step,
                 repeat_count=s.repeat_count,
+                duration_reps=s.duration_reps,
+                exercise_category=s.exercise_category,
+                exercise_name=s.exercise_name,
+                weight_kg=s.weight_kg,
             )
             for s in steps
         ],
@@ -163,6 +198,7 @@ def put_planned_workout(
         source_text=payload.source_text,
         scheduled_time=payload.scheduled_time,
         duration_minutes=payload.duration_minutes,
+        steps=_steps_in_to_planned_step_like(payload.steps) if payload.steps else None,
     )
     conn.commit()
     return get_planned_workout(local_date, athlete_id, conn)
@@ -297,6 +333,7 @@ def post_recurring_planned_workout(
             source_text=payload.source_text,
             scheduled_time=payload.scheduled_time,
             duration_minutes=payload.duration_minutes,
+            steps=_steps_in_to_planned_step_like(payload.steps) if payload.steps else None,
         )
         created.append(iso)
     conn.commit()
