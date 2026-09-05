@@ -28,7 +28,7 @@ import {
 } from "./ExerciseStepEditor";
 import { formatStepDurationLabel, groupWorkoutStepsForDisplay, plannedCadenceLabel, plannedTargetLabel } from "../workoutSteps";
 import { parsedStepToApiShape, parseWorkoutSyntax } from "../workoutSyntax";
-import { readWorkoutClipboard } from "../workoutClipboard";
+import { copyWorkoutToClipboard, readWorkoutClipboard } from "../workoutClipboard";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { StepBuilderModal } from "./StepBuilderModal";
 import "../styles/plannedWorkout.css";
@@ -67,6 +67,23 @@ function WorkoutSummary({ localDate, workout }: { localDate: string; workout: Pl
   const del = useDeletePlannedWorkout();
   const push = usePushPlannedWorkout();
   const duration = formatDurationMinutes(workout.estimated_duration_s);
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    copyWorkoutToClipboard({
+      sport: workout.sport ?? "running",
+      name: workout.name,
+      source_text: workout.source_text,
+      scheduled_time: workout.scheduled_time,
+      duration_minutes:
+        workout.estimated_duration_s != null
+          ? Math.round(workout.estimated_duration_s / 60)
+          : null,
+      steps: workout.steps,
+    });
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
     <div className="planned-workout__summary">
@@ -99,6 +116,9 @@ function WorkoutSummary({ localDate, workout }: { localDate: string; workout: Pl
             {push.isPending ? "Pushing…" : "Push to Garmin"}
           </button>
         )}
+        <button type="button" className="button" onClick={handleCopy}>
+          {copied ? "Copied — paste it on another day" : "Copy"}
+        </button>
         <button
           type="button"
           className="button"
@@ -185,6 +205,16 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
     setSport(item.sport);
     setName(item.name ?? "");
     setSourceText(item.source_text ?? "");
+    setScheduledTime(item.scheduled_time ?? "");
+    setDurationMinutes(item.duration_minutes != null ? String(item.duration_minutes) : "");
+    if (EXERCISE_SPORTS.has(item.sport) && item.steps && item.steps.length > 0) {
+      const { entries, repeatCount } = apiStepsToEntries(item.steps);
+      setExerciseEntries(entries);
+      setExerciseRepeatCount(repeatCount);
+    } else {
+      setExerciseEntries([]);
+      setExerciseRepeatCount("");
+    }
   }
 
   function insertAtCursor(text: string) {

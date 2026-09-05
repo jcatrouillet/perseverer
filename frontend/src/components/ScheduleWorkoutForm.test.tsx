@@ -213,6 +213,35 @@ describe("ScheduleWorkoutForm", () => {
     expect(screen.getByText(/45 min/)).toBeInTheDocument();
   });
 
+  it("Copy writes the full scheduled workout to the clipboard, not just name/source_text", () => {
+    mockUsePlannedWorkout.mockReturnValue({
+      data: {
+        ...SCHEDULED,
+        sport: "yoga",
+        name: "Evening yoga",
+        source_text: null,
+        scheduled_time: "18:30",
+        estimated_duration_s: 2700,
+        steps: [],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    fireEvent.click(screen.getByText("Copy"));
+
+    const stored = JSON.parse(localStorage.getItem("perseverer_workout_clipboard") ?? "{}");
+    expect(stored).toEqual(
+      expect.objectContaining({
+        sport: "yoga",
+        name: "Evening yoga",
+        scheduled_time: "18:30",
+        duration_minutes: 45,
+      }),
+    );
+  });
+
   it("hides Push to Garmin for fitness (no builder yet)", () => {
     mockUsePlannedWorkout.mockReturnValue({
       data: { ...SCHEDULED, sport: "fitness" },
@@ -339,6 +368,71 @@ describe("ScheduleWorkoutForm", () => {
     );
   });
 
+  it("pasting a copied yoga workout restores duration and time of day, not just name", () => {
+    localStorage.setItem(
+      "perseverer_workout_clipboard",
+      JSON.stringify({
+        sport: "yoga",
+        name: "Copied yoga",
+        source_text: null,
+        scheduled_time: "07:00",
+        duration_minutes: 60,
+      }),
+    );
+    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    fireEvent.click(screen.getByText("Paste copied workout"));
+
+    expect((screen.getByPlaceholderText("e.g. Evening yoga") as HTMLInputElement).value).toBe(
+      "Copied yoga",
+    );
+    expect((screen.getByLabelText("Duration (minutes)") as HTMLInputElement).value).toBe("60");
+    expect((screen.getByLabelText("Time of day") as HTMLInputElement).value).toBe("07:00");
+  });
+
+  it("pasting a copied strength_training workout restores its exercise steps", () => {
+    localStorage.setItem(
+      "perseverer_workout_clipboard",
+      JSON.stringify({
+        sport: "strength_training",
+        name: "Copied lift",
+        source_text: null,
+        steps: [
+          {
+            step_index: 0,
+            duration_type: "reps",
+            duration_time_s: null,
+            duration_distance_m: null,
+            target_type: null,
+            target_low: null,
+            target_high: null,
+            target_hr_zone: null,
+            cadence_low: null,
+            cadence_high: null,
+            intensity: "active",
+            repeat_from_step: null,
+            repeat_count: null,
+            duration_reps: 8,
+            exercise_category: "BENCH_PRESS",
+            exercise_name: "",
+            weight_kg: 55,
+          },
+        ],
+      }),
+    );
+    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    fireEvent.click(screen.getByText("Paste copied workout"));
+
+    expect((screen.getByPlaceholderText(/Search exercises/) as HTMLInputElement).value).toBe(
+      "Bench Press",
+    );
+    expect(screen.getByDisplayValue("8")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("55")).toBeInTheDocument();
+  });
+
   it("Repeat this schedule reveals the recurrence controls, and creating one calls the mutation", () => {
     mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
@@ -358,6 +452,36 @@ describe("ScheduleWorkoutForm", () => {
         sport: "running",
         frequency: "weekly",
         count: 4,
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("Repeat this schedule also carries exercise steps for hiit/strength_training", () => {
+    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Schedule a workout"));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "strength_training" } });
+    fireEvent.click(screen.getByText("+ Add exercise"));
+    fireEvent.change(screen.getByPlaceholderText(/Search exercises/), {
+      target: { value: "Bench Press" },
+    });
+    fireEvent.mouseDown(screen.getByRole("button", { name: /^Bench Press/ }));
+
+    fireEvent.click(screen.getByText("Repeat this schedule…"));
+    fireEvent.click(screen.getByText("Create schedule"));
+
+    expect(mockRecurring).toHaveBeenCalledWith(
+      expect.objectContaining({
+        local_date: "2026-09-01",
+        sport: "strength_training",
+        source_text: null,
+        steps: [
+          expect.objectContaining({
+            exercise_category: "BENCH_PRESS",
+            exercise_name: "",
+          }),
+        ],
       }),
       expect.anything(),
     );

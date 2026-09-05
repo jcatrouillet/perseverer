@@ -156,6 +156,22 @@ other day or every month") and a GUI step builder ("a step button to help build 
 multiple choice popup") — both designed in directly rather than deferred, per this project's own
 established fold-in-scope preference.
 
+**Addendum (after hiit/strength_training shipped, decision 10)**: `WorkoutClipboardItem` had
+only ever carried `sport`/`name`/`source_text` — fine for running (the only tier that existed
+when Copy/Paste was built), but silently lossy for every tier added since: pasting a copied
+yoga/bouldering workout dropped its `duration_minutes`/`scheduled_time`, and pasting a copied
+hiit/strength_training workout dropped its exercise steps entirely (the clipboard had nowhere to
+put them). Fixed by extending the clipboard item with optional `scheduled_time`/
+`duration_minutes`/`steps` fields and a second "Copy" source: alongside `CopyWorkoutButton`
+(a completed activity → clipboard, running-structured activities only, unchanged), `WorkoutSummary`
+in `ScheduleWorkoutForm.tsx` now has its own "Copy" action on an *already-scheduled planned*
+workout — the richer source, since a planned workout already carries every field a paste needs in
+exactly the shape `apiStepsToEntries` (the same hydration helper Edit already uses) expects.
+`handlePaste()` now restores all of it, branching on the pasted sport exactly like `startEditing`
+already does. "Repeat this schedule" needed no fix — it already forwards whatever's currently in
+the form (including `steps`/`duration_minutes`) regardless of sport tier, since it was built
+against the same mutation payload from the start.
+
 ### 6. `workoutSteps.ts`'s expand/group helpers generalized to a shared `WorkoutStepLike`, not duplicated
 
 `expandWorkoutSteps`/`groupWorkoutStepsForDisplay`/`consumedByRepeats` originally took
