@@ -1,0 +1,94 @@
+/* ExerciseStepEditor -- the hiit/strength_training authoring surface inside
+   ScheduleWorkoutForm. */
+
+.exercise-step-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.exercise-step-editor__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.exercise-step-editor__search {
+  position: relative;
+  flex: 1;
+  min-width: 12rem;
+}
+
+.exercise-step-editor__search .input {
+  width: 100%;
+}
+
+.exercise-step-editor__results {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 14rem;
+  overflow-y: auto;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 2px 8px rgba(0, 0, 0, 0.15));
+}
+
+.exercise-step-editor__results li {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.exercise-step-editor__results li:last-child {
+  border-bottom: none;
+}
+
+.exercise-step-editor__results button {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: var(--color-text);
+}
+
+.exercise-step-editor__results button:hover,
+.exercise-step-editor__results button:focus {
+  background: var(--color-surface-hover, var(--color-surface));
+}
+
+.exercise-step-editor__category {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.exercise-step-editor__no-results {
+  padding: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.exercise-step-editor__number {
+  width: 4.5rem;
+}
+
+.exercise-step-editor__rest-label {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.exercise-step-editor__remove {
+  margin-left: auto;
+}

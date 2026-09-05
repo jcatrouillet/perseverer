@@ -426,5 +426,11 @@ export function parsedStepToApiShape(step: ParsedStep): PlannedWorkoutStepOut {
     intensity: step.intensity,
     repeat_from_step: step.repeatFromStep,
     repeat_count: step.repeatCount,
+    // hiit/strength_training only -- a running step (the only kind workout_syntax.py/this file
+    // parse) never carries these.
+    duration_reps: null,
+    exercise_category: null,
+    exercise_name: null,
+    weight_kg: null,
   };
 }

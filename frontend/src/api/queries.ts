@@ -48,6 +48,7 @@ import type {
   PeriodCalendarResponse,
   PlannedWorkoutListItemOut,
   PlannedWorkoutOut,
+  PlannedWorkoutStepIn,
   RecurringWorkoutOut,
   RevokeShareOut,
   RunningLoadConfigIn,
@@ -854,6 +855,8 @@ export interface SavePlannedWorkoutInput {
   source_text: string | null;
   scheduled_time?: string | null;
   duration_minutes?: number | null;
+  // hiit/strength_training only, see PlannedWorkoutStepIn
+  steps?: PlannedWorkoutStepIn[] | null;
 }
 
 export function useSavePlannedWorkout() {
@@ -866,6 +869,7 @@ export function useSavePlannedWorkout() {
         source_text: body.source_text,
         scheduled_time: body.scheduled_time ?? null,
         duration_minutes: body.duration_minutes ?? null,
+        steps: body.steps ?? null,
       }),
     onSuccess: (_workout, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["planned-workout", variables.localDate] });
@@ -903,6 +907,8 @@ export interface RecurringPlannedWorkoutInput {
   source_text: string | null;
   scheduled_time?: string | null;
   duration_minutes?: number | null;
+  // hiit/strength_training only, see PlannedWorkoutStepIn
+  steps?: PlannedWorkoutStepIn[] | null;
   frequency: "weekly" | "every_n_days" | "monthly";
   interval_days?: number;
   count?: number;

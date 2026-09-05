@@ -232,6 +232,52 @@ sport — for yoga/bouldering's freeform notes, this produced bogus "unrecognize
 on plain prose. Fixed by gating that re-parse to `sport == "running"` only, caught by a test
 before it ever shipped.
 
+### 10. hiit/strength_training: a real exercise picker, not a third placeholder or a text syntax
+
+Added after shipping, per the user's own explicit follow-up ("let's add support for hiit and
+strenth_training") and their choice among three offered authoring styles: a searchable picker
+over Garmin's own real exercise catalog (`garminconnect.exercises`, 1,527 exercises across 47
+categories), each step naming a real exercise with sets/reps or time, optional weight/rest —
+matching what actually shows up on the watch, rather than a simpler yoga/bouldering-style
+placeholder or a free-text syntax (there's no natural text grammar for naming a specific Garmin
+exercise the way there is for a pace or HR target).
+
+Confirmed live against Garmin's real `GET /workout-service/workout/types` response (not the
+`garminconnect` package's own hardcoded `SportType` class) that hiit and strength_training are
+both real Workout Builder sport types — unlike bouldering (decision 9), no fallback mapping is
+needed. `planned_workouts.py::EXERCISE_SPORTS` is a third sport tier alongside running's parsed
+syntax and yoga/bouldering's placeholders: `build_exercise_workout`/`_build_exercise_step` build
+the real Garmin wire format directly from already-structured `PlannedStepLike` rows supplied by
+the frontend's picker (never parsed from text) — `weightValue` is grams despite the app's own
+`weight_kg` storage unit (kg × 1000, confirmed live), and `category`/`exerciseName` ride as extra
+`ExecutableStep` fields (`ConfigDict(extra="allow")`) alongside a reps- or time-based end
+condition. `build_workout_segment` (previously running-only, hardcoding `hr_boundaries`/
+`max_hr_bpm`) was generalized to take a `StepBuilder` callback so running and hiit/
+strength_training share one repeat-group/step-order implementation rather than duplicating it —
+`build_running_workout` now passes a closure capturing its own HR-zone state, `build_exercise_
+workout` passes the stateless `_build_exercise_step`.
+
+Four new `planned_workout_step` columns (`duration_reps`, `exercise_category`, `exercise_name`,
+`weight_kg`) are additive — running's own columns are untouched, and `save_planned_workout`'s
+insert-dict builder uses `getattr(s, field, None)` per exercise-only field rather than forcing a
+shared shape onto `workout_syntax.ParsedStep` (deliberately kept running-only) or writing a
+second near-duplicate insert block. `exercise_name` is stored as `""` (not `None`) when a step
+names just the category with no specific variant, matching Garmin's own catalog convention (an
+entry's own `exercise` code sometimes equals its `category`, e.g. "Bench Press") — kept
+distinguishable from "no exercise at all" (`exercise_category is None`), which a `duration_type
+== "rest"` step legitimately has.
+
+The frontend catalog (`frontend/src/data/exerciseCatalog.json`, regenerated from the installed
+`garminconnect` package by `scripts/generate_exercise_catalog.py`) is loaded via a dynamic
+`import()`, not a static one — a static import pushed the app-shell bundle from ~2.0MB to
+2.24MB and broke the production build against vite-plugin-pwa's 2MB single-file precache limit.
+Code-splitting it into its own ~230KB chunk keeps the shell lean for the common case;
+`ScheduleWorkoutForm` calls `preloadExerciseCatalog()` unconditionally on mount so the fetch is
+already in flight well before the athlete picks an exercise sport. `ExerciseStepEditor.tsx` is
+itself the canonical authored content (unlike running's textarea + live-parsed preview) —
+producing `PlannedWorkoutStepIn[]` directly, with no intermediate text representation, since
+there's nothing to parse.
+
 ## Verification
 
 `uv run pytest -q` (927 passed), `uv run ruff check .`, `uv run mypy` (clean), `cd frontend && npm
@@ -272,3 +318,19 @@ and `targetType: "no.target"`, `sportType: {"sportTypeId": 3, "sportTypeKey": "o
 workout's own `workoutName` still reads "CLAUDE TEST — bouldering — safe to delete" regardless of
 the generic sport type. Deleted afterward via the same `adapter.delete_workout` path
 `DELETE /planned-workouts/{date}` uses.
+
+**hiit/strength_training (decision 10)**: `uv run pytest -q` (944 passed), `uv run ruff check .`,
+`uv run mypy` (clean), `cd frontend && npm run typecheck && npm run build` (clean, including the
+PWA precache-size regression caught and fixed before it ever reached CI), `npx vitest run`
+(578 passed) — all green.
+
+Live-verified against the author's own Garmin account (2026-09-05), confirming both the wire
+format and the sport-type mapping before writing the adapter code: pushed a real "CLAUDE TEST —
+strength — safe to delete" workout (workout_id 1687437265, scheduled 2026-09-08) built with
+`build_exercise_workout`/`_build_exercise_step` directly (not yet through the API/frontend, which
+didn't exist at that point in the session), read back via `get_workout_by_id`, and confirmed the
+exact structure sent: `weightValue` in grams (kg × 1000) and `weightUnit` matching
+`WEIGHT_UNIT_KILOGRAM` exactly, `category`/`exerciseName` present as extra `ExecutableStep`
+fields, a reps-based step using `ConditionType.REPS` and a rest step using `StepType.REST` with
+no exercise fields at all. Deleted afterward via `adapter.delete_workout`, same as every other
+live-verification push in this ADR.

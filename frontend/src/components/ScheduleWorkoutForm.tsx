@@ -1,12 +1,14 @@
 // The "Planned workout" section of MonthView's expanded-day card and DayViewPage
 // (docs/adr/0015-scheduled-workouts.md): shows the scheduled workout + push status if one
-// exists, or a "Schedule a workout" affordance if not. Two sport tiers, matching
+// exists, or a "Schedule a workout" affordance if not. Three sport tiers, matching
 // planned_workouts.py::save_planned_workout: running gets the full text-syntax editor + live
-// preview; yoga/bouldering (PUSHABLE_PLACEHOLDER_SPORTS) are deliberately simpler placeholders
-// -- a duration (minutes) + a time-of-day field, no structured syntax at all, per the user's own
+// preview; yoga/bouldering (PLACEHOLDER_SPORTS) are deliberately simpler placeholders -- a
+// duration (minutes) + a time-of-day field, no structured syntax at all, per the user's own
 // explicit scoping ("no structured text syntax needed, it's just to put placeholder for those
-// sports"). Both push to Garmin; "fitness" doesn't have a builder yet.
-import { useRef, useState } from "react";
+// sports"); hiit/strength_training (EXERCISE_SPORTS) get the real exercise picker
+// (ExerciseStepEditor) -- the athlete's own choice over a simpler placeholder or a free-text
+// syntax. All but "fitness" push to Garmin.
+import { useEffect, useRef, useState } from "react";
 
 import {
   useCreateRecurringPlannedWorkouts,
@@ -16,6 +18,14 @@ import {
   useSavePlannedWorkout,
 } from "../api/queries";
 import type { PlannedWorkoutOut } from "../api/types";
+import {
+  apiStepsToEntries,
+  entriesToApiSteps,
+  estimateExerciseDurationS,
+  ExerciseStepEditor,
+  preloadExerciseCatalog,
+  type ExerciseEntry,
+} from "./ExerciseStepEditor";
 import { formatStepDurationLabel, groupWorkoutStepsForDisplay, plannedCadenceLabel, plannedTargetLabel } from "../workoutSteps";
 import { parsedStepToApiShape, parseWorkoutSyntax } from "../workoutSyntax";
 import { readWorkoutClipboard } from "../workoutClipboard";
@@ -28,14 +38,19 @@ const SPORTS = [
   { value: "yoga", label: "Yoga" },
   { value: "bouldering", label: "Bouldering" },
   { value: "fitness", label: "Fitness" },
+  { value: "hiit", label: "HIIT" },
+  { value: "strength_training", label: "Strength training" },
 ];
 
 // Sports with a real Garmin push path today -- "fitness" has neither structured syntax nor a
 // placeholder builder yet (planned_workouts.py has no builder registered for it).
-const PUSHABLE_SPORTS = new Set(["running", "yoga", "bouldering"]);
+const PUSHABLE_SPORTS = new Set(["running", "yoga", "bouldering", "hiit", "strength_training"]);
 // Sports with no structured syntax at all -- just a name, a duration, and a time of day. Mirrors
 // planned_workouts.py::PLACEHOLDER_SPORTS exactly.
 const PLACEHOLDER_SPORTS = new Set(["yoga", "bouldering"]);
+// Real, named Garmin exercises picked from the catalog. Mirrors planned_workouts.py::
+// EXERCISE_SPORTS exactly.
+const EXERCISE_SPORTS = new Set(["hiit", "strength_training"]);
 
 function statusLabel(status: PlannedWorkoutOut["push_status"]): string {
   if (status === "pushed") return "Pushed to Garmin";
@@ -102,6 +117,13 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
   const save = useSavePlannedWorkout();
   const recurring = useCreateRecurringPlannedWorkouts();
 
+  // Kicks off the (code-split, ~230KB) exercise catalog fetch as soon as this day's panel
+  // expands, well before the athlete might pick hiit/strength_training -- see
+  // ExerciseStepEditor.tsx's own docstring for why it's dynamically imported at all.
+  useEffect(() => {
+    void preloadExerciseCatalog();
+  }, []);
+
   const [editing, setEditing] = useState(false);
   const [sport, setSport] = useState("running");
   const [name, setName] = useState("");
@@ -109,6 +131,8 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
   const [durationMinutes, setDurationMinutes] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [stepBuilderOpen, setStepBuilderOpen] = useState(false);
+  const [exerciseEntries, setExerciseEntries] = useState<ExerciseEntry[]>([]);
+  const [exerciseRepeatCount, setExerciseRepeatCount] = useState("");
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [recurFrequency, setRecurFrequency] = useState<"weekly" | "every_n_days" | "monthly">(
     "weekly",
@@ -121,10 +145,12 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
 
   const clipboardItem = readWorkoutClipboard();
   const isPlaceholderSport = PLACEHOLDER_SPORTS.has(sport);
+  const isExerciseSport = EXERCISE_SPORTS.has(sport);
 
   function startEditing() {
     if (workout.data?.available) {
-      setSport(workout.data.sport ?? "running");
+      const sp = workout.data.sport ?? "running";
+      setSport(sp);
       setName(workout.data.name ?? "");
       setSourceText(workout.data.source_text ?? "");
       setScheduledTime(workout.data.scheduled_time ?? "");
@@ -133,12 +159,22 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
           ? String(Math.round(workout.data.estimated_duration_s / 60))
           : "",
       );
+      if (EXERCISE_SPORTS.has(sp)) {
+        const { entries, repeatCount } = apiStepsToEntries(workout.data.steps);
+        setExerciseEntries(entries);
+        setExerciseRepeatCount(repeatCount);
+      } else {
+        setExerciseEntries([]);
+        setExerciseRepeatCount("");
+      }
     } else {
       setSport("running");
       setName("");
       setSourceText("");
       setScheduledTime("");
       setDurationMinutes("");
+      setExerciseEntries([]);
+      setExerciseRepeatCount("");
     }
     setEditing(true);
   }
@@ -184,9 +220,10 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         localDate,
         sport,
         name: name.trim() || null,
-        source_text: sourceText.trim() || null,
+        source_text: isExerciseSport ? null : sourceText.trim() || null,
         scheduled_time: scheduledTime || null,
         duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
+        steps: isExerciseSport ? entriesToApiSteps(exerciseEntries, exerciseRepeatCount) : null,
       },
       { onSuccess: () => setEditing(false) },
     );
@@ -198,9 +235,10 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         local_date: localDate,
         sport,
         name: name.trim() || null,
-        source_text: sourceText.trim() || null,
+        source_text: isExerciseSport ? null : sourceText.trim() || null,
         scheduled_time: scheduledTime || null,
         duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
+        steps: isExerciseSport ? entriesToApiSteps(exerciseEntries, exerciseRepeatCount) : null,
         frequency: recurFrequency,
         interval_days:
           recurFrequency === "every_n_days" ? Number(recurIntervalDays) || undefined : undefined,
@@ -309,6 +347,33 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
               placeholder="Any detail worth remembering -- studio, route project, etc."
             />
           </label>
+        </>
+      ) : isExerciseSport ? (
+        <>
+          <label className="field">
+            Time of day (optional)
+            <input
+              className="input"
+              type="time"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+            />
+          </label>
+
+          <ExerciseStepEditor
+            entries={exerciseEntries}
+            onChange={setExerciseEntries}
+            repeatCount={exerciseRepeatCount}
+            onRepeatCountChange={setExerciseRepeatCount}
+          />
+
+          {exerciseEntries.length > 0 && (
+            <p className="chart-note">
+              Estimated duration:{" "}
+              {Math.round(estimateExerciseDurationS(exerciseEntries, exerciseRepeatCount) / 60)}{" "}
+              min
+            </p>
+          )}
         </>
       ) : (
         <>

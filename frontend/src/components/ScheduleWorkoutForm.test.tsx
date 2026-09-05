@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PlannedWorkoutOut } from "../api/types";
+import { preloadExerciseCatalog } from "./ExerciseStepEditor";
 import { ScheduleWorkoutForm } from "./ScheduleWorkoutForm";
 
 const mockUsePlannedWorkout = vi.fn();
@@ -63,6 +64,10 @@ const SCHEDULED: PlannedWorkoutOut = {
       intensity: "warmup",
       repeat_from_step: null,
       repeat_count: null,
+      duration_reps: null,
+      exercise_category: null,
+      exercise_name: null,
+      weight_kg: null,
     },
   ],
   parse_errors: [],
@@ -73,6 +78,10 @@ const SCHEDULED: PlannedWorkoutOut = {
 };
 
 describe("ScheduleWorkoutForm", () => {
+  beforeAll(async () => {
+    await preloadExerciseCatalog();
+  });
+
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
@@ -128,6 +137,7 @@ describe("ScheduleWorkoutForm", () => {
         source_text: "Warmup 10m",
         scheduled_time: null,
         duration_minutes: null,
+        steps: null,
       },
       expect.anything(),
     );
@@ -166,6 +176,7 @@ describe("ScheduleWorkoutForm", () => {
         source_text: null,
         scheduled_time: "18:30",
         duration_minutes: 45,
+        steps: null,
       },
       expect.anything(),
     );
@@ -211,6 +222,94 @@ describe("ScheduleWorkoutForm", () => {
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     expect(screen.queryByText("Push to Garmin")).not.toBeInTheDocument();
+  });
+
+  describe("hiit/strength_training exercise picker", () => {
+    it("switching to strength_training shows the exercise picker instead of the textarea", () => {
+      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+      fireEvent.click(screen.getByText("Schedule a workout"));
+
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "strength_training" } });
+
+      expect(screen.queryByPlaceholderText(/Warmup 10m/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Duration (minutes)")).not.toBeInTheDocument();
+      expect(screen.getByText("+ Add exercise")).toBeInTheDocument();
+      expect(screen.getByText("+ Add rest")).toBeInTheDocument();
+    });
+
+    it("picking a real exercise and saving sends a structured step", () => {
+      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+      fireEvent.click(screen.getByText("Schedule a workout"));
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "strength_training" } });
+
+      fireEvent.click(screen.getByText("+ Add exercise"));
+      fireEvent.change(screen.getByPlaceholderText(/Search exercises/), {
+        target: { value: "Bench Press" },
+      });
+      fireEvent.mouseDown(screen.getByRole("button", { name: /^Bench Press/ }));
+
+      fireEvent.click(screen.getByText("Save"));
+
+      expect(mockSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sport: "strength_training",
+          source_text: null,
+          steps: [
+            expect.objectContaining({
+              step_index: 0,
+              duration_type: "reps",
+              duration_reps: 10,
+              intensity: "active",
+              exercise_category: "BENCH_PRESS",
+              exercise_name: "",
+            }),
+          ],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("editing an already-saved hiit workout hydrates the picker from its steps", () => {
+      mockUsePlannedWorkout.mockReturnValue({
+        data: {
+          ...SCHEDULED,
+          sport: "hiit",
+          source_text: null,
+          steps: [
+            {
+              step_index: 0,
+              duration_type: "reps",
+              duration_time_s: null,
+              duration_distance_m: null,
+              target_type: null,
+              target_low: null,
+              target_high: null,
+              target_hr_zone: null,
+              cadence_low: null,
+              cadence_high: null,
+              intensity: "active",
+              repeat_from_step: null,
+              repeat_count: null,
+              duration_reps: 15,
+              exercise_category: "TOTAL_BODY",
+              exercise_name: "BURPEE",
+              weight_kg: null,
+            },
+          ],
+        },
+        isLoading: false,
+        isError: false,
+      });
+      render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+      fireEvent.click(screen.getByText("Edit"));
+
+      expect((screen.getByPlaceholderText(/Search exercises/) as HTMLInputElement).value).toBe(
+        "Burpee",
+      );
+      expect((screen.getByDisplayValue("15") as HTMLInputElement)).toBeInTheDocument();
+    });
   });
 
   it("Delete calls the delete mutation with the date", () => {

@@ -325,24 +325,36 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
 - **`planned_workout`**/**`planned_workout_step`** (scheduled workouts) — a *future*,
   athlete-authored workout on the calendar, pushed to the Garmin watch, and its unexpanded
   steps. One `planned_workout` per athlete per `local_date` (Garmin's own `schedule_workout()`
-  is itself date-granular). Two sport tiers (`planned_workouts.py::PLACEHOLDER_SPORTS`):
-  **running**'s `source_text` is the athlete's own typed workout-syntax text, kept verbatim and
-  re-parsed into `planned_workout_step` rows on every save (`workout_syntax.py`), with
-  `estimated_duration_s` derived from that parse; **yoga/bouldering**'s `source_text` (if any) is
+  is itself date-granular). Three sport tiers: **running**'s `source_text` is the athlete's own
+  typed workout-syntax text, kept verbatim and re-parsed into `planned_workout_step` rows on
+  every save (`workout_syntax.py`), with `estimated_duration_s` derived from that parse;
+  **yoga/bouldering** (`planned_workouts.py::PLACEHOLDER_SPORTS`)'s `source_text` (if any) is
   just freeform notes, never parsed — no `planned_workout_step` rows at all, and
-  `estimated_duration_s` is set directly from the athlete's own `duration_minutes` input instead.
-  `scheduled_time` ("HH:MM", nullable) is orthogonal to that split and stored either way — it's
-  Perseverer's own calendar display metadata only, since Garmin's `schedule_workout()` has no
-  time-of-day API at all. `push_status` (`draft`/`pushed`/`push_failed`) + `push_error` +
-  `garmin_workout_id` + `garmin_scheduled_at` track the push lifecycle `activity_workout` (the
-  retrospective, FIT-parsed workout-plan table from Phase 1, one-to-one with a completed
-  `activity_id`) has no concept of. `planned_workout_step` mirrors `activity_workout_step`'s own
-  unexpanded-repeat-block shape (a `repeat_until_steps_cmplt` row describing
-  `[repeat_from_step..step_index-1] x repeat_count`, not pre-flattened) so `workoutSteps.ts`'s
-  expand/group helpers work across both tables unmodified, but widens `target_type` to
-  `"pace"`/`"heart_rate"` (an absolute range, or `target_hr_zone` resolved against the
-  athlete's own `athlete_hr_zone_config` at push time) plus an independent `cadence_low`/
-  `cadence_high` — a recorded step's `target_type` is speed-only. See
+  `estimated_duration_s` is set directly from the athlete's own `duration_minutes` input instead;
+  **hiit/strength_training** (`planned_workouts.py::EXERCISE_SPORTS`) get real, named Garmin
+  exercises picked from a bundled catalog (`garminconnect.exercises`, 1,527 exercises/47
+  categories) via the frontend's own picker (`ExerciseStepEditor.tsx`) — steps arrive
+  already-structured, never parsed from text (there's no natural text syntax for naming a
+  specific Garmin exercise), and `estimated_duration_s` is computed from them (a rough assumed
+  seconds/rep for a reps-based step, real seconds otherwise). `scheduled_time` ("HH:MM",
+  nullable) is orthogonal to all three tiers and stored either way — it's Perseverer's own
+  calendar display metadata only, since Garmin's `schedule_workout()` has no time-of-day API at
+  all. `push_status` (`draft`/`pushed`/`push_failed`) + `push_error` + `garmin_workout_id` +
+  `garmin_scheduled_at` track the push lifecycle `activity_workout` (the retrospective,
+  FIT-parsed workout-plan table from Phase 1, one-to-one with a completed `activity_id`) has no
+  concept of. `planned_workout_step` mirrors `activity_workout_step`'s own unexpanded-repeat-block
+  shape (a `repeat_until_steps_cmplt` row describing `[repeat_from_step..step_index-1] x
+  repeat_count`, not pre-flattened) so `workoutSteps.ts`'s expand/group helpers work across both
+  tables unmodified, but widens `target_type` to `"pace"`/`"heart_rate"` (an absolute range, or
+  `target_hr_zone` resolved against the athlete's own `athlete_hr_zone_config` at push time) plus
+  an independent `cadence_low`/`cadence_high` — a recorded step's `target_type` is speed-only.
+  Four columns are hiit/strength_training-only: `duration_reps` (a rep-counted set — distinct
+  from `repeat_count`, which is "do this whole block N times" rather than "this one step is N
+  reps"), `exercise_category`/`exercise_name` (the exact `(category, exercise)` pair from
+  `garminconnect.exercises` — `exercise_name` is `""`, not `null`, when the step names just the
+  category with no specific variant, matching Garmin's own catalog convention, so it round-trips
+  distinctly from "no exercise at all", which a rest step legitimately has), and `weight_kg`
+  (converted to grams — Garmin's own wire unit — only at push time, never stored that way). See
   `docs/adr/0015-scheduled-workouts.md`.
 
 ## Metric registry

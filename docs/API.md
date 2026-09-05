@@ -809,13 +809,29 @@ stale and gets re-pushed fresh on the next push.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `sport` | string | required | `running` / `yoga` / `bouldering` / `fitness` — open string, not an enum. |
+| `sport` | string | required | `running` / `yoga` / `bouldering` / `fitness` / `hiit` / `strength_training` — open string, not an enum. |
 | `name` | string, nullable | optional | |
-| `source_text` | string, nullable | optional | For `running`: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting `parse_errors` come back in the response. For `yoga`/`bouldering`: freeform notes only, never parsed. |
+| `source_text` | string, nullable | optional | For `running`: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting `parse_errors` come back in the response. For `yoga`/`bouldering`: freeform notes only, never parsed. Ignored for `hiit`/`strength_training` — use `steps` instead. |
 | `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h). Perseverer's own calendar display metadata only — Garmin's own scheduling has no time-of-day API. |
-| `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — sets the workout's duration directly (there's no syntax to derive one from). Ignored for `running`, where duration comes from parsing `source_text`. |
+| `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — sets the workout's duration directly (there's no syntax to derive one from). Ignored for `running`/`hiit`/`strength_training`, where duration is derived instead. |
+| `steps` | array\<`PlannedWorkoutStepIn`\>, nullable | optional | `hiit`/`strength_training` only — the exercise-picker steps, arriving already-structured (never parsed from text). Ignored for every other sport. |
 
 **Response `200`:** `PlannedWorkoutOut`.
+
+`PlannedWorkoutStepIn`:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `step_index` | integer | required | Position within the (unexpanded) step list — see `PlannedWorkoutStepOut` below for the repeat-block convention. |
+| `duration_type` | string | required | `"reps"` / `"time"` for a real step, or `"repeat_until_steps_cmplt"` for a trailing repeat-group marker (`repeat_from_step`/`repeat_count` set, every other field omitted). |
+| `duration_time_s` | number, nullable | optional | Seconds — for a time-based exercise step or a rest step. |
+| `duration_reps` | integer, nullable | optional | For a reps-based exercise step (a counted set, e.g. "10 reps of bench press"). |
+| `intensity` | string, nullable | optional | `"active"` / `"rest"`. |
+| `repeat_from_step` | integer, nullable | optional | Repeat-marker only. |
+| `repeat_count` | integer, nullable | optional | Repeat-marker only. |
+| `exercise_category` | string, nullable | optional | The exact `(category, exercise)` pair from `garminconnect.exercises`, e.g. `"BENCH_PRESS"`. Omitted for a rest step. |
+| `exercise_name` | string, nullable | optional | `""` (not omitted) when the step names just the category with no specific variant, matching Garmin's own catalog convention. |
+| `weight_kg` | number, nullable | optional | Converted to grams (Garmin's own wire unit) only at push time. |
 
 ### `DELETE /planned-workouts/{local_date}`
 
@@ -860,6 +876,7 @@ reported back in `skipped_dates`.
 | `source_text` | string, nullable | optional | |
 | `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h) — see `PlannedWorkoutIn` above. |
 | `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — see `PlannedWorkoutIn` above. |
+| `steps` | array\<`PlannedWorkoutStepIn`\>, nullable | optional | `hiit`/`strength_training` only — see `PlannedWorkoutIn` above. |
 | `frequency` | string | required | `weekly` / `every_n_days` / `monthly`. |
 | `interval_days` | integer | required for `every_n_days` | `>= 1`. |
 | `count` | integer | exactly one of `count`/`until` | Total occurrences, including the first. |
@@ -1521,9 +1538,9 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 | `local_date` | string (date), nullable | |
 | `sport` | string, nullable | |
 | `name` | string, nullable | |
-| `source_text` | string, nullable | `running`: the athlete's own typed workout-syntax text, verbatim. `yoga`/`bouldering`: freeform notes only, never parsed. |
+| `source_text` | string, nullable | `running`: the athlete's own typed workout-syntax text, verbatim. `yoga`/`bouldering`: freeform notes only, never parsed. `hiit`/`strength_training`: always `null` — see `steps`. |
 | `scheduled_time` | string, nullable | `"HH:MM"` (24h) — display-only, not sent to Garmin. |
-| `estimated_duration_s` | number, nullable | `running`: an estimate — a distance-based step's real duration depends on the athlete's actual pace. `yoga`/`bouldering`: exactly the `duration_minutes` given at save time, in seconds. |
+| `estimated_duration_s` | number, nullable | `running`: an estimate — a distance-based step's real duration depends on the athlete's actual pace. `yoga`/`bouldering`: exactly the `duration_minutes` given at save time, in seconds. `hiit`/`strength_training`: an estimate computed from `steps` (a rough assumed seconds/rep for a reps-based step, real seconds otherwise). |
 | `steps` | array\<`PlannedWorkoutStepOut`\> | Defaults to `[]`. Raw, unexpanded (repeat-block markers included). Always `[]` for `yoga`/`bouldering` — no structured syntax for those sports. |
 | `parse_errors` | array\<`ParseErrorOut`\> | Defaults to `[]`. From re-parsing the currently-stored `source_text` — `running` only; always `[]` for `yoga`/`bouldering`. |
 | `push_status` | string, nullable | `draft` / `pushed` / `push_failed`. |
@@ -1545,6 +1562,9 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 | `intensity` | string, nullable | e.g. `warmup`, `active`, `recovery`, `cooldown`, `rest`. |
 | `repeat_from_step` | integer, nullable | For a repeat-block step: the `step_index` it loops back to. |
 | `repeat_count` | integer, nullable | |
+| `duration_reps` | integer, nullable | `hiit`/`strength_training` only — a rep-counted set. |
+| `exercise_category`, `exercise_name` | string, nullable | `hiit`/`strength_training` only — the exact `(category, exercise)` pair from `garminconnect.exercises`. `exercise_name` is `""` (not `null`) when the step names just the category with no specific variant. |
+| `weight_kg` | number, nullable | `hiit`/`strength_training` only. |
 
 ### ParseErrorOut
 

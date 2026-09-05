@@ -429,6 +429,32 @@ export interface PlannedWorkoutStepOut {
   intensity: string | null;
   repeat_from_step: number | null;
   repeat_count: number | null;
+  // hiit/strength_training only (EXERCISE_SPORTS, planned_workouts.py) -- a specific Garmin
+  // exercise picked from garminconnect.exercises' catalog (see data/exerciseCatalog.json), plus
+  // a rep count in place of duration_time_s/duration_distance_m (duration_type == "reps").
+  duration_reps: number | null;
+  exercise_category: string | null;
+  exercise_name: string | null;
+  weight_kg: number | null;
+}
+
+/** One step of a hiit/strength_training workout, as authored by the exercise picker -- never
+ * parsed from text, unlike running's source_text. See api/schemas/planned_workouts.py's own
+ * PlannedWorkoutStepIn. */
+export interface PlannedWorkoutStepIn {
+  step_index: number;
+  // "reps" | "time" for a real step; "repeat_until_steps_cmplt" for a trailing repeat-group
+  // marker (repeat_from_step/repeat_count set, every other field omitted) -- same convention
+  // ActivityWorkoutStepOut/PlannedWorkoutStepOut already use.
+  duration_type: "reps" | "time" | "repeat_until_steps_cmplt";
+  duration_time_s?: number | null;
+  duration_reps?: number | null;
+  intensity?: "active" | "rest" | null;
+  repeat_from_step?: number | null;
+  repeat_count?: number | null;
+  exercise_category?: string | null;
+  exercise_name?: string | null;
+  weight_kg?: number | null;
 }
 
 export interface ParseErrorOut {
