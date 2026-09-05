@@ -242,7 +242,10 @@ describe("ScheduleWorkoutForm", () => {
     );
   });
 
-  it("hides Push to Garmin for fitness (no builder yet)", () => {
+  it("hides Push to Garmin for a sport with no push builder (e.g. legacy 'fitness' data)", () => {
+    // "fitness" is no longer offered in the sport dropdown at all, but a workout saved under it
+    // before that removal must still degrade gracefully rather than offering a push that would
+    // just fail.
     mockUsePlannedWorkout.mockReturnValue({
       data: { ...SCHEDULED, sport: "fitness" },
       isLoading: false,
@@ -251,6 +254,14 @@ describe("ScheduleWorkoutForm", () => {
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     expect(screen.queryByText("Push to Garmin")).not.toBeInTheDocument();
+  });
+
+  it("no longer offers fitness as a sport option", () => {
+    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Schedule a workout"));
+
+    expect(screen.queryByRole("option", { name: "Fitness" })).not.toBeInTheDocument();
   });
 
   describe("hiit/strength_training exercise picker", () => {
@@ -338,6 +349,98 @@ describe("ScheduleWorkoutForm", () => {
         "Burpee",
       );
       expect((screen.getByDisplayValue("15") as HTMLInputElement)).toBeInTheDocument();
+    });
+
+    it("building a set of several exercises with rest, repeated, sends one repeat marker after them", () => {
+      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+      fireEvent.click(screen.getByText("Schedule a workout"));
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "strength_training" } });
+
+      fireEvent.click(screen.getByText("+ Add a set of exercises"));
+      fireEvent.click(screen.getByText("+ Add exercise to set"));
+      fireEvent.change(screen.getByPlaceholderText(/Search exercises/), {
+        target: { value: "Bench Press" },
+      });
+      fireEvent.mouseDown(screen.getByRole("button", { name: /^Bench Press/ }));
+      fireEvent.click(screen.getByText("+ Add rest to set"));
+
+      const repeatInput = screen.getByPlaceholderText("e.g. 3");
+      fireEvent.change(repeatInput, { target: { value: "4" } });
+
+      fireEvent.click(screen.getByText("Save"));
+
+      expect(mockSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sport: "strength_training",
+          steps: [
+            expect.objectContaining({ step_index: 0, exercise_category: "BENCH_PRESS" }),
+            expect.objectContaining({ step_index: 1, intensity: "rest" }),
+            expect.objectContaining({
+              step_index: 2,
+              duration_type: "repeat_until_steps_cmplt",
+              repeat_from_step: 0,
+              repeat_count: 4,
+            }),
+          ],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("supports a standalone exercise alongside a separate set", () => {
+      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+      fireEvent.click(screen.getByText("Schedule a workout"));
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "hiit" } });
+
+      // A standalone warmup exercise, outside any set.
+      fireEvent.click(screen.getByText("+ Add exercise"));
+      fireEvent.change(screen.getByPlaceholderText(/Search exercises/), {
+        target: { value: "Burpee" },
+      });
+      fireEvent.mouseDown(screen.getByRole("button", { name: "BurpeeTotal Body" }));
+
+      // A separate 3x set with its own exercise.
+      fireEvent.click(screen.getByText("+ Add a set of exercises"));
+      fireEvent.click(screen.getByText("+ Add exercise to set"));
+      const searchBoxes = screen.getAllByPlaceholderText(/Search exercises/);
+      fireEvent.change(searchBoxes[searchBoxes.length - 1], { target: { value: "Air Squat" } });
+      fireEvent.mouseDown(screen.getByRole("button", { name: "Air SquatSquat" }));
+      fireEvent.change(screen.getByPlaceholderText("e.g. 3"), { target: { value: "3" } });
+
+      fireEvent.click(screen.getByText("Save"));
+
+      expect(mockSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          steps: [
+            expect.objectContaining({ step_index: 0, exercise_category: "TOTAL_BODY" }),
+            expect.objectContaining({ step_index: 1, exercise_category: "SQUAT" }),
+            expect.objectContaining({
+              step_index: 2,
+              duration_type: "repeat_until_steps_cmplt",
+              repeat_from_step: 1,
+              repeat_count: 3,
+            }),
+          ],
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("Remove set deletes the whole set, not just one exercise inside it", () => {
+      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+      fireEvent.click(screen.getByText("Schedule a workout"));
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "hiit" } });
+
+      fireEvent.click(screen.getByText("+ Add a set of exercises"));
+      fireEvent.click(screen.getByText("+ Add exercise to set"));
+      expect(screen.getByText("+ Add exercise to set")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText("Remove set"));
+
+      expect(screen.queryByText("+ Add exercise to set")).not.toBeInTheDocument();
     });
   });
 

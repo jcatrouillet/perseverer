@@ -7,7 +7,8 @@
 // explicit scoping ("no structured text syntax needed, it's just to put placeholder for those
 // sports"); hiit/strength_training (EXERCISE_SPORTS) get the real exercise picker
 // (ExerciseStepEditor) -- the athlete's own choice over a simpler placeholder or a free-text
-// syntax. All but "fitness" push to Garmin.
+// syntax. All of these push to Garmin -- "fitness" (no structured syntax and no placeholder
+// builder either) was dropped from the sport list entirely rather than kept as a dead option.
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -19,12 +20,12 @@ import {
 } from "../api/queries";
 import type { PlannedWorkoutOut } from "../api/types";
 import {
-  apiStepsToEntries,
-  entriesToApiSteps,
-  estimateExerciseDurationS,
+  apiStepsToItems,
+  estimateItemsDurationS,
   ExerciseStepEditor,
+  itemsToApiSteps,
   preloadExerciseCatalog,
-  type ExerciseEntry,
+  type ExerciseItem,
 } from "./ExerciseStepEditor";
 import { formatStepDurationLabel, groupWorkoutStepsForDisplay, plannedCadenceLabel, plannedTargetLabel } from "../workoutSteps";
 import { parsedStepToApiShape, parseWorkoutSyntax } from "../workoutSyntax";
@@ -37,13 +38,11 @@ const SPORTS = [
   { value: "running", label: "Running" },
   { value: "yoga", label: "Yoga" },
   { value: "bouldering", label: "Bouldering" },
-  { value: "fitness", label: "Fitness" },
   { value: "hiit", label: "HIIT" },
   { value: "strength_training", label: "Strength training" },
 ];
 
-// Sports with a real Garmin push path today -- "fitness" has neither structured syntax nor a
-// placeholder builder yet (planned_workouts.py has no builder registered for it).
+// Every sport in SPORTS above has a real Garmin push path.
 const PUSHABLE_SPORTS = new Set(["running", "yoga", "bouldering", "hiit", "strength_training"]);
 // Sports with no structured syntax at all -- just a name, a duration, and a time of day. Mirrors
 // planned_workouts.py::PLACEHOLDER_SPORTS exactly.
@@ -151,8 +150,7 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
   const [durationMinutes, setDurationMinutes] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [stepBuilderOpen, setStepBuilderOpen] = useState(false);
-  const [exerciseEntries, setExerciseEntries] = useState<ExerciseEntry[]>([]);
-  const [exerciseRepeatCount, setExerciseRepeatCount] = useState("");
+  const [exerciseItems, setExerciseItems] = useState<ExerciseItem[]>([]);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [recurFrequency, setRecurFrequency] = useState<"weekly" | "every_n_days" | "monthly">(
     "weekly",
@@ -180,12 +178,9 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
           : "",
       );
       if (EXERCISE_SPORTS.has(sp)) {
-        const { entries, repeatCount } = apiStepsToEntries(workout.data.steps);
-        setExerciseEntries(entries);
-        setExerciseRepeatCount(repeatCount);
+        setExerciseItems(apiStepsToItems(workout.data.steps));
       } else {
-        setExerciseEntries([]);
-        setExerciseRepeatCount("");
+        setExerciseItems([]);
       }
     } else {
       setSport("running");
@@ -193,8 +188,7 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
       setSourceText("");
       setScheduledTime("");
       setDurationMinutes("");
-      setExerciseEntries([]);
-      setExerciseRepeatCount("");
+      setExerciseItems([]);
     }
     setEditing(true);
   }
@@ -208,12 +202,9 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
     setScheduledTime(item.scheduled_time ?? "");
     setDurationMinutes(item.duration_minutes != null ? String(item.duration_minutes) : "");
     if (EXERCISE_SPORTS.has(item.sport) && item.steps && item.steps.length > 0) {
-      const { entries, repeatCount } = apiStepsToEntries(item.steps);
-      setExerciseEntries(entries);
-      setExerciseRepeatCount(repeatCount);
+      setExerciseItems(apiStepsToItems(item.steps));
     } else {
-      setExerciseEntries([]);
-      setExerciseRepeatCount("");
+      setExerciseItems([]);
     }
   }
 
@@ -253,7 +244,7 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         source_text: isExerciseSport ? null : sourceText.trim() || null,
         scheduled_time: scheduledTime || null,
         duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
-        steps: isExerciseSport ? entriesToApiSteps(exerciseEntries, exerciseRepeatCount) : null,
+        steps: isExerciseSport ? itemsToApiSteps(exerciseItems) : null,
       },
       { onSuccess: () => setEditing(false) },
     );
@@ -268,7 +259,7 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         source_text: isExerciseSport ? null : sourceText.trim() || null,
         scheduled_time: scheduledTime || null,
         duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
-        steps: isExerciseSport ? entriesToApiSteps(exerciseEntries, exerciseRepeatCount) : null,
+        steps: isExerciseSport ? itemsToApiSteps(exerciseItems) : null,
         frequency: recurFrequency,
         interval_days:
           recurFrequency === "every_n_days" ? Number(recurIntervalDays) || undefined : undefined,
@@ -390,18 +381,11 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
             />
           </label>
 
-          <ExerciseStepEditor
-            entries={exerciseEntries}
-            onChange={setExerciseEntries}
-            repeatCount={exerciseRepeatCount}
-            onRepeatCountChange={setExerciseRepeatCount}
-          />
+          <ExerciseStepEditor items={exerciseItems} onChange={setExerciseItems} />
 
-          {exerciseEntries.length > 0 && (
+          {exerciseItems.length > 0 && (
             <p className="chart-note">
-              Estimated duration:{" "}
-              {Math.round(estimateExerciseDurationS(exerciseEntries, exerciseRepeatCount) / 60)}{" "}
-              min
+              Estimated duration: {Math.round(estimateItemsDurationS(exerciseItems) / 60)} min
             </p>
           )}
         </>

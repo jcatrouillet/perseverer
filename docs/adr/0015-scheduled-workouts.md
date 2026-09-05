@@ -366,6 +366,39 @@ modal was sized for one specific "big popup" use case (the Goals progress graph)
 lightbox shouldn't inherit — `.modal__panel--image` hugs the image's own size instead of taking
 most of the viewport.
 
+### 12. Sets of several exercises with rest, and dropping "fitness" as a dead option
+
+Added after shipping, per the user's own explicit request ("we need the option to have sets of
+multiple exercises with rest for hiit and strength"). The first version of `ExerciseStepEditor`
+only ever supported one repeat count wrapping the *entire* authored list — already enough to
+build a single circuit ("3 rounds of squat, push-up, rest"), but not enough for a workout with
+more than one distinct circuit, or a standalone exercise (a warmup) alongside a repeated one.
+
+No backend change was needed at all: `planned_workouts.py::build_workout_segment` already walks
+every `repeat_until_steps_cmplt` marker in a step list independently, each with its own
+`repeat_from_step`/`step_index` range — the exact mechanism running's own multi-`Nx`-block text
+syntax already relies on. This was a frontend-only gap: the editor's own authoring model just
+never generated more than one marker.
+
+`ExerciseStepEditor`'s data model changed from a flat `entries[] + one repeatCount` to a flat
+top-level list of *items*, each either a standalone exercise/rest or a *set* (a group of several
+exercises/rests with its own repeat count) — standalone items and any number of sets can now
+coexist in one workout, in any order, the same way running's text can freely mix ungrouped lines
+with several `Nx` blocks. `itemsToApiSteps`/`apiStepsToItems` replace the old
+`entriesToApiSteps`/`apiStepsToEntries`, assigning step_index sequentially and emitting one
+repeat marker right after each set's own children — `apiStepsToItems` reconstructs sets from
+saved data by treating each marker's own `[repeat_from_step, step_index)` range as that set's
+children, so editing an already-saved single-circuit workout (the old shape) round-trips into
+exactly one set with no standalone items, unchanged.
+
+Separately, "fitness" was dropped from the sport dropdown entirely rather than kept as a
+selectable dead end — it never had a structured syntax or a placeholder builder
+(`planned_workouts.py` has no builder registered for it at all), so selecting it produced a
+workout that could never push. `sport` stays a free string, not a schema-level enum (additive
+schema evolution), so this is a frontend-only removal; a workout saved under "fitness" before
+this change still renders correctly (`PUSHABLE_SPORTS` simply hides the push button for any
+unrecognized sport, same as it always has).
+
 ## Verification
 
 `uv run pytest -q` (927 passed), `uv run ruff check .`, `uv run mypy` (clean), `cd frontend && npm
@@ -445,3 +478,14 @@ second one at the user's own request after the first result). The detailed exerc
 real video with numbered steps and tips; both non-detailed ones hung on Garmin's own loading
 spinner indefinitely, confirming the `garmin_url`-only-for-tier-1 fix directly rather than
 inferring it from an HTTP status code.
+
+**Sets, and dropping "fitness" (decision 12)**: `cd frontend && npm run typecheck && npm run
+build` (clean), `npx vitest run` (599 passed, including 17 for `ExerciseStepEditor` covering a
+standalone exercise alongside two independently-repeated sets, and new `ScheduleWorkoutForm`
+tests for building a set end to end, mixing a standalone exercise with a separate set, and
+removing a whole set at once) — all green. Manually verified live: built a real "4 rounds of
+Barbell Bench Press + 60s rest" workout in the browser, confirmed the exact PUT payload (one
+repeat marker with `repeat_from_step: 0, repeat_count: 4` right after both children), saved it,
+confirmed the same shape came back from `GET /planned-workouts/{date}`, then reopened Edit and
+confirmed the set (exercise, rest, and its own repeat count) reconstructed correctly with no
+backend changes involved. Confirmed the sport `<select>` no longer offers "Fitness" at all.

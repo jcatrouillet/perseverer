@@ -562,7 +562,9 @@ planned_workout = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
     Column("local_date", String, nullable=False),
-    Column("sport", String, nullable=False),  # "running" | "yoga" | "bouldering" | "fitness"
+    Column("sport", String, nullable=False),  # "running" | "yoga" | "bouldering" | "hiit" |
+    # "strength_training" -- open string, not an enum. "fitness" was dropped from the frontend's
+    # own sport list (no structured syntax and no placeholder builder ever existed for it).
     Column("name", String, nullable=True),
     # The athlete's own typed text, kept verbatim -- raw-first-adjacent: never lose what they
     # actually authored even if the parser or step model changes later. Re-parsed into

@@ -2,13 +2,16 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import type { PlannedWorkoutStepOut } from "../api/types";
 import {
-  apiStepsToEntries,
+  apiStepsToItems,
   emptyExerciseEntry,
+  emptyGroup,
   emptyRestEntry,
-  entriesToApiSteps,
-  estimateExerciseDurationS,
+  estimateItemsDurationS,
+  itemsToApiSteps,
   preloadExerciseCatalog,
   searchExerciseCatalog,
+  type ExerciseEntry,
+  type ExerciseItem,
 } from "./ExerciseStepEditor";
 
 beforeAll(async () => {
@@ -38,6 +41,10 @@ function step(overrides: Partial<PlannedWorkoutStepOut>): PlannedWorkoutStepOut 
   };
 }
 
+function entryItem(entry: ExerciseEntry): ExerciseItem {
+  return { type: "entry", entry };
+}
+
 describe("searchExerciseCatalog", () => {
   it("returns nothing for a too-short query", () => {
     expect(searchExerciseCatalog("b")).toEqual([]);
@@ -57,14 +64,14 @@ describe("searchExerciseCatalog", () => {
   });
 });
 
-describe("entriesToApiSteps", () => {
+describe("itemsToApiSteps", () => {
   it("builds a reps-based exercise step with weight", () => {
     const entry = { ...emptyExerciseEntry(), durationType: "reps" as const, durationReps: "10" };
     entry.exerciseCategory = "BENCH_PRESS";
     entry.exerciseName = "";
     entry.weightKg = "60";
 
-    const steps = entriesToApiSteps([entry], "");
+    const steps = itemsToApiSteps([entryItem(entry)]);
     expect(steps).toEqual([
       {
         step_index: 0,
@@ -83,16 +90,17 @@ describe("entriesToApiSteps", () => {
     const entry = emptyRestEntry();
     entry.durationTimeS = "90";
 
-    const steps = entriesToApiSteps([entry], "");
+    const steps = itemsToApiSteps([entryItem(entry)]);
     expect(steps).toEqual([
       { step_index: 0, duration_type: "time", duration_time_s: 90, intensity: "rest" },
     ]);
   });
 
-  it("appends a repeat marker when repeatCount is a real count", () => {
+  it("appends a repeat marker after a set's own children when repeatCount is a real count", () => {
     const entry = { ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" };
-    const steps = entriesToApiSteps([entry], "3");
+    const group = { ...emptyGroup(), repeatCount: "3", entries: [entry] };
 
+    const steps = itemsToApiSteps([{ type: "group", group }]);
     expect(steps).toHaveLength(2);
     expect(steps[1]).toEqual({
       step_index: 1,
@@ -104,14 +112,72 @@ describe("entriesToApiSteps", () => {
 
   it("omits the repeat marker for a count of 1 or an empty/invalid value", () => {
     const entry = { ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" };
-    expect(entriesToApiSteps([entry], "1")).toHaveLength(1);
-    expect(entriesToApiSteps([entry], "")).toHaveLength(1);
-    expect(entriesToApiSteps([entry], "abc")).toHaveLength(1);
+    expect(itemsToApiSteps([{ type: "group", group: { ...emptyGroup(), repeatCount: "1", entries: [entry] } }])).toHaveLength(1);
+    expect(itemsToApiSteps([{ type: "group", group: { ...emptyGroup(), repeatCount: "", entries: [entry] } }])).toHaveLength(1);
+    expect(itemsToApiSteps([{ type: "group", group: { ...emptyGroup(), repeatCount: "abc", entries: [entry] } }])).toHaveLength(1);
+  });
+
+  it("builds a set of several exercises with rest, repeated together", () => {
+    const squat = { ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" };
+    const pushUp = { ...emptyExerciseEntry(), exerciseCategory: "PUSH_UP", exerciseName: "" };
+    const rest = emptyRestEntry();
+    const group = { ...emptyGroup(), repeatCount: "4", entries: [squat, pushUp, rest] };
+
+    const steps = itemsToApiSteps([{ type: "group", group }]);
+    expect(steps).toHaveLength(4); // 3 exercises/rest + 1 marker
+    expect(steps.map((s) => s.duration_type)).toEqual([
+      "reps",
+      "reps",
+      "time",
+      "repeat_until_steps_cmplt",
+    ]);
+    expect(steps[3]).toEqual({
+      step_index: 3,
+      duration_type: "repeat_until_steps_cmplt",
+      repeat_from_step: 0,
+      repeat_count: 4,
+    });
+  });
+
+  it("supports standalone exercises alongside one or more sets, in order", () => {
+    const warmup = { ...emptyExerciseEntry(), exerciseCategory: "WARM_UP", exerciseName: "" };
+    const groupA = {
+      ...emptyGroup(),
+      repeatCount: "3",
+      entries: [{ ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" }],
+    };
+    const groupB = {
+      ...emptyGroup(),
+      repeatCount: "2",
+      entries: [{ ...emptyExerciseEntry(), exerciseCategory: "LUNGE", exerciseName: "" }],
+    };
+
+    const steps = itemsToApiSteps([
+      entryItem(warmup),
+      { type: "group", group: groupA },
+      { type: "group", group: groupB },
+    ]);
+
+    // warmup(0), squat(1), markerA(2, repeat_from=1), lunge(3), markerB(4, repeat_from=3)
+    expect(steps).toHaveLength(5);
+    expect(steps[0].exercise_category).toBe("WARM_UP");
+    expect(steps[1].exercise_category).toBe("SQUAT");
+    expect(steps[2]).toMatchObject({
+      duration_type: "repeat_until_steps_cmplt",
+      repeat_from_step: 1,
+      repeat_count: 3,
+    });
+    expect(steps[3].exercise_category).toBe("LUNGE");
+    expect(steps[4]).toMatchObject({
+      duration_type: "repeat_until_steps_cmplt",
+      repeat_from_step: 3,
+      repeat_count: 2,
+    });
   });
 });
 
-describe("apiStepsToEntries", () => {
-  it("round-trips a reps-based step with weight", () => {
+describe("apiStepsToItems", () => {
+  it("round-trips a standalone reps-based step with weight", () => {
     const steps = [
       step({
         duration_type: "reps",
@@ -122,24 +188,26 @@ describe("apiStepsToEntries", () => {
         weight_kg: 55,
       }),
     ];
-    const { entries, repeatCount } = apiStepsToEntries(steps);
-    expect(entries).toHaveLength(1);
-    expect(entries[0].kind).toBe("exercise");
-    expect(entries[0].durationType).toBe("reps");
-    expect(entries[0].durationReps).toBe("8");
-    expect(entries[0].weightKg).toBe("55");
-    expect(entries[0].exerciseQuery).toBe("Bench Press");
-    expect(repeatCount).toBe("");
+    const items = apiStepsToItems(steps);
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("entry");
+    const entry = (items[0] as { type: "entry"; entry: ExerciseEntry }).entry;
+    expect(entry.kind).toBe("exercise");
+    expect(entry.durationType).toBe("reps");
+    expect(entry.durationReps).toBe("8");
+    expect(entry.weightKg).toBe("55");
+    expect(entry.exerciseQuery).toBe("Bench Press");
   });
 
   it("recognizes a rest step by intensity", () => {
     const steps = [step({ duration_type: "time", duration_time_s: 60, intensity: "rest" })];
-    const { entries } = apiStepsToEntries(steps);
-    expect(entries[0].kind).toBe("rest");
-    expect(entries[0].durationTimeS).toBe("60");
+    const items = apiStepsToItems(steps);
+    const entry = (items[0] as { type: "entry"; entry: ExerciseEntry }).entry;
+    expect(entry.kind).toBe("rest");
+    expect(entry.durationTimeS).toBe("60");
   });
 
-  it("consumes a trailing repeat marker into repeatCount, not its own entry", () => {
+  it("consumes a trailing repeat marker into one group item, not its own entry", () => {
     const steps = [
       step({
         step_index: 0,
@@ -156,27 +224,87 @@ describe("apiStepsToEntries", () => {
         repeat_count: 4,
       }),
     ];
-    const { entries, repeatCount } = apiStepsToEntries(steps);
-    expect(entries).toHaveLength(1);
-    expect(repeatCount).toBe("4");
+    const items = apiStepsToItems(steps);
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("group");
+    const group = (items[0] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }).group;
+    expect(group.repeatCount).toBe("4");
+    expect(group.entries).toHaveLength(1);
+  });
+
+  it("round-trips a standalone exercise followed by two separate sets", () => {
+    const steps = itemsToApiSteps([
+      entryItem({ ...emptyExerciseEntry(), exerciseCategory: "WARM_UP", exerciseName: "" }),
+      {
+        type: "group",
+        group: {
+          ...emptyGroup(),
+          repeatCount: "3",
+          entries: [{ ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" }],
+        },
+      },
+      {
+        type: "group",
+        group: {
+          ...emptyGroup(),
+          repeatCount: "2",
+          entries: [{ ...emptyExerciseEntry(), exerciseCategory: "LUNGE", exerciseName: "" }],
+        },
+      },
+    ]);
+    // Simulate the server round-trip shape (PlannedWorkoutStepOut carries the same fields plus
+    // the ones PlannedWorkoutStepIn doesn't set, e.g. duration_distance_m).
+    const asOut: PlannedWorkoutStepOut[] = steps.map((s) => step(s));
+
+    const items = apiStepsToItems(asOut);
+    expect(items.map((it) => it.type)).toEqual(["entry", "group", "group"]);
+    const groupA = (items[1] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }).group;
+    const groupB = (items[2] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }).group;
+    expect(groupA.repeatCount).toBe("3");
+    expect(groupA.entries[0].exerciseCategory).toBe("SQUAT");
+    expect(groupB.repeatCount).toBe("2");
+    expect(groupB.entries[0].exerciseCategory).toBe("LUNGE");
   });
 });
 
-describe("estimateExerciseDurationS", () => {
-  it("uses the assumed seconds/rep for a reps-based step", () => {
+describe("estimateItemsDurationS", () => {
+  it("uses the assumed seconds/rep for a reps-based standalone exercise", () => {
     const entry = { ...emptyExerciseEntry(), durationType: "reps" as const, durationReps: "10" };
-    expect(estimateExerciseDurationS([entry], "")).toBe(30); // 10 reps * 3s/rep
+    expect(estimateItemsDurationS([entryItem(entry)])).toBe(30); // 10 reps * 3s/rep
   });
 
   it("uses the real seconds for a time-based or rest step", () => {
     const exercise = { ...emptyExerciseEntry(), durationType: "time" as const, durationTimeS: "45" };
     const rest = emptyRestEntry();
     rest.durationTimeS = "60";
-    expect(estimateExerciseDurationS([exercise, rest], "")).toBe(105);
+    expect(estimateItemsDurationS([entryItem(exercise), entryItem(rest)])).toBe(105);
   });
 
-  it("multiplies by the repeat count", () => {
+  it("multiplies a set's own duration by its own repeat count", () => {
     const entry = { ...emptyExerciseEntry(), durationType: "time" as const, durationTimeS: "30" };
-    expect(estimateExerciseDurationS([entry], "3")).toBe(90);
+    const group = { ...emptyGroup(), repeatCount: "3", entries: [entry] };
+    expect(estimateItemsDurationS([{ type: "group", group }])).toBe(90);
+  });
+
+  it("sums a standalone exercise plus multiple independently-repeated sets", () => {
+    const warmup = { ...emptyExerciseEntry(), durationType: "time" as const, durationTimeS: "60" };
+    const groupA = {
+      ...emptyGroup(),
+      repeatCount: "3",
+      entries: [{ ...emptyExerciseEntry(), durationType: "time" as const, durationTimeS: "20" }],
+    };
+    const groupB = {
+      ...emptyGroup(),
+      repeatCount: "2",
+      entries: [{ ...emptyExerciseEntry(), durationType: "time" as const, durationTimeS: "10" }],
+    };
+    // 60 + (20*3) + (10*2) = 60 + 60 + 20 = 140
+    expect(
+      estimateItemsDurationS([
+        entryItem(warmup),
+        { type: "group", group: groupA },
+        { type: "group", group: groupB },
+      ]),
+    ).toBe(140);
   });
 });

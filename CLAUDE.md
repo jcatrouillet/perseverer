@@ -314,7 +314,14 @@ because you don't recognize it — stop, that's the bug.
   extra `ExecutableStep` fields via `ConfigDict(extra="allow")`, both live-verified against a
   real push + read-back). `build_workout_segment` (the repeat-group/step-order assembly, both
   hiit's factory and bouldering's) is shared across all three tiers via a `StepBuilder` callback
-  rather than duplicated. The frontend's own exercise catalog is a dynamically-imported
+  rather than duplicated, and already handles any number of independent repeat groups plus
+  standalone steps in one step list — the same mechanism running's own multi-`Nx`-block text
+  syntax relies on. `ExerciseStepEditor.tsx`'s own authoring model exposes this as a flat
+  top-level list of *items*, each either a standalone exercise/rest or a *set* (several
+  exercises/rests repeated together N times, e.g. "3 rounds of squat, push-up, rest") — added
+  after the first version only supported one repeat wrapping the entire workout, a frontend-only
+  gap since the backend needed no change at all. The frontend's own exercise catalog is a
+  dynamically-imported
   (code-split) asset, not a static import — a static import once pushed the app-shell bundle past
   vite-plugin-pwa's 2MB single-file precache limit and broke the production build. All three
   tiers push via the same `GarminConnectAdapter.push_planned_workout`, following the adapter's

@@ -71,7 +71,9 @@ class ParseErrorOut(BaseModel):
 
 
 class PlannedWorkoutIn(BaseModel):
-    sport: str  # "running" | "yoga" | "bouldering" | "fitness" | "hiit" | "strength_training"
+    sport: str  # "running" | "yoga" | "bouldering" | "hiit" | "strength_training" -- open string,
+    # not an enum, but "fitness" was dropped from the frontend's own sport list (no structured
+    # syntax and no placeholder builder ever existed for it) rather than kept as a dead option.
     name: str | None = None
     # running: the athlete's own workout-syntax text. yoga/bouldering (PLACEHOLDER_SPORTS,
     # planned_workouts.py): freeform notes only, never parsed -- no structured syntax for these.
