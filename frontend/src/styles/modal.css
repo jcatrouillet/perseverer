@@ -57,6 +57,25 @@
   overflow-y: auto;
 }
 
+/* An image lightbox should hug its content, not take most of the viewport like this
+   component's own "big popup" default -- see Modal.tsx's own panelClassName prop. */
+.modal__panel--image {
+  width: auto;
+  max-width: min(90vw, 720px);
+}
+
+.modal__panel--image .modal__body {
+  padding: 0;
+  display: flex;
+}
+
+.modal__panel--image .modal__body img {
+  display: block;
+  max-width: 100%;
+  max-height: 75vh;
+  margin: 0 auto;
+}
+
 @media (max-width: 640px) {
   .modal__backdrop {
     padding: var(--space-3);

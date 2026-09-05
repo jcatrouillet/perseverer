@@ -40,7 +40,9 @@ const FIXTURES: ExerciseLibraryEntry[] = [
     category: "SQUAT",
     categoryLabel: "Squat",
     exercise: "AIR_SQUAT",
-    garmin_url: "https://connect.garmin.com/modern/exercises/SQUAT/AIR_SQUAT",
+    // Only tier 1 gets a garmin_url -- Garmin's own page hangs forever for anything else, even
+    // signed in (confirmed live). Tier 2/3 always carry null in real data.
+    garmin_url: null,
     primary_muscles: ["Quads", "Glutes"],
     secondary_muscles: [],
     tier: 2,
@@ -55,7 +57,7 @@ const FIXTURES: ExerciseLibraryEntry[] = [
     category: "BANDED_EXERCISES",
     categoryLabel: "Banded Exercises",
     exercise: "AB_TWIST",
-    garmin_url: "https://connect.garmin.com/modern/exercises/BANDED_EXERCISES/AB_TWIST",
+    garmin_url: null,
     primary_muscles: ["Abs", "Obliques"],
     secondary_muscles: [],
     tier: 3,
@@ -99,17 +101,45 @@ describe("ExerciseLibraryPage", () => {
     expect(screen.getByText("No photo")).toBeInTheDocument();
   });
 
-  it("links every exercise to its own Garmin Connect page", async () => {
+  it("links only tier-1 exercises to Garmin -- their page hangs forever for anything else", async () => {
     render(<ExerciseLibraryPage />);
-    await waitFor(() => expect(screen.getAllByText("View on Garmin Connect")).toHaveLength(3));
+    await waitFor(() => expect(screen.getByText("Barbell Bench Press")).toBeInTheDocument());
 
-    // Categories render alphabetically by label: Banded Exercises, Bench Press, Squat.
+    // Only the tier-1 fixture (Barbell Bench Press) has a real garmin_url; tier 2 (Air Squat)
+    // and tier 3 (Banded Ab Twist) don't get a "View on Garmin Connect" link at all.
     const links = screen.getAllByText("View on Garmin Connect") as HTMLAnchorElement[];
     expect(links.map((l) => l.getAttribute("href"))).toEqual([
-      "https://connect.garmin.com/modern/exercises/BANDED_EXERCISES/AB_TWIST",
       "https://connect.garmin.com/modern/exercises/BENCH_PRESS/BARBELL_BENCH_PRESS",
-      "https://connect.garmin.com/modern/exercises/SQUAT/AIR_SQUAT",
     ]);
+  });
+
+  it("clicking a thumbnail opens it enlarged in a lightbox, closing on request", async () => {
+    render(<ExerciseLibraryPage />);
+    await waitFor(() => expect(screen.getByText("Barbell Bench Press")).toBeInTheDocument());
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Enlarge photo of Barbell Bench Press/ }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    const enlarged = dialog.querySelector("img");
+    expect(enlarged).toHaveAttribute(
+      "src",
+      "https://connect.garmin.com/images/exercises/images/BENCH_PRESS/hero.jpg",
+    );
+
+    fireEvent.click(screen.getByLabelText("Close"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not offer an enlarge action for an exercise with no photo", async () => {
+    render(<ExerciseLibraryPage />);
+    await waitFor(() => expect(screen.getByText("Banded Ab Twist")).toBeInTheDocument());
+
+    expect(
+      screen.queryByRole("button", { name: /Enlarge photo of Banded Ab Twist/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("notes when a tier-2 photo belongs to a closely related exercise, not the exact variant", async () => {

@@ -10,23 +10,31 @@ photo across dozens of exercises:
 1. **Garmin's own "detailed" exercises** (~10% of the catalog, confirmed live 2026-09 --
    `GET https://connect.garmin.com/web-data/exercises/en-US/<CATEGORY>/<EXERCISE>.json`, no auth
    needed) carry a real `heroImage` and a real `description` written by Garmin. These are the
-   only entries with an actual Garmin-produced photo.
+   only entries with an actual Garmin-produced photo, and the only ones that get a `garmin_url`
+   at all -- see below.
 2. **A free-exercise-db match** (github.com/yuhonas/free-exercise-db, public domain, ~870
    exercises): matched by name (stripping equipment words like "Barbell"/"Banded", folding
-   singular/plural) with real step-by-step instructions and muscle tags from that dataset --
-   but **every fed photo is claimed by at most one Garmin exercise**. Dozens of Garmin variants
-   (e.g. 50+ named push-up variations) reduce to the same stripped name and would otherwise all
-   point at one shared photo; the highest-confidence match keeps it, everyone else falls through
-   to tier 3 rather than showing a photo that isn't really theirs.
+   singular/plural -- deliberately NOT stripping anything that changes body position, tempo, or
+   laterality, e.g. "decline"/"seated"/"single-arm" stay) with real step-by-step instructions and
+   muscle tags from that dataset. Reuse of one fed photo across several Garmin exercises is fine
+   when they're genuinely the same base exercise (name-equivalent once equipment words are
+   stripped, e.g. "Barbell Curl" and "Banded Curl" sharing a curl photo -- see `_MODIFIERS`'s
+   own comment for exactly which words qualify). The looser fuzzy-similarity tier (a jaccard
+   overlap on the stripped name, not an exact match) is a real but weaker signal, so it's capped
+   to a handful of claimants per photo rather than left unbounded -- unbounded reuse there is
+   what produced the original complaint (one photo standing in for 50+ only loosely-related
+   variants).
 3. **Muscle-group data only**: Garmin's own master exercise list
    (`GET https://connect.garmin.com/web-data/exercises/Exercises.json`) has primary/secondary
    muscles for every exercise in the catalog even when it has no photo or description -- real,
    sourced data, just not a photo.
 
-Every exercise, regardless of tier, gets a `garmin_url`
-(`https://connect.garmin.com/modern/exercises/<CATEGORY>/<EXERCISE>`) -- confirmed live that this
-URL resolves for every category/exercise pair, not just the detailed ones, so it's always a real
-link even when the page it lands on has little content.
+`garmin_url` is set **only for tier 1**, not every exercise -- confirmed live that Garmin's own
+exercise pages sit entirely behind a sign-in wall (an unauthenticated visitor hits
+sso.garmin.com regardless of tier, even for a detailed exercise), and there is no way to confirm
+from here that a non-detailed exercise has *any* real content once past that wall. Rather than
+link to a page that plausibly 404s or renders empty, only the exercises this script has directly
+confirmed have real Garmin content get a Garmin link at all.
 
 This hits Garmin's public exercise-data endpoint ~1,527 times (a few seconds, no auth, same
 public asset the GarminExercisesCollector project and this project's own SportType lookup use)
@@ -60,10 +68,15 @@ FED_IMAGE_BASE = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/mai
 
 _UA = {"User-Agent": "Mozilla/5.0 (compatible; PerseverExerciseLibraryBot/1.0)"}
 
-# Equipment/qualifier words stripped before comparing two exercise names -- "Barbell Bench
-# Press"/"Bench Press" should compare equal, but this list deliberately does NOT include words
-# that actually change the movement (e.g. "decline", "clapping", "single-leg" stay, so a decline
-# push-up is never treated as interchangeable with a plain one).
+# Words stripped before comparing two exercise names for "close enough to share a photo" --
+# deliberately only equipment/apparatus nouns and plain connector words, so "Barbell Bench
+# Press"/"Bench Press" compare equal (same visible movement, different thing in your hands).
+# Anything that changes body position, orientation, tempo, or laterality stays IN the comparison
+# on purpose (a decline push-up, a seated row, a single-arm row, an isometric hold, a wide-grip
+# pull-up all look visibly different from their plain counterpart in a photo) -- stripping those
+# too is exactly what caused the original complaint (one photo standing in for dozens of
+# visually-different variants). See _match_fed_exercises' own docstring for the reuse policy
+# this feeds into.
 _MODIFIERS = {
     "barbell",
     "dumbbell",
@@ -78,65 +91,14 @@ _MODIFIERS = {
     "bar",
     "plate",
     "resistance",
-    "single",
-    "arm",
-    "one",
-    "alternating",
-    "alternate",
-    "standing",
-    "seated",
-    "lying",
-    "incline",
-    "decline",
-    "flat",
-    "wide",
-    "close",
-    "narrow",
-    "grip",
-    "reverse",
-    "underhand",
-    "overhand",
-    "neutral",
-    "assisted",
-    "weighted",
-    "bodyweight",
-    "body",
-    "only",
-    "self",
     "suspension",
     "trx",
     "sling",
-    "stability",
     "swiss",
     "ball",
     "bosu",
-    "floor",
-    "bench",
-    "board",
-    "chair",
-    "step",
-    "box",
-    "wall",
-    "pad",
+    "mat",
     "strap",
-    "v",
-    "two",
-    "double",
-    "triple",
-    "isometric",
-    "partial",
-    "full",
-    "tempo",
-    "pause",
-    "explosive",
-    "rotational",
-    "unilateral",
-    "bilateral",
-    "supported",
-    "unsupported",
-    "elevated",
-    "deficit",
-    "against",
     "with",
     "the",
     "a",
@@ -148,11 +110,7 @@ _MODIFIERS = {
     "at",
     "in",
     "for",
-    "high",
-    "low",
-    "mid",
-    "left",
-    "right",
+    "against",
     "each",
 }
 
@@ -250,19 +208,26 @@ def _match_fed_exercises(garmin_entries: list[dict], fed_list: list[dict]) -> di
             sc = _jaccard(gcore_set, set(fcore))
             if sc > best_score:
                 best, best_score = e, sc
-        if best is not None and best_score >= 0.55:
+        if best is not None and best_score >= 0.7:
             candidates.append((2, best_score, gname, best))
 
-    # Highest-confidence match first (rank, then score desc); each fed photo can only be
-    # claimed once -- see module docstring.
+    # Highest-confidence match first (rank, then score desc). "Close enough to reuse" means
+    # rank 0/1 (name-equivalent once equipment/positional words like "Barbell"/"Incline" are
+    # stripped -- genuinely the same base exercise, e.g. "Barbell Bench Press" and "Bench
+    # Press"): those may reuse a photo freely, no cap. Rank 2 (fuzzy jaccard overlap, a real but
+    # looser similarity) gets a modest cap instead -- unbounded reuse there is what produced the
+    # original complaint (one photo standing in for 50+ loosely-related variants); a cap keeps
+    # only the closest few claimants.
     candidates.sort(key=lambda c: (c[0], -c[1]))
-    claimed_images: set[str] = set()
+    JACCARD_RANK = 2
+    JACCARD_REUSE_CAP = 3
+    image_use_count: dict[str, int] = {}
     matched: dict[str, dict] = {}
-    for _rank, _score, gname, fed in candidates:
+    for rank, _score, gname, fed in candidates:
         image = fed["images"][0]
-        if image in claimed_images:
+        if rank == JACCARD_RANK and image_use_count.get(image, 0) >= JACCARD_REUSE_CAP:
             continue
-        claimed_images.add(image)
+        image_use_count[image] = image_use_count.get(image, 0) + 1
         matched[gname] = fed
     return matched
 
@@ -317,7 +282,12 @@ def main() -> None:
             "category": category,
             "categoryLabel": g["categoryLabel"],
             "exercise": exercise,
-            "garmin_url": GARMIN_PAGE_URL.format(category=category, exercise=exercise),
+            # Only set for tier 1 -- see module docstring on why. Garmin's exercise pages sit
+            # entirely behind a sign-in wall (confirmed live: even a detailed exercise like
+            # PUSH_UP bounces an unauthenticated visitor to sso.garmin.com), and there is no way
+            # to confirm from here that a non-detailed exercise has any real content once past
+            # it, so this app only links to the ones it knows for certain have something to show.
+            "garmin_url": None,
             "primary_muscles": primary,
             "secondary_muscles": secondary,
         }
@@ -328,6 +298,7 @@ def main() -> None:
         if detail and detail.get("heroImage"):
             entry.update(
                 tier=1,
+                garmin_url=GARMIN_PAGE_URL.format(category=category, exercise=exercise),
                 image_url=f"https://connect.garmin.com{detail['heroImage']}",
                 image_source="garmin",
                 description=detail.get("description"),

@@ -15,11 +15,16 @@ export function Modal({
   onClose,
   title,
   children,
+  panelClassName,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  // An extra class on `.modal__panel`, for a use case that needs different sizing than this
+  // component's own "big popup" default (e.g. an image lightbox, which should hug its content
+  // rather than take most of the viewport).
+  panelClassName?: string;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -35,7 +40,7 @@ export function Modal({
   return createPortal(
     <div className="modal__backdrop" onClick={onClose}>
       <div
-        className="modal__panel"
+        className={panelClassName ? `modal__panel ${panelClassName}` : "modal__panel"}
         role="dialog"
         aria-modal="true"
         aria-label={title}

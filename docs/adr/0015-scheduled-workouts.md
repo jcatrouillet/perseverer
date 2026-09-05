@@ -316,26 +316,39 @@ Two real, live-verified data sources cover the catalog, and neither covers all o
   The other ~90% genuinely have no Garmin-authored photo or description anywhere — not a gap this
   project's own scraping effort can close.
 - **free-exercise-db** (github.com/yuhonas/free-exercise-db, public domain, ~870 exercises)
-  covers a further ~150 by name-matching (stripping equipment words, folding singular/plural) —
-  but this time **every fed photo is claimed by at most one Garmin exercise**, highest-confidence
-  match first. Without that cap, matching alone found real photos for 574 exercises, but dozens
-  of Garmin's own named variants (50+ push-up variations, dozens of curl/row/bench-press
-  variants) all reduce to the same stripped name and would have all pointed at one shared fed
-  photo — exactly the repetition the user had already rejected once, just moved down to
-  per-exercise granularity instead of per-category. Capping each photo to a single claimant cut
-  photo coverage to ~150 fed-sourced matches, but every remaining photo is genuinely that
-  exercise's own, not a stand-in borrowed from a same-named sibling.
+  covers a further ~200-300 by name-matching (stripping *equipment* words only — "Barbell",
+  "Banded", "Kettlebell" — and folding singular/plural; deliberately never stripping anything
+  that changes body position, tempo, or laterality, so "Decline Push-up" and "Single-arm Row"
+  never get folded into their plain counterparts). Reuse of one fed photo across several Garmin
+  exercises is fine when they're genuinely the same base exercise this way (per the user's own
+  follow-up: "if an exercise without a picture is close enough from an exercise with a photo you
+  can reuse the picture") — that's not a template stand-in, it's the same movement shown once.
+  The weaker fuzzy-similarity tier (a jaccard overlap on the stripped name, not an exact
+  equivalence) is capped to a handful of claimants per photo rather than left unbounded, and its
+  score threshold was raised after a real bad match slipped through at the lower one: "Alternating
+  Dumbbell Chest Press" briefly matched "Alternating Kettlebell Press" (a 2-of-3-token overlap,
+  0.667) — a chest press and an overhead press, genuinely different movements sharing only
+  "alternating"/"press". Both guardrails exist because unbounded reuse is exactly what produced
+  the original complaint, just at a smaller radius than the category-level fallback that caused it
+  the first time.
 - Everything else (still real data, not a guess) falls back to Garmin's own master exercise list
   (`GET https://connect.garmin.com/web-data/exercises/Exercises.json`, no auth), which has
   primary/secondary muscle groups for every exercise in the catalog even when it has no photo —
   rendered as plain muscle-group text, with an honest "No photo" placeholder rather than a
   reused image implying it has one.
 
-`garmin_url` (`https://connect.garmin.com/modern/exercises/<CATEGORY>/<EXERCISE>`) is
-constructed for every exercise regardless of tier — confirmed live (302 redirect to a real
-`/app/exercises/...` SPA route) that this resolves for any category/exercise pair, not just the
-detailed ones, so the link is always real even when the page it lands on has little content for
-a non-detailed exercise.
+`garmin_url` is set **only for tier 1**, not constructed for every exercise. The first version did
+build `https://connect.garmin.com/modern/exercises/<CATEGORY>/<EXERCISE>` for every exercise
+regardless of tier, reasoning that a live 302 redirect to a real `/app/exercises/...` SPA route
+meant the link was real. The user reported most of them didn't work; testing directly in their
+own logged-in Chrome (via the `claude-in-chrome` MCP, not this session's own sandboxed browser,
+which has no Garmin session to test with) showed why: `PUSH_UP` (a detailed exercise) loads a real
+video with steps and tips, but `BANDED_EXERCISES/AB_TWIST` and `BANDED_EXERCISES/BACK_EXTENSION`
+(both non-detailed) hang on an infinite loading spinner indefinitely, signed in or not. Garmin's
+own "only detailed exercises have a dedicated page" (the `GarminExercisesCollector` README's own
+phrasing, decision 11's earlier paragraph) turned out to mean exactly that at the UI level, not
+just "less content" — the SPA route itself never resolves for anything else. Restricted to tier 1
+only, where a working page is now directly confirmed rather than inferred from a redirect status.
 
 `scripts/generate_exercise_library.py` does all three live fetches (~1,527 requests to Garmin's
 public endpoint plus one to free-exercise-db, ~15s total) and writes the merged, tier-labeled
@@ -344,6 +357,14 @@ result to `frontend/src/data/exerciseLibrary.json` — a ~1MB asset, dynamically
 `exerciseCatalog.json`) since photos are hotlinked directly from Garmin's/free-exercise-db's own
 CDNs rather than copied into this repo (the same "external resource, loaded at runtime" pattern
 this app's CARTO basemap tiles already use, not a new architectural choice).
+
+Each 84px thumbnail is a `<button>` (not a bare clickable `<div>`, for real keyboard/screen-reader
+semantics) that opens it full-size in `Modal.tsx`'s own lightbox — the thumbnail alone is too
+small to actually see the exercise being demonstrated. `Modal.tsx` gained an optional
+`panelClassName` prop for this rather than a second modal component, since this app's existing
+modal was sized for one specific "big popup" use case (the Goals progress graph) that an image
+lightbox shouldn't inherit — `.modal__panel--image` hugs the image's own size instead of taking
+most of the viewport.
 
 ## Verification
 
@@ -403,15 +424,24 @@ no exercise fields at all. Deleted afterward via `adapter.delete_workout`, same 
 live-verification push in this ADR.
 
 **Exercise library page (decision 11)**: `cd frontend && npm run typecheck && npm run build`
-(clean), `npx vitest run` (589 passed, including 7 new tests for `ExerciseLibraryPage`) — all
-green. `scripts/generate_exercise_library.py` run for real (not mocked) against the live Garmin
-and free-exercise-db endpoints: 1,527 exercises processed in ~15s, 0 request errors, tier counts
-161/149/1,217 (Garmin photo+description / free-exercise-db photo+instructions / muscle-groups
-only) — confirmed zero photo is shared by two different exercises (`len(set(image_urls)) ==
-len(image_urls)` over every non-null `image_url`). Manually verified live in the browser at
-`/exercises`: categories load collapsed with correct counts, expanding one shows real distinct
-photos alongside Garmin's own prose descriptions for detailed exercises (e.g. "Barbell Bench
-Press") and an honest "No photo" placeholder alongside muscle-group text for undetailed ones
-(e.g. "Barbell Board Bench Press"), the tier-2 attribution note appears exactly when the matched
-free-exercise-db exercise's name differs from the Garmin one, and searching ("kettlebell swing")
-correctly narrows to and auto-expands only the 3 categories with a real match.
+(clean), `npx vitest run` (591 passed, including 9 tests for `ExerciseLibraryPage`) — all green.
+`scripts/generate_exercise_library.py` run for real (not mocked) against the live Garmin and
+free-exercise-db endpoints across three iterations as the matching/reuse policy was tightened:
+161/149/1,217 (strict one-claim-per-photo) → 161/435/931 (equipment-only stripping, no reuse cap)
+→ 161/210/1,156 (jaccard threshold raised 0.55→0.7 after the chest-press/overhead-press
+mismatch) — confirmed the final version's max photo reuse is 4 exercises, all genuinely the same
+base movement (e.g. "Banded Fly"/"Fly"/"Kettlebell Fly"/"Swiss Ball Dumbbell Fly"). Manually
+verified live in the browser at `/exercises`: categories load collapsed with correct counts,
+expanding one shows real distinct photos alongside Garmin's own prose descriptions for detailed
+exercises and an honest "No photo" placeholder alongside muscle-group text otherwise, clicking a
+thumbnail opens it enlarged in the lightbox and closes on request, searching ("kettlebell swing")
+correctly narrows to and auto-expands only the categories with a real match, and — after the
+`garmin_url` restriction — only detailed exercises show a "View on Garmin Connect" link at all.
+
+Live-verified in the user's own logged-in Chrome (via `claude-in-chrome`, 2026-09): navigated
+directly to `connect.garmin.com/modern/exercises/PUSH_UP/PUSH_UP` (detailed) and
+`.../BANDED_EXERCISES/AB_TWIST` + `.../BANDED_EXERCISES/BACK_EXTENSION` (both non-detailed, the
+second one at the user's own request after the first result). The detailed exercise rendered a
+real video with numbered steps and tips; both non-detailed ones hung on Garmin's own loading
+spinner indefinitely, confirming the `garmin_url`-only-for-tier-1 fix directly rather than
+inferring it from an HTTP status code.

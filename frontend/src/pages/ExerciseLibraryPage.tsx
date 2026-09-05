@@ -2,30 +2,40 @@
 // (docs/adr/0015-scheduled-workouts.md's own addendum) -- categories collapsed by default
 // (native <details>, same convention as ActivitySourcesPanel.tsx's "Why these were merged"),
 // each expanding to its own exercise list. A search narrows the list and auto-expands whichever
-// categories still have a match, same UX as ExerciseStepEditor's own picker.
+// categories still have a match, same UX as ExerciseStepEditor's own picker. Clicking a thumbnail
+// opens it full-size in Modal.tsx's own lightbox variant -- these thumbnails are only 84px, too
+// small to actually see the exercise being demonstrated.
 import { useEffect, useMemo, useState } from "react";
 
 import { LoadingSpinner } from "../components/LoadingSpinner";
+import { Modal } from "../components/Modal";
 import { loadExerciseLibrary, type ExerciseLibraryEntry } from "../exerciseLibrary";
 import "../styles/exerciseLibrary.css";
 
-function ExerciseCard({ entry }: { entry: ExerciseLibraryEntry }) {
+function ExerciseCard({
+  entry,
+  onEnlarge,
+}: {
+  entry: ExerciseLibraryEntry;
+  onEnlarge: (entry: ExerciseLibraryEntry) => void;
+}) {
   const allMuscles = [...entry.primary_muscles, ...entry.secondary_muscles];
   return (
     <li className="exercise-library__item">
-      <div
-        className={
-          entry.image_url
-            ? "exercise-library__thumb"
-            : "exercise-library__thumb exercise-library__thumb--empty"
-        }
-      >
-        {entry.image_url ? (
+      {entry.image_url ? (
+        <button
+          type="button"
+          className="exercise-library__thumb"
+          onClick={() => onEnlarge(entry)}
+          aria-label={`Enlarge photo of ${entry.name}`}
+        >
           <img src={entry.image_url} alt="" loading="lazy" />
-        ) : (
+        </button>
+      ) : (
+        <div className="exercise-library__thumb exercise-library__thumb--empty">
           <span>No photo</span>
-        )}
-      </div>
+        </div>
+      )}
       <div className="exercise-library__info">
         <div className="exercise-library__heading">
           <p className="exercise-library__name">{entry.name}</p>
@@ -42,14 +52,16 @@ function ExerciseCard({ entry }: { entry: ExerciseLibraryEntry }) {
             Photo and instructions from a closely related exercise: {entry.matched_exercise_name}
           </p>
         )}
-        <a
-          className="exercise-library__link"
-          href={entry.garmin_url}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          View on Garmin Connect
-        </a>
+        {entry.garmin_url && (
+          <a
+            className="exercise-library__link"
+            href={entry.garmin_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View on Garmin Connect
+          </a>
+        )}
       </div>
     </li>
   );
@@ -58,6 +70,7 @@ function ExerciseCard({ entry }: { entry: ExerciseLibraryEntry }) {
 export function ExerciseLibraryPage() {
   const [entries, setEntries] = useState<ExerciseLibraryEntry[] | null>(null);
   const [query, setQuery] = useState("");
+  const [lightbox, setLightbox] = useState<ExerciseLibraryEntry | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,11 +139,24 @@ export function ExerciseLibraryPage() {
           </summary>
           <ul className="exercise-library__list">
             {list.map((e) => (
-              <ExerciseCard key={`${e.category}-${e.exercise}`} entry={e} />
+              <ExerciseCard
+                key={`${e.category}-${e.exercise}`}
+                entry={e}
+                onEnlarge={setLightbox}
+              />
             ))}
           </ul>
         </details>
       ))}
+
+      <Modal
+        open={lightbox != null}
+        onClose={() => setLightbox(null)}
+        title={lightbox?.name ?? ""}
+        panelClassName="modal__panel--image"
+      >
+        {lightbox?.image_url && <img src={lightbox.image_url} alt={lightbox.name} />}
+      </Modal>
     </main>
   );
 }

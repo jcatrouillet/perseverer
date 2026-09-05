@@ -76,6 +76,16 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--color-surface-raised);
+  /* Reset for the <button> case (a real photo, clickable to enlarge) -- the <div> case (no
+     photo) never gets these properties applied since it isn't interactive. */
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.exercise-library__thumb:hover img {
+  opacity: 0.85;
 }
 
 .exercise-library__thumb img {

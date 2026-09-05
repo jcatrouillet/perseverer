@@ -9,7 +9,12 @@ export interface ExerciseLibraryEntry {
   category: string;
   categoryLabel: string;
   exercise: string;
-  garmin_url: string;
+  // Only set for tier 1 -- Garmin's own exercise pages sit entirely behind a sign-in wall, and
+  // confirmed live (2026-09) that a non-detailed exercise's page hangs on an infinite loading
+  // spinner even once signed in, while a detailed one loads its real video/steps/tips
+  // correctly. Rather than link to a page that plausibly never loads, only the exercises this
+  // app knows for certain have real Garmin content get a link at all.
+  garmin_url: string | null;
   primary_muscles: string[];
   secondary_muscles: string[];
   // 1: Garmin's own photo + description (a real "detailed" exercise on Garmin's own site).

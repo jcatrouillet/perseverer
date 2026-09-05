@@ -334,22 +334,28 @@ because you don't recognize it — stop, that's the bug.
 - **Exercise library page (`/exercises`, `ExerciseLibraryPage.tsx`)**: a browsable reference for
   every exercise the hiit/strength_training picker's catalog supports — 47 categories collapsed
   by default (native `<details>`, same convention as `ActivitySourcesPanel.tsx`'s own "Why these
-  were merged"), each expanding to its exercise list with a photo, description, muscle groups,
-  and a link to that exercise's own Garmin Connect page. Sourced by
-  `scripts/generate_exercise_library.py` into `frontend/src/data/exerciseLibrary.json`
+  were merged"), each expanding to its exercise list with a photo (click to enlarge, via
+  `Modal.tsx`'s own `panelClassName` lightbox variant), description, and muscle groups. Sourced
+  by `scripts/generate_exercise_library.py` into `frontend/src/data/exerciseLibrary.json`
   (dynamically imported, like `ExerciseStepEditor.tsx`'s own catalog) — three real, honestly
   distinguished tiers rather than one blended guess, after an earlier draft's category-level
   fallback images repeated the same photo across dozens of exercises and the user rejected it
   outright: (1) ~160 exercises Garmin itself calls "detailed" have a real Garmin-authored photo
   and description, confirmed live against `connect.garmin.com`'s public (no-auth) exercise-data
-  endpoint; (2) ~150 more get a photo + instructions matched by name against
-  free-exercise-db (public domain) — **each of that dataset's photos is claimed by at most one
-  Garmin exercise**, so the 50+ named push-up variants that all reduce to the same stripped name
-  don't all point at one shared image; the rest fall through to (3) muscle-group text only (still
-  real data, from Garmin's own master exercise list, just no photo) rather than a misleading
-  stand-in. Every exercise, regardless of tier, gets a real `garmin_url` — confirmed live that
-  `https://connect.garmin.com/modern/exercises/<CATEGORY>/<EXERCISE>` resolves for every
-  category/exercise pair, not just the detailed ones.
+  endpoint; (2) ~200-300 more get a photo + instructions matched by name against free-exercise-db
+  (public domain) — reuse of one photo across several Garmin exercises is fine when they're
+  genuinely the same base exercise once equipment words are stripped (not position/tempo/
+  laterality words, which stay — a decline push-up is never treated as the plain one), with the
+  weaker fuzzy-similarity tier capped to a handful of claimants per photo so it can't reproduce
+  the original complaint (unbounded reuse there once let one photo stand in for 50+ only
+  loosely-related variants, and separately let one bad match slip a chest-press photo onto an
+  overhead-press exercise before the threshold was tightened); the rest fall through to
+  (3) muscle-group text only (still real data, from Garmin's own master exercise list, just no
+  photo) rather than a misleading stand-in. `garmin_url` is set **only for tier 1** — confirmed
+  live (2026-09, in the user's own logged-in Chrome) that Garmin's own exercise page hangs on an
+  infinite loading spinner for anything but a detailed exercise, even signed in, while a detailed
+  one loads its real video/steps/tips correctly; linking every exercise there regardless of tier
+  was the original mistake this corrected.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip
