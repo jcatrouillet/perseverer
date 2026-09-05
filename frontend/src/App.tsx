@@ -11,6 +11,7 @@ import { MonthView } from "./pages/calendar/MonthView";
 import { WeekView } from "./pages/calendar/WeekView";
 import { YearView } from "./pages/calendar/YearView";
 import { DayViewPage } from "./pages/DayViewPage";
+import { ExerciseLibraryPage } from "./pages/ExerciseLibraryPage";
 import { FitnessPage } from "./pages/FitnessPage";
 import { HealthPage } from "./pages/HealthPage";
 import { InsightsPage } from "./pages/InsightsPage";
@@ -71,6 +72,9 @@ export function App() {
           <NavLink href="/insights" icon="bolt">
             Insights
           </NavLink>
+          <NavLink href="/exercises" icon="dumbbell">
+            Exercises
+          </NavLink>
           <NavLink href="/settings" icon="settings">
             Settings
           </NavLink>
@@ -87,6 +91,7 @@ export function App() {
           <Route path="/health" component={HealthPage} />
           <Route path="/map" component={MapExplorerPage} />
           <Route path="/insights" component={InsightsPage} />
+          <Route path="/exercises" component={ExerciseLibraryPage} />
           <Route path="/settings" component={SettingsPage} />
           <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>
           <Route path="/calendar/week/:date">

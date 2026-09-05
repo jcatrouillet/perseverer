@@ -294,6 +294,57 @@ itself the canonical authored content (unlike running's textarea + live-parsed p
 producing `PlannedWorkoutStepIn[]` directly, with no intermediate text representation, since
 there's nothing to parse.
 
+### 11. Exercise library page: three honestly-distinguished tiers, not one blended guess
+
+Added after shipping, per the user's own explicit request for a browsable reference of every
+exercise the hiit/strength_training picker's catalog supports — categories collapsed, each
+expanding to its exercise list with a photo, a description, and a link to the exercise's own
+Garmin page. The first draft (a standalone artifact, not yet in the app) fell back to one
+representative photo per *category* for any exercise with no confident individual match; the
+user rejected this directly ("the images you found are not good, you repeated the same image way
+too many times") and asked for a real per-exercise photo, a description, and a Garmin link for
+*every* exercise, added as a real section of the app rather than a one-off document.
+
+Two real, live-verified data sources cover the catalog, and neither covers all of it:
+
+- **Garmin's own "detailed" exercises** — confirmed live that
+  `GET https://connect.garmin.com/web-data/exercises/en-US/<CATEGORY>/<EXERCISE>.json` needs no
+  authentication and returns a real `heroImage` + `description` for roughly 160 of the 1,527
+  exercises (~10%) — the same subset the community `GarminExercisesCollector` project's own
+  spreadsheet independently calls "Detailed" (146/1207 in that project's own snapshot, close
+  enough to confirm it's measuring the same real constraint, not a scraping bug on either side).
+  The other ~90% genuinely have no Garmin-authored photo or description anywhere — not a gap this
+  project's own scraping effort can close.
+- **free-exercise-db** (github.com/yuhonas/free-exercise-db, public domain, ~870 exercises)
+  covers a further ~150 by name-matching (stripping equipment words, folding singular/plural) —
+  but this time **every fed photo is claimed by at most one Garmin exercise**, highest-confidence
+  match first. Without that cap, matching alone found real photos for 574 exercises, but dozens
+  of Garmin's own named variants (50+ push-up variations, dozens of curl/row/bench-press
+  variants) all reduce to the same stripped name and would have all pointed at one shared fed
+  photo — exactly the repetition the user had already rejected once, just moved down to
+  per-exercise granularity instead of per-category. Capping each photo to a single claimant cut
+  photo coverage to ~150 fed-sourced matches, but every remaining photo is genuinely that
+  exercise's own, not a stand-in borrowed from a same-named sibling.
+- Everything else (still real data, not a guess) falls back to Garmin's own master exercise list
+  (`GET https://connect.garmin.com/web-data/exercises/Exercises.json`, no auth), which has
+  primary/secondary muscle groups for every exercise in the catalog even when it has no photo —
+  rendered as plain muscle-group text, with an honest "No photo" placeholder rather than a
+  reused image implying it has one.
+
+`garmin_url` (`https://connect.garmin.com/modern/exercises/<CATEGORY>/<EXERCISE>`) is
+constructed for every exercise regardless of tier — confirmed live (302 redirect to a real
+`/app/exercises/...` SPA route) that this resolves for any category/exercise pair, not just the
+detailed ones, so the link is always real even when the page it lands on has little content for
+a non-detailed exercise.
+
+`scripts/generate_exercise_library.py` does all three live fetches (~1,527 requests to Garmin's
+public endpoint plus one to free-exercise-db, ~15s total) and writes the merged, tier-labeled
+result to `frontend/src/data/exerciseLibrary.json` — a ~1MB asset, dynamically imported by
+`ExerciseLibraryPage.tsx` (same "keep it out of the app-shell bundle" pattern as
+`exerciseCatalog.json`) since photos are hotlinked directly from Garmin's/free-exercise-db's own
+CDNs rather than copied into this repo (the same "external resource, loaded at runtime" pattern
+this app's CARTO basemap tiles already use, not a new architectural choice).
+
 ## Verification
 
 `uv run pytest -q` (927 passed), `uv run ruff check .`, `uv run mypy` (clean), `cd frontend && npm
@@ -350,3 +401,17 @@ exact structure sent: `weightValue` in grams (kg × 1000) and `weightUnit` match
 fields, a reps-based step using `ConditionType.REPS` and a rest step using `StepType.REST` with
 no exercise fields at all. Deleted afterward via `adapter.delete_workout`, same as every other
 live-verification push in this ADR.
+
+**Exercise library page (decision 11)**: `cd frontend && npm run typecheck && npm run build`
+(clean), `npx vitest run` (589 passed, including 7 new tests for `ExerciseLibraryPage`) — all
+green. `scripts/generate_exercise_library.py` run for real (not mocked) against the live Garmin
+and free-exercise-db endpoints: 1,527 exercises processed in ~15s, 0 request errors, tier counts
+161/149/1,217 (Garmin photo+description / free-exercise-db photo+instructions / muscle-groups
+only) — confirmed zero photo is shared by two different exercises (`len(set(image_urls)) ==
+len(image_urls)` over every non-null `image_url`). Manually verified live in the browser at
+`/exercises`: categories load collapsed with correct counts, expanding one shows real distinct
+photos alongside Garmin's own prose descriptions for detailed exercises (e.g. "Barbell Bench
+Press") and an honest "No photo" placeholder alongside muscle-group text for undetailed ones
+(e.g. "Barbell Board Bench Press"), the tier-2 attribution note appears exactly when the matched
+free-exercise-db exercise's name differs from the Garmin one, and searching ("kettlebell swing")
+correctly narrows to and auto-expands only the 3 categories with a real match.

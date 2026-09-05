@@ -331,6 +331,25 @@ because you don't recognize it — stop, that's the bug.
   initially-undocumented Garmin field) does reach and round-trip correctly — Garmin's server
   echoes it back as `workoutTargetTypeKey: "cadence"` on read. See
   `docs/adr/0015-scheduled-workouts.md`.
+- **Exercise library page (`/exercises`, `ExerciseLibraryPage.tsx`)**: a browsable reference for
+  every exercise the hiit/strength_training picker's catalog supports — 47 categories collapsed
+  by default (native `<details>`, same convention as `ActivitySourcesPanel.tsx`'s own "Why these
+  were merged"), each expanding to its exercise list with a photo, description, muscle groups,
+  and a link to that exercise's own Garmin Connect page. Sourced by
+  `scripts/generate_exercise_library.py` into `frontend/src/data/exerciseLibrary.json`
+  (dynamically imported, like `ExerciseStepEditor.tsx`'s own catalog) — three real, honestly
+  distinguished tiers rather than one blended guess, after an earlier draft's category-level
+  fallback images repeated the same photo across dozens of exercises and the user rejected it
+  outright: (1) ~160 exercises Garmin itself calls "detailed" have a real Garmin-authored photo
+  and description, confirmed live against `connect.garmin.com`'s public (no-auth) exercise-data
+  endpoint; (2) ~150 more get a photo + instructions matched by name against
+  free-exercise-db (public domain) — **each of that dataset's photos is claimed by at most one
+  Garmin exercise**, so the 50+ named push-up variants that all reduce to the same stripped name
+  don't all point at one shared image; the rest fall through to (3) muscle-group text only (still
+  real data, from Garmin's own master exercise list, just no photo) rather than a misleading
+  stand-in. Every exercise, regardless of tier, gets a real `garmin_url` — confirmed live that
+  `https://connect.garmin.com/modern/exercises/<CATEGORY>/<EXERCISE>` resolves for every
+  category/exercise pair, not just the detailed ones.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip
