@@ -29,6 +29,7 @@ const NONE: PlannedWorkoutOut = {
   sport: null,
   name: null,
   source_text: null,
+  scheduled_time: null,
   estimated_duration_s: null,
   steps: [],
   parse_errors: [],
@@ -45,6 +46,7 @@ const SCHEDULED: PlannedWorkoutOut = {
   sport: "running",
   name: "Tempo run",
   source_text: "Warmup 10m",
+  scheduled_time: null,
   estimated_duration_s: 600,
   steps: [
     {
@@ -119,7 +121,52 @@ describe("ScheduleWorkoutForm", () => {
     fireEvent.click(screen.getByText("Save"));
 
     expect(mockSave).toHaveBeenCalledWith(
-      { localDate: "2026-09-01", sport: "running", name: "Easy jog", source_text: "Warmup 10m" },
+      {
+        localDate: "2026-09-01",
+        sport: "running",
+        name: "Easy jog",
+        source_text: "Warmup 10m",
+        scheduled_time: null,
+        duration_minutes: null,
+      },
+      expect.anything(),
+    );
+  });
+
+  it("switching to yoga shows duration/time fields instead of the syntax textarea", () => {
+    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Schedule a workout"));
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "yoga" } });
+
+    expect(screen.getByText("Duration (minutes)")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Warmup 10m/)).not.toBeInTheDocument();
+    expect(screen.queryByText("+ Add step")).not.toBeInTheDocument();
+  });
+
+  it("Save for yoga sends duration_minutes and scheduled_time, no source_text required", () => {
+    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Schedule a workout"));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "yoga" } });
+
+    fireEvent.change(screen.getByPlaceholderText("e.g. Evening yoga"), {
+      target: { value: "Evening yoga" },
+    });
+    fireEvent.change(screen.getByLabelText("Duration (minutes)"), { target: { value: "45" } });
+    fireEvent.change(screen.getByLabelText("Time of day"), { target: { value: "18:30" } });
+    fireEvent.click(screen.getByText("Save"));
+
+    expect(mockSave).toHaveBeenCalledWith(
+      {
+        localDate: "2026-09-01",
+        sport: "yoga",
+        name: "Evening yoga",
+        source_text: null,
+        scheduled_time: "18:30",
+        duration_minutes: 45,
+      },
       expect.anything(),
     );
   });
@@ -140,6 +187,30 @@ describe("ScheduleWorkoutForm", () => {
     fireEvent.click(screen.getByText("Push to Garmin"));
 
     expect(mockPush).toHaveBeenCalledWith("2026-09-01");
+  });
+
+  it("shows Push to Garmin for a scheduled yoga workout too", () => {
+    mockUsePlannedWorkout.mockReturnValue({
+      data: { ...SCHEDULED, sport: "yoga", scheduled_time: "18:30", estimated_duration_s: 2700 },
+      isLoading: false,
+      isError: false,
+    });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.getByText("Push to Garmin")).toBeInTheDocument();
+    expect(screen.getByText(/18:30/)).toBeInTheDocument();
+    expect(screen.getByText(/45 min/)).toBeInTheDocument();
+  });
+
+  it("hides Push to Garmin for fitness (no builder yet)", () => {
+    mockUsePlannedWorkout.mockReturnValue({
+      data: { ...SCHEDULED, sport: "fitness" },
+      isLoading: false,
+      isError: false,
+    });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.queryByText("Push to Garmin")).not.toBeInTheDocument();
   });
 
   it("Delete calls the delete mutation with the date", () => {

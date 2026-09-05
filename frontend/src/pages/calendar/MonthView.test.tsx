@@ -88,6 +88,7 @@ const PLANNED: PlannedWorkoutListItemOut = {
   id: 1,
   sport: "running",
   name: "Tempo run",
+  scheduled_time: null,
   push_status: "draft",
 };
 
@@ -116,6 +117,16 @@ describe("MonthView day-cell planned-workout indicator", () => {
     });
     render(<MonthView year={2026} month={9} />);
     expect(screen.getByText(/running/)).toBeInTheDocument();
+  });
+
+  it("shows the scheduled time alongside the workout name when set", () => {
+    mockUsePlannedWorkoutsList.mockReturnValue({
+      data: [{ ...PLANNED, scheduled_time: "18:30" }],
+      isLoading: false,
+      isError: false,
+    });
+    render(<MonthView year={2026} month={9} />);
+    expect(screen.getByText(/18:30 Tempo run/)).toBeInTheDocument();
   });
 });
 

@@ -39,7 +39,7 @@ from garminconnect import (
     GarminConnectAuthenticationError,
     GarminConnectTooManyRequestsError,
 )
-from garminconnect.workout import RunningWorkout
+from garminconnect.workout import BaseWorkout
 from sqlalchemy import Connection
 
 from perseverer.adapters.base import AdapterHealth
@@ -620,18 +620,26 @@ class GarminConnectAdapter:
             ) from e
 
     def push_planned_workout(
-        self, workout: RunningWorkout, local_date: str, *, existing_workout_id: int | None = None
+        self, workout: BaseWorkout, local_date: str, *, existing_workout_id: int | None = None
     ) -> int:
-        """Push a scheduled-workout RunningWorkout (built by `planned_workouts.py::
-        build_running_workout` -- this method knows nothing about how it was constructed) to the
-        athlete's Garmin account: delete any stale existing copy first (the "edit an
-        already-pushed workout" case -- v1 keeps this simple, a full re-push rather than a
-        partial `update_workout`, matching this project's general full-recompute-over-
-        incremental-patch preference elsewhere -- fitness rollup, insights engine -- applied to
-        this new domain), then upload and schedule the new one. Returns the new Garmin workout
-        id. Same rate-limited-per-call, abort-on-first-429-no-retry pattern as every other
-        method on this class (see module docstring) -- three separate real HTTP calls here, so
-        three separate rate_limiter.wait()/429 checks, not one.
+        """Push a scheduled-workout `BaseWorkout` (a `RunningWorkout` for running, built by
+        `planned_workouts.py::build_running_workout`, or a plain `BaseWorkout` for a yoga/
+        bouldering placeholder, built by `build_placeholder_workout` -- this method knows
+        nothing about how it was constructed) to the athlete's Garmin account: delete any stale
+        existing copy first (the "edit an already-pushed workout" case -- v1 keeps this simple,
+        a full re-push rather than a partial `update_workout`, matching this project's general
+        full-recompute-over-incremental-patch preference elsewhere -- fitness rollup, insights
+        engine -- applied to this new domain), then upload and schedule the new one. Returns the
+        new Garmin workout id. Same rate-limited-per-call, abort-on-first-429-no-retry pattern as
+        every other method on this class (see module docstring) -- three separate real HTTP
+        calls here, so three separate rate_limiter.wait()/429 checks, not one.
+
+        Uses the generic `upload_workout(workout.to_dict())`, not the sport-specific
+        `upload_running_workout` -- confirmed live (not assumed) that the latter raises
+        `TypeError` for anything but a real `RunningWorkout` instance
+        (`isinstance(workout, RunningWorkout)` is checked inside the library itself), which would
+        make it unusable for yoga/bouldering's plain `BaseWorkout`. `upload_workout` has no such
+        restriction -- it just posts whatever JSON `to_dict()` produces.
 
         The only place this app writes to a third-party account rather than only reading from
         it -- see docs/adr/0015-scheduled-workouts.md.
@@ -642,7 +650,7 @@ class GarminConnectAdapter:
 
         self.rate_limiter.wait()
         try:
-            uploaded = self._client.upload_running_workout(workout)
+            uploaded = self._client.upload_workout(workout.to_dict())
         except GarminConnectTooManyRequestsError as e:
             raise GarminRateLimitAborted("429 from Garmin while uploading workout") from e
         workout_id = int(uploaded["workoutId"])

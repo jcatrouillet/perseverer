@@ -5,7 +5,17 @@ workout_syntax.py for the text syntax, and planned_workouts.py for the push/save
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+import re
+
+from pydantic import BaseModel, field_validator
+
+_SCHEDULED_TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def _validate_scheduled_time(v: str | None) -> str | None:
+    if v is not None and not _SCHEDULED_TIME_RE.match(v):
+        raise ValueError('scheduled_time must be "HH:MM" (24h), e.g. "18:30"')
+    return v
 
 
 class PlannedWorkoutStepOut(BaseModel):
@@ -34,7 +44,18 @@ class ParseErrorOut(BaseModel):
 class PlannedWorkoutIn(BaseModel):
     sport: str  # "running" | "yoga" | "bouldering" | "fitness" -- open string, not an enum
     name: str | None = None
+    # running: the athlete's own workout-syntax text. yoga/bouldering (PLACEHOLDER_SPORTS,
+    # planned_workouts.py): freeform notes only, never parsed -- no structured syntax for these.
     source_text: str | None = None
+    # "HH:MM", 24h -- Perseverer's own calendar display metadata only (Garmin's own
+    # schedule_workout() has no time-of-day API at all, see docs/adr/0015-scheduled-workouts.md).
+    scheduled_time: str | None = None
+    # yoga/bouldering only: sets estimated_duration_s directly (there's no syntax to derive a
+    # duration from). Ignored for running, where estimated_duration_s comes from parsing
+    # source_text instead.
+    duration_minutes: float | None = None
+
+    _validate_scheduled_time = field_validator("scheduled_time")(_validate_scheduled_time)
 
 
 class PlannedWorkoutOut(BaseModel):
@@ -46,6 +67,7 @@ class PlannedWorkoutOut(BaseModel):
     sport: str | None = None
     name: str | None = None
     source_text: str | None = None
+    scheduled_time: str | None = None
     estimated_duration_s: float | None = None
     steps: list[PlannedWorkoutStepOut] = []
     # Parse errors from the *currently stored* source_text -- surfaced so the schedule form can
@@ -66,6 +88,7 @@ class PlannedWorkoutListItemOut(BaseModel):
     id: int
     sport: str
     name: str | None
+    scheduled_time: str | None
     push_status: str
 
 
@@ -74,12 +97,16 @@ class RecurringWorkoutIn(BaseModel):
     sport: str
     name: str | None = None
     source_text: str | None = None
+    scheduled_time: str | None = None
+    duration_minutes: float | None = None  # yoga/bouldering only, see PlannedWorkoutIn
     frequency: str  # "weekly" | "every_n_days" | "monthly"
     interval_days: int | None = None  # required (>=1) when frequency == "every_n_days"
     # Exactly one of count/until -- an unambiguous stop condition, not a guess. `count` includes
     # the first occurrence itself.
     count: int | None = None
     until: str | None = None  # ISO date, inclusive
+
+    _validate_scheduled_time = field_validator("scheduled_time")(_validate_scheduled_time)
 
 
 class RecurringWorkoutOut(BaseModel):

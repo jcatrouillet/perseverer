@@ -1,6 +1,6 @@
-"""Turns a saved `planned_workout`'s steps into a real Garmin `RunningWorkout` and runs the push
--- see `db/schema.py`'s own docstring for the storage shape and `workout_syntax.py` for how the
-athlete's typed `source_text` becomes `planned_workout_step` rows in the first place.
+"""Turns a saved `planned_workout` into a real Garmin workout and runs the push -- see
+`db/schema.py`'s own docstring for the storage shape and `workout_syntax.py` for how the
+athlete's typed `source_text` becomes `planned_workout_step` rows for a running workout.
 
 Kept separate from `api/routers/planned_workouts.py` (plain CRUD stays inline there, the same
 balance `goals.py`/`api/routers/goals.py` already strikes -- a thin request/response router, a
@@ -9,10 +9,13 @@ building the actual Garmin workout JSON needs `hr_zones.py` (to resolve a "Z2 HR
 against the athlete's own configured zones) and the adapter's push path, more than a router
 layer should carry.
 
-Running only, v1 (`push_planned_workout`'s own "running first" scope, see
-docs/adr/0015-scheduled-workouts.md) -- yoga/bouldering/fitness are simpler and will reuse this
-same module's push orchestration once they're built, but have no step-level structure to turn
-into a `RunningWorkout` yet.
+Two sport tiers, not one: **running** gets the full structured-syntax treatment
+(`build_running_workout`, parsed via `workout_syntax.py`); **yoga/bouldering** are deliberately
+simpler placeholders -- a name, a duration, and a display-only time of day, no step syntax at
+all (`build_placeholder_workout`, a single no-target step for the whole duration) -- per the
+user's own explicit scoping ("no structured text syntax needed, it's just to put placeholder for
+those sports"). `fitness` isn't built yet (still `push not supported`). See
+docs/adr/0015-scheduled-workouts.md.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ from typing import Any
 
 from garminconnect import Garmin
 from garminconnect.workout import (
+    BaseWorkout,
     ConditionType,
     ExecutableStep,
     RepeatGroup,
@@ -169,7 +173,7 @@ def _target_fields(
 
 
 def _cadence_extra(step: PlannedStepLike) -> dict[str, Any]:
-    """"Ride cadence alongside the primary pace/HR target" via a `secondaryTargetType`/
+    """ "Ride cadence alongside the primary pace/HR target" via a `secondaryTargetType`/
     `secondaryTargetValueOne`/`secondaryTargetValueTwo` triple -- **live-verified** (2026-09-03,
     a real push + `get_workout_by_id` read-back against the athlete's own Garmin account, see
     docs/adr/0015-scheduled-workouts.md's Verification section): Garmin's server accepts and
@@ -313,6 +317,63 @@ def build_running_workout(
     )
 
 
+# sport -> (sportTypeId, sportTypeKey) for the placeholder sports. "yoga" has a real Garmin
+# sport type; "bouldering" doesn't (confirmed directly against the installed garminconnect
+# package -- no climbing/bouldering entry in SportType at all), so it maps to SportType.OTHER --
+# a documented, real vendor limitation (see docs/adr/0015-scheduled-workouts.md), not a bug: the
+# workout still pushes and schedules fine, it just shows as "Other" rather than "Bouldering" in
+# Garmin Connect/on the watch.
+_PLACEHOLDER_SPORT_TYPES: dict[str, tuple[int, str]] = {
+    "yoga": (SportType.YOGA, "yoga"),
+    "bouldering": (SportType.OTHER, "other"),
+}
+
+
+def build_placeholder_workout(sport: str, name: str, estimated_duration_s: float) -> BaseWorkout:
+    """The yoga/bouldering case: no structured syntax at all (the user's own explicit scoping --
+    "no structured text syntax needed, it's just to put placeholder for those sports") -- a
+    single no-target step spanning the whole duration, wrapped in a plain `BaseWorkout` (there's
+    no `YogaWorkout`/`BoulderingWorkout` subclass in `garminconnect.workout`, unlike
+    `RunningWorkout` -- constructing `BaseWorkout` directly with an explicit `sportType` works
+    the same way and needs no such subclass to exist). Raises `WorkoutBuildError` for any sport
+    this module doesn't yet know how to build a placeholder for."""
+    sport_type = _PLACEHOLDER_SPORT_TYPES.get(sport)
+    if sport_type is None:
+        raise WorkoutBuildError(f"no placeholder workout builder for sport {sport!r}")
+    sport_type_id, sport_type_key = sport_type
+    sport_type_dict = {
+        "sportTypeId": sport_type_id,
+        "sportTypeKey": sport_type_key,
+        "displayOrder": 1,
+    }
+    duration_s = max(0.0, estimated_duration_s)
+    return BaseWorkout(
+        workoutName=name,
+        sportType=sport_type_dict,
+        estimatedDurationInSecs=round(duration_s),
+        workoutSegments=[
+            WorkoutSegment(
+                segmentOrder=1,
+                sportType=sport_type_dict,
+                workoutSteps=[
+                    ExecutableStep(
+                        stepOrder=1,
+                        stepType=_step_type_dict("active"),
+                        endCondition={
+                            "conditionTypeId": ConditionType.TIME,
+                            "conditionTypeKey": "time",
+                            "displayOrder": 2,
+                            "displayable": True,
+                        },
+                        endConditionValue=duration_s,
+                        targetType=_NO_TARGET,
+                    )
+                ],
+            )
+        ],
+    )
+
+
 @dataclass
 class PushResult:
     success: bool
@@ -363,38 +424,47 @@ def push_planned_workout(
         conn.commit()
         return PushResult(success=False, garmin_workout_id=None, error=message)
 
-    if row.sport != "running":
-        return _mark_failed(f"push not supported yet for sport {row.sport!r} (running only, v1)")
+    if row.sport not in ("running", *_PLACEHOLDER_SPORT_TYPES):
+        return _mark_failed(f"push not supported yet for sport {row.sport!r}")
 
     try:
-        step_rows = conn.execute(
-            select(planned_workout_step)
-            .where(planned_workout_step.c.planned_workout_id == planned_workout_id)
-            .order_by(planned_workout_step.c.step_index)
-        ).fetchall()
-        steps = [
-            PlannedStepLike(**{name: getattr(r, name) for name in _PLANNED_STEP_FIELD_NAMES})
-            for r in step_rows
-        ]
+        if row.sport == "running":
+            step_rows = conn.execute(
+                select(planned_workout_step)
+                .where(planned_workout_step.c.planned_workout_id == planned_workout_id)
+                .order_by(planned_workout_step.c.step_index)
+            ).fetchall()
+            steps = [
+                PlannedStepLike(**{name: getattr(r, name) for name in _PLANNED_STEP_FIELD_NAMES})
+                for r in step_rows
+            ]
 
-        zone_row = conn.execute(
-            select(athlete_hr_zone_config).where(athlete_hr_zone_config.c.athlete_id == athlete_id)
-        ).fetchone()
-        hr_boundaries = None
-        max_hr_bpm = None
-        if zone_row is not None:
-            hr_boundaries = compute_hr_zone_boundaries(
-                zone_row.max_hr_bpm, zone_row.threshold_hr_bpm, zone_row.resting_hr_bpm
+            zone_row = conn.execute(
+                select(athlete_hr_zone_config).where(
+                    athlete_hr_zone_config.c.athlete_id == athlete_id
+                )
+            ).fetchone()
+            hr_boundaries = None
+            max_hr_bpm = None
+            if zone_row is not None:
+                hr_boundaries = compute_hr_zone_boundaries(
+                    zone_row.max_hr_bpm, zone_row.threshold_hr_bpm, zone_row.resting_hr_bpm
+                )
+                max_hr_bpm = zone_row.max_hr_bpm
+
+            workout: BaseWorkout = build_running_workout(
+                row.name or f"Run - {row.local_date}",
+                steps,
+                row.estimated_duration_s or 0.0,
+                hr_boundaries=hr_boundaries,
+                max_hr_bpm=max_hr_bpm,
             )
-            max_hr_bpm = zone_row.max_hr_bpm
-
-        workout = build_running_workout(
-            row.name or f"Run - {row.local_date}",
-            steps,
-            row.estimated_duration_s or 0.0,
-            hr_boundaries=hr_boundaries,
-            max_hr_bpm=max_hr_bpm,
-        )
+        else:
+            workout = build_placeholder_workout(
+                row.sport,
+                row.name or f"{row.sport.capitalize()} - {row.local_date}",
+                row.estimated_duration_s or 0.0,
+            )
 
         rate_limiter = RateLimiter(
             rate_limits.request_interval_s, rate_limits.max_requests_per_hour
@@ -435,6 +505,11 @@ class SavedWorkout:
     parse_errors: list[ParseError]
 
 
+#: Sports with no structured workout-syntax at all -- a name, a duration, and a display-only
+#: time of day, nothing parsed (the user's own explicit scoping, see module docstring).
+PLACEHOLDER_SPORTS = frozenset({"yoga", "bouldering"})
+
+
 def save_planned_workout(
     conn: Connection,
     *,
@@ -443,15 +518,32 @@ def save_planned_workout(
     sport: str,
     name: str | None,
     source_text: str | None,
+    scheduled_time: str | None = None,
+    duration_minutes: float | None = None,
 ) -> SavedWorkout:
-    """Upserts one `planned_workout` row by (athlete_id, local_date) and replaces its
-    `planned_workout_step` rows from a fresh parse of `source_text` -- `source_text` is
-    re-parsed on every save, not just the first (see `db/schema.py::planned_workout`'s own
-    docstring). Resets `push_status` back to "draft" whenever an already-`"pushed"` workout is
-    edited: the old Garmin copy is now stale, and `push_planned_workout` re-pushes fresh (delete
-    + re-upload) the next time it runs, matching `GarminConnectAdapter.push_planned_workout`'s
-    own "edit means full re-push, not a partial update" contract."""
-    parsed = parse_workout_syntax(source_text or "")
+    """Upserts one `planned_workout` row by (athlete_id, local_date). Two sport tiers:
+
+    - **running**: `source_text` is the athlete's own workout-syntax text, re-parsed on every
+      save (not just the first) into fresh `planned_workout_step` rows -- `duration_minutes` is
+      ignored, `estimated_duration_s` comes from the parse.
+    - **yoga/bouldering** (`PLACEHOLDER_SPORTS`): no syntax to parse at all -- `source_text`, if
+      given, is just freeform athlete notes; no `planned_workout_step` rows are ever created;
+      `estimated_duration_s` is set directly from `duration_minutes` instead of being derived.
+
+    `scheduled_time` ("HH:MM", validated by the API schema layer) is stored either way -- it's
+    Perseverer's own calendar display metadata, orthogonal to which sport tier a workout is in.
+
+    Resets `push_status` back to "draft" whenever an already-`"pushed"` workout is edited: the
+    old Garmin copy is now stale, and `push_planned_workout` re-pushes fresh (delete + re-upload)
+    the next time it runs, matching `GarminConnectAdapter.push_planned_workout`'s own "edit means
+    full re-push, not a partial update" contract."""
+    is_running = sport == "running"
+    parsed = parse_workout_syntax(source_text or "") if is_running else None
+    estimated_duration_s = (
+        parsed.estimated_duration_s
+        if parsed is not None
+        else (duration_minutes * 60.0 if duration_minutes is not None else None)
+    )
     now = datetime.now(UTC).replace(tzinfo=None)
 
     existing = conn.execute(
@@ -468,7 +560,8 @@ def save_planned_workout(
                 sport=sport,
                 name=name,
                 source_text=source_text,
-                estimated_duration_s=parsed.estimated_duration_s,
+                estimated_duration_s=estimated_duration_s,
+                scheduled_time=scheduled_time,
                 push_status="draft",
                 created_at=now,
                 updated_at=now,
@@ -487,7 +580,8 @@ def save_planned_workout(
                 sport=sport,
                 name=name,
                 source_text=source_text,
-                estimated_duration_s=parsed.estimated_duration_s,
+                estimated_duration_s=estimated_duration_s,
+                scheduled_time=scheduled_time,
                 push_status=new_status,
                 updated_at=now,
             )
@@ -498,7 +592,7 @@ def save_planned_workout(
             )
         )
 
-    if parsed.steps:
+    if parsed is not None and parsed.steps:
         conn.execute(
             planned_workout_step.insert(),
             [
@@ -525,8 +619,8 @@ def save_planned_workout(
 
     return SavedWorkout(
         id=workout_id,
-        estimated_duration_s=parsed.estimated_duration_s,
-        parse_errors=parsed.errors,
+        estimated_duration_s=estimated_duration_s or 0.0,
+        parse_errors=parsed.errors if parsed is not None else [],
     )
 
 

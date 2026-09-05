@@ -250,7 +250,10 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                         </div>
                       )}
                       {planned && (
-                        <div className="month-grid__planned">📅 {planned.name || planned.sport}</div>
+                        <div className="month-grid__planned">
+                          📅 {planned.scheduled_time && `${planned.scheduled_time} `}
+                          {planned.name || planned.sport}
+                        </div>
                       )}
                     </td>
                   );

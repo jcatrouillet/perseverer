@@ -5,10 +5,11 @@
 Shipped and live-verified for running (the user's own scoping choice — see decision 1) — a real
 push against the author's own Garmin account (2026-09-03) confirmed the full round trip: pace
 range, absolute HR range, and cadence riding alongside pace on the same step all stored and
-read back correctly (see Verification). Yoga/bouldering/fitness
-share the same `planned_workout` schema (additive, no migration needed to add them) and the same
-push orchestration, but have no step-level syntax to parse yet — that's the next slice, not part
-of this round.
+read back correctly (see Verification). Yoga and bouldering shipped as a second, deliberately
+simpler tier — a name, a duration, and a display-only time of day, no structured syntax at all
+(the user's own explicit scoping: "no structured text syntax needed, it's just to put placeholder
+for those sports") — pushed as a single no-target Garmin step for the whole duration
+(`build_placeholder_workout`, decision 9). `fitness` still has no builder.
 
 This is a new capability, not a bug fix or a phase-plan item — the user asked directly ("can you
 push workouts to my garmin watch?") for a full training-schedule feature: use the existing
@@ -190,6 +191,38 @@ navigation path through `DateNavigator` into `DayViewPage`). Fixed by mounting t
 own data by `localDate` prop, so no parent-level wiring beyond the one `<ScheduleWorkoutForm
 localDate={date} />` line was needed in either page.
 
+### 9. Yoga/bouldering: a duration + time-of-day placeholder, still a real Garmin push
+
+Added after shipping, per the user's own explicit follow-up scoping ("scope out yoga and
+bouldering first, no structured text syntax needed, it's just to put placeholder for those
+sports") plus a direct answer to the one genuinely open question (push to Garmin, or calendar-
+only?): push it, as a trivial duration-only workout. `planned_workouts.py::PLACEHOLDER_SPORTS`
+(`{"yoga", "bouldering"}`) skips `workout_syntax.py` parsing entirely in `save_planned_workout` —
+`source_text`, if given, is freeform notes only — and takes `duration_minutes` directly instead
+of deriving `estimated_duration_s` from a parse. `scheduled_time` (new `planned_workout` column,
+"HH:MM") is orthogonal to that split and stored either way; it's Perseverer's own calendar
+display metadata only, same "Garmin's `schedule_workout()` has no time-of-day API at all"
+limitation documented for running from day one. `build_placeholder_workout` constructs a single
+no-target step spanning the whole duration, wrapped in a plain `BaseWorkout` (no
+`YogaWorkout`/`BoulderingWorkout` subclass exists in `garminconnect.workout`, unlike
+`RunningWorkout` — constructing `BaseWorkout` directly with an explicit `sportType` works the
+same way) — yoga gets a real Garmin sport type, bouldering has none and maps to `SportType.OTHER`
+(a documented vendor limitation, not a bug: the workout still pushes and schedules correctly,
+just shows as "Other" rather than "Bouldering").
+
+This surfaced one real, pre-existing bug in `GarminConnectAdapter.push_planned_workout`: it
+called the sport-specific `upload_running_workout`, which raises `TypeError` for anything but a
+real `RunningWorkout` instance (confirmed live, not assumed, by reading the check inside the
+installed `garminconnect` package itself) — unusable for yoga/bouldering's plain `BaseWorkout`.
+Fixed by switching to the generic `upload_workout(workout.to_dict())`, which has no such
+restriction; running's own push path is unaffected (same JSON either way).
+
+It also surfaced a second bug in the router: `GET /planned-workouts/{date}` unconditionally
+re-parsed `source_text` through `workout_syntax.py` to surface parse errors, regardless of
+sport — for yoga/bouldering's freeform notes, this produced bogus "unrecognized duration" errors
+on plain prose. Fixed by gating that re-parse to `sport == "running"` only, caught by a test
+before it ever shipped.
+
 ## Verification
 
 `uv run pytest -q` (927 passed), `uv run ruff check .`, `uv run mypy` (clean), `cd frontend && npm
@@ -212,3 +245,13 @@ back on read), for exact round-trip fidelity. Visual confirmation in the Garmin 
 website itself (that the workout renders and would actually prompt correctly on a real device
 during a run) is still up to the user to glance at — the API-level round-trip above is as far as
 this session can verify directly.
+
+**Yoga/bouldering (decision 9)**: `uv run pytest -q` (934 passed), `uv run ruff check .`,
+`uv run mypy` (clean), `cd frontend && npm run typecheck && npm run build` (clean), `npx vitest
+run` (562 passed) — all green, including the two real bugs decision 9 describes (both caught by
+tests before shipping, not live). Not yet live-pushed against a real Garmin account the way
+running was — the `upload_workout`/`BaseWorkout` path is exercised end-to-end by
+`tests/adapters/test_garmin_connect_push.py::test_a_plain_baseworkout_pushes_fine_via_the_generic_upload`
+against a fake client, not a real one; a real push would additionally confirm bouldering's
+"Other" sport type and a no-target single step actually render sensibly in the Garmin Connect
+app.

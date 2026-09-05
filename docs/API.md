@@ -811,7 +811,9 @@ stale and gets re-pushed fresh on the next push.
 |---|---|---|---|
 | `sport` | string | required | `running` / `yoga` / `bouldering` / `fitness` — open string, not an enum. |
 | `name` | string, nullable | optional | |
-| `source_text` | string, nullable | optional | The athlete's own workout-syntax text. A malformed line doesn't reject the save — it's still stored, and the resulting `parse_errors` come back in the response. |
+| `source_text` | string, nullable | optional | For `running`: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting `parse_errors` come back in the response. For `yoga`/`bouldering`: freeform notes only, never parsed. |
+| `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h). Perseverer's own calendar display metadata only — Garmin's own scheduling has no time-of-day API. |
+| `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — sets the workout's duration directly (there's no syntax to derive one from). Ignored for `running`, where duration comes from parsing `source_text`. |
 
 **Response `200`:** `PlannedWorkoutOut`.
 
@@ -856,6 +858,8 @@ reported back in `skipped_dates`.
 | `sport` | string | required | |
 | `name` | string, nullable | optional | |
 | `source_text` | string, nullable | optional | |
+| `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h) — see `PlannedWorkoutIn` above. |
+| `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — see `PlannedWorkoutIn` above. |
 | `frequency` | string | required | `weekly` / `every_n_days` / `monthly`. |
 | `interval_days` | integer | required for `every_n_days` | `>= 1`. |
 | `count` | integer | exactly one of `count`/`until` | Total occurrences, including the first. |
@@ -1505,7 +1509,7 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 ### PlannedWorkoutListItemOut
 
 `local_date` (string, date), `id` (integer), `sport` (string), `name` (string, nullable),
-`push_status` (`draft`/`pushed`/`push_failed`).
+`scheduled_time` (string, nullable — `"HH:MM"`), `push_status` (`draft`/`pushed`/`push_failed`).
 
 ### PlannedWorkoutOut
 
@@ -1517,10 +1521,11 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 | `local_date` | string (date), nullable | |
 | `sport` | string, nullable | |
 | `name` | string, nullable | |
-| `source_text` | string, nullable | The athlete's own typed text, verbatim. |
-| `estimated_duration_s` | number, nullable | An estimate — a distance-based step's real duration depends on the athlete's actual pace. |
-| `steps` | array\<`PlannedWorkoutStepOut`\> | Defaults to `[]`. Raw, unexpanded (repeat-block markers included). |
-| `parse_errors` | array\<`ParseErrorOut`\> | Defaults to `[]`. From re-parsing the currently-stored `source_text`. |
+| `source_text` | string, nullable | `running`: the athlete's own typed workout-syntax text, verbatim. `yoga`/`bouldering`: freeform notes only, never parsed. |
+| `scheduled_time` | string, nullable | `"HH:MM"` (24h) — display-only, not sent to Garmin. |
+| `estimated_duration_s` | number, nullable | `running`: an estimate — a distance-based step's real duration depends on the athlete's actual pace. `yoga`/`bouldering`: exactly the `duration_minutes` given at save time, in seconds. |
+| `steps` | array\<`PlannedWorkoutStepOut`\> | Defaults to `[]`. Raw, unexpanded (repeat-block markers included). Always `[]` for `yoga`/`bouldering` — no structured syntax for those sports. |
+| `parse_errors` | array\<`ParseErrorOut`\> | Defaults to `[]`. From re-parsing the currently-stored `source_text` — `running` only; always `[]` for `yoga`/`bouldering`. |
 | `push_status` | string, nullable | `draft` / `pushed` / `push_failed`. |
 | `push_error` | string, nullable | |
 | `garmin_workout_id` | integer, nullable | |

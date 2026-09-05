@@ -566,9 +566,20 @@ planned_workout = Table(
     Column("name", String, nullable=True),
     # The athlete's own typed text, kept verbatim -- raw-first-adjacent: never lose what they
     # actually authored even if the parser or step model changes later. Re-parsed into
-    # planned_workout_step on every save, not just the first.
+    # planned_workout_step on every save, not just the first, for sport=="running" -- for
+    # yoga/bouldering (no structured syntax, see planned_workouts.py::save_planned_workout) this
+    # is just freeform athlete notes, never parsed at all.
     Column("source_text", Text, nullable=True),
+    # For running: derived from parsing source_text. For yoga/bouldering: set directly from the
+    # athlete's own duration input (no syntax to parse a duration out of) -- see
+    # save_planned_workout's own docstring.
     Column("estimated_duration_s", Float, nullable=True),
+    # "HH:MM", 24h, local time -- Perseverer's own calendar display metadata only. Garmin's
+    # schedule_workout() is date-only with no time-of-day API at all (confirmed directly against
+    # the installed garminconnect package, see docs/adr/0015-scheduled-workouts.md's own "vendor
+    # facts" section), so this can never make the watch itself prompt at this clock time -- it
+    # only ever appears in Perseverer's own UI.
+    Column("scheduled_time", String, nullable=True),
     Column("garmin_workout_id", Integer, nullable=True),
     Column("garmin_scheduled_at", DateTime(), nullable=True),
     Column("push_status", String, nullable=False),  # "draft" | "pushed" | "push_failed"

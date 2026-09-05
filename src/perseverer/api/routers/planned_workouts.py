@@ -54,6 +54,7 @@ def list_planned_workouts(
             planned_workout.c.id,
             planned_workout.c.sport,
             planned_workout.c.name,
+            planned_workout.c.scheduled_time,
             planned_workout.c.push_status,
         )
         .where(
@@ -65,7 +66,12 @@ def list_planned_workouts(
     ).fetchall()
     return [
         PlannedWorkoutListItemOut(
-            local_date=r.local_date, id=r.id, sport=r.sport, name=r.name, push_status=r.push_status
+            local_date=r.local_date,
+            id=r.id,
+            sport=r.sport,
+            name=r.name,
+            scheduled_time=r.scheduled_time,
+            push_status=r.push_status,
         )
         for r in rows
     ]
@@ -79,6 +85,7 @@ def _to_out(row: Row, steps: list[Row], parse_errors: list[ParseError]) -> Plann
         sport=row.sport,
         name=row.name,
         source_text=row.source_text,
+        scheduled_time=row.scheduled_time,
         estimated_duration_s=row.estimated_duration_s,
         steps=[
             PlannedWorkoutStepOut(
@@ -131,7 +138,12 @@ def get_planned_workout(
     # has (e.g. from direct DB manipulation, or a future stricter parser version) -- the actual
     # steps served are always the already-parsed/stored planned_workout_step rows, not a fresh
     # parse, so this never risks the response drifting from what a push would actually send.
-    parse_errors = parse_workout_syntax(row.source_text or "").errors
+    # Running only: yoga/bouldering's source_text is freeform athlete notes (PLACEHOLDER_SPORTS,
+    # planned_workouts.py), never workout syntax -- parsing it here would surface bogus
+    # "unrecognized duration" errors for plain prose.
+    parse_errors = (
+        parse_workout_syntax(row.source_text or "").errors if row.sport == "running" else []
+    )
     return _to_out(row, list(steps), list(parse_errors))
 
 
@@ -149,6 +161,8 @@ def put_planned_workout(
         sport=payload.sport,
         name=payload.name,
         source_text=payload.source_text,
+        scheduled_time=payload.scheduled_time,
+        duration_minutes=payload.duration_minutes,
     )
     conn.commit()
     return get_planned_workout(local_date, athlete_id, conn)
@@ -281,6 +295,8 @@ def post_recurring_planned_workout(
             sport=payload.sport,
             name=payload.name,
             source_text=payload.source_text,
+            scheduled_time=payload.scheduled_time,
+            duration_minutes=payload.duration_minutes,
         )
         created.append(iso)
     conn.commit()

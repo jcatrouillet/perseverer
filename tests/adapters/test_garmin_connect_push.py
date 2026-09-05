@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 from garminconnect import GarminConnectTooManyRequestsError
-from garminconnect.workout import RunningWorkout, WorkoutSegment, create_warmup_step
+from garminconnect.workout import BaseWorkout, RunningWorkout, WorkoutSegment, create_warmup_step
 
 from perseverer.adapters.garmin_connect import (
     GarminConnectAdapter,
@@ -52,11 +52,11 @@ class FakePushClient:
             raise GarminConnectTooManyRequestsError("429")
         self.deleted_ids.append(workout_id)
 
-    def upload_running_workout(self, workout: Any) -> dict[str, Any]:
+    def upload_workout(self, workout_json: dict[str, Any]) -> dict[str, Any]:
         if self.raise_on_upload:
             raise GarminConnectTooManyRequestsError("429")
-        self.uploaded_workouts.append(workout)
-        return {"workoutId": self.next_workout_id, "workoutName": workout.workoutName}
+        self.uploaded_workouts.append(workout_json)
+        return {"workoutId": self.next_workout_id, "workoutName": workout_json["workoutName"]}
 
     def schedule_workout(self, workout_id: int, date_str: str) -> dict[str, Any]:
         if self.raise_on_schedule:
@@ -74,6 +74,25 @@ def _workout() -> RunningWorkout:
                 segmentOrder=1,
                 sportType={"sportTypeId": 1, "sportTypeKey": "running"},
                 workoutSteps=[create_warmup_step(600.0)],
+            )
+        ],
+    )
+
+
+def _yoga_workout() -> BaseWorkout:
+    # A plain BaseWorkout, not a RunningWorkout -- exactly what build_placeholder_workout
+    # produces for yoga/bouldering. upload_running_workout() would reject this with a TypeError
+    # (isinstance-checked inside the real garminconnect library); push_planned_workout must go
+    # through the generic upload_workout() instead -- see its own docstring.
+    return BaseWorkout(
+        workoutName="Yoga",
+        sportType={"sportTypeId": 7, "sportTypeKey": "yoga", "displayOrder": 7},
+        estimatedDurationInSecs=2700,
+        workoutSegments=[
+            WorkoutSegment(
+                segmentOrder=1,
+                sportType={"sportTypeId": 7, "sportTypeKey": "yoga", "displayOrder": 7},
+                workoutSteps=[create_warmup_step(2700.0)],
             )
         ],
     )
@@ -127,3 +146,12 @@ def test_429_on_schedule_aborts(tmp_path: Path) -> None:
     with pytest.raises(GarminRateLimitAborted):
         adapter.push_planned_workout(_workout(), "2026-09-01")
     assert len(client.uploaded_workouts) == 1  # upload already happened, only scheduling failed
+
+
+def test_a_plain_baseworkout_pushes_fine_via_the_generic_upload(tmp_path: Path) -> None:
+    """The yoga/bouldering case: push_planned_workout must not assume a RunningWorkout."""
+    adapter, client = _adapter(tmp_path)
+    workout_id = adapter.push_planned_workout(_yoga_workout(), "2026-09-01")
+    assert workout_id == 42
+    assert client.uploaded_workouts[0]["workoutName"] == "Yoga"
+    assert client.uploaded_workouts[0]["sportType"]["sportTypeKey"] == "yoga"

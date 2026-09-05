@@ -155,8 +155,8 @@ class FakePushGarminClient:
     def delete_workout(self, workout_id: int) -> None:
         self.deleted.append(workout_id)
 
-    def upload_running_workout(self, workout: Any) -> dict[str, Any]:
-        self.uploaded.append(workout)
+    def upload_workout(self, workout_json: dict[str, Any]) -> dict[str, Any]:
+        self.uploaded.append(workout_json)
         return {"workoutId": self.next_workout_id}
 
     def schedule_workout(self, workout_id: int, date_str: str) -> dict[str, Any]:
@@ -165,7 +165,7 @@ class FakePushGarminClient:
 
 
 class RaisingOnUploadClient(FakePushGarminClient):
-    def upload_running_workout(self, workout: Any) -> dict[str, Any]:
+    def upload_workout(self, workout_json: dict[str, Any]) -> dict[str, Any]:
         raise GarminConnectTooManyRequestsError("429")
 
 
@@ -271,9 +271,9 @@ def test_editing_a_pushed_workout_deletes_the_stale_garmin_copy(tmp_path: Path) 
     assert client.deleted == [7]
 
 
-def test_non_running_sport_fails_cleanly_v1(tmp_path: Path) -> None:
+def test_a_sport_with_no_builder_yet_fails_cleanly(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
-    workout_id = _insert_planned_workout(engine, sport="yoga")
+    workout_id = _insert_planned_workout(engine, sport="fitness")
     client = FakePushGarminClient()
 
     with engine.connect() as conn:
@@ -291,7 +291,48 @@ def test_non_running_sport_fails_cleanly_v1(tmp_path: Path) -> None:
         ).fetchone()
         assert row is not None
         assert row.push_status == "push_failed"
-        assert "running" in (row.push_error or "")
+        assert "fitness" in (row.push_error or "")
+
+
+def test_yoga_pushes_as_a_placeholder_workout(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    workout_id = _insert_planned_workout(engine, sport="yoga")
+    client = FakePushGarminClient()
+
+    with engine.connect() as conn:
+        result = push_planned_workout(
+            conn,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            planned_workout_id=workout_id,
+            tokenstore_dir=tmp_path / "tokens",
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=lambda: client,
+        )
+        assert result.success
+        assert client.uploaded[0]["sportType"]["sportTypeKey"] == "yoga"
+        row = conn.execute(
+            select(planned_workout).where(planned_workout.c.id == workout_id)
+        ).fetchone()
+        assert row is not None
+        assert row.push_status == "pushed"
+
+
+def test_bouldering_pushes_mapped_to_the_generic_other_sport_type(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    workout_id = _insert_planned_workout(engine, sport="bouldering")
+    client = FakePushGarminClient()
+
+    with engine.connect() as conn:
+        result = push_planned_workout(
+            conn,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            planned_workout_id=workout_id,
+            tokenstore_dir=tmp_path / "tokens",
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=lambda: client,
+        )
+        assert result.success
+        assert client.uploaded[0]["sportType"]["sportTypeKey"] == "other"
 
 
 def test_hr_zone_step_without_configured_zones_marks_push_failed(tmp_path: Path) -> None:

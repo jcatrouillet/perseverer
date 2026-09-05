@@ -1,12 +1,11 @@
-// The "Planned workout" section of MonthView's expanded-day card (docs/adr/0015-scheduled-
-// workouts.md): shows the scheduled workout + push status if one exists, or a "Schedule a
-// workout" affordance if not. The schedule form itself is a sport <select> + an intervals.icu-
-// style <textarea> with a live structured preview underneath (reusing the same
-// groupWorkoutStepsForDisplay/expandWorkoutSteps this app already had for recorded activities,
-// see workoutSteps.ts), a "+ Add step" button opening StepBuilderModal as an alternative to
-// typing the syntax by hand, a "Paste copied workout" affordance (workoutClipboard.ts, the other
-// half of ActivityDetailPage.tsx's own "Copy workout" button), and an optional "Repeat this
-// schedule" recurrence control.
+// The "Planned workout" section of MonthView's expanded-day card and DayViewPage
+// (docs/adr/0015-scheduled-workouts.md): shows the scheduled workout + push status if one
+// exists, or a "Schedule a workout" affordance if not. Two sport tiers, matching
+// planned_workouts.py::save_planned_workout: running gets the full text-syntax editor + live
+// preview; yoga/bouldering (PUSHABLE_PLACEHOLDER_SPORTS) are deliberately simpler placeholders
+// -- a duration (minutes) + a time-of-day field, no structured syntax at all, per the user's own
+// explicit scoping ("no structured text syntax needed, it's just to put placeholder for those
+// sports"). Both push to Garmin; "fitness" doesn't have a builder yet.
 import { useRef, useState } from "react";
 
 import {
@@ -31,15 +30,28 @@ const SPORTS = [
   { value: "fitness", label: "Fitness" },
 ];
 
+// Sports with a real Garmin push path today -- "fitness" has neither structured syntax nor a
+// placeholder builder yet (planned_workouts.py has no builder registered for it).
+const PUSHABLE_SPORTS = new Set(["running", "yoga", "bouldering"]);
+// Sports with no structured syntax at all -- just a name, a duration, and a time of day. Mirrors
+// planned_workouts.py::PLACEHOLDER_SPORTS exactly.
+const PLACEHOLDER_SPORTS = new Set(["yoga", "bouldering"]);
+
 function statusLabel(status: PlannedWorkoutOut["push_status"]): string {
   if (status === "pushed") return "Pushed to Garmin";
   if (status === "push_failed") return "Push failed";
   return "Draft";
 }
 
+function formatDurationMinutes(estimatedDurationS: number | null): string | null {
+  if (estimatedDurationS == null || estimatedDurationS <= 0) return null;
+  return `${Math.round(estimatedDurationS / 60)} min`;
+}
+
 function WorkoutSummary({ localDate, workout }: { localDate: string; workout: PlannedWorkoutOut }) {
   const del = useDeletePlannedWorkout();
   const push = usePushPlannedWorkout();
+  const duration = formatDurationMinutes(workout.estimated_duration_s);
 
   return (
     <div className="planned-workout__summary">
@@ -49,13 +61,20 @@ function WorkoutSummary({ localDate, workout }: { localDate: string; workout: Pl
           {statusLabel(workout.push_status)}
         </span>
       </div>
+      {(workout.scheduled_time || duration) && (
+        <p className="chart-note">
+          {workout.scheduled_time}
+          {workout.scheduled_time && duration && " · "}
+          {duration}
+        </p>
+      )}
       {workout.push_error && (
         <p className="chart-note" role="alert">
           {workout.push_error}
         </p>
       )}
       <div className="planned-workout__actions">
-        {workout.sport === "running" && (
+        {workout.sport != null && PUSHABLE_SPORTS.has(workout.sport) && (
           <button
             type="button"
             className="button"
@@ -87,6 +106,8 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
   const [sport, setSport] = useState("running");
   const [name, setName] = useState("");
   const [sourceText, setSourceText] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
   const [stepBuilderOpen, setStepBuilderOpen] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [recurFrequency, setRecurFrequency] = useState<"weekly" | "every_n_days" | "monthly">(
@@ -99,16 +120,25 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const clipboardItem = readWorkoutClipboard();
+  const isPlaceholderSport = PLACEHOLDER_SPORTS.has(sport);
 
   function startEditing() {
     if (workout.data?.available) {
       setSport(workout.data.sport ?? "running");
       setName(workout.data.name ?? "");
       setSourceText(workout.data.source_text ?? "");
+      setScheduledTime(workout.data.scheduled_time ?? "");
+      setDurationMinutes(
+        workout.data.estimated_duration_s
+          ? String(Math.round(workout.data.estimated_duration_s / 60))
+          : "",
+      );
     } else {
       setSport("running");
       setName("");
       setSourceText("");
+      setScheduledTime("");
+      setDurationMinutes("");
     }
     setEditing(true);
   }
@@ -150,7 +180,14 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
     save.mutate(
-      { localDate, sport, name: name.trim() || null, source_text: sourceText.trim() || null },
+      {
+        localDate,
+        sport,
+        name: name.trim() || null,
+        source_text: sourceText.trim() || null,
+        scheduled_time: scheduledTime || null,
+        duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
+      },
       { onSuccess: () => setEditing(false) },
     );
   }
@@ -162,6 +199,8 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         sport,
         name: name.trim() || null,
         source_text: sourceText.trim() || null,
+        scheduled_time: scheduledTime || null,
+        duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
         frequency: recurFrequency,
         interval_days:
           recurFrequency === "every_n_days" ? Number(recurIntervalDays) || undefined : undefined,
@@ -226,7 +265,7 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
             className="input"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Tempo run"
+            placeholder={isPlaceholderSport ? "e.g. Evening yoga" : "e.g. Tempo run"}
           />
         </label>
       </div>
@@ -237,23 +276,62 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         </button>
       )}
 
-      <label className="field">
-        {sport === "running" ? "Workout" : "Details"}
-        <textarea
-          ref={textareaRef}
-          className="input planned-workout-form__textarea"
-          value={sourceText}
-          onChange={(e) => setSourceText(e.target.value)}
-          placeholder={
-            sport === "running"
-              ? "Warmup 10m\n\n4x\n3m 5:00-5:10/km Pace\n2m Z2 HR\n\nCooldown 5m"
-              : "Duration, time of day, or any other detail"
-          }
-        />
-      </label>
-
-      {sport === "running" && (
+      {isPlaceholderSport ? (
         <>
+          <div className="planned-workout-form__row">
+            <label className="field">
+              Duration (minutes)
+              <input
+                className="input"
+                type="number"
+                min="1"
+                step="1"
+                value={durationMinutes}
+                onChange={(e) => setDurationMinutes(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              Time of day
+              <input
+                className="input"
+                type="time"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+              />
+            </label>
+          </div>
+          <label className="field">
+            Notes (optional)
+            <textarea
+              className="input planned-workout-form__textarea"
+              value={sourceText}
+              onChange={(e) => setSourceText(e.target.value)}
+              placeholder="Any detail worth remembering -- studio, route project, etc."
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <label className="field">
+            Time of day (optional)
+            <input
+              className="input"
+              type="time"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            Workout
+            <textarea
+              ref={textareaRef}
+              className="input planned-workout-form__textarea"
+              value={sourceText}
+              onChange={(e) => setSourceText(e.target.value)}
+              placeholder={"Warmup 10m\n\n4x\n3m 5:00-5:10/km Pace\n2m Z2 HR\n\nCooldown 5m"}
+            />
+          </label>
+
           <button type="button" className="button" onClick={() => setStepBuilderOpen(true)}>
             + Add step
           </button>

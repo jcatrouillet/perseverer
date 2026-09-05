@@ -443,6 +443,7 @@ export interface PlannedWorkoutOut {
   sport: string | null;
   name: string | null;
   source_text: string | null;
+  scheduled_time: string | null; // "HH:MM", 24h -- display-only, see db/schema.py's own docstring
   estimated_duration_s: number | null;
   steps: PlannedWorkoutStepOut[];
   parse_errors: ParseErrorOut[];
@@ -457,6 +458,7 @@ export interface PlannedWorkoutListItemOut {
   id: number;
   sport: string;
   name: string | null;
+  scheduled_time: string | null;
   push_status: "draft" | "pushed" | "push_failed";
 }
 

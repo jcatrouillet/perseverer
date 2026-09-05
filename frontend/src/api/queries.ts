@@ -852,6 +852,8 @@ export interface SavePlannedWorkoutInput {
   sport: string;
   name: string | null;
   source_text: string | null;
+  scheduled_time?: string | null;
+  duration_minutes?: number | null;
 }
 
 export function useSavePlannedWorkout() {
@@ -862,6 +864,8 @@ export function useSavePlannedWorkout() {
         sport: body.sport,
         name: body.name,
         source_text: body.source_text,
+        scheduled_time: body.scheduled_time ?? null,
+        duration_minutes: body.duration_minutes ?? null,
       }),
     onSuccess: (_workout, variables) => {
       void queryClient.invalidateQueries({ queryKey: ["planned-workout", variables.localDate] });
@@ -897,6 +901,8 @@ export interface RecurringPlannedWorkoutInput {
   sport: string;
   name: string | null;
   source_text: string | null;
+  scheduled_time?: string | null;
+  duration_minutes?: number | null;
   frequency: "weekly" | "every_n_days" | "monthly";
   interval_days?: number;
   count?: number;

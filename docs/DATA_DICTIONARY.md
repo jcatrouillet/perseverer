@@ -325,13 +325,19 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
 - **`planned_workout`**/**`planned_workout_step`** (scheduled workouts) — a *future*,
   athlete-authored workout on the calendar, pushed to the Garmin watch, and its unexpanded
   steps. One `planned_workout` per athlete per `local_date` (Garmin's own `schedule_workout()`
-  is itself date-granular). `source_text` is the athlete's own typed workout-syntax text, kept
-  verbatim and re-parsed into `planned_workout_step` rows on every save (`workout_syntax.py`).
-  `push_status` (`draft`/`pushed`/`push_failed`) + `push_error` + `garmin_workout_id` +
-  `garmin_scheduled_at` track the push lifecycle `activity_workout` (the retrospective,
-  FIT-parsed workout-plan table from Phase 1, one-to-one with a completed `activity_id`) has no
-  concept of. `planned_workout_step` mirrors `activity_workout_step`'s own unexpanded-
-  repeat-block shape (a `repeat_until_steps_cmplt` row describing
+  is itself date-granular). Two sport tiers (`planned_workouts.py::PLACEHOLDER_SPORTS`):
+  **running**'s `source_text` is the athlete's own typed workout-syntax text, kept verbatim and
+  re-parsed into `planned_workout_step` rows on every save (`workout_syntax.py`), with
+  `estimated_duration_s` derived from that parse; **yoga/bouldering**'s `source_text` (if any) is
+  just freeform notes, never parsed — no `planned_workout_step` rows at all, and
+  `estimated_duration_s` is set directly from the athlete's own `duration_minutes` input instead.
+  `scheduled_time` ("HH:MM", nullable) is orthogonal to that split and stored either way — it's
+  Perseverer's own calendar display metadata only, since Garmin's `schedule_workout()` has no
+  time-of-day API at all. `push_status` (`draft`/`pushed`/`push_failed`) + `push_error` +
+  `garmin_workout_id` + `garmin_scheduled_at` track the push lifecycle `activity_workout` (the
+  retrospective, FIT-parsed workout-plan table from Phase 1, one-to-one with a completed
+  `activity_id`) has no concept of. `planned_workout_step` mirrors `activity_workout_step`'s own
+  unexpanded-repeat-block shape (a `repeat_until_steps_cmplt` row describing
   `[repeat_from_step..step_index-1] x repeat_count`, not pre-flattened) so `workoutSteps.ts`'s
   expand/group helpers work across both tables unmodified, but widens `target_type` to
   `"pace"`/`"heart_rate"` (an absolute range, or `target_hr_zone` resolved against the
@@ -873,3 +879,17 @@ action can read; `StepBuilderModal.tsx` is a GUI wizard alternative to typing th
 generating text and inserting it at the textarea cursor rather than maintaining separate state.
 See `docs/adr/0015-scheduled-workouts.md` for the full design and the vendor-API facts (verified
 directly against the installed `garminconnect` package's own source) this was built against.
+
+**Yoga/bouldering placeholders** (added right after, per the user's own follow-up scoping): no
+structured syntax at all -- `planned_workouts.py::PLACEHOLDER_SPORTS` skips
+`workout_syntax.py` parsing entirely, taking a `duration_minutes` and a display-only
+`scheduled_time` ("HH:MM", new `planned_workout` column) directly instead. Pushed via
+`build_placeholder_workout` -- a single no-target step spanning the whole duration, wrapped in a
+plain `BaseWorkout` (yoga gets a real Garmin sport type; bouldering has none and maps to
+`SportType.OTHER`, a documented vendor limitation). This surfaced two real bugs, both fixed:
+`GarminConnectAdapter.push_planned_workout` called the sport-specific `upload_running_workout`
+(which rejects anything but a real `RunningWorkout`, confirmed by reading the check inside the
+installed package) -- switched to the generic `upload_workout(workout.to_dict())`; and
+`GET /planned-workouts/{date}` unconditionally re-parsed `source_text` for parse errors
+regardless of sport, producing bogus errors on yoga/bouldering's freeform notes -- gated to
+`sport == "running"` only. See `docs/adr/0015-scheduled-workouts.md` decision 9.

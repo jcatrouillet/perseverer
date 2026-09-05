@@ -87,6 +87,78 @@ def test_put_with_parse_errors_still_saves_and_reports_them(
     assert body["parse_errors"][0]["line_no"] == 1
 
 
+class TestYogaAndBoulderingPlaceholders:
+    """No structured syntax at all for these two sports (the user's own explicit scoping) --
+    just a name, a duration_minutes, and a display-only scheduled_time."""
+
+    def test_put_stores_duration_and_time_with_no_steps(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        put = client.put(
+            "/api/v1/planned-workouts/2026-09-01",
+            json={
+                "sport": "yoga",
+                "name": "Evening yoga",
+                "scheduled_time": "18:30",
+                "duration_minutes": 45,
+            },
+            headers=auth_headers,
+        )
+        assert put.status_code == 200
+        body = put.json()
+        assert body["sport"] == "yoga"
+        assert body["scheduled_time"] == "18:30"
+        assert body["estimated_duration_s"] == 2700.0
+        assert body["steps"] == []
+        assert body["push_status"] == "draft"
+
+    def test_source_text_is_kept_as_freeform_notes_not_parsed(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        put = client.put(
+            "/api/v1/planned-workouts/2026-09-01",
+            json={
+                "sport": "bouldering",
+                "duration_minutes": 90,
+                "source_text": "V4 project session, bring the crash pad",
+            },
+            headers=auth_headers,
+        )
+        assert put.status_code == 200
+        body = put.json()
+        assert body["source_text"] == "V4 project session, bring the crash pad"
+        assert body["steps"] == []
+        assert body["parse_errors"] == []
+
+    def test_malformed_scheduled_time_422s(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        r = client.put(
+            "/api/v1/planned-workouts/2026-09-01",
+            json={"sport": "yoga", "duration_minutes": 45, "scheduled_time": "6:30pm"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 422
+
+    def test_push_reaches_garmin_rather_than_being_rejected_for_sport(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        client.put(
+            "/api/v1/planned-workouts/2026-09-01",
+            json={"sport": "yoga", "duration_minutes": 45},
+            headers=auth_headers,
+        )
+        push = client.post("/api/v1/planned-workouts/2026-09-01/push", headers=auth_headers)
+        assert push.status_code == 200
+
+        # No Garmin token store in this test's tmp_path, so the push still fails -- but the
+        # failure must come from the auth step, never from an early "sport not supported" gate
+        # (that gate no longer exists for yoga/bouldering).
+        get = client.get("/api/v1/planned-workouts/2026-09-01", headers=auth_headers)
+        assert get.json()["push_status"] == "push_failed"
+        assert "not supported" not in (get.json()["push_error"] or "")
+
+
 def test_editing_a_pushed_workout_resets_status_to_draft(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
