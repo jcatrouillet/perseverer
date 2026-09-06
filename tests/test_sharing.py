@@ -5,21 +5,31 @@ See tests/api/test_share.py for the endpoint-level tests (auth boundaries, HTTP 
 from __future__ import annotations
 
 import datetime as dt
+import json
 from pathlib import Path
 
-from sqlalchemy import Engine, select
+from sqlalchemy import Connection, Engine, select
 
+from perseverer.config import Settings
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
     activity,
+    activity_metric,
+    activity_stream,
+    activity_workout_step,
     athlete,
     day_rollup,
     fitness_daily_rollup,
+    lap,
     metadata,
+    metric_definition,
     period_rollup,
+    route_geom,
     share_link,
 )
+from perseverer.db.schema import split as split_table
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.fit.types import StreamPoint
 from perseverer.sharing import (
     create_share_link,
     render_activity_share_html,
@@ -27,8 +37,13 @@ from perseverer.sharing import (
     resolve_share_token,
     revoke_share_link,
 )
+from perseverer.streams import write_activity_stream
 
 OTHER_ATHLETE_ID = "01JOTHERATHLETE00000000000"
+
+
+def _settings(tmp_path: Path) -> Settings:
+    return Settings(data_dir=tmp_path / "data")
 
 
 def _seed_athlete(engine: Engine, athlete_id: str = DEFAULT_ATHLETE_ID) -> None:
@@ -76,6 +91,67 @@ def _engine(tmp_path: Path) -> Engine:
     engine = make_engine(tmp_path / "db.sqlite")
     metadata.create_all(engine)
     return engine
+
+
+def _add_metric(
+    conn: Connection, *, activity_id: str, metric_key: str, value: float, source: str
+) -> None:
+    # activity_metric.metric_key FKs to metric_definition -- real ingestion auto-registers this
+    # via metrics/registry.py before ever writing a value; tests have to do the same.
+    now = dt.datetime.now(dt.UTC)
+    exists = conn.execute(
+        metric_definition.select().where(metric_definition.c.metric_key == metric_key)
+    ).fetchone()
+    if exists is None:
+        conn.execute(
+            metric_definition.insert().values(
+                metric_key=metric_key,
+                display_name=metric_key,
+                category="activity",
+                value_type="numeric",
+                first_seen_at=now,
+                first_seen_source=source,
+            )
+        )
+    conn.execute(
+        activity_metric.insert().values(
+            athlete_id=DEFAULT_ATHLETE_ID,
+            activity_id=activity_id,
+            metric_key=metric_key,
+            value_num=value,
+            source=source,
+            created_at=now,
+        )
+    )
+
+
+def _write_stream(
+    engine: Engine,
+    settings: Settings,
+    *,
+    activity_id: str,
+    base: dt.datetime,
+    values_over_time: list[dict[str, float]],
+) -> None:
+    points = [
+        StreamPoint(timestamp_utc=base + dt.timedelta(seconds=i), values=values)
+        for i, values in enumerate(values_over_time)
+    ]
+    rel_path, n_samples, channels = write_activity_stream(
+        settings.parquet_dir, DEFAULT_ATHLETE_ID, activity_id, points
+    )
+    with engine.connect() as conn:
+        conn.execute(
+            activity_stream.insert().values(
+                activity_id=activity_id,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                parquet_path=rel_path,
+                n_samples=n_samples,
+                channels=json.dumps(channels),
+                sample_rate_hint=1.0,
+            )
+        )
+        conn.commit()
 
 
 def test_create_share_link_returns_id_and_stores_only_a_hash(tmp_path: Path) -> None:
@@ -160,7 +236,7 @@ def test_render_activity_share_html_includes_name_and_stats(tmp_path: Path) -> N
     _seed_athlete(engine)
     _seed_activity(engine)
     with engine.connect() as conn:
-        html = render_activity_share_html(conn, "act1")
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
 
     assert "Morning run" in html
     assert "5.00 km" in html
@@ -171,7 +247,7 @@ def test_render_activity_share_html_unavailable_for_unknown_activity(tmp_path: P
     engine = _engine(tmp_path)
     _seed_athlete(engine)
     with engine.connect() as conn:
-        html = render_activity_share_html(conn, "does-not-exist")
+        html = render_activity_share_html(conn, _settings(tmp_path), "does-not-exist")
 
     assert "no longer available" in html
 
@@ -199,10 +275,171 @@ def test_render_activity_share_html_escapes_the_name(tmp_path: Path) -> None:
             )
         )
         conn.commit()
-        html = render_activity_share_html(conn, "act1")
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
 
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_render_activity_share_html_includes_a_laps_table(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    now = dt.datetime(2026, 6, 15, 10, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            lap.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="act1",
+                lap_index=0,
+                start_time_utc=now,
+                duration_s=300.0,
+                moving_duration_s=300.0,
+                distance_m=1000.0,
+                avg_hr=150.0,
+                max_hr=160.0,
+                avg_speed_mps=3.33,
+            )
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "Intervals" in html
+    assert "150" in html  # avg HR
+    assert "intervals-table" not in html  # not the frontend's own CSS class, just a sanity check
+
+
+def test_render_activity_share_html_omits_laps_table_for_hiking(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 15, 10, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="hike1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-15",
+                sport="hiking",
+                distance_m=8000.0,
+                duration_s=7200.0,
+                moving_duration_s=7000.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            lap.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="hike1",
+                lap_index=0,
+                start_time_utc=now,
+                duration_s=7000.0,
+                distance_m=8000.0,
+            )
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "hike1")
+
+    assert "Intervals" not in html
+
+
+def test_render_activity_share_html_includes_route_map_when_route_exists(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        conn.execute(
+            route_geom.insert().values(
+                activity_id="act1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                encoded_polyline="_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+                min_lat=37.0,
+                min_lng=-122.5,
+                max_lat=37.1,
+                max_lng=-122.4,
+                start_lat=37.0,
+                start_lng=-122.5,
+                end_lat=37.1,
+                end_lng=-122.4,
+            )
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "new Map(" in html
+    assert "maplibre-gl.mjs" in html
+    assert "route-map" in html
+    assert "Route" in html
+
+
+def test_render_activity_share_html_no_route_section_without_a_route(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "maplibre" not in html
+
+
+def test_render_activity_share_html_includes_bouldering_routes_table(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 15, 10, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="climb1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-15",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                duration_s=3600.0,
+                calories=400.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            split_table.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="climb1",
+                split_index=0,
+                split_type="climb_active",
+                duration_s=120.0,
+                climb_grade=4,
+                climb_result="completed",
+                climb_avg_hr=140.0,
+            )
+        )
+        conn.execute(
+            split_table.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="climb1",
+                split_index=1,
+                split_type="climb_active",
+                duration_s=90.0,
+                climb_grade=5,
+                climb_result="attempt",
+                climb_avg_hr=145.0,
+            )
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "climb1")
+
+    assert "Time &amp; calories" in html
+    assert "Routes by grade" in html
+    assert "V4" in html
+    assert "V5" in html
+    assert "Completed" in html
+    assert "Attempt" in html
+    assert "Intervals" not in html
 
 
 def test_render_period_share_html_aggregates_day_rollup_for_a_month(tmp_path: Path) -> None:
@@ -393,3 +630,459 @@ def test_render_period_share_html_omits_charts_with_no_data(tmp_path: Path) -> N
     assert "Running" not in html
     assert "Fitness &amp; Form" not in html
     assert "Distance by month" not in html
+
+
+def test_render_period_share_html_includes_a_hiking_breakdown(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="hike1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-01",
+                sport="hiking",
+                distance_m=12000.0,
+                moving_duration_s=10800.0,
+                elevation_gain_m=600.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Hiking" in html
+    assert "600 m on 2026-06-01" in html
+
+
+def test_render_period_share_html_includes_a_climbing_breakdown(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="climb1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-01",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                duration_s=3600.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            split_table.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="climb1",
+                split_index=0,
+                split_type="climb_active",
+                duration_s=120.0,
+                climb_grade=6,
+                climb_result="completed",
+            )
+        )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Climbing" in html
+    assert "V6" in html
+
+
+def test_render_period_share_html_includes_a_fitness_training_breakdown(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        for sport, activity_id in (("hiit", "hiit1"), ("strength_training", "strength1")):
+            conn.execute(
+                activity.insert().values(
+                    id=activity_id,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    start_time_utc=now,
+                    utc_offset_s=0,
+                    local_date="2026-06-01",
+                    sport=sport,
+                    duration_s=1800.0,
+                    moving_duration_s=1800.0,
+                    primary_source="fit_folder",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Fitness" in html
+    assert ">2<" in html  # two sessions (hiit + strength_training)
+
+
+def test_render_period_share_html_omits_sport_buckets_with_no_matching_activity(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Hiking" not in html
+    assert "Climbing" not in html
+    assert "Fitness</h2>" not in html
+
+
+# --- New activity-share features: units + hover data, weather, time in zone, interval overlay,
+# route playback, and theme colors -----------------------------------------------------------
+
+
+def test_render_activity_share_html_uses_real_theme_color_tokens(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "--color-heart-rate: #ef5a6f" in html
+    assert "--color-pace: #4da3ff" in html
+    assert "prefers-color-scheme: light" in html
+    assert "#f5f5f5" not in html  # the old flat gray palette is gone
+
+
+def test_render_activity_share_html_stats_use_icon_chips_and_tone_colors(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        _add_metric(
+            conn,
+            activity_id="act1",
+            metric_key="fit.session.total_training_effect",
+            value=3.5,
+            source="fit_folder",
+        )
+        _add_metric(
+            conn,
+            activity_id="act1",
+            metric_key="fit.session.avg_power",
+            value=210.0,
+            source="fit_folder",
+        )
+        _add_metric(
+            conn,
+            activity_id="act1",
+            metric_key="fit.session.avg_temperature",
+            value=18.0,
+            source="fit_folder",
+        )
+        _add_metric(
+            conn,
+            activity_id="act1",
+            metric_key="fit.session.enhanced_avg_respiration_rate",
+            value=32.0,
+            source="fit_folder",
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    # Distance & time and heart-rate-less basic sections always carry icon chips now.
+    assert 'class="icon-chip"' in html
+    assert 'tone-pace' in html
+    assert 'tone-elevation' in html
+    assert 'tone-cadence' in html
+    assert 'tone-load' in html
+    # The five sections converted last (training effect / power / temperature / respiration).
+    assert 'tone-power' in html
+    assert "Aerobic effect" in html
+    assert "Avg power" in html
+    assert "Avg temperature" in html
+    assert "Avg respiration" in html
+
+
+def test_render_activity_share_html_charts_embed_units_and_elapsed_time(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    settings = _settings(tmp_path)
+    base = dt.datetime(2026, 6, 15, 10, 0, 0)
+    _write_stream(
+        engine,
+        settings,
+        activity_id="act1",
+        base=base,
+        values_over_time=[{"heart_rate": 120.0 + i, "altitude_m": 50.0 + i} for i in range(300)],
+    )
+
+    with engine.connect() as conn:
+        html = render_activity_share_html(conn, settings, "act1")
+
+    assert "Charts" in html
+    assert "ichart-tooltip" in html
+    assert "ichart-cursor" in html
+    assert '"unit": " bpm"' in html or '"unit":" bpm"' in html.replace(", ", ",")
+    assert "_CHART_HOVER_SCRIPT" not in html  # sanity: the constant name itself never leaks
+    assert "elapsed_s" in html
+
+
+def test_render_activity_share_html_no_hover_script_without_a_stream(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "ichart-data" not in html
+    assert "_CHART_HOVER_SCRIPT" not in html
+    assert "addEventListener" not in html
+
+
+def test_render_activity_share_html_shows_cached_weather(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        for key, value in (
+            ("weather.open_meteo.temperature_min_c", 12.0),
+            ("weather.open_meteo.temperature_max_c", 12.0),
+            ("weather.open_meteo.humidity_min_pct", 60.0),
+            ("weather.open_meteo.humidity_max_pct", 60.0),
+            ("weather.open_meteo.weather_code", 1.0),
+            ("weather.open_meteo.wind_speed_mps", 3.0),
+        ):
+            _add_metric(
+                conn, activity_id="act1", metric_key=key, value=value, source="open-meteo"
+            )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "Mainly clear" in html
+    assert "12°C" in html
+    assert "60% RH" in html
+    assert "Wind 3" in html
+
+
+def test_render_activity_share_html_omits_weather_when_not_cached(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert '<div class="weather-row">' not in html
+
+
+def test_sharing_module_never_imports_the_live_weather_fetch() -> None:
+    """The share page must only ever read cached weather -- confirms no network-capable fetch
+    function from weather.py is imported/reachable from this module at all."""
+    import perseverer.sharing as sharing_module
+
+    assert not hasattr(sharing_module, "get_or_fetch_activity_weather")
+
+
+def test_render_activity_share_html_shows_time_in_zone_for_running(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        zone_data = {
+            "fit.time_in_zone.time_in_hr_zone_0": 60.0,
+            "fit.time_in_zone.time_in_hr_zone_1": 300.0,
+            "fit.time_in_zone.time_in_hr_zone_2": 900.0,
+            "fit.time_in_zone.hr_zone_high_boundary_0": 120.0,
+            "fit.time_in_zone.hr_zone_high_boundary_1": 140.0,
+        }
+        for key, value in zone_data.items():
+            _add_metric(conn, activity_id="act1", metric_key=key, value=value, source="fit")
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "Time in zone" in html
+    assert "Z1" in html
+    assert "Z2" in html
+    assert "&lt; 120" in html  # zone 0's own range label
+    # Regression guard: `.time-in-zone__fill` is a bare <span>, inline by default, which ignores
+    # a percentage `width` entirely (confirmed live: renders as a 0-width box despite the correct
+    # value in its inline style) -- the exact bug TimeInZoneChart.tsx's own CSS already
+    # documents and fixes the same way for the authenticated app's version of this chart.
+    assert "display: block" in html.split(".time-in-zone__fill")[1].split("}")[0]
+
+
+def test_render_activity_share_html_omits_time_in_zone_for_bouldering(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 15, 10, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="climb1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-15",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                duration_s=1800.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        _add_metric(
+            conn,
+            activity_id="climb1",
+            metric_key="fit.time_in_zone.time_in_hr_zone_1",
+            value=300.0,
+            source="fit",
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "climb1")
+
+    assert "Time in zone" not in html
+
+
+def test_render_activity_share_html_intervals_include_expected_columns_from_workout(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    now = dt.datetime(2026, 6, 15, 10, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            lap.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="act1",
+                lap_index=0,
+                start_time_utc=now,
+                duration_s=300.0,
+                moving_duration_s=300.0,
+                distance_m=1000.0,
+                avg_hr=150.0,
+                max_hr=160.0,
+            )
+        )
+        conn.execute(
+            activity_workout_step.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="act1",
+                step_index=0,
+                duration_type="distance",
+                duration_distance_m=1000.0,
+                target_type="speed",
+                target_low_mps=3.0,
+                target_high_mps=3.5,
+                intensity="active",
+            )
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "Interval" in html
+    assert "Exp. pace or dist." in html
+    assert "Expected pace" in html
+    assert "Active" in html
+    assert "1km" in html
+
+
+def test_render_activity_share_html_no_expected_columns_without_a_workout(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    now = dt.datetime(2026, 6, 15, 10, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            lap.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="act1",
+                lap_index=0,
+                start_time_utc=now,
+                duration_s=300.0,
+                distance_m=1000.0,
+            )
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "Exp. pace or dist." not in html
+    assert "Expected pace" not in html
+
+
+def test_render_activity_share_html_route_map_includes_playback_when_gps_stream_exists(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    settings = _settings(tmp_path)
+    base = dt.datetime(2026, 6, 15, 10, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            route_geom.insert().values(
+                activity_id="act1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                encoded_polyline="_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+                min_lat=37.0,
+                min_lng=-122.5,
+                max_lat=37.1,
+                max_lng=-122.4,
+                start_lat=37.0,
+                start_lng=-122.5,
+                end_lat=37.1,
+                end_lng=-122.4,
+            )
+        )
+        conn.commit()
+    _write_stream(
+        engine,
+        settings,
+        activity_id="act1",
+        base=base,
+        values_over_time=[
+            {"lat": 37.0 + i * 0.001, "lon": -122.5 + i * 0.001} for i in range(50)
+        ],
+    )
+
+    with engine.connect() as conn:
+        html = render_activity_share_html(conn, settings, "act1")
+
+    assert "route-playback" in html
+    assert "route-playback-toggle" in html
+    assert "playbackCoords" in html
+
+
+def test_render_activity_share_html_route_map_no_playback_without_gps_stream(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    _seed_activity(engine)
+    with engine.connect() as conn:
+        conn.execute(
+            route_geom.insert().values(
+                activity_id="act1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                encoded_polyline="_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+                min_lat=37.0,
+                min_lng=-122.5,
+                max_lat=37.1,
+                max_lng=-122.4,
+                start_lat=37.0,
+                start_lng=-122.5,
+                end_lat=37.1,
+                end_lng=-122.4,
+            )
+        )
+        conn.commit()
+        html = render_activity_share_html(conn, _settings(tmp_path), "act1")
+
+    assert "route-playback-toggle" not in html
+    assert "playbackCoords" not in html

@@ -694,6 +694,154 @@ tbody tr:last-child td {
   cursor: default;
 }
 
+/* TrendControls -- the Week/Month/Year/All-time toggle + prev/next navigator shared by the
+   Fitness & Form and Health tabs' metric explorer (see components/TrendControls.tsx). Sticky so
+   it stays reachable above the one chart currently selected as the page scrolls. */
+.trend-controls {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.trend-controls__resolutions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.trend-controls__res {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding: var(--space-1) var(--space-2);
+}
+
+.trend-controls__res--active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.trend-controls__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Fixed so the nav block's own width -- and therefore where its prev/next arrows land --
+   doesn't shift with the label's text length (e.g. "May 2026" vs "September 2026", or a
+   week's own date-range label, the widest of any resolution). Centering the text inside this
+   fixed box keeps both arrows pinned at the same two positions across every navigation click. */
+.trend-controls__label {
+  display: inline-block;
+  min-width: 13rem;
+  text-align: center;
+}
+
+.trend-controls__page {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+}
+
+.trend-controls__page:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* MetricExplorer -- the metric list (left) + selected chart (right) split shared by the
+   Fitness & Form and Health tabs (components/MetricExplorer.tsx). A phone-width viewport has no
+   room for a real left column, so the list collapses into a horizontal scrolling pill row above
+   the chart instead of stacking a long vertical list above it (which would push the chart, the
+   actual reason someone opened the tab, below the fold). */
+.metric-explorer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.metric-explorer__list {
+  flex: 0 0 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  position: sticky;
+  top: calc(3.5rem + var(--space-4));
+}
+
+.metric-explorer__item {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+
+.metric-explorer__item:hover {
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.metric-explorer__item--active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.metric-explorer__detail {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .metric-explorer {
+    flex-direction: column;
+  }
+
+  .metric-explorer__list {
+    /* Overrides the desktop rule's `flex: 0 0 12rem` -- that sizes this element along
+       `.metric-explorer`'s own main axis, which just switched from horizontal to vertical
+       above, so left unset it would make this list 12rem *tall* instead of the intended 12rem
+       *wide* sidebar (confirmed live: without this, the pill row renders as one giant column-
+       height bar). `flex: none` plus an explicit `width` replaces it with sizing that means the
+       same thing again now that the axis has changed. */
+    flex: none;
+    position: static;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .metric-explorer__item {
+    flex-shrink: 0;
+  }
+}
+
 .date-nav__weeks {
   margin-top: var(--space-1);
   padding-top: var(--space-1);

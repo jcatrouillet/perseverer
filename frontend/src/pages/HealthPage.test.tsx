@@ -1,73 +1,162 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import type { HealthDashboardMetricOut } from "../api/types";
-import { MetricSection } from "./HealthPage";
+import { HealthPage } from "./HealthPage";
 
-function metric(
-  logical_metric: string,
-  last_observed: string | null,
-  daily: HealthDashboardMetricOut["daily"] = [],
-): HealthDashboardMetricOut {
-  return { logical_metric, last_observed, daily };
+const mockUseHealthDashboard = vi.fn();
+const mockUseSleep = vi.fn();
+
+vi.mock("../api/queries", () => ({
+  useHealthDashboard: (...args: unknown[]) => mockUseHealthDashboard(...args),
+  useSleep: (...args: unknown[]) => mockUseSleep(...args),
+}));
+
+function dashboardDay(local_date: string, value: number) {
+  return {
+    local_date,
+    value_sum: value,
+    value_avg: value,
+    value_min: value,
+    value_max: value,
+    value_last: value,
+    n_observations: 1,
+    source_metric_key: "test",
+  };
 }
 
-describe("MetricSection", () => {
-  it("only shows metrics whose key is in the requested list, in that order", () => {
-    const metrics = [
-      metric("steps", "2025-06-01"),
-      metric("stress_average", "2025-06-01"),
-      metric("resting_heart_rate", "2025-06-01"),
-    ];
-    render(<MetricSection title="Core" metrics={metrics} keys={["resting_heart_rate", "steps"]} />);
-    // stress_average was seeded but not requested by this section -- must not appear.
-    expect(screen.queryByText(/stress average/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/resting heart rate/i)).toBeInTheDocument();
-    expect(screen.getByText(/^steps$/i)).toBeInTheDocument();
+const EMPTY = { data: undefined, isLoading: false, isError: false };
+// The page's own default resolution is "week" anchored on today -- sample data has to fall
+// inside today's own week for the "data present" tests to actually see it.
+const TODAY = new Date().toISOString().slice(0, 10);
+
+function daysBeforeToday(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+describe("HealthPage", () => {
+  it("shows nothing to select when there's no data at all", () => {
+    mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    render(<HealthPage />);
+    expect(screen.queryByRole("button", { name: "Week" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Weight")).not.toBeInTheDocument();
+    expect(screen.queryByText("Steps")).not.toBeInTheDocument();
   });
 
-  it("renders nothing -- heading included -- when none of the requested keys have data", () => {
-    const { container } = render(
-      <MetricSection title="HRV" metrics={[]} keys={["hrv_nightly_average"]} />,
-    );
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByText("HRV")).not.toBeInTheDocument();
+  it("lists every metric that has data, and switching selection swaps the visible chart", () => {
+    mockUseHealthDashboard.mockReturnValue({
+      ...EMPTY,
+      data: {
+        metrics: [
+          { logical_metric: "weight_kg", last_observed: TODAY, daily: [dashboardDay(TODAY, 79.5)] },
+          { logical_metric: "steps", last_observed: TODAY, daily: [dashboardDay(TODAY, 8000)] },
+        ],
+      },
+    });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    render(<HealthPage />);
+
+    const list = screen.getByRole("navigation", { name: "Metrics" });
+    expect(list).toHaveTextContent("Weight");
+    expect(list).toHaveTextContent("Steps");
+    expect(list).not.toHaveTextContent("BMI");
+
+    // Default selection is the first available metric.
+    expect(screen.getByRole("heading", { name: "Weight" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Steps" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Steps" }));
+    expect(screen.getByRole("heading", { name: "Steps" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Weight" })).not.toBeInTheDocument();
   });
 
-  it("shows the latest daily value and its date", () => {
-    const metrics = [
-      metric("steps", "2025-06-02", [
-        {
-          local_date: "2025-06-01",
-          value_sum: 8000,
-          value_avg: 8000,
-          value_min: 8000,
-          value_max: 8000,
-          value_last: 8000,
-          n_observations: 1,
-          source_metric_key: "garmin.daily_summary.totalSteps",
-        },
-        {
-          local_date: "2025-06-02",
-          value_sum: 9500,
-          value_avg: 9500,
-          value_min: 9500,
-          value_max: 9500,
-          value_last: 9500,
-          n_observations: 1,
-          source_metric_key: "garmin.daily_summary.totalSteps",
-        },
-      ]),
-    ];
-    render(<MetricSection title="Core" metrics={metrics} keys={["steps"]} />);
-    expect(screen.getByText(/9500/)).toBeInTheDocument();
-    expect(screen.getByText(/2025-06-02/)).toBeInTheDocument();
+  it("shows a chart only for a dashboard metric that actually has data", () => {
+    mockUseHealthDashboard.mockReturnValue({
+      ...EMPTY,
+      data: {
+        metrics: [
+          {
+            logical_metric: "weight_kg",
+            last_observed: TODAY,
+            daily: [dashboardDay(TODAY, 79.5)],
+          },
+        ],
+      },
+    });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    render(<HealthPage />);
+    // getByRole, not getByText: ChartFullscreen's mobile tap-to-expand affordance renders each
+    // panel title twice (a real button plus an aria-hidden static span) -- getByRole's
+    // accessible-name computation correctly excludes the aria-hidden copy.
+    expect(screen.getByRole("heading", { name: "Weight" })).toBeInTheDocument();
+    expect(screen.queryByText("BMI")).not.toBeInTheDocument();
   });
 
-  it("surfaces a stale last_observed date distinct from the latest daily row", () => {
-    const metrics = [metric("steps", "2025-01-15", [])];
-    render(<MetricSection title="Core" metrics={metrics} keys={["steps"]} />);
-    expect(screen.getByText(/no data in this range/i)).toBeInTheDocument();
-    expect(screen.getByText(/last observed: 2025-01-15/i)).toBeInTheDocument();
+  it("combines heart rate max/resting onto one chart card, not two", () => {
+    mockUseHealthDashboard.mockReturnValue({
+      ...EMPTY,
+      data: {
+        metrics: [
+          {
+            logical_metric: "max_heart_rate",
+            last_observed: TODAY,
+            daily: [dashboardDay(TODAY, 150)],
+          },
+          {
+            logical_metric: "resting_heart_rate",
+            last_observed: TODAY,
+            daily: [dashboardDay(TODAY, 48)],
+          },
+        ],
+      },
+    });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    render(<HealthPage />);
+    expect(screen.getAllByRole("heading", { name: "Heart rate" })).toHaveLength(1);
+    expect(screen.getByText("Max")).toBeInTheDocument();
+    expect(screen.getByText("Resting")).toBeInTheDocument();
+  });
+
+  it("switching resolution keeps the currently-viewed period instead of resetting to today", () => {
+    mockUseHealthDashboard.mockReturnValue({
+      ...EMPTY,
+      data: {
+        metrics: [
+          {
+            logical_metric: "weight_kg",
+            last_observed: TODAY,
+            // A second, much older day pushes dataStart back far enough that 12 "Earlier"
+            // clicks in Month view never hit the "no more history" boundary partway through.
+            daily: [dashboardDay(daysBeforeToday(800), 79.0), dashboardDay(TODAY, 79.5)],
+          },
+        ],
+      },
+    });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    render(<HealthPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Month" }));
+    for (let i = 0; i < 12; i++) {
+      fireEvent.click(screen.getByRole("button", { name: "Earlier" }));
+    }
+    const lastYear = String(new Date().getUTCFullYear() - 1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Year" }));
+    expect(screen.getByText(lastYear)).toBeInTheDocument();
+    expect(screen.queryByText(String(new Date().getUTCFullYear()))).not.toBeInTheDocument();
+  });
+
+  it("builds the Sleep chart from GET /sleep, not the health dashboard", () => {
+    mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
+    mockUseSleep.mockReturnValue({
+      ...EMPTY,
+      data: [
+        { local_date: TODAY, start_time_utc: "x", end_time_utc: "y", total_sleep_s: 27000, sleep_score: 80, source: "garmin_connect", stages: [] },
+      ],
+    });
+    render(<HealthPage />);
+    expect(screen.getByRole("heading", { name: "Sleep time" })).toBeInTheDocument();
   });
 });

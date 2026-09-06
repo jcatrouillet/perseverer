@@ -53,6 +53,7 @@ from perseverer.garmin_connect_activity_name import backfill_garmin_activity_nam
 from perseverer.health.ingest import HealthIngestResult, ingest_health_batch
 from perseverer.health.json_parser import (
     parse_daily_hrv_json,
+    parse_daily_lactate_threshold_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
     parse_daily_stress_json,
@@ -560,6 +561,54 @@ class GarminConnectAdapter:
             batch=parse_daily_race_predictions_json(content),
         )
 
+    def fetch_and_ingest_lactate_threshold(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        since: datetime,
+        until: datetime,
+    ) -> HealthIngestResult:
+        """Running lactate-threshold speed/heart-rate/power (`get_lactate_threshold`) for the
+        whole rolling window in *one* request -- same "this endpoint itself takes a range"
+        shape as `fetch_and_ingest_race_predictions` above, `aggregation="daily"` so a value
+        that changed mid-window is still attributed to the specific day Garmin recomputed it
+        rather than smeared across the whole period. See
+        health/json_parser.py::parse_daily_lactate_threshold_json for the response shape and
+        the empirically-confirmed unit correction its own docstring documents."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        start_date = since.date().isoformat()
+        end_date = until.date().isoformat()
+        try:
+            thresholds = self._client.get_lactate_threshold(
+                latest=False, start_date=start_date, end_date=end_date, aggregation="daily"
+            )
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                "429 from Garmin while fetching lactate threshold"
+            ) from e
+
+        content = json.dumps(thresholds).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_lactate_threshold_json",
+            content=content,
+            locator=f"lactate-threshold/{start_date}_{end_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_lactate_threshold_json(content),
+        )
+
     def fetch_and_ingest_daily_body_battery(
         self,
         conn: Connection,
@@ -886,6 +935,23 @@ def sync_garmin_connect(
         except GarminRateLimitAborted as e:
             conn.rollback()
             summary.errors.append({"error": f"race predictions: {e}"})
+
+        # Lactate threshold -- same whole-rolling-window, one-request contract as race
+        # predictions above (see fetch_and_ingest_lactate_threshold's own docstring).
+        try:
+            lactate_result = adapter.fetch_and_ingest_lactate_threshold(
+                conn,
+                archive_root,
+                parquet_dir,
+                athlete_id=athlete_id,
+                since=since,
+                until=started_at,
+            )
+            conn.commit()
+            touched_dates |= lactate_result.affected_local_dates
+        except GarminRateLimitAborted as e:
+            conn.rollback()
+            summary.errors.append({"error": f"lactate threshold: {e}"})
 
         # Body battery -- same whole-rolling-window, idempotent-upsert, self-healing contract as
         # sleep/HRV/wellness above (get_stress_data only takes a single date, unlike race

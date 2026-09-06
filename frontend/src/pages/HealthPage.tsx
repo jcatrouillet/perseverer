@@ -1,14 +1,32 @@
-// Three sections per the confirmed Phase 6 scope: core daily summary, sleep, HRV/SpO2/stress.
-// Core + HRV/SpO2/stress read GET /health/dashboard (the LOGICAL_METRICS alias-merge -- see
-// api/routers/health.py); sleep reads the existing GET /sleep endpoint directly, since
-// sleep_session is its own dedicated table, not part of the health_observation EAV metrics.
-// See docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
-import { useState } from "react";
+// Health: a metric list (weight through protein ratio) on the left, one selected metric's chart
+// on the right, both sharing one Week/Month/Year/All-time resolution + time-window navigator
+// (TrendControls) above the chart -- the exact same pattern as FitnessPage.tsx, per the user's
+// own request to pick one metric from a list rather than see every chart stacked at once. See
+// components/MetricExplorer.tsx for the list+chart split itself.
+//
+// `CORE_METRICS`/`HRV_METRIC`/`WEIGHT_METRIC` stay exported unchanged -- MonthView/YearView/
+// AllTimeView's own embedded "Health" calendar cards import these for their own (unrelated,
+// untouched) tile-grid/trend-chart rendering, which this rewrite doesn't touch.
+import { useMemo, useState } from "react";
 
 import { useHealthDashboard, useSleep } from "../api/queries";
-import type { HealthDashboardMetricOut } from "../api/types";
+import type { SleepSessionOut } from "../api/types";
+import { ChartFullscreen } from "../components/ChartFullscreen";
 import { LoadingSpinner } from "../components/LoadingSpinner";
-import { isoDate } from "../dateUtils";
+import { MetricExplorer, type ExplorerMetric } from "../components/MetricExplorer";
+import { TrendChart, type TrendSeries } from "../components/TrendChart";
+import { TrendControls } from "../components/TrendControls";
+import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../dateUtils";
+import { mergeTrendSeries } from "../healthStats";
+import { healthMetricStyle, toneColor } from "../metricStyle";
+import {
+  bucketSeriesToWindow,
+  computeWindow,
+  earliestDateForKeys,
+  shiftAnchor,
+  type DailyPoint,
+  type Resolution,
+} from "../trendWindow";
 
 // Exported so other pages (e.g. YearView's year-in-review stats) can reuse the exact same
 // categorization rather than maintaining a second, driftable copy of this list.
@@ -20,148 +38,242 @@ export const CORE_METRICS = [
   "floors_ascended",
   "vo2max",
 ];
-export const HRV_SPO2_STRESS_METRICS = ["hrv_nightly_average", "spo2_average", "stress_average"];
-// Eufy smart scale is the only source for these (see adapters/eufy.py) -- exported so the
-// calendar rollup views (YearView/MonthView/AllTimeView) and the week/day views can reuse the
-// exact same list rather than each maintaining their own copy.
-export const BODY_COMPOSITION_METRICS = [
-  "weight_kg",
-  "bmi",
-  "body_fat_pct",
-  "muscle_mass_kg",
-  "bone_mass_kg",
-  "water_pct",
-  "bmr_kcal",
-  "visceral_fat",
-  "metabolic_age",
-  "protein_ratio_pct",
-];
-// The summary calendar views (YearView/MonthView/AllTimeView) trend only HRV and weight -- by
-// request, SpO2, stress, and the remaining Eufy body-composition metrics (BMI, body fat %,
-// muscle mass, bone mass, water %, BMR, visceral fat, metabolic age, protein ratio) are left out
-// of those trend charts as low-value there. They're still visible in this page's own
-// BODY_COMPOSITION_METRICS list section above.
 export const HRV_METRIC = ["hrv_nightly_average"];
 export const WEIGHT_METRIC = ["weight_kg"];
 
-function defaultRange(): { start: string; end: string } {
-  const end = new Date();
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - 30);
-  return { start: isoDate(start), end: isoDate(end) };
+const TODAY = isoDate(new Date());
+
+function color(logicalMetric: string): string {
+  return toneColor(healthMetricStyle(logicalMetric).tone);
 }
 
-export function MetricSection({
-  title,
-  metrics,
-  keys,
-}: {
-  title: string;
-  metrics: HealthDashboardMetricOut[];
-  keys: string[];
-}) {
-  const byKey = new Map(metrics.map((m) => [m.logical_metric, m]));
-  const present = keys.map((k) => byKey.get(k)).filter((m): m is HealthDashboardMetricOut => !!m);
-
-  // No data for anything in this section, anywhere in the selected range -- hide the whole
-  // section (heading included) rather than a dangling title over an empty list.
-  if (present.length === 0) {
-    return null;
-  }
-
-  return (
-    <section>
-      <h2>{title}</h2>
-      <ul>
-        {present.map((m) => {
-          const latest = m.daily[m.daily.length - 1];
-          return (
-            <li key={m.logical_metric}>
-              <strong>{m.logical_metric.replace(/_/g, " ")}</strong>
-              {latest ? (
-                <>
-                  {" "}
-                  — latest {latest.value_last ?? latest.value_avg} on {latest.local_date}
-                </>
-              ) : (
-                <> — no data in this range</>
-              )}
-              {m.last_observed && m.last_observed !== latest?.local_date && (
-                <> (last observed: {m.last_observed})</>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
+function series(
+  key: string,
+  label: string,
+  formatValue: (v: number) => string,
+  colorOverride?: string,
+): TrendSeries {
+  return { key, label, color: colorOverride ?? color(key), formatValue };
 }
+
+/** Whether any of `keys` has a real value anywhere in the athlete's fetched history -- gates
+ * which metrics appear in the left-hand list at all, same reasoning as FitnessPage.tsx's own
+ * identical helper: checked against the raw, unwindowed points, not the current window's own
+ * bucketed ones, so a metric with data somewhere doesn't disappear during a quiet week. */
+function hasAnyRawValue(points: DailyPoint[], keys: string[]): boolean {
+  return points.some((p) => keys.some((k) => typeof p[k] === "number"));
+}
+
+function sleepToDailyPoints(sessions: SleepSessionOut[]): DailyPoint[] {
+  return sessions
+    .filter((s) => s.total_sleep_s != null)
+    .map((s) => ({ local_date: s.local_date, sleep_hours: s.total_sleep_s! / 3600 }));
+}
+
+const oneDecimal = (unit: string) => (v: number) => `${v.toFixed(1)}${unit}`;
+const wholeNumber = (unit: string) => (v: number) => `${v.toFixed(0)}${unit}`;
+
+// One list entry per requested metric -- combined two-line entries (Respiration, Heart rate,
+// Blood pressure) match the "Heart rate (max and resting)" combining the user asked for
+// verbatim, applied consistently to the other two paired readings this app happens to carry.
+const CHARTS: { key: string; title: string; keys: string[]; series: TrendSeries[] }[] = [
+  {
+    key: "weight",
+    title: "Weight",
+    keys: ["weight_kg"],
+    series: [series("weight_kg", "Weight", oneDecimal(" kg"))],
+  },
+  { key: "bmi", title: "BMI", keys: ["bmi"], series: [series("bmi", "BMI", oneDecimal(""))] },
+  {
+    key: "sleep",
+    title: "Sleep time",
+    keys: ["sleep_hours"],
+    series: [series("sleep_hours", "Sleep", oneDecimal("h"))],
+  },
+  {
+    key: "spo2",
+    title: "Pulse Ox",
+    keys: ["spo2_average"],
+    series: [series("spo2_average", "SpO2", wholeNumber("%"))],
+  },
+  {
+    key: "respiration",
+    title: "Respiration",
+    keys: ["waking_respiration_rate", "sleep_respiration_rate"],
+    series: [
+      series("waking_respiration_rate", "Waking", wholeNumber(" brpm")),
+      series("sleep_respiration_rate", "Sleep", wholeNumber(" brpm")),
+    ],
+  },
+  {
+    key: "heart-rate",
+    title: "Heart rate",
+    keys: ["max_heart_rate", "resting_heart_rate"],
+    // max_heart_rate/resting_heart_rate share one "hr" tone in metricStyle.ts (both are the
+    // same metric family everywhere else in the app), which would make this one combined chart's
+    // two lines indistinguishable -- Resting gets an explicit second colour just for this pairing
+    // rather than the shared single-metric tone.
+    series: [
+      series("max_heart_rate", "Max", wholeNumber(" bpm")),
+      series("resting_heart_rate", "Resting", wholeNumber(" bpm"), toneColor("pace")),
+    ],
+  },
+  {
+    key: "blood-pressure",
+    title: "Blood pressure",
+    keys: ["blood_pressure_systolic", "blood_pressure_diastolic"],
+    series: [
+      series("blood_pressure_systolic", "Systolic", wholeNumber(" mmHg")),
+      series("blood_pressure_diastolic", "Diastolic", wholeNumber(" mmHg")),
+    ],
+  },
+  {
+    key: "steps",
+    title: "Steps",
+    keys: ["steps"],
+    series: [series("steps", "Steps", wholeNumber(""))],
+  },
+  {
+    key: "body-fat",
+    title: "Body fat %",
+    keys: ["body_fat_pct"],
+    series: [series("body_fat_pct", "Body fat", oneDecimal("%"))],
+  },
+  {
+    key: "muscle-mass",
+    title: "Muscle mass",
+    keys: ["muscle_mass_kg"],
+    series: [series("muscle_mass_kg", "Muscle mass", oneDecimal(" kg"))],
+  },
+  {
+    key: "bone-mass",
+    title: "Bone mass",
+    keys: ["bone_mass_kg"],
+    series: [series("bone_mass_kg", "Bone mass", oneDecimal(" kg"))],
+  },
+  {
+    key: "water",
+    title: "Water %",
+    keys: ["water_pct"],
+    series: [series("water_pct", "Water", oneDecimal("%"))],
+  },
+  {
+    key: "bmr",
+    title: "BMR",
+    keys: ["bmr_kcal"],
+    series: [series("bmr_kcal", "BMR", wholeNumber(" kcal"))],
+  },
+  {
+    key: "visceral-fat",
+    title: "Visceral fat",
+    keys: ["visceral_fat"],
+    series: [series("visceral_fat", "Visceral fat", oneDecimal(""))],
+  },
+  {
+    key: "metabolic-age",
+    title: "Metabolic age",
+    keys: ["metabolic_age"],
+    series: [series("metabolic_age", "Metabolic age", wholeNumber(""))],
+  },
+  {
+    key: "protein-ratio",
+    title: "Protein ratio %",
+    keys: ["protein_ratio_pct"],
+    series: [series("protein_ratio_pct", "Protein ratio", oneDecimal("%"))],
+  },
+];
+
+const ALL_DASHBOARD_KEYS = CHARTS.flatMap((c) => c.keys).filter((k) => k !== "sleep_hours");
 
 export function HealthPage() {
-  const [range, setRange] = useState(defaultRange);
-  const dashboard = useHealthDashboard(range.start, range.end);
-  const sleep = useSleep(range.start, range.end);
+  const [resolution, setResolution] = useState<Resolution>("week");
+  const [anchor, setAnchor] = useState(TODAY);
+  const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+
+  const dashboard = useHealthDashboard(EARLIEST_PLAUSIBLE_DATE, TODAY);
+  const sleep = useSleep(EARLIEST_PLAUSIBLE_DATE, TODAY);
+
+  const dashboardPoints = useMemo(
+    () => (dashboard.data ? mergeTrendSeries(dashboard.data.metrics, ALL_DASHBOARD_KEYS) : []),
+    [dashboard.data],
+  );
+  const sleepPoints = useMemo(() => sleepToDailyPoints(sleep.data ?? []), [sleep.data]);
+
+  const sourceForChart = (chart: (typeof CHARTS)[number]) =>
+    chart.keys.includes("sleep_hours") ? sleepPoints : dashboardPoints;
+
+  // Only the charts that actually have data anywhere -- same list MetricExplorer would resolve
+  // `selected` against, computed here too so the active chart's own history bounds can be used
+  // below rather than the whole page's combined earliest date.
+  const availableCharts = useMemo(
+    () => CHARTS.filter((chart) => hasAnyRawValue(sourceForChart(chart), chart.keys)),
+    [dashboardPoints, sleepPoints],
+  );
+  const activeChart =
+    availableCharts.find((c) => c.key === selectedMetric) ?? availableCharts[0] ?? null;
+
+  // Scoped to the *selected* metric's own keys -- not a merge across every metric on the page --
+  // so "All time" for Sleep starts where sleep data actually starts (e.g. 2022), not wherever
+  // some unrelated metric (e.g. a 2016 weight reading) happens to begin.
+  const dataStart = useMemo(
+    () => (activeChart ? earliestDateForKeys(sourceForChart(activeChart), activeChart.keys) : TODAY),
+    [activeChart, dashboardPoints, sleepPoints],
+  );
+  const window = useMemo(
+    () => computeWindow(resolution, anchor, dataStart, TODAY),
+    [resolution, anchor, dataStart],
+  );
+
+  const isLoading = dashboard.isLoading || sleep.isLoading;
+  const isError = dashboard.isError || sleep.isError;
+
+  function changeResolution(next: Resolution) {
+    // Deliberately keep `anchor` as-is: it already names a date within whatever period is
+    // currently in view (TODAY on first load, or wherever prev/next navigated to since), and
+    // computeWindow re-derives each resolution's own start/end from it -- so switching from a
+    // week in August 2025 to Month lands on August 2025, not back to the current month.
+    setResolution(next);
+  }
+
+  const metrics: ExplorerMetric[] = useMemo(
+    () =>
+      availableCharts.map((chart) => {
+        const points = bucketSeriesToWindow(sourceForChart(chart), chart.keys, window);
+        return {
+          key: chart.key,
+          title: chart.title,
+          content: (
+            <ChartFullscreen title={chart.title}>
+              <TrendChart points={points} series={chart.series} />
+            </ChartFullscreen>
+          ),
+        };
+      }),
+    [availableCharts, window],
+  );
 
   return (
     <main>
       <h1>Health</h1>
-      <form>
-        <label>
-          From
-          <input
-            type="date"
-            value={range.start}
-            onChange={(e) => setRange((r) => ({ ...r, start: e.target.value }))}
-          />
-        </label>
-        <label>
-          To
-          <input
-            type="date"
-            value={range.end}
-            onChange={(e) => setRange((r) => ({ ...r, end: e.target.value }))}
-          />
-        </label>
-      </form>
 
-      {dashboard.isLoading && <LoadingSpinner />}
-      {dashboard.isError && <p role="alert">Could not load the health dashboard.</p>}
+      {isLoading && <LoadingSpinner />}
+      {isError && <p role="alert">Could not load the health dashboard.</p>}
 
-      {dashboard.data && (
-        <>
-          <MetricSection
-            title="Core daily summary"
-            metrics={dashboard.data.metrics}
-            keys={CORE_METRICS}
-          />
-          <MetricSection
-            title="HRV / SpO2 / Stress"
-            metrics={dashboard.data.metrics}
-            keys={HRV_SPO2_STRESS_METRICS}
-          />
-          <MetricSection
-            title="Body composition"
-            metrics={dashboard.data.metrics}
-            keys={BODY_COMPOSITION_METRICS}
-          />
-        </>
+      {!isLoading && !isError && metrics.length > 0 && (
+        <MetricExplorer
+          metrics={metrics}
+          selected={selectedMetric}
+          onSelect={setSelectedMetric}
+          detailHeader={
+            <TrendControls
+              window={window}
+              onResolutionChange={changeResolution}
+              onPrevious={() => setAnchor(shiftAnchor(window, -1))}
+              onNext={() => setAnchor(shiftAnchor(window, 1))}
+            />
+          }
+        />
       )}
-
-      <section>
-        <h2>Sleep</h2>
-        {sleep.isLoading && <LoadingSpinner />}
-        {sleep.isError && <p role="alert">Could not load sleep data.</p>}
-        {sleep.data && sleep.data.length === 0 && <p>No sleep sessions in this range.</p>}
-        <ul>
-          {sleep.data?.map((session) => (
-            <li key={session.local_date}>
-              {session.local_date}
-              {session.total_sleep_s != null && ` — ${(session.total_sleep_s / 3600).toFixed(1)}h`}
-              {session.sleep_score != null && ` · score ${session.sleep_score}`}
-            </li>
-          ))}
-        </ul>
-      </section>
     </main>
   );
 }

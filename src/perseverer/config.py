@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     # this explicitly, same "don't guess the public hostname" reasoning as
     # PERSEVERER_API_BASE_URL on the frontend side, see docs/DEPLOY.md).
     public_base_url: str | None = None
+    # Same CARTO basemap key the frontend already reads via PERSEVERER_CARTO_API_KEY
+    # (mapBasemap.ts) -- not actually secret (CARTO's basemap product is designed for
+    # client-side embedding, like a Mapbox public token), so embedding it in a public share
+    # page's own MapLibre map is the same exposure the authenticated frontend already has.
+    # Read here too because sharing.py's route map is rendered server-side by this process, not
+    # the frontend container -- unset -> the CARTO style URL omits `?key=` (same graceful
+    # degradation cartoStyleUrl() already has).
+    carto_api_key: str | None = None
 
     # --- Eufy Life body-composition sync (adapters/eufy.py) ---
     # All optional and unset by default -- sync_eufy() skips with a log line, not an error, when

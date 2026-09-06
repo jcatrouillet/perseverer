@@ -457,6 +457,70 @@ def parse_daily_race_predictions_json(raw_bytes: bytes) -> HealthBatch:
     return HealthBatch(observations=observations, unrecognized_field_keys=sorted(set(unrecognized)))
 
 
+# Garmin Connect's live lactate-threshold endpoint (`Garmin.get_lactate_threshold(latest=False,
+# start_date, end_date, aggregation="daily")`) -- confirmed to exist by introspecting the
+# installed `garminconnect` package (not assumed from memory, per this project's own rule for
+# fast-moving vendor libraries): three separate range sub-requests bundled into one call
+# (speed/heart_rate/power, each `sport=RUNNING` hardcoded by the library itself), returned as
+# `{"speed": [...], "heart_rate": [...], "power": [...]}`, each a list of
+# `{"from": "YYYY-MM-DD", "until": ..., "series": "running", "value": <num>, "updatedDate": ...}`
+# entries -- one entry per day Garmin actually *recomputed* the value, not one per calendar day
+# in range (confirmed live: an 12-day window returned a single speed/heart_rate entry but six
+# power entries, each spanning exactly one day). `from`/`until` are always equal for the "daily"
+# aggregation this adapter uses, so `from` alone is used as the observation's own date.
+#
+# `heart_rate`/`power` are already real, unscaled units (bpm, watts) -- confirmed against this
+# project's own real account data lining up with independently-known real training numbers
+# (e.g. a threshold HR of 147-151 bpm sitting exactly between this athlete's real easy-run HR
+# and VO2max-interval HR). `speed`, however, is NOT plain m/s: the raw value (e.g. 0.336)
+# would imply an implausible ~50 min/km threshold pace. Multiplying by 10 first (3.36 m/s ->
+# 4:57/km) produces a pace that sits exactly where a real lactate-threshold pace should --
+# between this athlete's real VO2max-interval pace (~4:20-4:44/km) and easy-run pace
+# (~5:30-6:07/km) -- confirmed across four real consecutive months, all self-consistent. Same
+# "confirmed against real data, not vendor docs" methodology as this project's other
+# empirically-reverse-engineered unit corrections (e.g. fit/parser.py's bouldering climb_grade
+# offset, api/routers/activities.py's single-foot cadence doubling). Per that same cadence
+# precedent, the RAW value is what's stored here (raw-first) -- the x10 correction is applied at
+# the point of use (frontend), not at ingest.
+_LACTATE_THRESHOLD_FIELD_METRIC_KEYS = {
+    "speed": "garmin.daily_lactate_threshold.speed",
+    "heart_rate": "garmin.daily_lactate_threshold.heart_rate",
+    "power": "garmin.daily_lactate_threshold.power",
+}
+
+
+def parse_daily_lactate_threshold_json(raw_bytes: bytes) -> HealthBatch:
+    data: Any = json.loads(raw_bytes)
+    if not isinstance(data, dict):
+        return HealthBatch()
+
+    observations: list[HealthObservation] = []
+    for field_name, metric_key in _LACTATE_THRESHOLD_FIELD_METRIC_KEYS.items():
+        entries = data.get(field_name)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            local_date = entry.get("from")
+            value = entry.get("value")
+            if not isinstance(local_date, str):
+                continue
+            if not isinstance(value, int | float) or isinstance(value, bool):
+                continue
+            observations.append(
+                HealthObservation(
+                    metric_key=metric_key,
+                    observed_at_utc=datetime.fromisoformat(local_date),
+                    local_date=local_date,
+                    aggregation="daily",
+                    value_num=float(value),
+                )
+            )
+
+    return HealthBatch(observations=observations)
+
+
 # Only the two fields this parser itself consumes into stream points -- excluded from
 # _flatten_scalars's generic pass so the array isn't *also* reported as unrecognized once it's
 # actually been handled. Everything else nested (the activity-impact event list, the two

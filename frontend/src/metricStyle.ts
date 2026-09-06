@@ -119,6 +119,17 @@ const HEALTH_METRIC_STYLES: Record<string, MetricStyle> = {
   visceral_fat: { tone: "load", icon: "gauge" },
   metabolic_age: { tone: "power", icon: "clock" },
   bmr_kcal: { tone: "load", icon: "flame" },
+  // Fitness & Form tab (Lactate threshold chart) -- pace and heart rate share one chart on two
+  // axes, so they need distinct tones from each other, same rule as every other paired chart.
+  lactate_threshold_speed: { tone: "pace", icon: "gauge" },
+  lactate_threshold_heart_rate: { tone: "hr", icon: "heart" },
+  // Health tab -- blood pressure's two readings share one chart (systolic/diastolic), and sleep
+  // gets its own single-line chart (not a real logical_metric -- see GET /sleep, a dedicated
+  // table -- so "sleep_hours" is a synthetic key this app's own frontend invents, only ever used
+  // as a healthMetricStyle() lookup key, never sent to or read from the API).
+  blood_pressure_systolic: { tone: "hr", icon: "heart" },
+  blood_pressure_diastolic: { tone: "load", icon: "heart" },
+  sleep_hours: { tone: "cadence", icon: "moon" },
 };
 
 export function healthMetricStyle(logicalMetric: string): MetricStyle {

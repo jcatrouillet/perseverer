@@ -102,6 +102,19 @@ LOGICAL_METRICS: dict[str, list[str]] = {
     "visceral_fat": ["eufy.scale.visceral_fat"],
     "metabolic_age": ["eufy.scale.body_age"],
     "protein_ratio_pct": ["eufy.scale.protein_ratio"],
+    # Running lactate threshold (Fitness & Form tab) -- single source, live-fetched by
+    # adapters/garmin_connect.py::fetch_and_ingest_lactate_threshold, no aliasing needed. The
+    # raw speed value is NOT plain m/s -- see health/json_parser.py::
+    # parse_daily_lactate_threshold_json's own docstring for the empirically-confirmed x10
+    # correction, applied by the frontend at the point of use, not here (raw-first: this is the
+    # unconverted vendor value).
+    "lactate_threshold_speed": ["garmin.daily_lactate_threshold.speed"],
+    "lactate_threshold_heart_rate": ["garmin.daily_lactate_threshold.heart_rate"],
+    # Blood pressure -- the only source anywhere in this project is an Apple Health export (see
+    # adapters/apple_health_export.py), full history, never previously promoted to a logical
+    # metric/dashboard field (queryable only via GET /health/observations until now).
+    "blood_pressure_systolic": ["apple_health.blood_pressure_systolic"],
+    "blood_pressure_diastolic": ["apple_health.blood_pressure_diastolic"],
 }
 
 

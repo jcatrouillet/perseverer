@@ -68,6 +68,8 @@ class FakeGarminClient:
         raise_on_race_predictions: bool = False,
         stress_by_date: dict[str, dict[str, Any]] | None = None,
         raise_on_stress_for: set[str] | None = None,
+        lactate_threshold: dict[str, Any] | None = None,
+        raise_on_lactate_threshold: bool = False,
     ) -> None:
         self.activities = activities
         self.fit_bytes_by_id = fit_bytes_by_id
@@ -97,6 +99,9 @@ class FakeGarminClient:
         self.stress_by_date = stress_by_date or {}
         self._raise_on_stress_for = raise_on_stress_for or set()
         self.stress_calls: list[str] = []
+        self.lactate_threshold = lactate_threshold or {"speed": [], "heart_rate": [], "power": []}
+        self._raise_on_lactate_threshold = raise_on_lactate_threshold
+        self.lactate_threshold_calls: list[tuple[str, str]] = []
 
     def login(self, tokenstore: str | None = None) -> tuple[None, None]:
         if self._raise_on_login:
@@ -196,6 +201,20 @@ class FakeGarminClient:
         # sha256 across *all* kinds (see get_training_readiness's own comment above), which
         # would silently collide the two onto one raw_object row.
         return self.stress_by_date.get(cdate, {"calendarDate": cdate, "maxStressLevel": -1})
+
+    def get_lactate_threshold(
+        self,
+        *,
+        latest: bool = True,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        aggregation: str = "daily",
+    ) -> dict[str, Any]:
+        assert start_date is not None and end_date is not None
+        self.lactate_threshold_calls.append((start_date, end_date))
+        if self._raise_on_lactate_threshold:
+            raise GarminConnectTooManyRequestsError("429")
+        return self.lactate_threshold
 
 
 def _seed_athlete(engine: Engine) -> None:
@@ -369,6 +388,7 @@ def test_sync_garmin_connect_full_orchestration_with_fake_client(tmp_path: Path)
         "garmin_connect_daily_training_status_json",
         "garmin_connect_daily_hydration_json",
         "garmin_connect_race_predictions_json",
+        "garmin_connect_lactate_threshold_json",
         "garmin_connect_daily_stress_json",
     }
     # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation --
@@ -485,6 +505,7 @@ def test_daily_wellness_is_fetched_archived_and_ingested(tmp_path: Path) -> None
         "garmin_connect_daily_training_status_json",
         "garmin_connect_daily_hydration_json",
         "garmin_connect_race_predictions_json",
+        "garmin_connect_lactate_threshold_json",
         "garmin_connect_daily_stress_json",
     }
     assert resting_hr == 47
@@ -533,6 +554,7 @@ def test_wellness_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
         "garmin_connect_daily_training_status_json",
         "garmin_connect_daily_hydration_json",
         "garmin_connect_race_predictions_json",
+        "garmin_connect_lactate_threshold_json",
         "garmin_connect_daily_stress_json",
     }
 
@@ -1106,6 +1128,92 @@ def test_race_predictions_429_aborts_the_run_without_retrying(tmp_path: Path) ->
 
     assert summary.errors  # the 429 is recorded, not silently swallowed
     assert race_prediction_kinds == []  # nothing archived for the fetch that 429'd
+
+
+def test_lactate_threshold_is_fetched_archived_and_ingested_once_per_run(tmp_path: Path) -> None:
+    """Same whole-rolling-window, one-request-per-run shape as race predictions -- proves
+    get_lactate_threshold() is invoked exactly once, and
+    parse_daily_lactate_threshold_json's per-field expansion lands real observations."""
+    today = dt.datetime.now(dt.UTC).date().isoformat()
+
+    client_holder: list[FakeGarminClient] = []
+
+    def factory() -> FakeGarminClient:
+        client = FakeGarminClient(
+            activities=[],
+            fit_bytes_by_id={},
+            lactate_threshold={
+                "speed": [{"from": today, "value": 0.336}],
+                "heart_rate": [{"from": today, "value": 147.0}],
+                "power": [{"from": today, "value": 371.0}],
+            },
+        )
+        client_holder.append(client)
+        return client
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+
+    with engine.connect() as conn:
+        summary = sync_garmin_connect(
+            conn,
+            tmp_path / "archive",
+            tmp_path / "parquet",
+            tmp_path / "tokens",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            rolling_window_days=3,
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=factory,
+        )
+        kinds = set(
+            conn.execute(
+                select(raw_object.c.kind).where(raw_object.c.source == "garmin_connect")
+            ).scalars()
+        )
+        heart_rate = conn.execute(
+            select(health_observation.c.value_num).where(
+                health_observation.c.metric_key == "garmin.daily_lactate_threshold.heart_rate",
+                health_observation.c.local_date == today,
+            )
+        ).scalar_one()
+
+    assert summary.errors == []
+    assert "garmin_connect_lactate_threshold_json" in kinds
+    assert heart_rate == 147.0
+    assert len(client_holder[0].lactate_threshold_calls) == 1  # one range call, not one per day
+
+
+def test_lactate_threshold_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
+    def factory() -> FakeGarminClient:
+        return FakeGarminClient(
+            activities=[], fit_bytes_by_id={}, raise_on_lactate_threshold=True
+        )
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+
+    with engine.connect() as conn:
+        summary = sync_garmin_connect(
+            conn,
+            tmp_path / "archive",
+            tmp_path / "parquet",
+            tmp_path / "tokens",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            rolling_window_days=0,
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=factory,
+        )
+        lactate_threshold_kinds = conn.execute(
+            select(raw_object.c.id).where(
+                raw_object.c.source == "garmin_connect",
+                raw_object.c.kind == "garmin_connect_lactate_threshold_json",
+            )
+        ).fetchall()
+
+    assert summary.errors  # the 429 is recorded, not silently swallowed
+    assert lactate_threshold_kinds == []  # nothing archived for the fetch that 429'd
 
 
 def test_body_battery_is_fetched_archived_and_ingested_per_date(tmp_path: Path) -> None:

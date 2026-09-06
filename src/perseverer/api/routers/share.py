@@ -110,13 +110,15 @@ def post_revoke_share(
 
 
 @router.get("/share/{token}", response_class=HTMLResponse)
-def get_shared_page(token: str, conn: Connection = Depends(get_conn)) -> str:
+def get_shared_page(
+    token: str, conn: Connection = Depends(get_conn), settings: Settings = Depends(get_settings)
+) -> str:
     target = resolve_share_token(conn, token)
     if target is None:
         return render_unavailable_html()
 
     if target.target_type == "activity":
-        return render_activity_share_html(conn, target.target_id)
+        return render_activity_share_html(conn, settings, target.target_id)
 
     if target.target_type == "period":
         if target.target_id == "all":

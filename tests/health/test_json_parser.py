@@ -11,6 +11,7 @@ import pytest
 from perseverer.health.json_parser import (
     parse_daily_body_battery_json,
     parse_daily_hrv_json,
+    parse_daily_lactate_threshold_json,
     parse_daily_race_predictions_json,
     parse_daily_sleep_json,
     parse_daily_stress_json,
@@ -631,6 +632,93 @@ def test_daily_race_predictions_record_missing_calendar_date_is_skipped_not_fata
 
 def test_daily_race_predictions_non_list_top_level_produces_empty_batch() -> None:
     batch = parse_daily_race_predictions_json(_bytes({"time5K": 1320}))
+    assert batch.observations == []
+
+
+# --- parse_daily_lactate_threshold_json: garmin_connect's live get_lactate_threshold() shape --
+# real response shape confirmed live against the real account (this module's own docstring),
+# values below are synthetic but shaped identically. -----------------------------------------
+
+DAILY_LACTATE_THRESHOLD: dict[str, object] = {
+    "speed": [
+        {
+            "from": "2026-08-01",
+            "until": "2026-08-31",
+            "series": "running",
+            "value": 0.34166571,
+            "updatedDate": "2026-08-11",
+        },
+    ],
+    "heart_rate": [
+        {
+            "from": "2026-08-01",
+            "until": "2026-08-31",
+            "series": "running",
+            "value": 151.0,
+            "updatedDate": "2026-08-11",
+        },
+    ],
+    "power": [
+        {
+            "from": "2026-08-01",
+            "until": "2026-08-28",
+            "series": "running",
+            "value": 386.0,
+            "updatedDate": "2026-08-11",
+        },
+        {
+            "from": "2026-08-29",
+            "until": "2026-08-31",
+            "series": "running",
+            "value": 246.0,
+            "updatedDate": "2026-08-29",
+        },
+    ],
+}
+
+
+def test_lactate_threshold_each_field_becomes_its_own_metric_key() -> None:
+    batch = parse_daily_lactate_threshold_json(_bytes(DAILY_LACTATE_THRESHOLD))
+    by_key = {(o.metric_key, o.local_date): o.value_num for o in batch.observations}
+    assert by_key[("garmin.daily_lactate_threshold.speed", "2026-08-01")] == 0.34166571
+    assert by_key[("garmin.daily_lactate_threshold.heart_rate", "2026-08-01")] == 151.0
+    assert by_key[("garmin.daily_lactate_threshold.power", "2026-08-01")] == 386.0
+    assert by_key[("garmin.daily_lactate_threshold.power", "2026-08-29")] == 246.0
+
+
+def test_lactate_threshold_raw_speed_value_is_stored_unconverted() -> None:
+    """Raw-first: the x10 correction documented in parse_daily_lactate_threshold_json's own
+    docstring is a frontend display concern, not applied here."""
+    batch = parse_daily_lactate_threshold_json(_bytes(DAILY_LACTATE_THRESHOLD))
+    speed_obs = next(
+        o for o in batch.observations if o.metric_key == "garmin.daily_lactate_threshold.speed"
+    )
+    assert speed_obs.value_num == 0.34166571
+
+
+def test_lactate_threshold_dates_at_midnight() -> None:
+    batch = parse_daily_lactate_threshold_json(_bytes(DAILY_LACTATE_THRESHOLD))
+    obs = next(
+        o for o in batch.observations if o.metric_key == "garmin.daily_lactate_threshold.heart_rate"
+    )
+    assert obs.observed_at_utc == datetime(2026, 8, 1, 0, 0, 0)
+
+
+def test_lactate_threshold_missing_field_is_skipped_not_fatal() -> None:
+    payload = {"heart_rate": DAILY_LACTATE_THRESHOLD["heart_rate"]}
+    batch = parse_daily_lactate_threshold_json(_bytes(payload))
+    keys = {o.metric_key for o in batch.observations}
+    assert keys == {"garmin.daily_lactate_threshold.heart_rate"}
+
+
+def test_lactate_threshold_non_dict_top_level_produces_empty_batch() -> None:
+    batch = parse_daily_lactate_threshold_json(_list_bytes([{"value": 1}]))
+    assert batch.observations == []
+
+
+def test_lactate_threshold_entry_missing_value_is_skipped_not_fatal() -> None:
+    payload: dict[str, object] = {"speed": [{"from": "2026-08-01", "value": None}]}
+    batch = parse_daily_lactate_threshold_json(_bytes(payload))
     assert batch.observations == []
 
 

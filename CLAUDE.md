@@ -130,6 +130,68 @@ because you don't recognize it — stop, that's the bug.
   logical field's several raw `metric_key` namespaces (`api/routers/health.py::
   LOGICAL_METRICS`, verified field-by-field against the real database, not assumed from parser
   docstrings). See `docs/adr/0009-phase-6-calendar-rollups-fitness-health.md`.
+- **Fitness & Form / Health tabs (`FitnessPage.tsx`/`HealthPage.tsx`)**: both pages are entirely
+  metric-over-time trend charts, one metric selected at a time — not every chart stacked at
+  once (an earlier version of this redesign did stack them; the user changed their mind once it
+  shipped, since scrolling past a dozen charts to reach one was worse than the old flat list it
+  replaced). `MetricExplorer.tsx` is the shared list+detail shell (a left-hand metric list, the
+  selected one's chart on the right, falling back to the first available metric if the current
+  selection has no data); each page builds its own `ExplorerMetric[]` filtered by
+  `hasAnyRawValue` against the *unwindowed* daily series, so the list only ever offers a metric
+  that actually has some data somewhere in history, not just in the current window. `TrendChart.tsx`
+  (a generic Recharts `ComposedChart` over any number of named series, one or two Y axes,
+  optional area fill) renders the active metric's chart; one navigator, `TrendControls.tsx`
+  (Week/Month/Year/All-time resolution + prev/next), is hosted once via `MetricExplorer`'s
+  `detailHeader` slot and drives whichever chart is currently selected. Switching resolution
+  (Week → Month → Year) keeps the same `anchor` date rather than resetting it to today — a week
+  in August 2025 switches to "August 2025", not the current month — since `computeWindow` only
+  ever needs *a* date inside the target window to re-derive that window's own start/end, and the
+  anchor already names one (the app's own state, not a value TrendControls hands back). The
+  prev/next arrows themselves also stay at a fixed screen position across every click:
+  `.trend-controls__label` (`layout.css`) is given a fixed `min-width` and centered text so the
+  label's own varying width (`"May 2026"` vs `"September 2026"`, or a week's date-range label,
+  the widest of any resolution) can't shift the whole nav block, which sits flush right via the
+  parent's `justify-content: space-between`. `trendWindow.ts` computes the
+  window (`computeWindow`) and buckets an already-fetched daily series into it
+  (`bucketSeriesToWindow`): week buckets by day (one point per day, i.e. no averaging needed),
+  month by ISO week, year and all-time by calendar month — averaging whichever real observations
+  fall in each bucket, `null` (not zero, not omitted) where none do. Deliberately client-side:
+  neither `fitness_daily_rollup` nor `health_metric_daily_rollup` has a week/month/year
+  pre-aggregation (only `period_rollup`'s own week/month grain exists, and that's activity
+  totals, not fitness/health), and a daily series over this app's real history (~1,400+ days) is
+  cheap enough to fetch once (`EARLIEST_PLAUSIBLE_DATE` to today, one `GET /fitness` +
+  one `GET /health/dashboard` call per page) and slice/average client-side on every navigation
+  click with zero further network round-trips. Fitness & Form charts VO2max, HRV, Lactate
+  threshold (pace + heart rate, dual-axis — see the `garmin_connect` bullet below for where this
+  data comes from), and the combined Fitness (CTL)/Fatigue (ATL)/Form (TSB) triad (also
+  dual-axis, TSB on its own axis with a zero reference line, same shape the old single-purpose
+  `FitnessChart.tsx` used). Health charts all fifteen `LOGICAL_METRICS` this project surfaces
+  for an athlete's own body/vitals — weight, BMI, SpO2, steps, and the ten Eufy body-composition
+  fields each on their own chart, plus three combined two-line charts following the same pattern
+  as CTL/ATL (Heart rate: max+resting; Respiration: waking+sleep; Blood pressure: systolic+
+  diastolic, the latter two newly promoted to `LOGICAL_METRICS` — blood pressure had no logical
+  metric before this, `apple_health.blood_pressure_{systolic,diastolic}` being its only source)
+  — plus Sleep time, read from `GET /sleep` (`sleep_session`, not `health_observation`) since
+  that's a dedicated table, not part of the EAV metrics pipeline. `FitnessChart.tsx`/`HealthTrendChart.tsx`/
+  `HealthMetricTiles.tsx`/`SleepDurationChart.tsx` are untouched and still power the Fitness &
+  Form/Health cards embedded in the calendar's own Month/Year/All-time views (a different,
+  calendar-period-scoped use case this redesign didn't touch) — `CORE_METRICS`/`HRV_METRIC`/
+  `WEIGHT_METRIC` stay exported from `HealthPage.tsx` unchanged since those views import them.
+  `earliestDateForKeys` (`trendWindow.ts`) scopes "All time" (and `canGoPrevious`) to the
+  *selected* metric's own keys, not a merge across every metric the page fetches — both pages
+  fetch one combined series per data source (all of `LOGICAL_METRICS` in one `GET
+  /health/dashboard` call, say), so an unscoped `earliestDate` over that whole merge meant
+  every metric's "All time" silently started wherever the single oldest metric on the page
+  began (Sleep's own 2022-onward data showing an x-axis stretching back to a 2016 weight
+  reading it has nothing to do with) — a real bug, not a hypothetical one. Each page resolves
+  its own currently-active metric (mirroring `MetricExplorer`'s own selected-or-first-available
+  fallback, since the page needs that resolved key *before* handing `MetricExplorer` a window
+  to bucket against) and computes `dataStart` from only that metric's keys. Heart rate's Max +
+  Resting pairing is the one `series()` call in `HealthPage.tsx` that takes an explicit colour
+  override rather than deriving it from `metricStyle.ts` — both are legitimately the same `"hr"`
+  tone everywhere else in the app (that's metricStyle.ts's whole point, one hue per metric), but
+  reusing it for both lines on this one *combined* chart made them indistinguishable, so Resting
+  gets `toneColor("pace")` instead, scoped to just this chart.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash
@@ -160,7 +222,19 @@ because you don't recognize it — stop, that's the bug.
     `garmin.daily_training_status.*`), and `get_hydration_data` (reuses the same
     `parse_hydration_json` `fit_folder.py` already had, just a new `kind` string). Plus one
     *range* fetch per run (not per-date): `get_race_predictions` covers the whole rolling
-    window in a single call (`garmin.daily_race_predictions.*`). A comprehensive metric-by-
+    window in a single call (`garmin.daily_race_predictions.*`), and likewise
+    `get_lactate_threshold(latest=False, aggregation="daily")` (`garmin.daily_lactate_threshold.
+    {speed,heart_rate,power}` — a real, live-verified endpoint feeding the Fitness & Form tab's
+    Lactate threshold chart, found by introspecting the installed `garminconnect` package per
+    this project's own "verify, don't assume" rule for fast-moving vendor libraries; confirmed
+    live against the real account that Garmin only emits an entry for a day it actually
+    recomputed the value on, not one per calendar day in range). `heart_rate`/`power` are
+    already real units (bpm/W); `speed` is NOT plain m/s despite the name — the raw value needs
+    ×10 first (confirmed empirically: the athlete's own real numbers only make physiological
+    sense, sitting between their real VO2max-interval and easy-run paces, after that
+    correction), applied at the point of use (`FitnessPage.tsx`), matching this same adapter's
+    existing single-foot-cadence-doubling precedent of storing the raw vendor value and
+    converting on read, not at ingest. A comprehensive metric-by-
     metric audit (checking every `garmin.export.*` report kind against the installed
     `garminconnect` package's live `get_*` methods) found and closed this same "never fetched
     live" gap for all of the above — each had silently gone stale the moment the last
@@ -363,6 +437,88 @@ because you don't recognize it — stop, that's the bug.
   infinite loading spinner for anything but a detailed exercise, even signed in, while a detailed
   one loads its real video/steps/tips correctly; linking every exercise there regardless of tier
   was the original mistake this corrected.
+- **Share links (`share_link`, `sharing.py`, `api/routers/share.py`)**: an athlete-issued token
+  granting unauthenticated, read-only access to one activity or one summary period. `GET
+  /share/{token}` is public by omission, same exemption mechanism `/healthz`/`/version`/
+  `/auth/login` already use — a route is "public" purely by never taking
+  `Depends(require_api_key)`. Both pages are server-rendered HTML (hand-escaped f-strings, no
+  template engine) built to mirror the *authenticated* frontend's own activity-detail and
+  period-summary views as closely as a public page reasonably can — full stat sections
+  (distance/HR/elevation/power/training-effect/running-dynamics/temperature/respiration), the
+  Intervals (laps) table with server-computed GAP plus (when the activity has a planned workout)
+  Interval/"Exp. pace or dist."/Expected-pace columns (the header text is the athlete's own
+  verbatim wording, deliberately terser than the authenticated app's own column label) —
+  `_expand_workout_steps` is a
+  straight Python port of `frontend/src/workoutSteps.ts::expandWorkoutSteps` (unrolling
+  `repeat_until_steps_cmplt` groups so `laps[i] <-> expanded[i]` positionally, same alignment the
+  real app relies on), per-second interactive charts, and — for bouldering — the routes-by-grade
+  chart and routes table. Deliberately excludes anything health-related (weight/HRV/sleep — this
+  app's own existing stance is that health metrics aren't vetted for public exposure) and the
+  context/comparison sections (percentile-rank/similar-activity tables, already a second
+  aggregate query each — not worth exposing to anonymous traffic). Weather and time-in-zone,
+  once excluded for the same "don't build a second implementation" reasoning, are shown after
+  all: weather via `_cached_weather`, a plain read-only `SELECT` mirroring `weather.py::
+  _read_cached`'s own query (duplicated, not imported — that function is module-private) that
+  never calls the live fetch path (`get_or_fetch_activity_weather`), so a public URL still can't
+  trigger a paid API call — an activity nothing ever fetched weather for just shows no Weather
+  section; time-in-zone via the *device-reported* fallback only (`fit.time_in_zone.*` metrics,
+  already loaded), never the athlete's-own-configured-zones stream computation.
+  `.time-in-zone__fill` needs an explicit `display: block` in this page's own `<style>` block —
+  the exact same bug `TimeInZoneChart.tsx`'s own CSS already hit and documented once: a bare
+  `<span>` is `display: inline` by default, which ignores a percentage `width` entirely, so the
+  zone bars rendered as empty (0×0) tracks despite the correct percentage in their inline style,
+  confirmed live via `getBoundingClientRect()`, not just by reading the CSS. The per-second
+  charts (`_svg_series_chart`) now carry real axis units and are wrapped for
+  `_CHART_HOVER_SCRIPT` — one shared script, emitted once, reading each chart's own sibling
+  `<script type="application/json">` blob to show a crosshair + exact value/elapsed-time tooltip
+  on hover/touch — because a static chart image with no way to read a value off it wasn't enough.
+  Every color on both share pages (stat tiles, chart lines, badges, page background/text) now
+  comes from the exact same tone tokens `frontend/src/styles/theme.css` defines (dark default,
+  `prefers-color-scheme: light` override — this page has no JS theme toggle to persist an
+  explicit choice, so it only ever follows the visitor's OS setting) — CSS custom properties
+  resolve fine as literal SVG presentation-attribute values (`stroke="var(--color-heart-rate)"`)
+  since this is inline SVG in the same HTML document, not a standalone `.svg` file. The activity
+  page's own stat tiles (distance/HR/elevation/power/training-effect/running-dynamics/temperature/
+  respiration, bouldering's time-and-calories) go one step further, reproducing
+  `StatTile.tsx`'s exact icon-chip + tone mechanism rather than just its colors: `st(label,
+  value, icon, tone)` builds a `_Stat`, `_stats_grid_iconed` renders each as `<div class="stat
+  tone-{tone}">` with an `<span class="icon-chip">` wrapping an inlined copy of the matching
+  hand-rolled icon's raw SVG path data from `Icon.tsx` (`_ICON_PATHS`/`_icon_svg` — copied
+  directly rather than shared via a symbol/sprite, since this is a one-off static page with no
+  other icon reuse need); `.icon-chip`'s `color`/`background` read the same `--tone` custom
+  property `.tone-*` sets, `color-mix(in srgb, var(--tone) 15%, transparent)` and all, matching
+  `layout.css`'s own rule byte-for-byte. Every icon/tone pairing was verified against
+  `ActivityStatsGrid.tsx`'s real per-stat assignments, not guessed from the label text — the one
+  deliberate exception is Fueling (`ActivityFueling.tsx`), which has no `StatTile`/icon usage at
+  all in the authenticated app either, so its share-page section stays on the older, plain
+  `_stats_grid`/tuple rendering rather than inventing a mapping that doesn't exist upstream. The
+  period share's
+  sport breakdown covers Running, Hiking, Climbing (bouldering, with the same grade chart as the
+  activity page, aggregated across every session in range), and Fitness (hiit/strength_training —
+  note `sport_family()` in `merge/engine.py` has no single bucket for either of these, so this
+  page unions `sport_family(sport)=="strength"` with the literal `sport=="hiit"` fallback itself)
+  — Fitness & Form (CTL/ATL) stays, health stays excluded. The route map is the one deliberate
+  exception to this file's otherwise zero-JS pages: a real interactive MapLibre GL map (CARTO's
+  Positron vector basemap, same style the authenticated frontend's `CartoBasemapLayer.tsx` uses),
+  loaded from a CDN as a `type="module"` script — MapLibre v6 shipped no UMD/global build at all
+  (confirmed against the real published package: `dist/` only has `.mjs` files), so this needs
+  named ESM imports and an explicit `setWorkerUrl()` pointed at the CDN's own worker file, not a
+  plain `<script src=...>` global. A Play/Pause route-playback marker rides along on top of the
+  same map, driven by the activity's own `lat`/`lon` Parquet stream channels (yes, GPS position
+  really is stored per-sample, one real Parquet column each, not just baked into `route_geom`'s
+  polyline — confirmed directly against `fit/parser.py`) at the same "low" tier (200 points) the
+  charts already fetch, so no second, heavier stream read is needed just for a smooth-looking
+  marker. Replay always takes a fixed 20 real seconds regardless of the activity's own actual
+  duration — a deliberately simplified, non-draggable version of `ActivityRouteMap.tsx`'s own
+  scrubber. `PERSEVERER_CARTO_API_KEY` is read by the API's own `Settings`
+  now too (previously frontend-only) — not actually a larger exposure, since it's the same
+  client-embeddable key the authenticated frontend already ships to every visitor's browser.
+  `PERSEVERER_PUBLIC_BASE_URL` must be the athlete-facing origin (bercy: the frontend's own
+  `:443` reverse-proxy rule, which nginx forwards `/share/*` from to the api container — see
+  `docker/nginx.conf`), **not** `PERSEVERER_API_BASE_URL` — those are two different origins
+  whenever the reverse proxy fronts api/frontend on different ports, which is exactly bercy's own
+  setup; leaving it unset falls back to the *incoming* request's own base URL, which is the api's
+  own port when the create-share call arrives there, not the origin a browser should open.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

@@ -198,6 +198,23 @@ see `docs/adr/0004-phase-2-health-ingestion.md`.
   (ADR 0004 decision 4). `local_date` here (and on `sleep_session` below) is still the raw UTC
   calendar date of the observation's timestamp, unlike `activity.local_date` (offset-adjusted as
   of Phase 6, ADR 0009 decision 8) — a known, documented inconsistency, not an oversight.
+- `garmin.daily_lactate_threshold.<field>` (`speed`/`heart_rate`/`power`) — a third live *range*
+  fetch (`get_lactate_threshold(latest=False, aggregation="daily")`, alongside race predictions
+  and body battery above), added for the Fitness & Form tab's Lactate threshold chart. One
+  observation per day Garmin actually recomputed the value on (confirmed live: sparse, not one
+  row per calendar day in range — `speed`/`heart_rate` updated once across a real 12-day test
+  window, `power` updated on six of those days). `heart_rate`/`power` are plain bpm/W; `speed`
+  is stored exactly as Garmin returns it (raw-first) even though it is **not** plain m/s —
+  multiplying by 10 first is what turns it into a real, physiologically-plausible pace (confirmed
+  against this athlete's own real numbers, not vendor docs: the corrected pace sits between their
+  real VO2max-interval and easy-run paces every month tested). That correction is applied by the
+  frontend at the point of use (`FitnessPage.tsx`), the same "store raw, convert on read"
+  contract this project's cadence field already established.
+- `apple_health.blood_pressure_systolic`/`_diastolic` (see the Apple Health section below) were
+  promoted to `LOGICAL_METRICS` (as `blood_pressure_systolic`/`blood_pressure_diastolic`) for the
+  Health tab's Blood pressure chart — previously queryable only via `GET /health/observations`,
+  now also on `GET /health/dashboard` like every other health metric. No new data, just a new
+  alias entry; the underlying `health_observation` rows are unchanged.
 - **`health_stream`** — Parquet-backed intraday time series, one row per `(metric_key,
   year_month)`: `heart_rate` (from `monitoring_mesgs`, `timestamp_16`-corrected — decision 1),
   `stress_level`, `respiration_rate`, `spo2`, `hrv`, and (Phase 9) `garmin.daily_body_battery.
