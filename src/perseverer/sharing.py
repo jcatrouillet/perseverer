@@ -299,14 +299,136 @@ _ICON_PATHS: dict[str, str] = {
         '<path d="M12 3.6a2.1 2.1 0 0 0-2.1 2.1v8.6a3.6 3.6 0 1 0 4.2 0V5.7A2.1 2.1 0 0 0 '
         '12 3.6Z"/><path d="M12 10.4v5.4"/>'
     ),
+    "calendar": (
+        '<rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6"/>'
+        '<path d="M3.6 10h16.8M8.2 3.2v4M15.8 3.2v4"/>'
+    ),
+    "trophy": (
+        '<path d="M8.1 3.8h7.8v5.1a3.9 3.9 0 0 1-7.8 0V3.8Z"/>'
+        '<path d="M8.1 5.4H5.6a2.5 2.5 0 0 0 2.5 4.4M15.9 5.4h2.5a2.5 2.5 0 0 1-2.5 4.4"/>'
+        '<path d="M12 12.9v3.7M8.8 20.2h6.4M10.4 16.6h3.2l1.6 3.6H8.8l1.6-3.6Z"/>'
+    ),
+}
+
+# Sport pictograms -- unlike every icon above (hand-rolled stroke glyphs), these ten are real
+# Phosphor Icons `weight="fill"` path data (MIT), copied verbatim from the installed
+# `@phosphor-icons/react` package's own `dist/defs/<Name>.es.js` (the "fill" entry), matching
+# Icon.tsx's own docstring on *why* sport icons specifically are Phosphor and not hand-rolled
+# (repeated hand-authoring attempts read as "ugly"/"not good enough" in user feedback). Phosphor's
+# own viewBox is always 0 0 256 256 for these, confirmed against the installed IconBase component
+# -- a different coordinate space from the hand-rolled 24x24 glyphs above, so these render through
+# a separate `.icon--filled` CSS override (`fill: currentColor; stroke: none`) rather than the
+# stroke-only `.icon` rule, exactly matching layout.css's own `.icon.icon--filled` rule.
+_SPORT_ICON_PATHS: dict[str, str] = {
+    "run": (
+        '<path d="M120,56a32,32,0,1,1,32,32A32,32,0,0,1,120,56Zm103.28,74.08a8,8,0,0,0-10.6-4c'
+        "-.25.12-26.71,10.72-72.18-20.19-52.29-35.54-88-7.77-89.51-6.57a8,8,0,1,0,10,12.48c.26"
+        "-.21,25.12-19.5,64.07,3.27-4.25,13.35-12.76,31.82-25.25,47-18.56,22.48-41.11,32.56-67,"
+        "30A8,8,0,0,0,31.2,208a92.29,92.29,0,0,0,9.34.47c27.38,0,52-12.38,71.63-36.18.57-.69,1.14"
+        "-1.4,1.69-2.1C133.31,175.29,168,190.3,168,232a8,8,0,0,0,16,0c0-24.65-10.08-45.35-29.15"
+        "-59.86a104.29,104.29,0,0,0-31.31-15.81A169.31,169.31,0,0,0,139,124c26.14,16.09,46.84,20,"
+        '60.69,20,12.18,0,19.06-3,19.67-3.28A8,8,0,0,0,223.28,130.08Z"/>'
+    ),
+    "walk": (
+        '<path d="M120,48a32,32,0,1,1,32,32A32,32,0,0,1,120,48Zm88,88c-28.64,0-41.81-13.3-55.75'
+        "-27.37-3.53-3.57-7.18-7.26-11-10.58-37-32.14-96.22,22.73-98.72,25.08a8,8,0,0,0,10.95,11.66"
+        "A163.88,163.88,0,0,1,84,113c13.78-7.38,25.39-10.23,34.7-8.58L64.66,228.81a8,8,0,0,0,4.15,"
+        "10.52A7.84,7.84,0,0,0,72,240a8,8,0,0,0,7.34-4.81l33.59-77.27L144,180.12V232a8,8,0,0,0,16,"
+        "0V176a8,8,0,0,0-3.35-6.51l-37.2-26.57L132.88,112c2.64,2.44,5.26,5.07,8,7.84C155.05,134.19,"
+        '172.69,152,208,152a8,8,0,0,0,0-16Z"/>'
+    ),
+    "hike": (
+        '<path d="M120,48a32,32,0,1,1,32,32A32,32,0,0,1,120,48Zm72,88c-23.37,0-28.92-8.56-36.6'
+        "-20.4-3.65-5.64-7.79-12-14.16-17.55a40.92,40.92,0,0,0-8-5.47,8,8,0,0,0-11,3.92L64.66,228.81"
+        "a8,8,0,0,0,4.15,10.52A7.84,7.84,0,0,0,72,240a8,8,0,0,0,7.34-4.81l33.59-77.27L144,180.12V232"
+        "a8,8,0,0,0,16,0V176a8,8,0,0,0-3.35-6.51l-37.2-26.57,13.4-30.81c3.57,3.62,6.28,7.8,9.13,"
+        "12.19,7.67,11.84,16.27,25.11,42,27.36V232a8,8,0,0,0,16,0V144A8,8,0,0,0,192,136ZM72,152a8,8"
+        ",0,0,0,7.36-4.85l24-56a8,8,0,0,0-4.2-10.5l-28-12a8,8,0,0,0-10.5,4.2l-24,56a8,8,0,0,0,4.2,"
+        '10.5l28,12A8,8,0,0,0,72,152Z"/>'
+    ),
+    "bike": (
+        '<path d="M136,52a28,28,0,1,1,28,28A28,28,0,0,1,136,52ZM240,176a40,40,0,1,1-40-40A40,40,0'
+        ",0,1,240,176Zm-16,0a24,24,0,1,0-24,24A24,24,0,0,0,224,176Zm-24-64a8,8,0,0,0-8-8H155.31"
+        "L125.66,74.34a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,0,11.32L120,155.31V200a8,8,0,0,0,16,0V152"
+        "a8,8,0,0,0-2.34-5.66L99.31,112,120,91.31l26.34,26.35A8,8,0,0,0,152,120h40A8,8,0,0,0,200,"
+        '112ZM96,176a40,40,0,1,1-40-40A40,40,0,0,1,96,176Zm-16,0a24,24,0,1,0-24,24A24,24,0,0,0,80,'
+        '176Z"/>'
+    ),
+    "dumbbell": (
+        '<path d="M200,64V192a16,16,0,0,1-16,16H168a16,16,0,0,1-16-16V136H104v56a16,16,0,0,1-16,'
+        "16H72a16,16,0,0,1-16-16V64A16,16,0,0,1,72,48H88a16,16,0,0,1,16,16v56h48V64a16,16,0,0,1,16"
+        "-16h16A16,16,0,0,1,200,64ZM36,72H32A16,16,0,0,0,16,88v32H8.27A8.18,8.18,0,0,0,0,127.47,8,8"
+        ",0,0,0,8,136h8v32a16,16,0,0,0,16,16h4a4,4,0,0,0,4-4V76A4,4,0,0,0,36,72Zm220,55.47a8.18,"
+        "8.18,0,0,0-8.25-7.47H240V88a16,16,0,0,0-16-16h-4a4,4,0,0,0-4,4V180a4,4,0,0,0,4,4h4a16,16,"
+        '0,0,0,16-16V136h8A8,8,0,0,0,256,127.47Z"/>'
+    ),
+    "yoga": (
+        '<path d="M245.83,121.63a15.53,15.53,0,0,0-9.52-7.33,73.55,73.55,0,0,0-22.17-2.22c4-19.85,'
+        "1-35.55-2-44.86a16.17,16.17,0,0,0-18.8-10.88,85.53,85.53,0,0,0-28.55,12.12,94.58,94.58,0,0"
+        ",0-27.11-33.25,16.05,16.05,0,0,0-19.26,0A94.58,94.58,0,0,0,91.26,68.46,85.53,85.53,0,0,0,"
+        "62.71,56.34,16.14,16.14,0,0,0,43.92,67.22c-3,9.31-6,25-2.06,44.86a73.55,73.55,0,0,0-22.17,"
+        "2.22,15.53,15.53,0,0,0-9.52,7.33,16,16,0,0,0-1.6,12.26c3.39,12.58,13.8,36.49,45.33,55.33S"
+        "113.13,208,128.05,208s42.67,0,74-18.78c31.53-18.84,41.94-42.75,45.33-55.33A16,16,0,0,0,"
+        "245.83,121.63ZM62.1,175.49C35.47,159.57,26.82,140.05,24,129.7a59.61,59.61,0,0,1,22.5-1.17,"
+        "129.08,129.08,0,0,0,9.15,19.41,142.28,142.28,0,0,0,34,39.56A114.92,114.92,0,0,1,62.1,"
+        "175.49ZM128,190.4c-9.33-6.94-32-28.23-32-71.23C96,76.7,118.38,55.24,128,48c9.62,7.26,32,"
+        "28.72,32,71.19C160,162.17,137.33,183.46,128,190.4Zm104-60.68c-2.77,10.24-11.4,29.81-38.09,"
+        "45.77a114.92,114.92,0,0,1-27.55,12,142.28,142.28,0,0,0,34-39.56,129.08,129.08,0,0,0,9.15"
+        '-19.41A59.69,59.69,0,0,1,232,129.71Z"/>'
+    ),
+    "climb": (
+        '<path d="M254.88,195.92l-54.56-92.08A15.87,15.87,0,0,0,186.55,96h0a15.85,15.85,0,0,0'
+        "-13.76,7.84l-15.64,26.39a4,4,0,0,0,0,4.07l26.8,45.47a8.13,8.13,0,0,1-1.89,10.55,8,8,0,0,1"
+        "-11.8-2.26L101.79,71.88a16,16,0,0,0-27.58,0L1.11,195.94a8,8,0,0,0,1,9.52A8.23,8.23,0,0,0,"
+        "8.23,208H247.77a8.29,8.29,0,0,0,6.09-2.55A8,8,0,0,0,254.88,195.92ZM64.43,120,88,80l23.57,"
+        '40ZM140,52a24,24,0,1,1,24,24A24,24,0,0,1,140,52Z"/>'
+    ),
+    "snow": (
+        '<path d="M144,60a28,28,0,1,1,28,28A28,28,0,0,1,144,60ZM37.76,87.68l111,32.36,5.61,5.61A8,'
+        "8,0,0,0,160,128h40a8,8,0,0,0,0-16H163.31l-4.72-4.72,0,0-24.9-24.9a8,8,0,0,0-11.32,0L112,"
+        "92.67,42.24,72.32a8,8,0,0,0-4.48,15.36Zm200.9,105.47a8,8,0,0,0-11.1-2.22,53.78,53.78,0,0,1"
+        "-45,6.9l-62.79-18.28,29.9-29.9a8,8,0,0,0-3.46-13.35l-56-16a8,8,0,0,0-4.4,15.39L128.73,148"
+        "l-26.5,26.49-76-22.13a8,8,0,1,0-4.48,15.36l156.31,45.52a69.78,69.78,0,0,0,58.37-8.95A8,8,0"
+        ',0,0,238.66,193.15Z"/>'
+    ),
+    "racket": (
+        '<path d="M230,26.05C202-1.88,151.53,3.16,117.4,37.3c-31.79,31.79-38.33,77.77-16.51,106.49'
+        "L71.33,173.35l-.68-.68a16,16,0,0,0-22.64,0L20.69,200a16,16,0,0,0,0,22.64l12.69,12.69a16,16"
+        ",0,0,0,22.63,0h0L83.34,208a16,16,0,0,0,0-22.63l-.69-.69,29.56-29.56c11.29,8.58,25.24,12.79"
+        ",40,12.79,22.72,0,47.25-10,66.54-29.3C252.83,104.47,257.88,54,230,26.05ZM224.23,104H200.06"
+        "v-32h32A72.45,72.45,0,0,1,224.23,104ZM136,149.61A44.15,44.15,0,0,1,106.39,120H136ZM104,104"
+        "a72.24,72.24,0,0,1,7.86-32H136v32Zm48-32h32v32h-32Zm77.67-16H200.06V26.28a44.23,44.23,0,0"
+        ",1,29.66,29.66Zm-45.82-32h.16v32h-32V31.76A72.47,72.47,0,0,1,183.9,23.9ZM136,42.06V55.94"
+        "H122.16a89.72,89.72,0,0,1,6.56-7.32A93.17,93.17,0,0,1,136,42.06Zm16,109.92V120h32v24.16A72"
+        ".24,72.24,0,0,1,152.05,152Zm48-18.14V120H214a91.62,91.62,0,0,1-6.56,7.32A89.64,89.64,0,0,1"
+        ',200.06,133.84Z"/>'
+    ),
+    "waves": (
+        '<path d="M208,32H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,'
+        "16,0,0,0,208,32ZM197.2,176.87c-13.07,11.18-24.9,15.1-35.64,15.1-14.26,0-26.62-6.92-37.47"
+        "-13-18.41-10.31-32.95-18.45-54.89.31a8,8,0,1,1-10.4-12.16c30.42-26,54.09-12.76,73.11-2.11,"
+        "18.41,10.31,33,18.45,54.89-.31a8,8,0,0,1,10.4,12.16Zm0-44c-13.07,11.18-24.9,15.1-35.64,"
+        "15.1-14.26,0-26.62-6.92-37.47-13-18.41-10.31-32.95-18.45-54.89.31a8,8,0,0,1-10.4-12.16c"
+        "30.42-26,54.09-12.76,73.11-2.11,18.41,10.31,33,18.45,54.89-.31a8,8,0,1,1,10.4,12.16Zm0-44"
+        "c-13.07,11.18-24.9,15.1-35.64,15.1-14.26,0-26.62-6.92-37.47-13-18.41-10.31-32.95-18.45"
+        "-54.89.31A8,8,0,0,1,58.8,79.13c30.42-26,54.09-12.76,73.11-2.11,18.41,10.31,33,18.45,54.89"
+        '-.31a8,8,0,1,1,10.4,12.16Z"/>'
+    ),
 }
 
 
-def _icon_svg(name: str) -> str:
-    path = _ICON_PATHS.get(name)
+def _icon_svg(name: str | None) -> str:
+    path = _ICON_PATHS.get(name) if name is not None else None
     if path is None:
         return ""
     return f'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">{path}</svg>'
+
+
+def _sport_icon_svg(name: str | None) -> str:
+    path = _SPORT_ICON_PATHS.get(name) if name is not None else None
+    if path is None:
+        return ""
+    return f'<svg class="icon icon--filled" viewBox="0 0 256 256" aria-hidden="true">{path}</svg>'
 
 
 @dataclass(frozen=True)
@@ -315,14 +437,18 @@ class _Stat:
     value: str
     icon: str | None = None
     tone: str = "neutral"
+    filled: bool = False
 
 
-def st(label: str, value: str, icon: str | None = None, tone: str = "neutral") -> _Stat:
-    return _Stat(label, value, icon, tone)
+def st(
+    label: str, value: str, icon: str | None = None, tone: str = "neutral", filled: bool = False
+) -> _Stat:
+    return _Stat(label, value, icon, tone, filled)
 
 
 def _stat_tile(stat: _Stat) -> str:
-    icon_html = f'<span class="icon-chip">{_icon_svg(stat.icon)}</span>' if stat.icon else ""
+    icon_svg = _sport_icon_svg(stat.icon) if stat.filled else _icon_svg(stat.icon)
+    icon_html = f'<span class="icon-chip">{icon_svg}</span>' if stat.icon else ""
     return (
         f'<div class="stat tone-{stat.tone}"><div class="label">{icon_html}'
         f"{escape(stat.label)}</div>"
@@ -838,6 +964,16 @@ def _page(*, title: str, description: str, body: str, extra_head: str = "") -> s
                 flex: none; }}
   .icon {{ width: 13px; height: 13px; display: block; fill: none; stroke: currentColor;
            stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }}
+  /* Sport pictograms are real Phosphor fill-weight paths (see _SPORT_ICON_PATHS), not the
+     hand-rolled stroke glyphs the bare `.icon` rule above is drawn for -- same override
+     layout.css's own `.icon.icon--filled` uses. */
+  .icon.icon--filled {{ fill: currentColor; stroke: none; }}
+  .type-breakdown__row {{ display: grid; grid-template-columns: 1.75rem 7rem 1fr 9rem;
+                           align-items: center; gap: 0.6rem; margin: 0.3rem 0; font-size: 0.8rem; }}
+  .type-breakdown__track {{ height: 10px; border-radius: 999px; background: var(--color-border);
+                             overflow: hidden; }}
+  .type-breakdown__fill {{ display: block; height: 100%; }}
+  .type-breakdown__value {{ text-align: right; color: var(--color-text-muted); }}
   .chart {{ display: block; margin: 0.5rem 0; }}
   .chart-axis-label {{ fill: var(--color-text-faint); }}
   .chart-legend {{ font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 0.25rem; }}
@@ -1667,6 +1803,211 @@ def _period_date_range(period_type: str, period_start: str | None) -> tuple[str 
 _MONTH_ABBR = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ]
+_MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June", "July", "August", "September",
+    "October", "November", "December",
+]
+_WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+# Ten-plus sports, five hues -- straight port of frontend/src/metricStyle.ts::SPORT_STYLES
+# (tone, icon, whether that icon is one of the Phosphor fill pictograms above vs. a hand-rolled
+# stroke glyph already in `_ICON_PATHS`). `hiit`'s "bolt" is deliberately the hand-rolled glyph,
+# not a Phosphor one -- that's exactly what the real app does too (bolt is a metrics icon reused
+# for hiit, not a dedicated sport pictogram).
+_SPORT_STYLES: dict[str, tuple[str, str, bool]] = {
+    "running": ("pace", "run", True),
+    "cycling": ("pace", "bike", True),
+    "rowing": ("pace", "waves", True),
+    "walking": ("elevation", "walk", True),
+    "hiking": ("elevation", "hike", True),
+    "snowshoeing": ("elevation", "snow", True),
+    "alpine_skiing": ("elevation", "snow", True),
+    "strength_training": ("power", "dumbbell", True),
+    "fitness_equipment": ("power", "dumbbell", True),
+    "hiit": ("power", "bolt", False),
+    "yoga": ("cadence", "yoga", True),
+    "breathing": ("cadence", "yoga", True),
+    "rock_climbing": ("load", "climb", True),
+    "racket": ("load", "racket", True),
+}
+
+
+def _sport_style(sport: str) -> tuple[str, str, bool]:
+    return _SPORT_STYLES.get(sport, ("neutral", "calendar", False))
+
+
+# FIT's "training" sport is a generic container for indoor cardio/strength/mindfulness work --
+# straight port of frontend/src/yearStats.ts::displaySport (same GENERIC_CONTAINER_SPORTS
+# substitution, scoped to "training" only for the same reason: every other sport already has a
+# real name of its own).
+def _display_sport(sport: str, sub_sport: str | None) -> str:
+    if sport == "training" and sub_sport:
+        return sub_sport
+    return sport
+
+
+@dataclass(frozen=True)
+class _PeriodActivity:
+    sport: str
+    sub_sport: str | None
+    distance_m: float | None
+    moving_duration_s: float | None
+    duration_s: float | None
+    elevation_gain_m: float | None
+    local_date: str | None
+    avg_hr_bpm: float | None
+    max_hr_bpm: float | None
+
+
+def _effective_duration_s(a: _PeriodActivity) -> float | None:
+    return a.moving_duration_s if a.moving_duration_s is not None else a.duration_s
+
+
+def _distinct_active_dates(activities: list[_PeriodActivity]) -> list[str]:
+    return sorted({a.local_date for a in activities if a.local_date is not None})
+
+
+def _weekday_index(local_date: str) -> int:
+    """Monday=0 .. Sunday=6, matching this app's Monday-start convention everywhere else
+    (runningStats.ts::weekdayIndex) -- Python's own date.weekday() already uses this exact
+    convention, no translation needed."""
+    return date.fromisoformat(local_date).weekday()
+
+
+def _longest_streak_days(sorted_dates: list[str]) -> int:
+    """Port of runningStats.ts::longestStreakAndBreak, the streak half only -- the period-share
+    top-level stats only ever show the longest streak, never the longest break."""
+    if not sorted_dates:
+        return 0
+    longest = current = 1
+    for i in range(1, len(sorted_dates)):
+        gap = (date.fromisoformat(sorted_dates[i]) - date.fromisoformat(sorted_dates[i - 1])).days
+        current = current + 1 if gap == 1 else 1
+        longest = max(longest, current)
+    return longest
+
+
+def _favorite_weekday_label(activities: list[_PeriodActivity]) -> str | None:
+    """Port of runningStats.ts::weekdayStats + the caller's own
+    `.reduce((max, d) => d.count > max.count ? d : max)` -- ties resolve to the earliest weekday
+    index (Monday first) since the reduce only ever replaces on a *strict* `>`."""
+    counts = [0] * 7
+    for a in activities:
+        if a.local_date is not None:
+            counts[_weekday_index(a.local_date)] += 1
+    if not any(counts):
+        return None
+    best = max(range(7), key=lambda i: (counts[i], -i))
+    return _WEEKDAY_LABELS[best]
+
+
+def _busiest_week_start(activities: list[_PeriodActivity]) -> str | None:
+    """Port of yearStats.ts::busiestWeekStart -- the Monday-starting week (by ISO date) with the
+    most activities, ties resolved to the earliest week."""
+    counts: dict[str, int] = {}
+    for a in activities:
+        if a.local_date is None:
+            continue
+        monday = (date.fromisoformat(a.local_date) - timedelta(days=_weekday_index(a.local_date)))
+        counts[monday.isoformat()] = counts.get(monday.isoformat(), 0) + 1
+    if not counts:
+        return None
+    return max(sorted(counts), key=lambda k: counts[k])
+
+
+def _busiest_month(activities: list[_PeriodActivity]) -> int | None:
+    """Port of yearStats.ts::busiestMonth -- 1-12, ties resolved to the earliest month."""
+    counts = [0] * 12
+    for a in activities:
+        if a.local_date is not None:
+            counts[int(a.local_date[5:7]) - 1] += 1
+    if not any(counts):
+        return None
+    return counts.index(max(counts)) + 1
+
+
+def _busiest_year(activities: list[_PeriodActivity]) -> int | None:
+    """Port of yearStats.ts::busiestYear -- ties resolved to the earliest year."""
+    counts: dict[int, int] = {}
+    for a in activities:
+        if a.local_date is not None:
+            year = int(a.local_date[:4])
+            counts[year] = counts.get(year, 0) + 1
+    if not counts:
+        return None
+    return max(sorted(counts), key=lambda y: counts[y])
+
+
+def _average_distance_m(activities: list[_PeriodActivity]) -> float | None:
+    values = [a.distance_m for a in activities if a.distance_m is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _average_duration_s(activities: list[_PeriodActivity]) -> float | None:
+    values = [d for a in activities if (d := _effective_duration_s(a)) is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _average_speed_kmh(activities: list[_PeriodActivity]) -> float | None:
+    """Weighted (sum distance / sum time), not a naive average of each activity's own speed --
+    port of yearStats.ts::averageSpeedKmh, same "weighted, not average-of-averages" rule this
+    project's own period rollups already follow (ADR 0009 decision 2)."""
+    eligible = [
+        a for a in activities if a.distance_m is not None and _effective_duration_s(a) is not None
+    ]
+    total_distance_m = sum(a.distance_m for a in eligible if a.distance_m is not None)
+    total_duration_s = sum(d for a in eligible if (d := _effective_duration_s(a)) is not None)
+    if total_duration_s == 0:
+        return None
+    return total_distance_m / 1000 / (total_duration_s / 3600)
+
+
+def _average_hr_bpm(activities: list[_PeriodActivity]) -> float | None:
+    values = [a.avg_hr_bpm for a in activities if a.avg_hr_bpm is not None]
+    return sum(values) / len(values) if values else None
+
+
+def _max_hr_bpm_overall(activities: list[_PeriodActivity]) -> float | None:
+    values = [a.max_hr_bpm for a in activities if a.max_hr_bpm is not None]
+    return max(values) if values else None
+
+
+def _activity_type_counts(activities: list[_PeriodActivity]) -> list[tuple[str, int, float]]:
+    """Port of yearStats.ts::activityTypeCounts -- descending by count, ties broken alphabetically
+    by the *displayed* sport name for a stable, deterministic order."""
+    counts: dict[str, int] = {}
+    durations: dict[str, float] = {}
+    for a in activities:
+        sport = _display_sport(a.sport, a.sub_sport)
+        counts[sport] = counts.get(sport, 0) + 1
+        duration = _effective_duration_s(a)
+        if duration is not None:
+            durations[sport] = durations.get(sport, 0.0) + duration
+    return sorted(
+        ((sport, count, durations.get(sport, 0.0)) for sport, count in counts.items()),
+        key=lambda t: (-t[1], t[0]),
+    )
+
+
+def _type_breakdown_html(counts: list[tuple[str, int, float]]) -> str:
+    total = sum(c for _, c, _ in counts) or 1
+    rows = []
+    for sport, count, duration_s in counts:
+        tone, icon, filled = _sport_style(sport)
+        icon_svg = _sport_icon_svg(icon) if filled else _icon_svg(icon)
+        pct = count / total * 100
+        label = sport.replace("_", " ").title()
+        value = f"{count} &middot; {_format_duration(duration_s)}" if duration_s > 0 else str(count)
+        rows.append(
+            f'<div class="type-breakdown__row tone-{tone}">'
+            f'<span class="icon-chip">{icon_svg}</span>'
+            f"<span>{escape(label)}</span>"
+            f'<span class="type-breakdown__track"><span class="type-breakdown__fill" '
+            f'style="width:{pct:.1f}%;background:var(--tone)"></span></span>'
+            f'<span class="type-breakdown__value">{value}</span>'
+            "</div>"
+        )
+    return "".join(rows)
 
 
 def render_period_share_html(
@@ -1692,6 +2033,7 @@ def render_period_share_html(
     # SQL equivalent, so that filtering runs in Python here, same cross-language-duplication
     # precedent as insights/rules_pb.py's own personalRecords logic).
     activity_query = select(
+        activity.c.id,
         activity.c.sport,
         activity.c.sub_sport,
         activity.c.distance_m,
@@ -1706,18 +2048,115 @@ def render_period_share_html(
     with_distance = [a for a in activities if a.distance_m]
     longest_m = max((a.distance_m for a in with_distance), default=None)
 
+    # Whole-activity avg/max heart rate isn't a fixed column on `activity` -- it's an EAV metric
+    # under one of two possible metric_key namespaces (see api/routers/activities.py::
+    # AVG_HR_METRIC_KEYS/MAX_HR_METRIC_KEYS, imported above). One query for every activity in
+    # range rather than a correlated subquery per activity or an N+1 per-activity lookup.
+    hr_by_activity: dict[str, dict[str, float]] = {}
+    activity_ids = [a.id for a in activities]
+    if activity_ids:
+        for r in conn.execute(
+            select(
+                activity_metric.c.activity_id,
+                activity_metric.c.metric_key,
+                activity_metric.c.value_num,
+            ).where(
+                activity_metric.c.activity_id.in_(activity_ids),
+                activity_metric.c.metric_key.in_((*AVG_HR_METRIC_KEYS, *MAX_HR_METRIC_KEYS)),
+            )
+        ):
+            hr_by_activity.setdefault(r.activity_id, {})[r.metric_key] = r.value_num
+    period_activities = [
+        _PeriodActivity(
+            sport=a.sport,
+            sub_sport=a.sub_sport,
+            distance_m=a.distance_m,
+            moving_duration_s=a.moving_duration_s,
+            duration_s=a.duration_s,
+            elevation_gain_m=a.elevation_gain_m,
+            local_date=a.local_date,
+            avg_hr_bpm=_first_metric(hr_by_activity.get(a.id, {}), AVG_HR_METRIC_KEYS),
+            max_hr_bpm=_first_metric(hr_by_activity.get(a.id, {}), MAX_HR_METRIC_KEYS),
+        )
+        for a in activities
+    ]
+
     label = "All time" if period_type == "all" else (period_start or "")
     description = (
         f"{totals.activity_count} activities, {_format_km(totals.distance_m)}, "
         f"{totals.active_days} active day(s)"
     )
-    stats = _stats_grid(
-        ("Activities", str(totals.activity_count)),
-        ("Distance", _format_km(totals.distance_m)),
-        ("Moving time", _format_duration(totals.moving_duration_s)),
-        ("Elevation gain", _format_meters(totals.elevation_gain_m)),
-        ("Active days", str(totals.active_days)),
-        ("Longest activity", _format_km(longest_m)),
+
+    top_stats = [
+        st("Activities", str(totals.activity_count), "calendar", "pace"),
+        st("Distance", _format_km(totals.distance_m), "route", "pace"),
+        st("Moving time", _format_duration(totals.moving_duration_s), "clock", "cadence"),
+        st("Elevation gain", _format_meters(totals.elevation_gain_m), "mountain", "elevation"),
+        st("Active days", str(totals.active_days), "calendar", "elevation"),
+    ]
+    if longest_m is not None:
+        top_stats.append(st("Longest activity", _format_km(longest_m), "trophy", "load"))
+    # The richer stat set (streak/busiest/favorite-day/averages) mirrors PeriodStatsCard.tsx,
+    # which only Month/Year/All-time views actually use -- WeekView.tsx has its own, materially
+    # different "Week stats" card (Load/CTL/ATL/TSB/Ramp, no streak or busiest-anything concept
+    # for a single week), so a week share deliberately keeps the simpler set above rather than
+    # inventing stats the real week view doesn't have.
+    if period_type in ("month", "year", "all"):
+        active_dates = _distinct_active_dates(period_activities)
+        favorite_day = _favorite_weekday_label(period_activities)
+        avg_distance_m = _average_distance_m(period_activities)
+        avg_duration_s = _average_duration_s(period_activities)
+        avg_speed_kmh = _average_speed_kmh(period_activities)
+        avg_hr = _average_hr_bpm(period_activities)
+        max_hr = _max_hr_bpm_overall(period_activities)
+
+        busiest_label = ""
+        busiest_value: str | None = None
+        if period_type == "month":
+            busiest_label = "Busiest week"
+            busiest_week = _busiest_week_start(period_activities)
+            if busiest_week is not None:
+                d = date.fromisoformat(busiest_week)
+                busiest_value = f"Week of {_MONTH_ABBR[d.month - 1]} {d.day}"
+        elif period_type == "year":
+            busiest_label = "Busiest month"
+            busiest_month = _busiest_month(period_activities)
+            busiest_value = _MONTH_NAMES[busiest_month - 1] if busiest_month is not None else None
+        else:  # "all"
+            busiest_label = "Busiest year"
+            busiest_year = _busiest_year(period_activities)
+            busiest_value = str(busiest_year) if busiest_year is not None else None
+
+        top_stats.append(
+            st("Longest streak", f"{_longest_streak_days(active_dates)} days", "flame", "load")
+        )
+        if busiest_value is not None:
+            top_stats.append(st(busiest_label, busiest_value, "calendar", "pace"))
+        if favorite_day is not None:
+            top_stats.append(st("Favorite day", favorite_day, "calendar", "pace"))
+        if avg_distance_m is not None:
+            top_stats.append(
+                st("Average distance", f"{avg_distance_m / 1000:.1f} km", "route", "pace")
+            )
+        if avg_duration_s is not None:
+            top_stats.append(
+                st("Average time", _format_duration(avg_duration_s), "clock", "cadence")
+            )
+        if avg_speed_kmh is not None:
+            top_stats.append(st("Average speed", f"{avg_speed_kmh:.1f} km/h", "gauge", "pace"))
+        if avg_hr is not None:
+            top_stats.append(st("Average heart rate", f"{avg_hr:.0f} bpm", "heart", "hr"))
+        if max_hr is not None:
+            top_stats.append(st("Max heart rate", f"{max_hr:.0f} bpm", "heart", "hr"))
+    stats = _stats_grid_iconed(*top_stats)
+
+    # Same breakdown as PeriodStatsCard.tsx's own "Activities by type" pie chart, minus the
+    # count/time toggle (a static page can't; both figures are shown together instead) and the
+    # slice-icon placement math -- a colored, iconed horizontal bar list conveys the same
+    # information (which sport, how much) without needing pie-geometry.
+    type_counts = _activity_type_counts(period_activities)
+    type_breakdown_body = (
+        f"<h2>Activities by type</h2>\n{_type_breakdown_html(type_counts)}\n" if type_counts else ""
     )
 
     running_body = ""
@@ -1726,11 +2165,11 @@ def render_period_share_html(
         total_run_m = sum(a.distance_m or 0 for a in running)
         total_run_s = sum(a.moving_duration_s or 0 for a in running)
         longest_run_m = max(a.distance_m or 0 for a in running)
-        running_stats = _stats_grid(
-            ("Kilometers run", f"{total_run_m / 1000:.0f} km"),
-            ("Number of runs", str(len(running))),
-            ("Avg pace", _format_pace(total_run_s, total_run_m)),
-            ("Longest run", _format_km(longest_run_m)),
+        running_stats = _stats_grid_iconed(
+            st("Kilometers run", f"{total_run_m / 1000:.0f} km", "route", "pace"),
+            st("Number of runs", str(len(running)), "run", "load", True),
+            st("Avg pace", _format_pace(total_run_s, total_run_m), "clock", "pace"),
+            st("Longest run", _format_km(longest_run_m), "trophy", "load"),
         )
         running_body = f"<h2>Running</h2>\n{running_stats}\n"
 
@@ -1747,17 +2186,35 @@ def render_period_share_html(
             if max_gain is not None
             else None
         )
-        hiking_pairs = [
-            ("Hikes", str(len(hikes))),
-            ("Total distance", f"{total_hike_m / 1000:.1f} km" if hikes_with_distance else "—"),
-            ("Total time", _format_duration(total_hike_s)),
-            ("Average elevation gain", f"{sum(gains) / len(gains):.0f} m" if gains else "—"),
+        hiking_stats = [
+            st("Hikes", str(len(hikes)), "hike", "elevation", True),
+            st(
+                "Total distance",
+                f"{total_hike_m / 1000:.1f} km" if hikes_with_distance else "—",
+                "route",
+                "elevation",
+            ),
+            st("Total time", _format_duration(total_hike_s), "clock", "elevation"),
         ]
-        if max_gain_hike is not None:
-            hiking_pairs.append(
-                ("Max elevation gain", f"{max_gain:.0f} m on {max_gain_hike.local_date}")
+        if gains:
+            hiking_stats.append(
+                st(
+                    "Average elevation gain",
+                    f"{sum(gains) / len(gains):.0f} m",
+                    "mountain",
+                    "elevation",
+                )
             )
-        hiking_body = f"<h2>Hiking</h2>\n{_stats_grid(*hiking_pairs)}\n"
+        if max_gain_hike is not None:
+            hiking_stats.append(
+                st(
+                    "Max elevation gain",
+                    f"{max_gain:.0f} m on {max_gain_hike.local_date}",
+                    "mountain",
+                    "elevation",
+                )
+            )
+        hiking_body = f"<h2>Hiking</h2>\n{_stats_grid_iconed(*hiking_stats)}\n"
 
     climbing_body = ""
     climb_where = [
@@ -1784,15 +2241,29 @@ def render_period_share_html(
                 bucket[1] += 1
             else:
                 bucket[0] += 1
-        climbing_pairs = [
-            ("Sessions", str(session_count)),
-            ("Climb time", _format_duration(total_climb_time_s)),
-            ("Routes", str(len(climb_splits))),
-            ("Max grade completed", f"V{max(completed_grades)}" if completed_grades else "—"),
+        # Tone/icon per ClimbingStatsCard.tsx (the real Week/Month/Year/All-time card for
+        # bouldering) -- deliberately all "elevation", not the different per-stat mapping the
+        # activity share page uses for a single climb's own "Time & calories" section
+        # (ActivityStatsGrid.tsx), since that's a different real component with its own mapping.
+        climbing_stats = [
+            st("Sessions", str(session_count), "climb", "elevation", True),
+            st("Climb time", _format_duration(total_climb_time_s), "clock", "elevation"),
+            st("Routes", str(len(climb_splits)), "route", "elevation"),
         ]
+        if completed_grades:
+            climbing_stats.append(
+                st("Max grade completed", f"V{max(completed_grades)}", "mountain", "elevation")
+            )
         grade_chart = _svg_grade_chart([(g, a, c) for g, (a, c) in sorted(breakdown.items())])
-        climbing_body = f"<h2>Climbing</h2>\n{_stats_grid(*climbing_pairs)}\n{grade_chart}\n"
+        climbing_body = (
+            f"<h2>Climbing</h2>\n{_stats_grid_iconed(*climbing_stats)}\n{grade_chart}\n"
+        )
 
+    # hiit/strength_training has no dedicated card in the authenticated app at all (confirmed:
+    # MonthView/YearView show these sports only via the generic PeriodStatsCard totals and the
+    # Activities-by-type breakdown above, same as every other sport) -- so, like Fueling on the
+    # activity share page, this section keeps the older plain `_stats_grid` rather than inventing
+    # an icon/tone mapping that doesn't exist upstream.
     fitness_training_body = ""
     fitness_sessions = [
         a for a in activities if sport_family(a.sport) == "strength" or a.sport == "hiit"
@@ -1858,5 +2329,6 @@ def render_period_share_html(
 <h1>{escape(label)}</h1>
 <div class="meta">Activity summary</div>
 {stats}
+{type_breakdown_body}
 {running_body}{hiking_body}{climbing_body}{fitness_training_body}{fitness_form_body}{months_body}"""
     return _page(title=f"{label} summary", description=description, body=body)

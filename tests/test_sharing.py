@@ -739,6 +739,143 @@ def test_render_period_share_html_omits_sport_buckets_with_no_matching_activity(
     assert "Fitness</h2>" not in html
 
 
+def test_render_period_share_html_month_has_icon_chips_and_extra_stats(tmp_path: Path) -> None:
+    """The top-level stat grid, for Month/Year/All-time, now mirrors PeriodStatsCard.tsx's own
+    richer set (streak/busiest-week/favorite-day/averages), not just the original six totals --
+    plus every tile carries an icon-chip + tone, matching the activity share page's own
+    icon/tone treatment."""
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        # Three runs on three different Mondays -- enough to give "Favorite day"/"Busiest week"/
+        # "Longest streak" real, non-trivial values rather than degenerate single-activity ones.
+        for i, day in enumerate(("2026-06-01", "2026-06-08", "2026-06-15")):
+            activity_id = f"run{i}"
+            conn.execute(
+                activity.insert().values(
+                    id=activity_id,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    start_time_utc=now,
+                    utc_offset_s=0,
+                    local_date=day,
+                    sport="running",
+                    distance_m=10000.0,
+                    moving_duration_s=3000.0,
+                    primary_source="fit_folder",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            _add_metric(
+                conn,
+                activity_id=activity_id,
+                metric_key="fit.session.avg_heart_rate",
+                value=140.0 + i,
+                source="fit_folder",
+            )
+            _add_metric(
+                conn,
+                activity_id=activity_id,
+                metric_key="fit.session.max_heart_rate",
+                value=160.0 + i,
+                source="fit_folder",
+            )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Longest streak" in html
+    assert "Busiest week" in html
+    assert "Week of Jun 1" in html
+    assert "Favorite day" in html
+    assert "Mon" in html
+    assert "Average distance" in html
+    assert "Average heart rate" in html
+    assert "141 bpm" in html  # mean of 140/141/142
+    assert "Max heart rate" in html
+    assert "162 bpm" in html  # max of 160/161/162
+    assert 'class="icon-chip"' in html
+    assert "tone-pace" in html
+
+
+def test_render_period_share_html_week_keeps_the_simpler_stat_set(tmp_path: Path) -> None:
+    """WeekView.tsx has its own, materially different "Week stats" card -- no streak/busiest/
+    favorite-day/averages concept for a single week -- so a week share must not invent them."""
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="run1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-01",
+                sport="running",
+                distance_m=10000.0,
+                moving_duration_s=3000.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "week", "2026-06-01")
+
+    assert "Longest streak" not in html
+    assert "Busiest" not in html
+    assert "Favorite day" not in html
+    assert "Average distance" not in html
+    assert 'class="icon-chip"' in html  # the simpler set is still icon/tone-treated
+
+
+def test_render_period_share_html_includes_activities_by_type_breakdown(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="run1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-01",
+                sport="running",
+                distance_m=10000.0,
+                moving_duration_s=3000.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            activity.insert().values(
+                id="ride1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-10",
+                sport="cycling",
+                distance_m=40000.0,
+                moving_duration_s=3600.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Activities by type" in html
+    assert "type-breakdown__row" in html
+    assert "type-breakdown__fill" in html
+    assert "Running" in html
+    assert "Cycling" in html
+    assert "icon--filled" in html  # the Phosphor sport pictograms, not the hand-rolled glyphs
+
+
 # --- New activity-share features: units + hover data, weather, time in zone, interval overlay,
 # route playback, and theme colors -----------------------------------------------------------
 

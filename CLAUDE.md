@@ -497,7 +497,38 @@ because you don't recognize it — stop, that's the bug.
   activity page, aggregated across every session in range), and Fitness (hiit/strength_training —
   note `sport_family()` in `merge/engine.py` has no single bucket for either of these, so this
   page unions `sport_family(sport)=="strength"` with the literal `sport=="hiit"` fallback itself)
-  — Fitness & Form (CTL/ATL) stays, health stays excluded. The route map is the one deliberate
+  — Fitness & Form (CTL/ATL) stays, health stays excluded. Every one of these sections, plus the
+  top-level totals, now carries the same icon-chip + tone treatment as the activity page, matched
+  against each section's *own* real authenticated-app component rather than one blanket mapping:
+  the top-level stats mirror `PeriodStatsCard.tsx` (Month/Year/All-time's real card — Distance/
+  Longest streak/Total elevation as heroes plus Activities/Moving time/Active days/Longest
+  activity/Busiest week-or-month-or-year/Favorite day/Average distance-time-speed/Average+Max
+  heart rate; `earliestDateForKeys`-style per-field Python ports of `runningStats.ts`/
+  `yearStats.ts`'s streak/weekday/busiest/average logic feed these, straight from the same
+  `activity`+`activity_metric` query this function already runs, plus one extra query resolving
+  avg/max heart rate per activity via `AVG_HR_METRIC_KEYS`/`MAX_HR_METRIC_KEYS`, already imported
+  here for the activity page's own HR stats). `WeekView.tsx` has a materially different "Week
+  stats" card with no streak/busiest/favorite-day/averages concept at all for a single week, so a
+  **week** share deliberately keeps the original six-stat set (now iconed, not expanded) rather
+  than inventing stats the real week view doesn't have. Running/Hiking/Climbing's own tiles are
+  tuned to `RunningStats.tsx`/`HikeStatsCard.tsx`/`ClimbingStatsCard.tsx` respectively — Climbing
+  here is deliberately all-`"elevation"`, a different mapping than the activity page's own single-
+  climb section (`ActivityStatsGrid.tsx`), because they're two different real components with
+  their own real mappings, not one shared source of truth. `Activities by type` is new: a colored,
+  iconed horizontal-bar breakdown by sport (count and time together, since a static page can't
+  offer `PeriodStatsCard`'s own live count/time pie toggle) — `_SPORT_ICON_PATHS` holds ten
+  pictogram paths copied verbatim from the installed `@phosphor-icons/react` package's own
+  `dist/defs/<Name>.es.js` "fill" entries (MIT), since `Icon.tsx`'s sport icons are real Phosphor
+  components, not the hand-rolled stroke glyphs every other icon on this page reproduces — a
+  second `.icon.icon--filled` CSS override (`fill: currentColor; stroke: none`) renders them,
+  matching `layout.css`'s own identically-named rule. Deliberately NOT ported this round — real,
+  separately-scoped future work, not oversights: `RunningStats.tsx`'s heatmap grid, pace-vs-
+  distance scatter, time-of-day pie, trailing-N-day chart, and personal-records table;
+  `HikeStatsCard.tsx`'s featured-hike cards (need per-activity location lookups); the day-by-day
+  calendar grid. hiit/strength_training keeps the older plain `_stats_grid` (no confirmed
+  icon/tone mapping — the authenticated app has no dedicated card for these sports at all, only
+  the generic totals and the new Activities-by-type breakdown), same "don't invent a mapping that
+  doesn't exist upstream" reasoning as Fueling above. The route map is the one deliberate
   exception to this file's otherwise zero-JS pages: a real interactive MapLibre GL map (CARTO's
   Positron vector basemap, same style the authenticated frontend's `CartoBasemapLayer.tsx` uses),
   loaded from a CDN as a `type="module"` script — MapLibre v6 shipped no UMD/global build at all
