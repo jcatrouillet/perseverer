@@ -534,7 +534,7 @@ def test_render_period_share_html_includes_a_running_breakdown(tmp_path: Path) -
                 start_time_utc=now,
                 utc_offset_s=0,
                 local_date="2026-06-15",
-                sport="trail_running",  # same sport_family("run") as plain running
+                sport="running",
                 distance_m=20000.0,
                 moving_duration_s=7200.0,
                 primary_source="fit_folder",
@@ -542,7 +542,25 @@ def test_render_period_share_html_includes_a_running_breakdown(tmp_path: Path) -
                 updated_at=now,
             )
         )
-        # A non-running activity in the same range -- must not be counted in the running totals.
+        # A different (but sport_family-equivalent) sport, and a wholly unrelated one -- neither
+        # must be counted: MonthView/YearView's own `useActivities({sport: "running"})` call does
+        # a plain `sport == "running"` match server-side, not a sport_family() grouping, confirmed
+        # against GET /activities's own query -- trail_running is a real, deliberate exclusion.
+        conn.execute(
+            activity.insert().values(
+                id="trail1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-12",
+                sport="trail_running",
+                distance_m=99000.0,
+                moving_duration_s=99000.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
         conn.execute(
             activity.insert().values(
                 id="ride1",
@@ -562,8 +580,8 @@ def test_render_period_share_html_includes_a_running_breakdown(tmp_path: Path) -
         html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
 
     assert "Running" in html
-    assert "30 km" in html  # 10km + 20km run distance, cycling excluded
-    assert ">2<" in html  # two runs (including the trail_running one)
+    assert "30 km" in html  # 10km + 20km run distance, cycling + trail_running excluded
+    assert ">2<" in html  # two runs, not three
     assert "20.00 km" in html  # longest run
 
 
@@ -627,7 +645,7 @@ def test_render_period_share_html_omits_charts_with_no_data(tmp_path: Path) -> N
     with engine.connect() as conn:
         html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "week", "2026-06-01")
 
-    assert "Running" not in html
+    assert "<h2>Running</h2>" not in html
     assert "Fitness &amp; Form" not in html
     assert "Distance by month" not in html
 
@@ -874,6 +892,254 @@ def test_render_period_share_html_includes_activities_by_type_breakdown(tmp_path
     assert "Running" in html
     assert "Cycling" in html
     assert "icon--filled" in html  # the Phosphor sport pictograms, not the hand-rolled glyphs
+
+
+def test_render_period_share_html_month_shows_running_charts_and_heatmap(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        for day in ("2026-06-01", "2026-06-08", "2026-06-15"):
+            conn.execute(
+                activity.insert().values(
+                    id=f"run-{day}",
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    start_time_utc=now,
+                    utc_offset_s=0,
+                    local_date=day,
+                    sport="running",
+                    distance_m=8000.0,
+                    moving_duration_s=2400.0,
+                    duration_s=2400.0,
+                    primary_source="fit_folder",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Distance per day" in html
+    assert "Trailing 7-day kilometers" in html
+    assert "Daily distance" in html
+    assert 'class="running-heatmap__strip"' in html
+    assert 'style="--day-count:30"' in html  # June has 30 days
+    assert "running-heatmap__legend-item" in html  # the always-shown gradient/pie legend swatches
+
+
+def test_render_period_share_html_year_shows_month_bucket_and_month_tiles(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 3, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="run1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-03-15",
+                sport="running",
+                distance_m=8000.0,
+                moving_duration_s=2400.0,
+                duration_s=2400.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        for day, count, dist, moving_s in (
+            ("2026-03-01", 4, 32000.0, 14400.0),
+            ("2026-07-01", 2, 16000.0, 7200.0),
+        ):
+            conn.execute(
+                period_rollup.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    period_type="month",
+                    period_start=day,
+                    period_end=day,
+                    activity_count=count,
+                    activity_distance_m=dist,
+                    activity_moving_duration_s=moving_s,
+                    activity_days_count=count,
+                    refreshed_at=now,
+                )
+            )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "year", "2026")
+
+    assert "Distance per month" in html
+    assert "Trailing 90-day kilometers" in html
+    assert 'class="running-heatmap__grid"' in html  # the week-grid layout, not the daily strip
+    assert 'class="running-heatmap__strip"' not in html
+    # The month-tile grid: March and July have real rollup data, every other month is empty.
+    assert 'class="stat-grid month-tile-grid"' in html
+    assert "March" in html
+    assert "32.0 km" in html
+    assert "4.0h" in html
+    assert "July" in html
+    assert "16.0 km" in html
+    assert "No activity" in html  # every other month
+
+
+def test_render_period_share_html_personal_records_and_new_pr_badge(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        # A slower 5k earlier in the athlete's history -- the June one below must outrun it to
+        # earn the "all-time PR" badge.
+        conn.execute(
+            activity.insert().values(
+                id="old5k",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=dt.datetime(2026, 1, 1, 8, 0, 0),
+                utc_offset_s=0,
+                local_date="2026-01-01",
+                sport="running",
+                distance_m=5000.0,
+                moving_duration_s=1800.0,  # 6:00/km
+                duration_s=1800.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            activity.insert().values(
+                id="new5k",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-15",
+                sport="running",
+                distance_m=5000.0,
+                moving_duration_s=1500.0,  # 5:00/km -- a real all-time PR
+                duration_s=1500.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "Personal records" in html
+    assert "fastest whole recorded run near each distance" in html
+    assert "running-records__table" in html
+    assert "5 km" in html
+    assert "5:00 /km" in html
+    assert "1 all-time PR set this period: 5 km" in html
+    assert "running-records__pr-badge" in html
+
+
+def test_render_period_share_html_featured_hikes(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="hike-long",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-01",
+                sport="hiking",
+                name="Ridge Trail",
+                distance_m=18000.0,
+                moving_duration_s=14400.0,
+                elevation_gain_m=200.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.execute(
+            activity.insert().values(
+                id="hike-high-gain",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-10",
+                sport="hiking",
+                name="Hike",  # the generic device default -- must fall back to "Hike" verbatim
+                distance_m=6000.0,
+                moving_duration_s=7200.0,
+                elevation_gain_m=900.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        # A separate, lower-gain hike that reaches the highest absolute point -- must be its own
+        # featured card, distinct from "Highest elevation gain" above (a hike already featured
+        # under one label is never featured again under another, same dedup HikeStatsCard.tsx's
+        # own pickFeaturedHikes uses).
+        conn.execute(
+            activity.insert().values(
+                id="hike-high-point",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-20",
+                sport="hiking",
+                distance_m=4000.0,
+                moving_duration_s=5400.0,
+                elevation_gain_m=100.0,
+                max_altitude_m=3200.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "month", "2026-06")
+
+    assert "hike-featured-card" in html
+    assert "Longest hike" in html
+    assert "Ridge Trail" in html
+    assert "Highest elevation gain" in html
+    assert "Highest point reached" in html
+    assert "3200 m peak" in html
+
+
+def test_render_period_share_html_week_has_no_running_charts_or_records(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _seed_athlete(engine)
+    now = dt.datetime(2026, 6, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id="run1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date="2026-06-01",
+                sport="running",
+                distance_m=5000.0,
+                moving_duration_s=1500.0,
+                duration_s=1500.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        html = render_period_share_html(conn, DEFAULT_ATHLETE_ID, "week", "2026-06-01")
+
+    assert "<h2>Running</h2>" in html
+    # Only-conditionally-emitted markers, not the bare class names -- those are always present in
+    # the page's own <style> block regardless of whether the section itself rendered.
+    assert '<div class="running-heatmap"' not in html
+    assert '<div class="running-stats__charts"' not in html
+    assert "Personal records" not in html
 
 
 # --- New activity-share features: units + hover data, weather, time in zone, interval overlay,

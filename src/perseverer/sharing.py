@@ -66,7 +66,7 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from html import escape
@@ -498,8 +498,19 @@ def _svg_line_chart(
     )
 
 
-def _svg_bar_chart(bars: list[tuple[str, float]], *, width: int = 560, height: int = 150) -> str:
-    """One bar per (label, value) pair, e.g. monthly distance -- `bars` in display order."""
+def _svg_bar_chart(
+    bars: list[tuple[str, float]],
+    *,
+    width: int = 560,
+    height: int = 150,
+    label_interval: int = 0,
+    aria_label: str = "Monthly distance",
+) -> str:
+    """One bar per (label, value) pair, e.g. monthly distance -- `bars` in display order.
+    `label_interval` skips that many labels between shown ones (Recharts' own `interval` prop
+    convention, see RunningStats.tsx's `bucketTickInterval`) -- a bar chart with 31 daily bars
+    needs this to stay legible; the default of 0 (show every label) matches every pre-existing
+    caller of this function, which never has more than a dozen-odd bars."""
     if not bars:
         return ""
     max_v = max(v for _, v in bars) or 1.0
@@ -518,13 +529,14 @@ def _svg_bar_chart(bars: list[tuple[str, float]], *, width: int = 560, height: i
             f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{bar_h:.1f}" '
             f'fill="var(--color-pace)" rx="2"/>'
         )
-        parts.append(
-            f'<text x="{x + bar_w / 2:.1f}" y="{label_y}" font-size="9" text-anchor="middle" '
-            f'class="chart-axis-label">{escape(label)}</text>'
-        )
+        if i % (label_interval + 1) == 0:
+            parts.append(
+                f'<text x="{x + bar_w / 2:.1f}" y="{label_y}" font-size="9" text-anchor="middle" '
+                f'class="chart-axis-label">{escape(label)}</text>'
+            )
     return (
         f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" '
-        f'role="img" aria-label="Monthly distance" class="chart">{"".join(parts)}</svg>'
+        f'role="img" aria-label="{escape(aria_label)}" class="chart">{"".join(parts)}</svg>'
     )
 
 
@@ -1020,6 +1032,102 @@ def _page(*, title: str, description: str, body: str, extra_head: str = "") -> s
                            overflow: hidden; }}
   .time-in-zone__fill {{ display: block; height: 100%; }}
   .time-in-zone__value {{ text-align: right; color: var(--color-text-muted); }}
+
+  /* Running charts/heatmap/PR table + featured hikes + the year's month-tile grid -- same class
+     names as running-stats.css/hike-stats.css/calendar.css so this page is styled by literally
+     the same rules as the authenticated app, not an approximation of them. */
+  .running-stats__charts {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;
+                             margin-top: 1.5rem; }}
+  .running-stats__charts h3 {{ font-size: 0.8125rem; color: var(--color-text-muted);
+                                font-weight: 600; margin: 0 0 0.5rem; }}
+  .running-heatmap {{ margin-top: 1.5rem; }}
+  .running-heatmap h3 {{ font-size: 0.8125rem; color: var(--color-text-muted); font-weight: 600;
+                          margin: 0 0 0.5rem; }}
+  .running-heatmap__grid {{ display: flex; flex-direction: column; gap: 2px; width: 100%;
+                             max-width: min(100%, calc(28px + var(--week-count, 53) * 20px)); }}
+  .running-heatmap__row {{ display: grid; align-items: center; gap: 2px;
+                            grid-template-columns:
+                              28px repeat(var(--week-count, 53), minmax(12px, 1fr)); }}
+  .running-heatmap__row-label {{ font-size: 0.8125rem; color: var(--color-text-muted);
+                                  position: sticky; left: 0; background: var(--color-surface); }}
+  .running-heatmap__grid--years .running-heatmap__row {{
+    grid-template-columns: 34px repeat(var(--week-count, 53), minmax(12px, 1fr)); }}
+  .running-heatmap__strip {{ display: grid; gap: 4px;
+                              grid-template-columns:
+                                repeat(var(--day-count, 31), minmax(28px, 1fr)); }}
+  .running-heatmap__strip-day {{ display: flex; flex-direction: column; align-items: stretch;
+                                  gap: 0.25rem; }}
+  .running-heatmap__day-label {{ text-align: center; font-size: 0.8125rem;
+                                  color: var(--color-text-muted); }}
+  .running-heatmap__row--months {{ margin-bottom: 1px; }}
+  .running-heatmap__month-label {{ font-size: 0.8125rem; color: var(--color-text-muted);
+                                    overflow: visible; white-space: nowrap; }}
+  .running-heatmap__cell {{ width: 100%; aspect-ratio: 1 / 1; border-radius: 3px;
+                             border: 1px solid var(--color-border); display: inline-flex;
+                             align-items: center; justify-content: center; position: relative;
+                             background: color-mix(in srgb, var(--color-pace) var(--heat-pct, 0%),
+                               var(--color-surface)); }}
+  .running-heatmap__cell.is-empty {{ border-color: transparent; background: transparent; }}
+  .running-heatmap__cell.is-month-end {{ border-right: 2px solid var(--color-text-faint); }}
+  .running-heatmap__pie {{ width: 72%; height: 72%; border-radius: 50%;
+                            background: conic-gradient(var(--color-pace) var(--pie-deg, 0deg),
+                            color-mix(in srgb, var(--color-pace) 15%, transparent) 0); }}
+  .running-heatmap__legend {{ display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+                               margin-top: 0.75rem; font-size: 0.8125rem;
+                               color: var(--color-text-muted); }}
+  .running-heatmap__legend-item {{ display: inline-flex; align-items: center; gap: 3px; }}
+  .running-heatmap__legend .running-heatmap__cell {{ width: 14px; }}
+  .running-heatmap__tooltip {{ display: none; position: absolute; bottom: calc(100% + 6px);
+                                left: 50%; transform: translateX(-50%); z-index: 10;
+                                flex-direction: column; gap: 2px; white-space: nowrap;
+                                background: var(--color-surface-raised);
+                                border: 1px solid var(--color-border);
+                                border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.8125rem;
+                                color: var(--color-text); box-shadow: var(--shadow-card); }}
+  .running-heatmap__cell:not(.is-empty):hover .running-heatmap__tooltip {{ display: flex; }}
+  .running-records {{ margin-top: 1.5rem; }}
+  .running-records h3 {{ font-size: 0.8125rem; color: var(--color-text-muted); font-weight: 600;
+                          margin: 0 0 0.5rem; }}
+  .running-records__caveat {{ font-weight: 400; color: var(--color-text-faint); }}
+  .running-records__table {{ width: 100%; border-collapse: collapse; font-size: 0.8125rem; }}
+  .running-records__table th, .running-records__table td {{
+    text-align: left; padding: 0.5rem 0.75rem; font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid var(--color-border); }}
+  .running-records__table th {{
+    font-size: 0.65625rem; font-weight: 700; letter-spacing: 0.075em;
+    text-transform: uppercase; color: var(--color-text-faint); }}
+  .running-records__table tbody tr:last-child td {{ border-bottom: 0; }}
+  .running-records__new-prs {{
+    display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0 0;
+    padding: 0.5rem 0.75rem; border-radius: 8px; font-weight: 600; font-size: 0.8125rem;
+    color: var(--color-load);
+    background: color-mix(in srgb, var(--color-load) 15%, transparent); }}
+  .running-records__pr-badge {{
+    display: inline-flex; color: var(--color-load); margin-left: 0.25rem; }}
+  .running-records__pr-badge .icon {{ width: 13px; height: 13px; }}
+  .hike-featured-grid {{
+    display: grid; gap: 1rem; margin-top: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }}
+  .hike-featured-card {{
+    display: block; padding: 1rem; border-radius: 14px;
+    border: 1px solid var(--color-border); background: var(--color-surface); }}
+  .hike-featured-card__label {{
+    display: flex; align-items: center; gap: 0.25rem; font-size: 0.8125rem;
+    font-weight: 600; color: var(--color-elevation); text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 0.5rem; }}
+  .hike-featured-card__title {{ display: block; font-weight: 600; margin-bottom: 0.25rem; }}
+  .hike-featured-card__meta {{
+    display: block; font-size: 0.8125rem; color: var(--color-text-muted);
+    margin-bottom: 0.5rem; }}
+  .hike-featured-card__stats {{ display: block; font-size: 0.8125rem; }}
+  .stat-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 1rem; align-items: start; margin-top: 1rem; }}
+  .card {{ background: var(--color-surface); border: 1px solid var(--color-border);
+           border-radius: 14px; padding: 0.75rem 1rem; }}
+  .month-tile__name {{ font-weight: 600; margin-bottom: 0.5rem; }}
+  .month-tile__stats {{ color: var(--color-text-muted); font-size: 0.8125rem; display: flex;
+                         flex-direction: column; gap: 0.15rem; }}
+  .month-tile__stats--empty {{ color: var(--color-text-faint); font-style: italic; }}
   footer {{ margin-top: 2rem; font-size: 0.8rem; color: var(--color-text-faint); }}
 </style>
 {extra_head}
@@ -1848,15 +1956,19 @@ def _display_sport(sport: str, sub_sport: str | None) -> str:
 
 @dataclass(frozen=True)
 class _PeriodActivity:
+    id: str
     sport: str
     sub_sport: str | None
+    name: str | None
     distance_m: float | None
     moving_duration_s: float | None
     duration_s: float | None
     elevation_gain_m: float | None
+    max_altitude_m: float | None
     local_date: str | None
     avg_hr_bpm: float | None
     max_hr_bpm: float | None
+    vdot: float | None
 
 
 def _effective_duration_s(a: _PeriodActivity) -> float | None:
@@ -2010,6 +2122,613 @@ def _type_breakdown_html(counts: list[tuple[str, int, float]]) -> str:
     return "".join(rows)
 
 
+# --- Running section: distance charts, heatmap, personal records (RunningStats.tsx port) ----
+# Straight ports of runningStats.ts's own pure functions -- one Python function per named export
+# used here, kept under the same names/semantics so a future change to the real component's
+# logic has an obvious counterpart to update. `activities` throughout is this function's own
+# `_PeriodActivity` list, already scoped to whichever activities the caller has selected (the
+# period's own running activities, or -- for the heatmap/bucket charts specifically -- the whole
+# period's activities of every sport, matching AllTimeView.tsx/YearView.tsx's own choice to date-
+# range the Running section off the *overall* activity history, not a running-only span).
+
+
+def _daily_distance_m(activities: list[_PeriodActivity]) -> dict[str, float]:
+    by_date: dict[str, float] = {}
+    for a in activities:
+        if a.local_date is None or a.distance_m is None:
+            continue
+        by_date[a.local_date] = by_date.get(a.local_date, 0.0) + a.distance_m
+    return by_date
+
+
+def _daily_stats(activities: list[_PeriodActivity]) -> dict[str, tuple[float, float, float]]:
+    """(distance_m, duration_s, elevation_gain_m) per local_date -- `duration_s` here is
+    deliberately the raw elapsed duration (not `_effective_duration_s`), matching
+    runningStats.ts::dailyStats's own field exactly (used only for the heatmap tooltip's pace,
+    which the real component computes the same way)."""
+    by_date: dict[str, list[float]] = {}
+    for a in activities:
+        if a.local_date is None:
+            continue
+        acc = by_date.setdefault(a.local_date, [0.0, 0.0, 0.0])
+        acc[0] += a.distance_m or 0.0
+        acc[1] += a.duration_s or 0.0
+        acc[2] += a.elevation_gain_m or 0.0
+    return {k: (v[0], v[1], v[2]) for k, v in by_date.items()}
+
+
+def _distance_by_day(
+    activities: list[_PeriodActivity], start: str, end: str
+) -> list[tuple[str, float]]:
+    by_date = _daily_distance_m(activities)
+    buckets = []
+    cursor = date.fromisoformat(start)
+    last = date.fromisoformat(end)
+    while cursor <= last:
+        buckets.append((str(cursor.day), round(by_date.get(cursor.isoformat(), 0.0) / 100) / 10))
+        cursor += timedelta(days=1)
+    return buckets
+
+
+def _distance_by_year(
+    activities: list[_PeriodActivity], start: str, end: str
+) -> list[tuple[str, float]]:
+    by_year: dict[int, float] = {}
+    for a in activities:
+        if a.local_date is None or a.distance_m is None:
+            continue
+        year = int(a.local_date[:4])
+        by_year[year] = by_year.get(year, 0.0) + a.distance_m
+    start_year, end_year = int(start[:4]), int(end[:4])
+    return [
+        (str(y), round(by_year.get(y, 0.0) / 100) / 10) for y in range(start_year, end_year + 1)
+    ]
+
+
+def _monthly_distance_m(activities: list[_PeriodActivity]) -> list[float]:
+    totals = [0.0] * 12
+    for a in activities:
+        if a.local_date is None or a.distance_m is None:
+            continue
+        totals[int(a.local_date[5:7]) - 1] += a.distance_m
+    return totals
+
+
+def _rolling_distance_km(
+    activities: list[_PeriodActivity], start: str, end: str, window_days: int
+) -> list[tuple[str, float]]:
+    by_date = _daily_distance_m(activities)
+    dates = []
+    cursor = date.fromisoformat(start)
+    last = date.fromisoformat(end)
+    while cursor <= last:
+        dates.append(cursor.isoformat())
+        cursor += timedelta(days=1)
+    points: list[tuple[str, float]] = []
+    window: list[float] = []
+    window_sum = 0.0
+    for d in dates:
+        today_m = by_date.get(d, 0.0)
+        window.append(today_m)
+        window_sum += today_m
+        if len(window) > window_days:
+            window_sum -= window.pop(0)
+        points.append((d, window_sum / 1000))
+    return points
+
+
+def _svg_trailing_chart(
+    points: list[tuple[str, float]],
+    tick_dates: set[str],
+    tick_label: Callable[[str], str],
+    *,
+    width: int = 560,
+    height: int = 150,
+    color: str = "var(--color-pace)",
+) -> str:
+    """One line, x-axis tick labels only at `tick_dates` -- matching RunningStats.tsx's own
+    sparse `trailingTicks` selection (every 5th day / the 1st of each month / Jan 1 of each
+    year), since labelling every single day would be illegible."""
+    if len(points) < 2:
+        return ""
+    values = [v for _, v in points]
+    lo, hi = min(values), max(values)
+    span = hi - lo or 1.0
+    pad_l, pad_r, pad_t, pad_b = 4, 4, 6, 20
+
+    def x_at(i: int) -> float:
+        return pad_l + i / (len(points) - 1) * (width - pad_l - pad_r)
+
+    def y_at(v: float) -> float:
+        return height - pad_b - (v - lo) / span * (height - pad_t - pad_b)
+
+    poly = " ".join(f"{x_at(i):.1f},{y_at(v):.1f}" for i, (_, v) in enumerate(points))
+    ticks = []
+    for i, (d, _) in enumerate(points):
+        if d in tick_dates:
+            ticks.append(
+                f'<text x="{x_at(i):.1f}" y="{height - 6}" font-size="9" text-anchor="middle" '
+                f'class="chart-axis-label">{escape(tick_label(d))}</text>'
+            )
+    return (
+        f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" '
+        f'role="img" aria-label="Trailing distance" class="chart">'
+        f'<polyline points="{poly}" fill="none" stroke="{color}" stroke-width="2"/>'
+        f'{"".join(ticks)}</svg>'
+    )
+
+
+@dataclass(frozen=True)
+class _HeatmapScale:
+    short_max_km: float
+    full_circle_km: float
+    gradient_legend_km: tuple[float, ...]
+    pie_legend_km: tuple[float, ...]
+
+
+# Same two calibrated scales as runningStats.ts::DAILY_HEATMAP_SCALE/WEEKLY_HEATMAP_SCALE --
+# one cell = one day (month/year views) vs. one cell = one week (all-time view).
+_DAILY_HEATMAP_SCALE = _HeatmapScale(10.0, 42.195, (2.0, 5.0, 8.0, 10.0), (15.0, 21.1, 30.0, 42.2))
+_WEEKLY_HEATMAP_SCALE = _HeatmapScale(40.0, 70.0, (10.0, 20.0, 30.0, 40.0), (50.0, 60.0, 70.0))
+
+
+def _is_long_run(km: float, scale: _HeatmapScale) -> bool:
+    return km > scale.short_max_km
+
+
+def _short_run_heat_pct(km: float, scale: _HeatmapScale) -> float:
+    if km <= 0:
+        return 0.0
+    return min(92.0, 15.0 + (km / scale.short_max_km) * 77.0)
+
+
+def _long_run_pie_deg(km: float, scale: _HeatmapScale) -> float:
+    frac = (km - scale.short_max_km) / (scale.full_circle_km - scale.short_max_km)
+    return max(0.0, min(1.0, frac)) * 360.0
+
+
+def _format_heatmap_date(iso: str) -> str:
+    d = date.fromisoformat(iso)
+    return f"{_WEEKDAY_LABELS[d.weekday()]}, {_MONTH_ABBR[d.month - 1]} {d.day}"
+
+
+def _heatmap_cell_html(
+    km: float,
+    pace_min_per_km: float | None,
+    elevation_m: float,
+    tooltip_title: str,
+    scale: _HeatmapScale,
+    extra_class: str = "",
+) -> str:
+    """A `<span>`, not the real app's `<Link>` -- there is no public day/week view for an
+    anonymous visitor to navigate to, so this cell is informational only (still hoverable for
+    its tooltip, a pure-CSS `:hover` reveal, same mechanism `layout.css`'s own version uses)."""
+    long_run = _is_long_run(km, scale)
+    style = f"--heat-pct:{0 if long_run else _short_run_heat_pct(km, scale):.0f}%"
+    pie_deg = _long_run_pie_deg(km, scale)
+    pie_html = (
+        f'<span class="running-heatmap__pie" style="--pie-deg:{pie_deg:.0f}deg"></span>'
+        if long_run
+        else ""
+    )
+    if km > 0 and pace_min_per_km is not None:
+        detail = f"{km:.1f} km &middot; {_format_pace_min_per_km(pace_min_per_km)} min/km"
+        if elevation_m > 0:
+            detail += f" &middot; +{elevation_m:.0f}m"
+    else:
+        detail = "No run"
+    return (
+        f'<span class="running-heatmap__cell{extra_class}" style="{style}">{pie_html}'
+        f'<span class="running-heatmap__tooltip"><strong>{escape(tooltip_title)}</strong>'
+        f"<span>{detail}</span></span></span>"
+    )
+
+
+def _monday_of(d: date) -> date:
+    return d - timedelta(days=d.weekday())
+
+
+def _daily_heatmap_strip_html(activities: list[_PeriodActivity], start: str, end: str) -> str:
+    """Month view's own layout -- one row, one cell per day, a day-number label underneath each
+    (the page heading already says which month, so no month label row is needed)."""
+    daily = _daily_stats(activities)
+    cells = []
+    cursor = date.fromisoformat(start)
+    last = date.fromisoformat(end)
+    day_count = 0
+    while cursor <= last:
+        iso = cursor.isoformat()
+        dist_m, dur_s, elev_m = daily.get(iso, (0.0, 0.0, 0.0))
+        km = dist_m / 1000
+        pace = (dur_s / 60 / km) if km > 0 else None
+        cell = _heatmap_cell_html(km, pace, elev_m, _format_heatmap_date(iso), _DAILY_HEATMAP_SCALE)
+        cells.append(
+            f'<div class="running-heatmap__strip-day">{cell}'
+            f'<span class="running-heatmap__day-label">{cursor.day}</span></div>'
+        )
+        cursor += timedelta(days=1)
+        day_count += 1
+    return (
+        '<div class="table-scroll"><div class="running-heatmap__strip" '
+        f'style="--day-count:{day_count}">{"".join(cells)}</div></div>'
+    )
+
+
+def _weekly_heatmap_grid_html(activities: list[_PeriodActivity], start: str, end: str) -> str:
+    """Year view's own layout -- one column per week of the year, one row per weekday
+    (Mon..Sun), plus a month-label row on top and a divider at each month boundary. Straight
+    port of RunningStats.tsx's own `weeks`/`monthLabelFor`/`isMonthEndWeek` construction: weeks
+    are built from the Monday on/before `start` through `end` (rounded up to a full week), and a
+    day outside [start, end] in a boundary week renders as an empty placeholder rather than being
+    omitted, so the grid still reads as complete weeks."""
+    daily = _daily_stats(activities)
+    start_d = date.fromisoformat(start)
+    end_d = date.fromisoformat(end)
+
+    weeks: list[list[date]] = []
+    cursor = _monday_of(start_d)
+    week: list[date] = []
+    while cursor <= end_d or week:
+        week.append(cursor)
+        if len(week) == 7:
+            weeks.append(week)
+            week = []
+        cursor += timedelta(days=1)
+        if cursor > end_d and not week:
+            break
+    if week:
+        weeks.append(week)
+
+    def in_range(d: date) -> bool:
+        return start_d <= d <= end_d
+
+    def month_label_for(wk: list[date], prev_wk: list[date] | None) -> str:
+        first = next((d for d in wk if in_range(d)), None)
+        if first is None:
+            return ""
+        prev_first = next((d for d in prev_wk if in_range(d)), None) if prev_wk else None
+        if prev_first is not None and prev_first.month == first.month:
+            return ""
+        return _MONTH_ABBR[first.month - 1]
+
+    def is_month_end_week(wk: list[date], next_wk: list[date] | None) -> bool:
+        if next_wk is None:
+            return False
+        this_month = next((d.month for d in wk if in_range(d)), None)
+        next_month = next((d.month for d in next_wk if in_range(d)), None)
+        return this_month is not None and next_month is not None and this_month != next_month
+
+    month_cells = []
+    for i, wk in enumerate(weeks):
+        label = escape(month_label_for(wk, weeks[i - 1] if i else None))
+        month_cells.append(f'<span class="running-heatmap__month-label">{label}</span>')
+    rows = [
+        '<div class="running-heatmap__row running-heatmap__row--months">'
+        '<span class="running-heatmap__row-label"></span>' + "".join(month_cells) + "</div>"
+    ]
+    for row_idx, weekday_label in enumerate(_WEEKDAY_LABELS):
+        cells = []
+        for i, wk in enumerate(weeks):
+            month_end = is_month_end_week(wk, weeks[i + 1] if i + 1 < len(weeks) else None)
+            extra = " is-month-end" if month_end else ""
+            d = wk[row_idx]
+            if not in_range(d):
+                cells.append(f'<span class="running-heatmap__cell is-empty{extra}"></span>')
+                continue
+            iso = d.isoformat()
+            dist_m, dur_s, elev_m = daily.get(iso, (0.0, 0.0, 0.0))
+            km = dist_m / 1000
+            pace = (dur_s / 60 / km) if km > 0 else None
+            title = _format_heatmap_date(iso)
+            cells.append(
+                _heatmap_cell_html(km, pace, elev_m, title, _WEEKLY_HEATMAP_SCALE, extra)
+            )
+        rows.append(
+            f'<div class="running-heatmap__row"><span class="running-heatmap__row-label">'
+            f"{weekday_label}</span>" + "".join(cells) + "</div>"
+        )
+    grid = (
+        f'<div class="running-heatmap__grid" style="--week-count:{len(weeks)}">'
+        + "".join(rows)
+        + "</div>"
+    )
+    return f'<div class="table-scroll">{grid}</div>'
+
+
+def _yearly_heatmap_grid_html(activities: list[_PeriodActivity], start: str, end: str) -> str:
+    """All-time view's own layout -- one row per calendar year, one cell per week (each year's
+    own Jan-1-aligned Monday grid, not one continuous timeline)."""
+    weekly: dict[str, list[float]] = {}
+    for a in activities:
+        if a.local_date is None:
+            continue
+        monday = _monday_of(date.fromisoformat(a.local_date)).isoformat()
+        acc = weekly.setdefault(monday, [0.0, 0.0, 0.0])
+        acc[0] += a.distance_m or 0.0
+        acc[1] += a.duration_s or 0.0
+        acc[2] += a.elevation_gain_m or 0.0
+
+    start_year, end_year = int(start[:4]), int(end[:4])
+    max_weeks = 0
+    year_rows = []
+    for year in range(start_year, end_year + 1):
+        cursor = _monday_of(date(year, 1, 1))
+        year_end = date(year, 12, 31)
+        week_cells = []
+        while cursor <= year_end:
+            iso = cursor.isoformat()
+            dist_m, dur_s, elev_m = weekly.get(iso, [0.0, 0.0, 0.0])
+            km = dist_m / 1000
+            pace = (dur_s / 60 / km) if km > 0 else None
+            title = f"Week of {_MONTH_ABBR[cursor.month - 1]} {cursor.day}"
+            week_cells.append(_heatmap_cell_html(km, pace, elev_m, title, _WEEKLY_HEATMAP_SCALE))
+            cursor += timedelta(days=7)
+        max_weeks = max(max_weeks, len(week_cells))
+        year_rows.append(
+            f'<div class="running-heatmap__row"><span class="running-heatmap__row-label">{year}'
+            "</span>" + "".join(week_cells) + "</div>"
+        )
+    grid = (
+        '<div class="running-heatmap__grid running-heatmap__grid--years" '
+        f'style="--week-count:{max_weeks}">' + "".join(year_rows) + "</div>"
+    )
+    return f'<div class="table-scroll">{grid}</div>'
+
+
+def _heatmap_legend_html(scale: _HeatmapScale) -> str:
+    items = [
+        '<span class="running-heatmap__legend-item"><span class="running-heatmap__cell" '
+        'style="--heat-pct:0%"></span><span>No run</span></span>'
+    ]
+    for km in scale.gradient_legend_km:
+        items.append(
+            '<span class="running-heatmap__legend-item"><span class="running-heatmap__cell" '
+            f'style="--heat-pct:{_short_run_heat_pct(km, scale):.0f}%"></span>'
+            f"<span>{km:g}km</span></span>"
+        )
+    for km in scale.pie_legend_km:
+        pie_deg = _long_run_pie_deg(km, scale)
+        items.append(
+            '<span class="running-heatmap__legend-item"><span class="running-heatmap__cell">'
+            f'<span class="running-heatmap__pie" style="--pie-deg:{pie_deg:.0f}deg"></span>'
+            f"</span><span>{km:g}km</span></span>"
+        )
+    return f'<div class="running-heatmap__legend">{"".join(items)}</div>'
+
+
+# --- Personal records (runningStats.ts::personalRecords port) -------------------------------
+
+_STANDARD_DISTANCES: list[tuple[str, float]] = [
+    ("1 mile", 1609.34),
+    ("3 km", 3000.0),
+    ("5 km", 5000.0),
+    ("4 mile", 6437.38),
+    ("5 mile", 8046.72),
+    ("10 km", 10000.0),
+    ("15 km", 15000.0),
+    ("10 mile", 16093.4),
+    ("20 km", 20000.0),
+    ("Half marathon", 21097.5),
+    ("Marathon", 42195.0),
+]
+
+
+@dataclass(frozen=True)
+class _PersonalRecord:
+    label: str
+    date: str
+    actual_distance_m: float
+    duration_s: float
+    pace_min_per_km: float
+    speed_kmh: float
+    eligible_count: int
+
+
+def _personal_records(activities: list[_PeriodActivity]) -> list[_PersonalRecord]:
+    """An honest approximation, not a true best-effort-segment extraction -- see
+    runningStats.ts::personalRecords's own docstring: for each standard distance, the fastest
+    *whole recorded activity* within a 0.9x-1.3x tolerance band of that distance."""
+    records = []
+    for label, meters in _STANDARD_DISTANCES:
+        min_m, max_m = meters * 0.9, meters * 1.3
+        eligible = [
+            a
+            for a in activities
+            if a.distance_m is not None
+            and min_m <= a.distance_m <= max_m
+            and _effective_duration_s(a) is not None
+        ]
+        if not eligible:
+            continue
+        best_date = eligible[0].local_date
+        best_distance_m = eligible[0].distance_m
+        best_duration = _effective_duration_s(eligible[0])
+        assert best_distance_m is not None and best_duration is not None
+        best_pace = best_duration / best_distance_m
+        for a in eligible[1:]:
+            duration = _effective_duration_s(a)
+            assert duration is not None and a.distance_m is not None
+            pace = duration / a.distance_m
+            if pace < best_pace:
+                best_date, best_distance_m, best_duration, best_pace = (
+                    a.local_date,
+                    a.distance_m,
+                    duration,
+                    pace,
+                )
+        distance_km = best_distance_m / 1000
+        records.append(
+            _PersonalRecord(
+                label=label,
+                date=best_date or "",
+                actual_distance_m=best_distance_m,
+                duration_s=best_duration,
+                pace_min_per_km=best_duration / 60 / distance_km,
+                speed_kmh=distance_km / (best_duration / 3600),
+                eligible_count=len(eligible),
+            )
+        )
+    return records
+
+
+def _new_all_time_prs(
+    period_records: list[_PersonalRecord], all_time_records: list[_PersonalRecord]
+) -> list[_PersonalRecord]:
+    """Which of `period_records` are genuine all-time bests, not just the fastest within this
+    narrower period -- matched by (label, date), same as runningStats.ts::newAllTimePrs."""
+    all_time_date_by_label = {r.label: r.date for r in all_time_records}
+    return [r for r in period_records if all_time_date_by_label.get(r.label) == r.date]
+
+
+def _format_pace_min_per_km(min_per_km: float) -> str:
+    """Carry-safe M:SS formatting -- runningStats.ts::formatMinPerKm's own rounding fix (a bare
+    round() on the seconds component alone can print "6:60" instead of "7:00")."""
+    m = int(min_per_km)
+    s = round((min_per_km - m) * 60)
+    if s == 60:
+        m, s = m + 1, 0
+    return f"{m}:{s:02d}"
+
+
+def _format_duration_rounded_to_minute(seconds: float) -> str:
+    """"1:41:00" / "56:00" -- the personal-records table's own local `formatDuration`, rounded to
+    the minute (distinct from this file's own `_format_duration`, which keeps real seconds)."""
+    h = int(seconds // 3600)
+    m = round((seconds % 3600) / 60)
+    if m == 60:
+        h, m = h + 1, 0
+    return f"{h}:{m:02d}:00" if h > 0 else f"{m}:00"
+
+
+def _records_table_html(records: list[_PersonalRecord], new_prs: list[_PersonalRecord]) -> str:
+    new_pr_labels = {r.label for r in new_prs}
+    rows = []
+    for r in records:
+        trophy = _icon_svg("trophy")
+        badge = (
+            f' <span class="running-records__pr-badge" title="All-time PR">{trophy}</span>'
+            if r.label in new_pr_labels
+            else ""
+        )
+        rows.append(
+            "<tr>"
+            f"<td>{escape(r.label)}</td>"
+            f"<td>{escape(r.date)}{badge}</td>"
+            f"<td>{_format_pace_min_per_km(r.pace_min_per_km)} /km</td>"
+            f"<td>{r.speed_kmh:.2f} km/h</td>"
+            f"<td>{r.actual_distance_m / 1000:.2f} km</td>"
+            f"<td>{_format_duration_rounded_to_minute(r.duration_s)}</td>"
+            f"<td>{r.eligible_count}</td>"
+            "</tr>"
+        )
+    new_prs_html = ""
+    if new_prs:
+        labels = ", ".join(r.label for r in new_prs)
+        plural = "" if len(new_prs) == 1 else "s"
+        new_prs_html = (
+            f'<p class="running-records__new-prs">{_icon_svg("trophy")} {len(new_prs)} '
+            f"all-time PR{plural} set this period: {escape(labels)}</p>"
+        )
+    return (
+        f"{new_prs_html}"
+        '<div class="table-scroll"><table class="running-records__table">'
+        "<thead><tr><th>Distance</th><th>Date</th><th>Pace</th><th>Speed</th>"
+        "<th>Distance run</th><th>Time</th><th>Runs</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
+# --- Featured hikes (HikeStatsCard.tsx port) -------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _FeaturedHike:
+    label: str
+    activity: _PeriodActivity
+    location_name: str | None
+
+
+def _pick_featured_hikes(hikes: list[_PeriodActivity]) -> list[_FeaturedHike]:
+    """Longest by distance, then longest by time, most elevation gain, and highest point
+    reached -- each only included if it's a genuinely different activity from everything already
+    picked, straight port of HikeStatsCard.tsx::pickFeaturedHikes."""
+    featured: list[_FeaturedHike] = []
+    seen: set[str] = set()
+
+    by_distance = [h for h in hikes if (h.distance_m or 0) > 0]
+    if by_distance:
+        longest = max(by_distance, key=lambda h: h.distance_m or 0)
+        featured.append(_FeaturedHike("Longest hike", longest, None))
+        seen.add(longest.id)
+
+    by_duration = [h for h in hikes if (_effective_duration_s(h) or 0) > 0]
+    if by_duration:
+        longest_by_time = max(by_duration, key=lambda h: _effective_duration_s(h) or 0)
+        if longest_by_time.id not in seen:
+            featured.append(_FeaturedHike("Longest hike by time", longest_by_time, None))
+            seen.add(longest_by_time.id)
+
+    by_elevation = [h for h in hikes if (h.elevation_gain_m or 0) > 0]
+    if by_elevation:
+        most_elevation = max(by_elevation, key=lambda h: h.elevation_gain_m or 0)
+        if most_elevation.id not in seen:
+            featured.append(_FeaturedHike("Highest elevation gain", most_elevation, None))
+            seen.add(most_elevation.id)
+
+    by_altitude = [h for h in hikes if h.max_altitude_m is not None]
+    if by_altitude:
+        highest = max(by_altitude, key=lambda h: h.max_altitude_m or 0)
+        if highest.id not in seen:
+            featured.append(_FeaturedHike("Highest point reached", highest, None))
+            seen.add(highest.id)
+
+    return featured
+
+
+_HIKE_GENERIC_DEFAULT_NAME = "Hike"
+
+
+def _display_hike_name(a: _PeriodActivity) -> str:
+    """Port of yearStats.ts::displayActivityName, simplified for hikes only -- no
+    `workout_name` fallback (a planned-workout name essentially never applies to a hike)."""
+    if a.name is None or a.name == _HIKE_GENERIC_DEFAULT_NAME:
+        return _HIKE_GENERIC_DEFAULT_NAME
+    return a.name
+
+
+def _featured_hike_card_html(f: _FeaturedHike) -> str:
+    a = f.activity
+    duration_s = _effective_duration_s(a)
+    meta_parts = [escape(a.local_date or "")]
+    if f.location_name:
+        meta_parts.append(escape(f.location_name))
+    stats_parts = []
+    if a.distance_m is not None:
+        stats_parts.append(f"{a.distance_m / 1000:.1f} km")
+    if duration_s is not None:
+        stats_parts.append(_format_duration_hm(duration_s))
+    if a.elevation_gain_m is not None and a.elevation_gain_m > 0:
+        stats_parts.append(f"+{a.elevation_gain_m:.0f} m")
+    if a.max_altitude_m is not None:
+        stats_parts.append(f"{a.max_altitude_m:.0f} m peak")
+    return (
+        '<div class="hike-featured-card">'
+        f'<span class="hike-featured-card__label">{_icon_svg("trophy")} {escape(f.label)}</span>'
+        f'<span class="hike-featured-card__title">{escape(_display_hike_name(a))}</span>'
+        f'<span class="hike-featured-card__meta">{" &middot; ".join(meta_parts)}</span>'
+        f'<span class="hike-featured-card__stats">{" &middot; ".join(stats_parts)}</span>'
+        "</div>"
+    )
+
+
+def _format_duration_hm(seconds: float) -> str:
+    """"1h 14m" / "42m" -- runningStats.ts::formatDurationHM, distinct from this file's own
+    `_format_duration` (H:MM:SS)."""
+    h = int(seconds // 3600)
+    m = round((seconds % 3600) / 60)
+    return f"{h}h {m}m" if h > 0 else f"{m}m"
+
+
 def render_period_share_html(
     conn: Connection, athlete_id: str, period_type: str, period_start: str | None
 ) -> str:
@@ -2036,10 +2755,12 @@ def render_period_share_html(
         activity.c.id,
         activity.c.sport,
         activity.c.sub_sport,
+        activity.c.name,
         activity.c.distance_m,
         activity.c.moving_duration_s,
         activity.c.duration_s,
         activity.c.elevation_gain_m,
+        activity.c.max_altitude_m,
         activity.c.local_date,
     ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
     if start is not None and end is not None:
@@ -2048,10 +2769,10 @@ def render_period_share_html(
     with_distance = [a for a in activities if a.distance_m]
     longest_m = max((a.distance_m for a in with_distance), default=None)
 
-    # Whole-activity avg/max heart rate isn't a fixed column on `activity` -- it's an EAV metric
-    # under one of two possible metric_key namespaces (see api/routers/activities.py::
-    # AVG_HR_METRIC_KEYS/MAX_HR_METRIC_KEYS, imported above). One query for every activity in
-    # range rather than a correlated subquery per activity or an N+1 per-activity lookup.
+    # Whole-activity avg/max heart rate and VDOT aren't fixed columns on `activity` -- they're
+    # EAV metrics (see api/routers/activities.py::AVG_HR_METRIC_KEYS/MAX_HR_METRIC_KEYS,
+    # perseverer.performance::VDOT_METRIC_KEY, both imported above). One query for every activity
+    # in range rather than a correlated subquery per activity or an N+1 per-activity lookup.
     hr_by_activity: dict[str, dict[str, float]] = {}
     activity_ids = [a.id for a in activities]
     if activity_ids:
@@ -2062,21 +2783,27 @@ def render_period_share_html(
                 activity_metric.c.value_num,
             ).where(
                 activity_metric.c.activity_id.in_(activity_ids),
-                activity_metric.c.metric_key.in_((*AVG_HR_METRIC_KEYS, *MAX_HR_METRIC_KEYS)),
+                activity_metric.c.metric_key.in_(
+                    (*AVG_HR_METRIC_KEYS, *MAX_HR_METRIC_KEYS, VDOT_METRIC_KEY)
+                ),
             )
         ):
             hr_by_activity.setdefault(r.activity_id, {})[r.metric_key] = r.value_num
     period_activities = [
         _PeriodActivity(
+            id=a.id,
             sport=a.sport,
             sub_sport=a.sub_sport,
+            name=a.name,
             distance_m=a.distance_m,
             moving_duration_s=a.moving_duration_s,
             duration_s=a.duration_s,
             elevation_gain_m=a.elevation_gain_m,
+            max_altitude_m=a.max_altitude_m,
             local_date=a.local_date,
             avg_hr_bpm=_first_metric(hr_by_activity.get(a.id, {}), AVG_HR_METRIC_KEYS),
             max_hr_bpm=_first_metric(hr_by_activity.get(a.id, {}), MAX_HR_METRIC_KEYS),
+            vdot=hr_by_activity.get(a.id, {}).get(VDOT_METRIC_KEY),
         )
         for a in activities
     ]
@@ -2159,12 +2886,19 @@ def render_period_share_html(
         f"<h2>Activities by type</h2>\n{_type_breakdown_html(type_counts)}\n" if type_counts else ""
     )
 
+    # Exact `sport == "running"`/`"hiking"` -- matching MonthView/YearView/AllTimeView's own
+    # `useActivities({sport: "running"})`/`.filter(a => a.sport === "hiking")` calls exactly,
+    # confirmed against `GET /activities?sport=` doing a plain `==` match server-side, not a
+    # sport_family() grouping -- trail_running/track_running (sport_family "run" too) and
+    # walking/snowshoeing/alpine_skiing (sport_family "hike" too) are real, confirmed exclusions
+    # from the authenticated app's own Running/Hiking cards, not an oversight here.
     running_body = ""
-    running = [a for a in with_distance if sport_family(a.sport) == "run"]
+    running = [a for a in period_activities if a.sport == "running"]
     if running:
-        total_run_m = sum(a.distance_m or 0 for a in running)
-        total_run_s = sum(a.moving_duration_s or 0 for a in running)
-        longest_run_m = max(a.distance_m or 0 for a in running)
+        running_with_distance = [a for a in running if a.distance_m]
+        total_run_m = sum(a.distance_m or 0 for a in running_with_distance)
+        total_run_s = sum(_effective_duration_s(a) or 0 for a in running_with_distance)
+        longest_run_m = max((a.distance_m or 0 for a in running_with_distance), default=0.0)
         running_stats = _stats_grid_iconed(
             st("Kilometers run", f"{total_run_m / 1000:.0f} km", "route", "pace"),
             st("Number of runs", str(len(running)), "run", "load", True),
@@ -2173,12 +2907,138 @@ def render_period_share_html(
         )
         running_body = f"<h2>Running</h2>\n{running_stats}\n"
 
+        # The charts/heatmap/PR table below mirror RunningStats.tsx, shown for Month/Year/
+        # All-time only -- WeekView.tsx uses a different, simpler WeekRunningStats component with
+        # none of these (its own comment: "just without the full records table"), so a week share
+        # keeps the plain stat grid above untouched, matching that real distinction.
+        if period_type in ("month", "year", "all"):
+            if start is not None and end is not None:
+                run_range_start, run_range_end = start, end
+            else:
+                run_dates = [a.local_date for a in period_activities if a.local_date is not None]
+                run_range_start = min(run_dates)
+                run_range_end = max(run_dates)
+            span_days = (
+                date.fromisoformat(run_range_end) - date.fromisoformat(run_range_start)
+            ).days + 1
+            use_daily_buckets = span_days <= 31
+            use_year_rows = span_days > 366
+            trailing_window_days = {"month": 7, "year": 90, "all": 365}[period_type]
+
+            if use_daily_buckets:
+                bucket_data = _distance_by_day(running, run_range_start, run_range_end)
+                bucket_title = "Distance per day"
+                bucket_interval = max(0, -(-len(bucket_data) // 8) - 1)
+            elif use_year_rows:
+                bucket_data = _distance_by_year(running, run_range_start, run_range_end)
+                bucket_title = "Distance per year"
+                bucket_interval = 0
+            else:
+                bucket_data = [
+                    (_MONTH_ABBR[i], round(m / 100) / 10)
+                    for i, m in enumerate(_monthly_distance_m(running))
+                ]
+                bucket_title = "Distance per month"
+                bucket_interval = 0
+            bucket_chart = _svg_bar_chart(
+                bucket_data, label_interval=bucket_interval, aria_label=bucket_title
+            )
+
+            rolling = _rolling_distance_km(
+                running, run_range_start, run_range_end, trailing_window_days
+            )
+            if use_daily_buckets:
+                trailing_ticks = {d for i, (d, _) in enumerate(rolling) if i % 5 == 0}
+
+                def _trailing_tick_label(d: str) -> str:
+                    return d[8:10]
+            elif use_year_rows:
+                trailing_ticks = {d for d, _ in rolling if d.endswith("-01-01")}
+
+                def _trailing_tick_label(d: str) -> str:
+                    return d[:4]
+            else:
+                trailing_ticks = {d for d, _ in rolling if d.endswith("-01")}
+
+                def _trailing_tick_label(d: str) -> str:
+                    return _MONTH_ABBR[int(d[5:7]) - 1]
+
+            trailing_chart = _svg_trailing_chart(rolling, trailing_ticks, _trailing_tick_label)
+
+            if use_daily_buckets:
+                heatmap_title = "Daily distance"
+                heatmap_html = _daily_heatmap_strip_html(running, run_range_start, run_range_end)
+                heatmap_scale = _DAILY_HEATMAP_SCALE
+            elif use_year_rows:
+                heatmap_title = "Weekly distance"
+                heatmap_html = _yearly_heatmap_grid_html(running, run_range_start, run_range_end)
+                heatmap_scale = _WEEKLY_HEATMAP_SCALE
+            else:
+                heatmap_title = "Daily distance"
+                heatmap_html = _weekly_heatmap_grid_html(running, run_range_start, run_range_end)
+                heatmap_scale = _WEEKLY_HEATMAP_SCALE
+
+            trailing_title = f"Trailing {trailing_window_days}-day kilometers"
+            running_body += (
+                '<div class="running-stats__charts">'
+                f'<div><h3>{escape(bucket_title)}</h3>{bucket_chart}</div>'
+                f"<div><h3>{escape(trailing_title)}</h3>{trailing_chart}</div>"
+                "</div>\n"
+                f'<div class="running-heatmap"><h3>{escape(heatmap_title)}</h3>{heatmap_html}'
+                f"{_heatmap_legend_html(heatmap_scale)}</div>\n"
+            )
+
+            period_records = _personal_records(running_with_distance)
+            if period_records:
+                new_prs: list[_PersonalRecord] = []
+                if period_type in ("month", "year"):
+                    all_running_query = select(
+                        activity.c.distance_m,
+                        activity.c.moving_duration_s,
+                        activity.c.duration_s,
+                        activity.c.local_date,
+                    ).where(
+                        activity.c.athlete_id == athlete_id,
+                        activity.c.deleted_at.is_(None),
+                        activity.c.sport == "running",
+                        activity.c.distance_m.is_not(None),
+                    )
+                    all_time_running = [
+                        _PeriodActivity(
+                            id="",
+                            sport="running",
+                            sub_sport=None,
+                            name=None,
+                            distance_m=r.distance_m,
+                            moving_duration_s=r.moving_duration_s,
+                            duration_s=r.duration_s,
+                            elevation_gain_m=None,
+                            max_altitude_m=None,
+                            local_date=r.local_date,
+                            avg_hr_bpm=None,
+                            max_hr_bpm=None,
+                            vdot=None,
+                        )
+                        for r in conn.execute(all_running_query)
+                    ]
+                    new_prs = _new_all_time_prs(
+                        period_records, _personal_records(all_time_running)
+                    )
+                caveat = (
+                    " <span class=\"running-records__caveat\">(fastest whole recorded run near "
+                    "each distance, not a true best-effort segment)</span>"
+                )
+                running_body += (
+                    f'<div class="running-records"><h3>Personal records{caveat}</h3>'
+                    f"{_records_table_html(period_records, new_prs)}</div>\n"
+                )
+
     hiking_body = ""
-    hikes = [a for a in activities if sport_family(a.sport) == "hike"]
+    hikes = [a for a in period_activities if a.sport == "hiking"]
     if hikes:
         hikes_with_distance = [a for a in hikes if a.distance_m]
         total_hike_m = sum(a.distance_m or 0 for a in hikes_with_distance)
-        total_hike_s = sum((a.moving_duration_s or a.duration_s or 0) for a in hikes)
+        total_hike_s = sum((_effective_duration_s(a) or 0) for a in hikes)
         gains = [a.elevation_gain_m for a in hikes if a.elevation_gain_m is not None]
         max_gain = max(gains, default=None)
         max_gain_hike = (
@@ -2215,6 +3075,17 @@ def render_period_share_html(
                 )
             )
         hiking_body = f"<h2>Hiking</h2>\n{_stats_grid_iconed(*hiking_stats)}\n"
+
+        featured_hikes = _pick_featured_hikes(hikes)
+        if featured_hikes:
+            resolved_featured = [
+                _FeaturedHike(
+                    f.label, f.activity, read_cached_location(conn, athlete_id, f.activity.id)
+                )
+                for f in featured_hikes
+            ]
+            cards = "".join(_featured_hike_card_html(f) for f in resolved_featured)
+            hiking_body += f'<div class="hike-featured-grid">{cards}</div>\n'
 
     climbing_body = ""
     climb_where = [
@@ -2280,9 +3151,15 @@ def render_period_share_html(
     # Month-by-month distance, year periods only -- "all" can span a decade of months (not worth
     # a bar per month) and week/month periods are already narrower than a month themselves.
     months_body = ""
+    month_tile_body = ""
     if period_type == "year" and period_start is not None:
         month_rows = conn.execute(
-            select(period_rollup.c.period_start, period_rollup.c.activity_distance_m)
+            select(
+                period_rollup.c.period_start,
+                period_rollup.c.activity_count,
+                period_rollup.c.activity_distance_m,
+                period_rollup.c.activity_moving_duration_s,
+            )
             .where(
                 period_rollup.c.athlete_id == athlete_id,
                 period_rollup.c.period_type == "month",
@@ -2299,6 +3176,33 @@ def render_period_share_html(
         ]
         if any(v > 0 for _, v in bars):
             months_body = f"<h2>Distance by month (km)</h2>\n{_svg_bar_chart(bars)}\n"
+
+        # The year's own 12-tile month grid (YearView.tsx's own `month-tile-grid`, at the very
+        # bottom of the page) -- each tile is the same period_rollup row the bar chart above
+        # already fetched, just read for three more fields.
+        by_month = {int(r.period_start.split("-")[1]): r for r in month_rows}
+        tiles = []
+        for month in range(1, 13):
+            row = by_month.get(month)
+            if row is not None and row.activity_count > 0:
+                unit = "y" if row.activity_count == 1 else "ies"
+                lines = [f"{row.activity_count} activit{unit}"]
+                if row.activity_distance_m is not None:
+                    lines.append(f"{row.activity_distance_m / 1000:.1f} km")
+                if row.activity_moving_duration_s is not None:
+                    lines.append(f"{row.activity_moving_duration_s / 3600:.1f}h")
+                rows_html = "".join(f"<div>{escape(x)}</div>" for x in lines)
+                stats_html = f'<div class="month-tile__stats">{rows_html}</div>'
+            else:
+                stats_html = (
+                    '<div class="month-tile__stats month-tile__stats--empty">No activity</div>'
+                )
+            tiles.append(
+                '<div class="card month-tile">'
+                f'<div class="month-tile__name">{escape(_MONTH_NAMES[month - 1])}</div>'
+                f"{stats_html}</div>"
+            )
+        month_tile_body = f'<div class="stat-grid month-tile-grid">{"".join(tiles)}</div>\n'
 
     # Fitness & Form (CTL/ATL) -- meaningful only over month+ windows; a week's worth of points
     # is too short a trend to chart.
@@ -2330,5 +3234,6 @@ def render_period_share_html(
 <div class="meta">Activity summary</div>
 {stats}
 {type_breakdown_body}
-{running_body}{hiking_body}{climbing_body}{fitness_training_body}{fitness_form_body}{months_body}"""
+{running_body}{hiking_body}{climbing_body}{fitness_training_body}{fitness_form_body}{months_body}
+{month_tile_body}"""
     return _page(title=f"{label} summary", description=description, body=body)

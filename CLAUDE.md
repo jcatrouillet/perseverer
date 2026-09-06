@@ -521,14 +521,47 @@ because you don't recognize it — stop, that's the bug.
   `dist/defs/<Name>.es.js` "fill" entries (MIT), since `Icon.tsx`'s sport icons are real Phosphor
   components, not the hand-rolled stroke glyphs every other icon on this page reproduces — a
   second `.icon.icon--filled` CSS override (`fill: currentColor; stroke: none`) renders them,
-  matching `layout.css`'s own identically-named rule. Deliberately NOT ported this round — real,
-  separately-scoped future work, not oversights: `RunningStats.tsx`'s heatmap grid, pace-vs-
-  distance scatter, time-of-day pie, trailing-N-day chart, and personal-records table;
-  `HikeStatsCard.tsx`'s featured-hike cards (need per-activity location lookups); the day-by-day
-  calendar grid. hiit/strength_training keeps the older plain `_stats_grid` (no confirmed
-  icon/tone mapping — the authenticated app has no dedicated card for these sports at all, only
-  the generic totals and the new Activities-by-type breakdown), same "don't invent a mapping that
-  doesn't exist upstream" reasoning as Fueling above. The route map is the one deliberate
+  matching `layout.css`'s own identically-named rule.
+
+  `RunningStats.tsx`'s own distance-bucket bar chart, trailing-window line chart, calendar
+  heatmap, and personal-records table are now ported too (Month/Year/All-time only — see below)
+  — a second, later pass once "match everything, be precise" made clear that "Running" meaning
+  just four stat tiles wasn't actually close enough. Exact `sport == "running"`/`"hiking"`
+  matching (not `sport_family()`) is used throughout, confirmed against `GET /activities?sport=`
+  itself doing a plain `==`, not a family grouping — trail_running/track_running and walking/
+  snowshoeing/alpine_skiing are real, deliberate exclusions from these two sections, not an
+  oversight; this corrected a latent inaccuracy in the *original*, four-stat version of this
+  section from earlier the same session. Which of the three real RunningStats "modes" a period
+  gets is derived exactly like the real component (`spanDays <= 31` / `> 366` / else) from the
+  *overall* activity date range (every sport, matching AllTimeView.tsx passing
+  its own all-sport `start`/`end` into RunningStats, not a running-only range) — Month gets daily
+  buckets/a 7-day trailing window/a one-row "Daily distance" strip; Year gets monthly buckets/
+  90-day trailing/a "Daily distance" week-grid (`.running-heatmap__grid`, one column per week,
+  one row per weekday, month-boundary dividers); All-time gets yearly buckets/365-day trailing/a
+  "Weekly distance" year-rows grid (one row per calendar year). The heatmap itself needed no SVG
+  at all — `running-stats.css`'s own encoding is pure CSS (`color-mix()` for an ordinary day's
+  intensity wash, `conic-gradient()` for a long run's proportional-circle overlay, a `:hover`-
+  revealed absolutely-positioned tooltip) — so this page reuses the *exact* same class names and
+  rules rather than an SVG approximation of them; the one real deviation is a plain `<span>`
+  where the authenticated app has a `<Link>`, since there's no public per-day/week view for an
+  anonymous visitor to navigate to. Personal records (`_personal_records`, a straight port of
+  `personalRecords()`'s own 0.9x-1.3x-tolerance-band approach) get an all-time-PR badge for
+  Month/Year (a second, unbounded `sport == "running"` query, mirroring `useAllActivities`) but
+  not All-time, matching `AllTimeView.tsx` itself never passing `allTimeRecords` at all (every
+  record there already *is* the all-time one). `HikeStatsCard.tsx`'s featured-hike cards
+  (Longest hike / by time / most elevation gain / highest point reached, each only if it's a
+  genuinely different hike from ones already featured) resolve their location name via
+  `geocoding.py::read_cached_location` — the same cache-only guarantee weather already has,
+  confirmed live: an uncached hike's card simply omits the location rather than triggering a
+  live Nominatim lookup. `YearView.tsx`'s own 12-tile month grid closes out the page, reusing the
+  exact `period_rollup` query the "Distance by month" bar chart above it already runs (extended
+  for two more columns) rather than a second query for the same rows. hiit/strength_training
+  keeps the older plain `_stats_grid` (no confirmed icon/tone mapping — the authenticated app has
+  no dedicated card for these sports at all, only the generic totals and the Activities-by-type
+  breakdown), same "don't invent a mapping that doesn't exist upstream" reasoning as Fueling
+  above; the day-by-day calendar grid (WeekView/MonthView's own per-day activity list, a
+  different kind of view than a summary page) stays out of scope. The route map is the one
+  deliberate
   exception to this file's otherwise zero-JS pages: a real interactive MapLibre GL map (CARTO's
   Positron vector basemap, same style the authenticated frontend's `CartoBasemapLayer.tsx` uses),
   loaded from a CDN as a `type="module"` script — MapLibre v6 shipped no UMD/global build at all
