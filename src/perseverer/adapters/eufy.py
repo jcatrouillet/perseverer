@@ -28,10 +28,11 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from sqlalchemy import Connection
+from sqlalchemy import Connection, select
 
 from perseverer.adapters.fit_folder import IngestRunSummary
 from perseverer.archive import archive_raw_bytes
+from perseverer.db.schema import athlete_eufy_config
 from perseverer.health.eufy_parser import parse_eufy_scale_reading
 from perseverer.health.ingest import ingest_health_batch
 from perseverer.rollups import refresh_daily_and_period_rollups
@@ -93,6 +94,34 @@ class EufyClient:
         resp.raise_for_status()
         data = resp.json()
         return list(data.get("data") or [])
+
+
+def resolve_eufy_credentials(
+    conn: Connection,
+    athlete_id: str,
+    *,
+    legacy_athlete_id: str,
+    legacy_email: str | None,
+    legacy_password: str | None,
+    legacy_device_id: str | None,
+    legacy_customer_id: str | None,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Resolve one athlete's Eufy credentials for a sync call: a per-athlete `athlete_eufy_config`
+    row (see db/schema.py) takes priority. When no row exists and `athlete_id ==
+    legacy_athlete_id`, falls back to the original global env-var credentials
+    (`Settings.eufy_*`) -- this is what lets the pre-existing single-athlete deployment keep
+    working unchanged with zero migration required, now that a second athlete's credentials live
+    in the DB instead. Any other athlete with no DB row gets all-`None`, which `sync_eufy` above
+    already treats as "not configured, skip" rather than an error.
+    """
+    row = conn.execute(
+        select(athlete_eufy_config).where(athlete_eufy_config.c.athlete_id == athlete_id)
+    ).fetchone()
+    if row is not None:
+        return row.email, row.password, row.device_id, row.customer_id
+    if athlete_id == legacy_athlete_id:
+        return legacy_email, legacy_password, legacy_device_id, legacy_customer_id
+    return None, None, None, None
 
 
 def sync_eufy(

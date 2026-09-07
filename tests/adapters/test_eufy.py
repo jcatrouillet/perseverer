@@ -10,10 +10,12 @@ from typing import Any
 
 from sqlalchemy import Engine, select
 
-from perseverer.adapters.eufy import EufyAuthError, EufyClient, sync_eufy
+from perseverer.adapters.eufy import EufyAuthError, EufyClient, resolve_eufy_credentials, sync_eufy
 from perseverer.db.engine import make_engine
-from perseverer.db.schema import athlete, health_observation, raw_object
+from perseverer.db.schema import athlete, athlete_eufy_config, health_observation, raw_object
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
+
+SECOND_ATHLETE_ID = "01SECONDATHLETE0000000000"
 
 RECORD_1 = {
     "id": "record-1",
@@ -201,3 +203,75 @@ def test_one_bad_reading_does_not_abort_the_rest(tmp_path: Path) -> None:
             select(health_observation).where(health_observation.c.metric_key == "eufy.scale.weight")
         ).fetchall()
         assert len(obs_rows) == 1
+
+
+# --- resolve_eufy_credentials ---------------------------------------------------------------
+
+
+def test_resolve_prefers_a_db_row_over_the_legacy_fallback(tmp_path: Path) -> None:
+    engine = make_engine(tmp_path / "db.sqlite")
+    from perseverer.db.schema import metadata
+
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete_eufy_config.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                email="db@example.com",
+                password="db-pw",
+                device_id="db-device",
+                customer_id="db-customer",
+                updated_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+
+        creds = resolve_eufy_credentials(
+            conn,
+            DEFAULT_ATHLETE_ID,
+            legacy_athlete_id=DEFAULT_ATHLETE_ID,
+            legacy_email="env@example.com",
+            legacy_password="env-pw",
+            legacy_device_id="env-device",
+            legacy_customer_id="env-customer",
+        )
+    assert creds == ("db@example.com", "db-pw", "db-device", "db-customer")
+
+
+def test_resolve_falls_back_to_legacy_settings_for_the_original_athlete(tmp_path: Path) -> None:
+    engine = make_engine(tmp_path / "db.sqlite")
+    from perseverer.db.schema import metadata
+
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        creds = resolve_eufy_credentials(
+            conn,
+            DEFAULT_ATHLETE_ID,
+            legacy_athlete_id=DEFAULT_ATHLETE_ID,
+            legacy_email="env@example.com",
+            legacy_password="env-pw",
+            legacy_device_id="env-device",
+            legacy_customer_id="env-customer",
+        )
+    assert creds == ("env@example.com", "env-pw", "env-device", "env-customer")
+
+
+def test_resolve_skips_a_second_athlete_with_no_row_and_no_legacy_fallback(tmp_path: Path) -> None:
+    engine = make_engine(tmp_path / "db.sqlite")
+    from perseverer.db.schema import metadata
+
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        creds = resolve_eufy_credentials(
+            conn,
+            SECOND_ATHLETE_ID,
+            legacy_athlete_id=DEFAULT_ATHLETE_ID,
+            legacy_email="env@example.com",
+            legacy_password="env-pw",
+            legacy_device_id="env-device",
+            legacy_customer_id="env-customer",
+        )
+    assert creds == (None, None, None, None)

@@ -718,13 +718,21 @@ cross-validated here against two other fields in the same real sample — `muscl
 `None` — e.g. `fat_free_weight`/`body_fat_mass` read identically in the live probe, which doesn't
 cleanly resolve either interpretation, so neither is guessed at.
 
-Credentials (`PERSEVERER_EUFY_EMAIL`/`_PASSWORD`/`_DEVICE_ID`/`_CUSTOMER_ID`, all optional) are
-deliberately **not** held to `garmin_connect.py`'s stricter token-store-only/never-auto-login model:
-there's no evidence Eufy's API shares Garmin's SSO 429-lockout fragility, and the sibling project's
-own plain-env-var pattern has run this exact login flow safely, daily, unattended, for months.
-`sync_eufy()` just skips (logs, doesn't raise) when any credential is unset. `worker/main.py`'s
-`run_daily_sync()` calls it in its own `try`/`except`, separate from the Garmin sync and staleness
-check, so a Eufy-side failure (bad credentials, an API change) never blocks either of those.
+Credentials are deliberately **not** held to `garmin_connect.py`'s stricter token-store-only/
+never-auto-login model: there's no evidence Eufy's API shares Garmin's SSO 429-lockout fragility,
+and the sibling project's own plain-env-var pattern has run this exact login flow safely, daily,
+unattended, for months. Storage is now per-athlete: **`athlete_eufy_config`** (one row per
+athlete, upsert — same shape/contract as `athlete_hr_zone_config`) holds `email`/`password`/
+`device_id`/`customer_id`, set via `sync athlete set-eufy-credentials --athlete-id <id>`.
+`adapters/eufy.py::resolve_eufy_credentials` reads that row first; when none exists and the
+athlete is `DEFAULT_ATHLETE_ID`, it falls back to the original global env vars
+(`PERSEVERER_EUFY_EMAIL`/`_PASSWORD`/`_DEVICE_ID`/`_CUSTOMER_ID`, all optional) — so the original
+single-athlete deployment needed no migration when this became per-athlete; any other athlete
+with no row simply has no fallback. `sync_eufy()` itself just skips (logs, doesn't raise) when
+any resolved credential is missing. `worker/main.py`'s `run_daily_sync()` resolves and calls it
+once per athlete in `athlete`, in its own `try`/`except`, separate from that athlete's Garmin
+sync and staleness check, so one athlete's Eufy-side failure (bad credentials, an API change)
+never blocks either of those or another athlete's own sync.
 
 `GET /health/dashboard`'s `LOGICAL_METRICS` promotes ten of the raw `eufy.scale.*` fields to
 human-meaningful dashboard names (`weight_kg`, `bmi`, `body_fat_pct`, `muscle_mass_kg`,

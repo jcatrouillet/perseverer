@@ -14,11 +14,14 @@ from unittest.mock import patch
 
 from sqlalchemy import Engine, select
 
+from perseverer.adapters.fit_folder import IngestRunSummary
 from perseverer.config import Settings
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import athlete, metadata, planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
-from perseverer.worker.main import run_daily_workout_push
+from perseverer.worker.main import run_daily_sync, run_daily_workout_push
+
+SECOND_ATHLETE_ID = "01SECONDATHLETE0000000000"
 
 
 def _engine(tmp_path: Path) -> Engine:
@@ -121,9 +124,72 @@ def test_rate_limit_abort_stops_the_loop_without_marking_remaining_failed(tmp_pa
         }
     # Neither row was ever marked push_failed -- a rate-limit abort isn't this workout's fault
     # (push_planned_workout deliberately lets it propagate rather than writing push_status, see
-    # its own docstring), and the loop's `break` means the run stops here entirely.
+    # its own docstring). Both belong to the same athlete, so once that athlete is rate-limited,
+    # every further due workout of theirs this run is skipped too (see
+    # test_rate_limit_for_one_athlete_does_not_block_another_athletes_push below for the
+    # per-athlete isolation this is actually guarding).
     assert rows[first] == "draft"
     assert rows[second] == "draft"
+
+
+def test_rate_limit_for_one_athlete_does_not_block_another_athletes_push(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.insert().values(
+                id=SECOND_ATHLETE_ID,
+                display_name="Second",
+                timezone="UTC",
+                unit_preference="metric",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+    today = dt.datetime.now(dt.UTC).date()
+    rate_limited_athletes_workout = _insert(engine, local_date=today.isoformat())
+    with engine.connect() as conn:
+        conn.execute(
+            planned_workout.update()
+            .where(planned_workout.c.id == rate_limited_athletes_workout)
+            .values(athlete_id=DEFAULT_ATHLETE_ID)
+        )
+        conn.execute(
+            planned_workout.insert().values(
+                athlete_id=SECOND_ATHLETE_ID,
+                local_date=today.isoformat(),
+                sport="running",
+                name="Test",
+                source_text="Warmup 10m",
+                estimated_duration_s=600,
+                push_status="draft",
+                created_at=dt.datetime.now(dt.UTC).replace(tzinfo=None),
+                updated_at=dt.datetime.now(dt.UTC).replace(tzinfo=None),
+            )
+        )
+        conn.commit()
+
+    from perseverer.adapters.garmin_connect import GarminRateLimitAborted
+    from perseverer.planned_workouts import PushResult
+
+    calls: list[str] = []
+
+    def fake_push(conn: Any, *, athlete_id: str, planned_workout_id: int, **kwargs: Any) -> Any:
+        calls.append(athlete_id)
+        if athlete_id == DEFAULT_ATHLETE_ID:
+            raise GarminRateLimitAborted("429")
+        return PushResult(success=True, garmin_workout_id=1, error=None)
+
+    settings = Settings(data_dir=tmp_path)
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.push_planned_workout", side_effect=fake_push),
+    ):
+        run_daily_workout_push()
+
+    # Both athletes' due workouts were attempted -- the rate limit on DEFAULT_ATHLETE_ID didn't
+    # stop SECOND_ATHLETE_ID's own push from being tried.
+    assert set(calls) == {DEFAULT_ATHLETE_ID, SECOND_ATHLETE_ID}
 
 
 def test_no_due_workouts_is_a_clean_noop(tmp_path: Path) -> None:
@@ -136,3 +202,90 @@ def test_no_due_workouts_is_a_clean_noop(tmp_path: Path) -> None:
     ):
         run_daily_workout_push()
     mock_push.assert_not_called()
+
+
+# --- run_daily_sync ------------------------------------------------------------------------
+
+
+def test_run_daily_sync_syncs_every_athlete_independently(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.insert().values(
+                id=SECOND_ATHLETE_ID,
+                display_name="Second",
+                timezone="UTC",
+                unit_preference="metric",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+
+    synced_athletes: list[str] = []
+
+    def fake_sync_garmin_connect(
+        conn: Any,
+        raw_dir: Any,
+        parquet_dir: Any,
+        tokenstore_dir: Any,
+        *,
+        athlete_id: str,
+        **kw: Any,
+    ) -> IngestRunSummary:
+        synced_athletes.append(athlete_id)
+        return IngestRunSummary(run_id=0)
+
+    settings = Settings(data_dir=tmp_path)
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch(
+            "perseverer.worker.main.sync_garmin_connect", side_effect=fake_sync_garmin_connect
+        ),
+    ):
+        run_daily_sync()
+
+    assert set(synced_athletes) == {DEFAULT_ATHLETE_ID, SECOND_ATHLETE_ID}
+
+
+def test_run_daily_sync_one_athletes_failure_does_not_block_another(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.insert().values(
+                id=SECOND_ATHLETE_ID,
+                display_name="Second",
+                timezone="UTC",
+                unit_preference="metric",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+
+    synced_athletes: list[str] = []
+
+    def fake_sync_garmin_connect(
+        conn: Any,
+        raw_dir: Any,
+        parquet_dir: Any,
+        tokenstore_dir: Any,
+        *,
+        athlete_id: str,
+        **kw: Any,
+    ) -> IngestRunSummary:
+        if athlete_id == DEFAULT_ATHLETE_ID:
+            raise RuntimeError("unexpected failure for the first athlete")
+        synced_athletes.append(athlete_id)
+        return IngestRunSummary(run_id=0)
+
+    settings = Settings(data_dir=tmp_path)
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch(
+            "perseverer.worker.main.sync_garmin_connect", side_effect=fake_sync_garmin_connect
+        ),
+    ):
+        run_daily_sync()  # must not raise -- a per-athlete failure is caught and logged
+
+    assert synced_athletes == [SECOND_ATHLETE_ID]

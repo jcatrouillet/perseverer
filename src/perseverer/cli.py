@@ -25,12 +25,13 @@ if sys.stdout.encoding is not None and sys.stdout.encoding.lower() != "utf-8":
 if sys.stderr.encoding is not None and sys.stderr.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 from sqlalchemy import func, select
+from ulid import ULID
 
 from perseverer.adapters.apple_health_export import (
     detect_weight_cutoff_from_eufy,
     import_apple_health_export,
 )
-from perseverer.adapters.eufy import sync_eufy
+from perseverer.adapters.eufy import resolve_eufy_credentials, sync_eufy
 from perseverer.adapters.fit_folder import import_from_folder
 from perseverer.adapters.garmin_connect import (
     RateLimitSettings,
@@ -48,7 +49,7 @@ from perseverer.backfill_workouts import backfill_workouts
 from perseverer.backup import create_backup, restore_backup
 from perseverer.config import get_settings
 from perseverer.db.engine import make_engine
-from perseverer.db.schema import activity, activity_source_link
+from perseverer.db.schema import activity, activity_source_link, athlete_eufy_config
 from perseverer.db.schema import athlete as athlete_table
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.gap import refresh_avg_gap
@@ -78,6 +79,13 @@ app.add_typer(backup_app, name="backup")
 
 FolderArg = Annotated[
     Path, typer.Argument(exists=True, file_okay=False, help="Directory of .fit files")
+]
+
+# Every ingestion/auth command defaults to DEFAULT_ATHLETE_ID like before this option existed --
+# overridable for a second (or later) athlete's own sync, mirroring `sync rebuild`'s own
+# pre-existing --athlete-id option.
+AthleteIdOpt = Annotated[
+    str, typer.Option("--athlete-id", help="Defaults to DEFAULT_ATHLETE_ID (the original athlete)")
 ]
 
 
@@ -131,6 +139,7 @@ def import_garmin_export_cmd(
     path: Annotated[
         Path, typer.Argument(exists=True, help="Directory or .zip of a Garmin export archive")
     ],
+    athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
 ) -> None:
     """One-shot backfill from a Garmin "Export Your Data" archive. Zero network calls."""
     settings = get_settings()
@@ -141,7 +150,7 @@ def import_garmin_export_cmd(
             settings.raw_archive_dir,
             settings.parquet_dir,
             settings.data_dir / "tmp" / "garmin_export",
-            athlete_id=DEFAULT_ATHLETE_ID,
+            athlete_id=athlete_id,
             path=path,
         )
     typer.echo(f"seen={summary.items_seen} new={summary.items_new} errors={len(summary.errors)}")
@@ -156,6 +165,7 @@ def import_strava_export_cmd(
     path: Annotated[
         Path, typer.Argument(exists=True, help="Directory or .zip of a Strava export archive")
     ],
+    athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
 ) -> None:
     """One-shot backfill from Strava's "export your data" archive. Zero network calls."""
     settings = get_settings()
@@ -166,7 +176,7 @@ def import_strava_export_cmd(
             settings.raw_archive_dir,
             settings.parquet_dir,
             settings.data_dir / "tmp" / "strava_export",
-            athlete_id=DEFAULT_ATHLETE_ID,
+            athlete_id=athlete_id,
             path=path,
         )
     typer.echo(f"seen={summary.items_seen} new={summary.items_new} errors={len(summary.errors)}")
@@ -226,6 +236,7 @@ def import_garmin_connect_cmd(
     days: Annotated[
         int | None, typer.Option(help="Override the rolling re-fetch window in days")
     ] = None,
+    athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
 ) -> None:
     """On-demand run of the same incremental sync the scheduler runs daily. Never falls back
     to a credentialed login - run `sync auth login` first if this fails with an auth error.
@@ -237,8 +248,8 @@ def import_garmin_connect_cmd(
             conn,
             settings.raw_archive_dir,
             settings.parquet_dir,
-            settings.garmin_tokenstore_dir,
-            athlete_id=DEFAULT_ATHLETE_ID,
+            settings.garmin_tokenstore_dir_for(athlete_id),
+            athlete_id=athlete_id,
             rolling_window_days=days if days is not None else settings.garmin_rolling_window_days,
             rate_limits=RateLimitSettings(
                 request_interval_s=settings.garmin_request_interval_s,
@@ -253,22 +264,33 @@ def import_garmin_connect_cmd(
 
 
 @import_app.command("eufy")
-def import_eufy_cmd() -> None:
+def import_eufy_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """On-demand run of the Eufy body-composition sync. The API always returns the full
     reading history in one call, so there's no separate backfill-vs-incremental mode -- this
-    is the same call the daily scheduler makes."""
+    is the same call the daily scheduler makes. Credentials come from `sync athlete
+    set-eufy-credentials` for this athlete, falling back to the legacy global env vars only for
+    DEFAULT_ATHLETE_ID (see adapters/eufy.py::resolve_eufy_credentials)."""
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
+        email, password, device_id, customer_id = resolve_eufy_credentials(
+            conn,
+            athlete_id,
+            legacy_athlete_id=DEFAULT_ATHLETE_ID,
+            legacy_email=settings.eufy_email,
+            legacy_password=settings.eufy_password,
+            legacy_device_id=settings.eufy_device_id,
+            legacy_customer_id=settings.eufy_customer_id,
+        )
         summary = sync_eufy(
             conn,
             settings.raw_archive_dir,
             settings.parquet_dir,
-            athlete_id=DEFAULT_ATHLETE_ID,
-            email=settings.eufy_email,
-            password=settings.eufy_password,
-            device_id=settings.eufy_device_id,
-            customer_id=settings.eufy_customer_id,
+            athlete_id=athlete_id,
+            email=email,
+            password=password,
+            device_id=device_id,
+            customer_id=customer_id,
         )
     typer.echo(f"seen={summary.items_seen} new={summary.items_new} errors={len(summary.errors)}")
     if summary.errors:
@@ -290,36 +312,64 @@ def daily_sync_cmd() -> None:
 
 
 @auth_app.command("login")
-def auth_login() -> None:
+def auth_login(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Interactive Garmin login: prompts for email/password and, if required, an MFA code.
     Persists a token store so every future run resumes without this. The ONLY command in
     this project that ever authenticates with credentials - the scheduler and `sync import
     garmin-connect` only ever load this token store, never fall back to credentials.
     """
     settings = get_settings()
+    tokenstore_dir = settings.garmin_tokenstore_dir_for(athlete_id)
     email = os.environ.get("GARMIN_EMAIL") or typer.prompt("Garmin email")
     password = os.environ.get("GARMIN_PASSWORD") or typer.prompt("Garmin password", hide_input=True)
     login_with_credentials(
         email,
         password,
-        settings.garmin_tokenstore_dir,
+        tokenstore_dir,
         prompt_mfa=lambda: typer.prompt("Garmin MFA code"),
     )
-    typer.echo(f"Logged in. Token store saved to {settings.garmin_tokenstore_dir}")
+    typer.echo(f"Logged in. Token store saved to {tokenstore_dir}")
 
 
 @auth_app.command("status")
-def auth_status() -> None:
+def auth_status(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Whether a Garmin token store exists and how long ago it was last written."""
     settings = get_settings()
-    present, age_days = token_store_status(settings.garmin_tokenstore_dir)
+    tokenstore_dir = settings.garmin_tokenstore_dir_for(athlete_id)
+    present, age_days = token_store_status(tokenstore_dir)
     if not present:
         typer.echo("No token store found - run `sync auth login`.")
         raise typer.Exit(code=1)
-    typer.echo(
-        f"Token store present at {settings.garmin_tokenstore_dir}, "
-        f"last written {age_days} day(s) ago."
-    )
+    typer.echo(f"Token store present at {tokenstore_dir}, last written {age_days} day(s) ago.")
+
+
+@athlete_app.command("create")
+def athlete_create(
+    display_name: Annotated[str, typer.Option(help="e.g. the athlete's first name")],
+    timezone: Annotated[str, typer.Option(help="IANA name, e.g. America/Los_Angeles")] = "UTC",
+    unit_preference: Annotated[str, typer.Option(help='"metric" or "imperial"')] = "metric",
+) -> None:
+    """Create a new athlete row -- the one provisioning step every other `athlete`/CLI command
+    here assumes already exists. Prints the new athlete's id, needed by every command below (and
+    by --athlete-id elsewhere) to actually provision and sync that athlete. See docs/DEPLOY.md's
+    "Provisioning a second athlete" section for the full sequence.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    new_athlete_id = str(ULID())
+    with engine.connect() as conn:
+        conn.execute(
+            athlete_table.insert().values(
+                id=new_athlete_id,
+                display_name=display_name,
+                timezone=timezone,
+                unit_preference=unit_preference,
+                created_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+        )
+        conn.commit()
+    typer.echo(f"Created athlete {display_name!r} with id {new_athlete_id}")
+    typer.echo(f"Next: sync athlete set-password --athlete-id {new_athlete_id}")
 
 
 @athlete_app.command("set-password")
@@ -371,6 +421,49 @@ def athlete_create_key(
         raise typer.Exit(code=1)
     typer.echo("API key created -- save it now, it will not be shown again:")
     typer.echo(raw_key)
+
+
+@athlete_app.command("set-eufy-credentials")
+def athlete_set_eufy_credentials(
+    athlete_id: Annotated[str, typer.Option(help="Athlete id to configure")] = DEFAULT_ATHLETE_ID,
+) -> None:
+    """Set or change an athlete's own Eufy Life scale credentials (email/password/device id/
+    customer id), stored in `athlete_eufy_config` -- see adapters/eufy.py::sync_eufy for what
+    device_id/customer_id mean and how to find them (same values the legacy
+    PERSEVERER_EUFY_DEVICE_ID/CUSTOMER_ID env vars held for the original athlete). Plaintext,
+    same as those env vars -- this is a reversible vendor credential Eufy's own API needs, not a
+    local login this app authenticates against itself.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    email = typer.prompt("Eufy account email")
+    password = typer.prompt("Eufy account password", hide_input=True)
+    device_id = typer.prompt("Eufy device id")
+    customer_id = typer.prompt("Eufy customer id")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    with engine.connect() as conn:
+        existing = conn.execute(
+            select(athlete_eufy_config.c.athlete_id).where(
+                athlete_eufy_config.c.athlete_id == athlete_id
+            )
+        ).scalar_one_or_none()
+        values = {
+            "email": email,
+            "password": password,
+            "device_id": device_id,
+            "customer_id": customer_id,
+            "updated_at": now,
+        }
+        if existing is None:
+            conn.execute(athlete_eufy_config.insert().values(athlete_id=athlete_id, **values))
+        else:
+            conn.execute(
+                athlete_eufy_config.update()
+                .where(athlete_eufy_config.c.athlete_id == athlete_id)
+                .values(**values)
+            )
+        conn.commit()
+    typer.echo(f"Eufy credentials set for athlete {athlete_id}")
 
 
 @backup_app.command("create")
@@ -540,7 +633,7 @@ def rebuild(
 
 
 @app.command("refresh-insights")
-def refresh_insights_cmd() -> None:
+def refresh_insights_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Recomputes every insight from already-ingested data (no network call) -- for backfilling
     after this feature was added, or after adjusting a rule's thresholds. Every ingest entry
     point already calls this automatically; this command is for a manual, out-of-band refresh.
@@ -548,13 +641,13 @@ def refresh_insights_cmd() -> None:
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        count = refresh_insights(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        count = refresh_insights(conn, athlete_id=athlete_id)
         conn.commit()
     typer.echo(f"computed {count} insights")
 
 
 @app.command("correct-garmin-activities")
-def correct_garmin_activities() -> None:
+def correct_garmin_activities(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Corrects activity.sport/name for already-ingested garmin_export activities using
     Garmin's own reclassification (summarizedActivitiesExport, already in the raw archive from
     a prior `import garmin-export` run -- no network call, no need to re-run the import). See
@@ -568,7 +661,7 @@ def correct_garmin_activities() -> None:
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
         result = backfill_activity_corrections(
-            conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID
+            conn, settings.raw_archive_dir, athlete_id=athlete_id
         )
         conn.commit()
     typer.echo(
@@ -582,7 +675,7 @@ def correct_garmin_activities() -> None:
 
 
 @app.command("backfill-workouts")
-def backfill_workouts_cmd() -> None:
+def backfill_workouts_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Backfills activity_workout/activity_workout_step for already-ingested activities from
     their already-archived raw FIT bytes -- no full `sync rebuild` needed. See
     backfill_workouts.py's own docstring for why: this is a purely additive parser change (a new
@@ -593,13 +686,13 @@ def backfill_workouts_cmd() -> None:
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        count = backfill_workouts(conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        count = backfill_workouts(conn, settings.raw_archive_dir, athlete_id=athlete_id)
         conn.commit()
     typer.echo(f"backfilled {count} activities with a workout plan")
 
 
 @app.command("backfill-lap-moving-duration")
-def backfill_lap_moving_duration_cmd() -> None:
+def backfill_lap_moving_duration_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Backfills lap.moving_duration_s for already-ingested activities from their already-
     archived raw FIT bytes -- no full `sync rebuild` needed. See
     backfill_lap_moving_duration.py's own docstring: a lap's `duration_s` (total_elapsed_time)
@@ -610,15 +703,13 @@ def backfill_lap_moving_duration_cmd() -> None:
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        count = backfill_lap_moving_duration(
-            conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID
-        )
+        count = backfill_lap_moving_duration(conn, settings.raw_archive_dir, athlete_id=athlete_id)
         conn.commit()
     typer.echo(f"backfilled moving_duration_s for {count} laps")
 
 
 @app.command("backfill-locations")
-def backfill_locations_cmd() -> None:
+def backfill_locations_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Pre-warms geocoding.py's per-activity location cache for every already-ingested,
     GPS-bearing activity that doesn't have one yet. See backfill_locations.py's own docstring:
     this is what makes GET /activities/{id}/location answer from cache in normal use instead of
@@ -631,12 +722,12 @@ def backfill_locations_cmd() -> None:
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        count = backfill_locations(conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        count = backfill_locations(conn, settings.raw_archive_dir, athlete_id=athlete_id)
     typer.echo(f"backfilled locations for {count} activities")
 
 
 @app.command("backfill-vdot")
-def backfill_vdot_cmd() -> None:
+def backfill_vdot_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Backfills perseverer.performance.vdot for already-ingested running activities -- no full
     `sync rebuild` needed. Unlike backfill-workouts/backfill-lap-moving-duration above, this
     doesn't even need to re-parse raw bytes: `refresh_vdot` reads only what's already in the
@@ -648,13 +739,13 @@ def backfill_vdot_cmd() -> None:
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        count = refresh_vdot(conn, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        count = refresh_vdot(conn, settings.parquet_dir, athlete_id=athlete_id)
         conn.commit()
     typer.echo(f"backfilled VDOT for {count} activities")
 
 
 @app.command("backfill-pace-bands")
-def backfill_pace_bands_cmd() -> None:
+def backfill_pace_bands_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Backfills perseverer.performance.pace_band.* for already-ingested running activities --
     no full `sync rebuild` needed. Like backfill-vdot above, reads only what's already in the
     database and each activity's already-written Parquet stream (this time the raw speed_mps
@@ -665,13 +756,13 @@ def backfill_pace_bands_cmd() -> None:
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        count = refresh_pace_bands(conn, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        count = refresh_pace_bands(conn, settings.parquet_dir, athlete_id=athlete_id)
         conn.commit()
     typer.echo(f"backfilled pace bands for {count} activity/band rows")
 
 
 @app.command("backfill-avg-gap")
-def backfill_avg_gap_cmd() -> None:
+def backfill_avg_gap_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Backfills perseverer.performance.avg_gap_speed_mps for already-ingested running
     activities -- no full `sync rebuild` needed. Like backfill-vdot/backfill-pace-bands above,
     reads only what's already in the database and each activity's already-written Parquet
@@ -682,7 +773,7 @@ def backfill_avg_gap_cmd() -> None:
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        count = refresh_avg_gap(conn, settings.parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
+        count = refresh_avg_gap(conn, settings.parquet_dir, athlete_id=athlete_id)
         conn.commit()
     typer.echo(f"backfilled average GAP for {count} activities")
 
@@ -693,6 +784,7 @@ def backfill_weather_titles_cmd(
         bool,
         typer.Option("--dry-run", help="Show what would change without writing anything."),
     ] = False,
+    athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
 ) -> None:
     """Prepends a weather-condition emoji to every outdoor (GPS-bearing) activity's own title --
     e.g. "Morning Run" becomes "☀️ Morning Run". A title that already starts with an emoji (this
@@ -710,7 +802,7 @@ def backfill_weather_titles_cmd(
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
         changes = backfill_weather_titles(
-            conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID, dry_run=dry_run
+            conn, settings.raw_archive_dir, athlete_id=athlete_id, dry_run=dry_run
         )
     verb = "would retitle" if dry_run else "retitled"
     typer.echo(f"{verb} {len(changes)} activities")
@@ -724,6 +816,7 @@ def backfill_garmin_activity_names_cmd(
         bool,
         typer.Option("--dry-run", help="Show what would change without writing anything."),
     ] = False,
+    athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
 ) -> None:
     """Replaces a still-generic-default activity name (e.g. "Run") with Garmin Connect's own
     richer `activityName` (e.g. "Santa Clara - W12 Fri . [Consolidation] Easy"), already archived
@@ -740,7 +833,7 @@ def backfill_garmin_activity_names_cmd(
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
         changes = backfill_garmin_activity_names(
-            conn, settings.raw_archive_dir, athlete_id=DEFAULT_ATHLETE_ID, dry_run=dry_run
+            conn, settings.raw_archive_dir, athlete_id=athlete_id, dry_run=dry_run
         )
     verb = "would retitle" if dry_run else "retitled"
     typer.echo(f"{verb} {len(changes)} activities")

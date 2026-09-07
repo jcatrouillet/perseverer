@@ -93,9 +93,12 @@ because you don't recognize it — stop, that's the bug.
   working unchanged), a per-athlete `X-API-Key` (SHA-256-hashed, `athlete.api_key_hash`), or an
   `Authorization: Bearer` JWT issued by `POST /auth/login` (password checked via stdlib
   PBKDF2, `auth/passwords.py`; signed with `PERSEVERER_JWT_SECRET`, `auth/tokens.py`). Every
-  router query is scoped to the resolved athlete, not a hardcoded default. Provisioned via
-  `sync athlete set-password`/`create-key` — CLI-only, no self-service signup. See
-  `docs/adr/0008-phase-5-frontend.md`.
+  router query is scoped to the resolved athlete, not a hardcoded default. `sync athlete create
+  --display-name ...` creates the row itself (the one athlete-provisioning step no other command
+  does — `set-password`/`create-key` only `UPDATE` a row that already exists); credentials are
+  then provisioned via `sync athlete set-password`/`create-key` — CLI-only, no self-service
+  signup. See `docs/adr/0008-phase-5-frontend.md` and docs/DEPLOY.md's "Provisioning a second
+  athlete" for the full second-athlete sequence.
 - **Frontend** (`frontend/src/`): Vite + React 19 + TS-strict, `wouter` for routing,
   `@tanstack/react-query` for data fetching, a hand-rolled SVG chart (no charting library) for
   the one stream-chart need. The API base URL is runtime-configured
@@ -329,7 +332,12 @@ because you don't recognize it — stop, that's the bug.
     runs of unchanged readings cheap no-ops. `health/eufy_parser.py` flattens *every* scalar
     `scale_data` field into `eufy.scale.<field>` (not just the 9 fields the sibling project's
     own extraction uses) — see `docs/DATA_DICTIONARY.md` for the full field list and unit
-    handling.
+    handling. `sync_eufy()` itself still just takes credentials as plain parameters, but where
+    those come from is now per-athlete: `athlete_eufy_config` (one row per athlete, same
+    "narrow config, upsert not history" shape as `athlete_hr_zone_config`) rather than one global
+    `Settings.eufy_*` env-var set — `resolve_eufy_credentials` (also in `adapters/eufy.py`) picks
+    a DB row when one exists and falls back to those original env vars only for
+    `DEFAULT_ATHLETE_ID`, so the original single-athlete deployment needs no migration.
   - `apple_health_export` (`adapters/apple_health_export.py`) — historical backfill from an
     Apple Health "export.xml" archive (Settings > [Name] > Export All Health Data on iOS), zero
     network calls. Imports blood pressure (full history — nothing else in this project has any
@@ -732,7 +740,17 @@ because you don't recognize it — stop, that's the bug.
   exactly which fields get values stored where versus cataloged-only.
 - Multi-tenant from day one: every data table carries `athlete_id` except `athlete` and
   `metric_definition` (shared catalogs, not personal data) — enforced by a schema test
-  (`tests/db/test_schema.py`), not just convention. Only one athlete row exists today.
+  (`tests/db/test_schema.py`), not just convention. A second athlete is a real, exercised path,
+  not just schema-level theory: `worker/main.py`'s daily jobs (`run_daily_sync`,
+  `run_daily_workout_push`) loop over every row in `athlete` rather than one hardcoded id, each
+  athlete gets their own Garmin token-store directory (`config.py::garmin_tokenstore_dir_for`,
+  `<data_dir>/garmin_tokens/<athlete_id>/`) and their own optional Eufy credentials
+  (`athlete_eufy_config`, one row per athlete — see `adapters/eufy.py::
+  resolve_eufy_credentials`, which falls back to the original global `PERSEVERER_EUFY_*` env vars
+  only for `DEFAULT_ATHLETE_ID` so that original setup needs no migration), and every ingestion/
+  backfill CLI command takes a `--athlete-id` override (mirroring `sync rebuild`'s own
+  pre-existing option). `sync athlete create --display-name ...` is what actually provisions a
+  new row. See docs/DEPLOY.md's "Provisioning a second athlete" for the operator sequence.
 
 ## Commands
 

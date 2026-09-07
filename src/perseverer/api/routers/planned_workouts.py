@@ -229,7 +229,9 @@ def delete_planned_workout(
             rate_limiter = RateLimiter(
                 settings.garmin_request_interval_s, settings.garmin_max_requests_per_hour
             )
-            adapter = GarminConnectAdapter(settings.garmin_tokenstore_dir, rate_limiter)
+            adapter = GarminConnectAdapter(
+                settings.garmin_tokenstore_dir_for(athlete_id), rate_limiter
+            )
             adapter.authenticate()
             adapter.delete_workout(row.garmin_workout_id)
         except Exception:
@@ -276,7 +278,7 @@ def post_push_planned_workout(
                 bg_conn,
                 athlete_id=athlete_id,
                 planned_workout_id=workout_id,
-                tokenstore_dir=settings.garmin_tokenstore_dir,
+                tokenstore_dir=settings.garmin_tokenstore_dir_for(athlete_id),
                 rate_limits=RateLimitSettings(
                     request_interval_s=settings.garmin_request_interval_s,
                     max_requests_per_hour=settings.garmin_max_requests_per_hour,

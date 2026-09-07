@@ -100,6 +100,26 @@ athlete_running_load_config = Table(
     Column("updated_at", DateTime(), nullable=False),
 )
 
+# An athlete's own Eufy Life scale credentials -- one row per athlete (upsert, same shape as
+# athlete_hr_zone_config above), replacing the original single global Settings.eufy_* env-var
+# fields now that a second athlete can have their own separate Eufy account/scale. Plaintext
+# storage matches the pre-existing env-var precedent: Eufy's API needs the raw password (it's a
+# reversible vendor credential, not a local login this app itself authenticates against, unlike
+# athlete.password_hash). device_id/customer_id nullable -- see adapters/eufy.py::sync_eufy,
+# which already skips gracefully when any of the four fields is missing. See
+# adapters/eufy.py::resolve_eufy_credentials for how a missing row here still falls back to the
+# legacy global env vars for the original athlete, so that existing setup needs no migration.
+athlete_eufy_config = Table(
+    "athlete_eufy_config",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("email", String, nullable=True),
+    Column("password", String, nullable=True),
+    Column("device_id", String, nullable=True),
+    Column("customer_id", String, nullable=True),
+    Column("updated_at", DateTime(), nullable=False),
+)
+
 # A distance goal for a whole calendar year or month, one per (athlete, period_type,
 # period_start) -- not a growing history of past goals, just "what's the target for this
 # period", upserted like athlete_hr_zone_config above. `sport=NULL` means every sport combined;

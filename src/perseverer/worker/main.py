@@ -9,6 +9,11 @@ timezone rather than a fixed hour offset matters here (DST).
 `garmin_export` is deliberately never scheduled here — it's a one-off/occasional CLI action
 (`sync import garmin-export <path>`), not a recurring job. Same for `sync backup restore` --
 CLI-only, human-initiated, never automated (see backup.py's own docstring for why).
+
+Both `run_daily_sync` and `run_daily_workout_push` loop over every row in `athlete`, not one
+hardcoded id -- see docs/adr's second-athlete note and config.py::garmin_tokenstore_dir_for /
+adapters/eufy.py::resolve_eufy_credentials for how each athlete's own Garmin token store and Eufy
+credentials are resolved per-athlete rather than from one shared global.
 """
 
 import logging
@@ -16,17 +21,18 @@ from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import select
+from sqlalchemy import Connection, select
 
-from perseverer.adapters.eufy import sync_eufy
+from perseverer.adapters.eufy import resolve_eufy_credentials, sync_eufy
 from perseverer.adapters.garmin_connect import (
     GarminRateLimitAborted,
     RateLimitSettings,
     sync_garmin_connect,
 )
 from perseverer.backup import create_backup
-from perseverer.config import get_settings
+from perseverer.config import Settings, get_settings
 from perseverer.db.engine import make_engine
+from perseverer.db.schema import athlete as athlete_table
 from perseverer.db.schema import planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.planned_workouts import push_planned_workout
@@ -35,65 +41,99 @@ from perseverer.staleness import check_staleness, notify_webhook
 logger = logging.getLogger("perseverer.worker")
 
 
+def _sync_one_athlete(
+    conn: Connection, settings: Settings, athlete_id: str, display_name: str
+) -> None:
+    logger.info("starting scheduled garmin_connect sync for %s (%s)", display_name, athlete_id)
+    summary = sync_garmin_connect(
+        conn,
+        settings.raw_archive_dir,
+        settings.parquet_dir,
+        settings.garmin_tokenstore_dir_for(athlete_id),
+        athlete_id=athlete_id,
+        rolling_window_days=settings.garmin_rolling_window_days,
+        rate_limits=RateLimitSettings(
+            request_interval_s=settings.garmin_request_interval_s,
+            max_requests_per_hour=settings.garmin_max_requests_per_hour,
+        ),
+    )
+    logger.info(
+        "garmin_connect sync finished for %s: seen=%d new=%d errors=%d",
+        athlete_id,
+        summary.items_seen,
+        summary.items_new,
+        len(summary.errors),
+    )
+
+    # Separately try/excepted -- a Eufy failure (e.g. bad credentials, API change) must
+    # never block the Garmin sync or the staleness check that follows.
+    try:
+        logger.info("starting scheduled eufy sync for %s", athlete_id)
+        email, password, device_id, customer_id = resolve_eufy_credentials(
+            conn,
+            athlete_id,
+            legacy_athlete_id=DEFAULT_ATHLETE_ID,
+            legacy_email=settings.eufy_email,
+            legacy_password=settings.eufy_password,
+            legacy_device_id=settings.eufy_device_id,
+            legacy_customer_id=settings.eufy_customer_id,
+        )
+        eufy_summary = sync_eufy(
+            conn,
+            settings.raw_archive_dir,
+            settings.parquet_dir,
+            athlete_id=athlete_id,
+            email=email,
+            password=password,
+            device_id=device_id,
+            customer_id=customer_id,
+        )
+        logger.info(
+            "eufy sync finished for %s: seen=%d new=%d errors=%d",
+            athlete_id,
+            eufy_summary.items_seen,
+            eufy_summary.items_new,
+            len(eufy_summary.errors),
+        )
+    except Exception:
+        logger.exception("eufy sync failed unexpectedly for athlete %s", athlete_id)
+
+    alerts = check_staleness(
+        conn,
+        athlete_id,
+        escalate_after_days=settings.garmin_stale_escalate_days,
+        freshness_days=settings.export_freshness_days,
+    )
+    for alert in alerts:
+        logger.warning(
+            "staleness alert [%s/%s] for %s: %s",
+            alert.source,
+            alert.severity,
+            athlete_id,
+            alert.message,
+        )
+        if settings.staleness_webhook_url:
+            notify_webhook(settings.staleness_webhook_url, alert)
+
+
 def run_daily_sync() -> None:
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        logger.info("starting scheduled garmin_connect sync")
-        summary = sync_garmin_connect(
-            conn,
-            settings.raw_archive_dir,
-            settings.parquet_dir,
-            settings.garmin_tokenstore_dir,
-            athlete_id=DEFAULT_ATHLETE_ID,
-            rolling_window_days=settings.garmin_rolling_window_days,
-            rate_limits=RateLimitSettings(
-                request_interval_s=settings.garmin_request_interval_s,
-                max_requests_per_hour=settings.garmin_max_requests_per_hour,
-            ),
-        )
-        logger.info(
-            "garmin_connect sync finished: seen=%d new=%d errors=%d",
-            summary.items_seen,
-            summary.items_new,
-            len(summary.errors),
-        )
-
-        # Separately try/excepted -- a Eufy failure (e.g. bad credentials, API change) must
-        # never block the Garmin sync or the staleness check that follows.
-        try:
-            logger.info("starting scheduled eufy sync")
-            eufy_summary = sync_eufy(
-                conn,
-                settings.raw_archive_dir,
-                settings.parquet_dir,
-                athlete_id=DEFAULT_ATHLETE_ID,
-                email=settings.eufy_email,
-                password=settings.eufy_password,
-                device_id=settings.eufy_device_id,
-                customer_id=settings.eufy_customer_id,
-            )
-            logger.info(
-                "eufy sync finished: seen=%d new=%d errors=%d",
-                eufy_summary.items_seen,
-                eufy_summary.items_new,
-                len(eufy_summary.errors),
-            )
-        except Exception:
-            logger.exception("eufy sync failed unexpectedly")
-
-        alerts = check_staleness(
-            conn,
-            DEFAULT_ATHLETE_ID,
-            escalate_after_days=settings.garmin_stale_escalate_days,
-            freshness_days=settings.export_freshness_days,
-        )
-        for alert in alerts:
-            logger.warning(
-                "staleness alert [%s/%s]: %s", alert.source, alert.severity, alert.message
-            )
-            if settings.staleness_webhook_url:
-                notify_webhook(settings.staleness_webhook_url, alert)
+        athletes = conn.execute(
+            select(athlete_table.c.id, athlete_table.c.display_name)
+        ).fetchall()
+        for row in athletes:
+            try:
+                _sync_one_athlete(conn, settings, row.id, row.display_name)
+            except Exception:
+                conn.rollback()
+                logger.exception(
+                    "scheduled sync failed unexpectedly for athlete %s (%s) -- continuing with "
+                    "any remaining athletes",
+                    row.display_name,
+                    row.id,
+                )
 
 
 def run_daily_backup() -> None:
@@ -135,12 +175,16 @@ def run_daily_workout_push() -> None:
     sync -- automatically pushes every `planned_workout` due within the coming
     `planned_workout_push_window_days` days (default 7, "push it if it's within the coming
     week" -- the athlete's own choice, see docs/adr/0015-scheduled-workouts.md) that hasn't been
-    pushed yet (`push_status != "pushed"`). `push_planned_workout` already catches and records
-    every per-workout failure itself (`push_status="push_failed"` + `push_error`) -- see its own
-    docstring -- so this loop only needs to handle the one exception it deliberately lets
-    through: `GarminRateLimitAborted`, which means the whole session hit Garmin's rate limit, not
-    that any specific workout is broken, and stops this run entirely (same "no retry, let the
-    next scheduled run continue" precedent as `run_daily_sync`)."""
+    pushed yet (`push_status != "pushed"`), across every athlete rather than one hardcoded id.
+    `push_planned_workout` already catches and records every per-workout failure itself
+    (`push_status="push_failed"` + `push_error`) -- see its own docstring -- so this loop only
+    needs to handle the one exception it deliberately lets through: `GarminRateLimitAborted`,
+    which means that workout's own athlete hit Garmin's rate limit for this run (same "no retry,
+    let the next scheduled run continue" precedent as `run_daily_sync`). Since due workouts here
+    can belong to several independent athletes/Garmin accounts, a rate-limit hit only stops
+    further pushes for *that* athlete this run -- it says nothing about another athlete's own
+    account/rate-limit budget.
+    """
     settings = get_settings()
     engine = make_engine(settings.db_path)
     today = datetime.now(UTC).date()
@@ -153,8 +197,11 @@ def run_daily_workout_push() -> None:
 
     with engine.connect() as conn:
         due = conn.execute(
-            select(planned_workout.c.id, planned_workout.c.local_date).where(
-                planned_workout.c.athlete_id == DEFAULT_ATHLETE_ID,
+            select(
+                planned_workout.c.id,
+                planned_workout.c.athlete_id,
+                planned_workout.c.local_date,
+            ).where(
                 planned_workout.c.push_status != "pushed",
                 planned_workout.c.local_date >= today.isoformat(),
                 planned_workout.c.local_date <= window_end.isoformat(),
@@ -163,27 +210,35 @@ def run_daily_workout_push() -> None:
 
         logger.info("starting scheduled workout push: %d workout(s) due", len(due))
         pushed = 0
+        rate_limited_athletes: set[str] = set()
         for row in due:
+            if row.athlete_id in rate_limited_athletes:
+                continue
             try:
                 result = push_planned_workout(
                     conn,
-                    athlete_id=DEFAULT_ATHLETE_ID,
+                    athlete_id=row.athlete_id,
                     planned_workout_id=row.id,
-                    tokenstore_dir=settings.garmin_tokenstore_dir,
+                    tokenstore_dir=settings.garmin_tokenstore_dir_for(row.athlete_id),
                     rate_limits=rate_limits,
                 )
                 if result.success:
                     pushed += 1
                 else:
                     logger.warning(
-                        "workout push failed for planned_workout %s (%s): %s",
+                        "workout push failed for planned_workout %s (%s, athlete %s): %s",
                         row.id,
                         row.local_date,
+                        row.athlete_id,
                         result.error,
                     )
             except GarminRateLimitAborted as e:
-                logger.warning("scheduled workout push run aborted by rate limit: %s", e)
-                break
+                logger.warning(
+                    "scheduled workout push for athlete %s aborted by rate limit: %s",
+                    row.athlete_id,
+                    e,
+                )
+                rate_limited_athletes.add(row.athlete_id)
         logger.info("scheduled workout push finished: pushed=%d of %d due", pushed, len(due))
 
 

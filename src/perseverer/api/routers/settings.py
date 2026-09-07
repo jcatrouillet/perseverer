@@ -270,7 +270,7 @@ def get_garmin_status(
     conn: Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
 ) -> GarminAuthStatusOut:
-    present, age_days = token_store_status(settings.garmin_tokenstore_dir)
+    present, age_days = token_store_status(settings.garmin_tokenstore_dir_for(athlete_id))
     latest = _latest_ingest_run(conn, athlete_id, "garmin_connect")
     staleness = check_garmin_connect_staleness(
         conn, athlete_id, escalate_after_days=settings.garmin_stale_escalate_days
@@ -305,7 +305,9 @@ def post_garmin_login(
     anywhere in this app's client, so a rejected Garmin login shows an inline form error
     instead of logging the athlete out of their own account."""
     try:
-        login_with_credentials(payload.username, payload.password, settings.garmin_tokenstore_dir)
+        login_with_credentials(
+            payload.username, payload.password, settings.garmin_tokenstore_dir_for(athlete_id)
+        )
     except GarminConnectTooManyRequestsError as e:
         raise HTTPException(
             status_code=429,
@@ -344,7 +346,7 @@ def post_garmin_sync(
                 bg_conn,
                 settings.raw_archive_dir,
                 settings.parquet_dir,
-                settings.garmin_tokenstore_dir,
+                settings.garmin_tokenstore_dir_for(athlete_id),
                 athlete_id=athlete_id,
                 rolling_window_days=settings.garmin_rolling_window_days,
                 rate_limits=RateLimitSettings(

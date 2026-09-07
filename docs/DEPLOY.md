@@ -159,6 +159,55 @@ follow the same shape.
    sudo loginctl enable-linger prez
    ```
 
+### Provisioning a second athlete
+
+Every table except `athlete`/`metric_definition` already carries `athlete_id`, and every REST
+route resolves it from the caller's own credential — a second athlete works with **zero code
+changes** once their `athlete` row and credentials exist. Run these once, in order, against the
+live `api` container (`podman exec perseverer-api ...`), same as `alembic upgrade head` above:
+
+1. **Create the athlete row** — the one step no other command does; `sync athlete
+   set-password`/`create-key` only `UPDATE` an existing row:
+   ```bash
+   podman exec perseverer-api sync athlete create --display-name Erwan
+   # prints the new athlete's id -- needed by every command below
+   ```
+2. **Set login credentials** (password or a standing API key):
+   ```bash
+   podman exec -it perseverer-api sync athlete set-password --athlete-id <new-id>
+   ```
+3. **Log into their own Garmin account.** Each athlete gets their own token-store directory
+   (`<data_dir>/garmin_tokens/<athlete_id>/`, previously one shared global directory) — this
+   MFA-capable interactive login has to run at a real terminal, same as the original athlete's:
+   ```bash
+   podman exec -it perseverer-api sync auth login --athlete-id <new-id>
+   ```
+4. **Set their own Eufy credentials**, if they have their own scale (stored in
+   `athlete_eufy_config`, one row per athlete — see `adapters/eufy.py::resolve_eufy_credentials`):
+   ```bash
+   podman exec -it perseverer-api sync athlete set-eufy-credentials --athlete-id <new-id>
+   ```
+
+That's it — no restart, no config change. The worker's daily jobs (`run_daily_sync`,
+`run_daily_workout_push`) already loop over every row in `athlete`, so the new athlete's Garmin/
+Eufy sync and scheduled-workout push start on the very next scheduled run. They log into the
+frontend with the credentials from step 2 and see only their own data.
+
+**One-time migration note for the original athlete**, needed only once, the first time this app
+is upgraded past the per-athlete tokenstore change above: the pre-existing single-athlete
+deployment's Garmin token store lived directly at `<data_dir>/garmin_tokens/`. Move it into its
+own namespaced subdirectory so the original athlete's daily sync keeps working:
+```bash
+podman exec perseverer-api sh -c \
+  'mkdir -p /data/garmin_tokens/<DEFAULT_ATHLETE_ID> && \
+   find /data/garmin_tokens -maxdepth 1 -type f \
+     -exec mv {} /data/garmin_tokens/<DEFAULT_ATHLETE_ID>/ \;'
+```
+(substitute the real `DEFAULT_ATHLETE_ID`, see `db/seed.py`). Eufy credentials need no such
+migration — the original athlete's env-var-based `PERSEVERER_EUFY_*` settings keep working
+unchanged as a fallback for exactly that one athlete id (see `resolve_eufy_credentials`); only a
+*second* athlete needs an `athlete_eufy_config` row.
+
 ### Redeploying after a new image push
 
 ```bash

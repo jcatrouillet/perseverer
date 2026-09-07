@@ -144,9 +144,12 @@ class Settings(BaseSettings):
     def parquet_dir(self) -> Path:
         return self.data_dir / "parquet"
 
-    @property
-    def garmin_tokenstore_dir(self) -> Path:
-        return self.data_dir / "garmin_tokens"
+    def garmin_tokenstore_dir_for(self, athlete_id: str) -> Path:
+        """Each athlete gets their own Garmin token-store directory -- before this, every athlete
+        shared one global directory and whoever last ran `sync auth login` silently overwrote
+        everyone else's session. See docs/DEPLOY.md for the one-time manual move of the original
+        single-athlete deployment's existing token directory into its own namespaced subpath."""
+        return self.data_dir / "garmin_tokens" / athlete_id
 
     @property
     def backups_dir(self) -> Path:

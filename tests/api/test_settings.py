@@ -319,8 +319,9 @@ def test_garmin_status_no_token_store_no_sync_yet(
 def test_garmin_status_reports_token_store_age_and_last_sync(
     client: TestClient, auth_headers: dict[str, str], test_settings: Settings, engine: Engine
 ) -> None:
-    test_settings.garmin_tokenstore_dir.mkdir(parents=True)
-    (test_settings.garmin_tokenstore_dir / "token.json").write_text("{}")
+    tokenstore_dir = test_settings.garmin_tokenstore_dir_for(DEFAULT_ATHLETE_ID)
+    tokenstore_dir.mkdir(parents=True)
+    (tokenstore_dir / "token.json").write_text("{}")
 
     with engine.connect() as conn:
         conn.execute(
