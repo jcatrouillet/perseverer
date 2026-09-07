@@ -27,6 +27,11 @@ dependencies = [
   "mcp>=1.9,<2",
   "pyjwt>=2.9,<3",
   "timezonefinder>=8.2.5",
+  # Google-Calendar-subscribable feed of the athlete's planned_workout calendar
+  # (calendar_feed.py) -- RFC 5545 escaping/line-folding/VTIMEZONE generation is exactly the kind
+  # of vendor-format correctness this project defers to a real library for elsewhere rather than
+  # hand-rolling.
+  "icalendar>=7.3.0",
 ]
 
 [project.scripts]

@@ -1065,6 +1065,46 @@ every day on record.
 
 ---
 
+## Calendar feed
+
+A Google-Calendar-subscribable public iCalendar (.ics) feed of the athlete's own `planned_workout`
+calendar — a parallel mechanism to Sharing above (single standing per-athlete secret, mirroring
+the API key, not a growing list of one-off tokens), not a third share kind. See
+`docs/DATA_DICTIONARY.md`'s own "Calendar feed" section for the full event-rendering rules.
+
+### `GET /settings/calendar-feed`
+
+**Response `200`:** `CalendarFeedStatusOut` — `{"enabled": bool, "created_at": string | null}`.
+Never includes the feed URL or token itself — only whether one is currently published.
+
+### `POST /settings/calendar-feed`
+
+Publishes (if not already) or rotates (if already published) the feed, always minting a fresh
+token — invalidating any previously issued link.
+
+**Response `200`:** `CalendarFeedUrlOut` — `{"url": "https://.../share/calendar/<token>.ics"}`.
+The raw token is only ever returned here; only its SHA-256 hash is stored, and it cannot be
+recovered later — losing it means rotating to a new one.
+
+### `DELETE /settings/calendar-feed`
+
+Unpublishes the feed (the existing link stops working immediately).
+
+**Response `200`:** `CalendarFeedStatusOut` — `{"enabled": false, "created_at": null}`.
+
+### `GET /share/calendar/{token}.ics`
+
+**No authentication.** Same "public by omission" posture as `GET /share/{token}` above, and
+reuses the same `/share/` reverse-proxy forwarding rule. An unknown or unpublished token returns a
+plain **`404`** (unlike `GET /share/{token}`'s own soft "unavailable" HTML page — there is no
+public page here for a bad token to render, so a normal HTTP error code is the honest response).
+
+**Response `200`:** `text/calendar; charset=utf-8` — a full `VCALENDAR` with one `VEVENT` per
+planned workout, freshly regenerated on every request (Google Calendar itself polls a subscribed
+feed roughly every 8-24 hours, not live).
+
+---
+
 ## System
 
 ### `GET /healthz`

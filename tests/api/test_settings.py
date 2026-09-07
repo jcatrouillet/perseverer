@@ -253,6 +253,55 @@ def test_running_load_endpoints_require_auth(client: TestClient) -> None:
     assert client.put("/api/v1/settings/running-load", json={}).status_code in (401, 403)
 
 
+# --- GET/POST/DELETE /settings/calendar-feed ----------------------------------------------
+
+
+def test_calendar_feed_disabled_by_default(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/settings/calendar-feed", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {"enabled": False, "created_at": None}
+
+
+def test_calendar_feed_publish_then_status_then_unpublish(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    posted = client.post("/api/v1/settings/calendar-feed", headers=auth_headers)
+    assert posted.status_code == 200
+    url = posted.json()["url"]
+    assert "/share/calendar/" in url
+    assert url.endswith(".ics")
+
+    status = client.get("/api/v1/settings/calendar-feed", headers=auth_headers)
+    assert status.json()["enabled"] is True
+    assert status.json()["created_at"] is not None
+
+    deleted = client.delete("/api/v1/settings/calendar-feed", headers=auth_headers)
+    assert deleted.status_code == 200
+    assert deleted.json() == {"enabled": False, "created_at": None}
+
+    status_after = client.get("/api/v1/settings/calendar-feed", headers=auth_headers)
+    assert status_after.json()["enabled"] is False
+
+
+def test_calendar_feed_post_rotates_to_a_new_token(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    first = client.post("/api/v1/settings/calendar-feed", headers=auth_headers).json()["url"]
+    second = client.post("/api/v1/settings/calendar-feed", headers=auth_headers).json()["url"]
+    assert first != second
+
+    old_token = first.rsplit("/", 1)[-1].removesuffix(".ics")
+    assert client.get(f"/share/calendar/{old_token}.ics").status_code == 404
+
+
+def test_calendar_feed_endpoints_require_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/settings/calendar-feed").status_code in (401, 403)
+    assert client.post("/api/v1/settings/calendar-feed").status_code in (401, 403)
+    assert client.delete("/api/v1/settings/calendar-feed").status_code in (401, 403)
+
+
 # --- GET /settings/garmin/status ----------------------------------------------------------
 
 

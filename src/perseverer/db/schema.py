@@ -60,6 +60,11 @@ athlete = Table(
     Column("password_hash", String, nullable=True),
     Column("api_key_hash", String, nullable=True),
     Column("api_key_created_at", DateTime(), nullable=True),
+    # A public, unauthenticated iCalendar feed of this athlete's own planned_workout calendar
+    # (calendar_feed.py) -- one standing secret per athlete, same replace-on-rotate shape as
+    # api_key_hash above, not a growing history like share_link. NULL means "not published".
+    Column("calendar_feed_token_hash", String, nullable=True),
+    Column("calendar_feed_created_at", DateTime(), nullable=True),
 )
 
 # An athlete's own configured HR training zones -- independent of the per-activity, device-

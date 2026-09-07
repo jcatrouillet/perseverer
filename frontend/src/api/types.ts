@@ -343,6 +343,16 @@ export interface RunningLoadConfigIn {
   threshold_pace_sec_per_km: number | null;
 }
 
+// GET/POST/DELETE /settings/calendar-feed -- see calendar_feed.py's own module docstring.
+export interface CalendarFeedStatusOut {
+  enabled: boolean;
+  created_at: string | null;
+}
+
+export interface CalendarFeedUrlOut {
+  url: string;
+}
+
 // GET /settings/garmin/status
 export interface GarminAuthStatusOut {
   token_store_present: boolean;

@@ -14,9 +14,10 @@ guess), gated by the same shared API key via a raw ASGI wrapper (`Mount` bypasse
 `streamable_http_app()` must be called (building `mcp_asgi_app` below) before `mcp_lifespan` is
 entered.
 
-`GET /share/{token}` (share.py) is the other deliberately unauthenticated route besides
-/healthz/version/auth/login -- an athlete-issued link viewable by anyone who has it, with no
-X-API-Key/JWT at all. See share.py's own module docstring.
+`GET /share/{token}` (share.py) and `GET /share/calendar/{token}.ics` (calendar_feed.py) are the
+other deliberately unauthenticated routes besides /healthz/version/auth/login -- an athlete-issued
+link/feed viewable by anyone who has it, with no X-API-Key/JWT at all. See each module's own
+docstring.
 """
 
 from fastapi import FastAPI
@@ -28,6 +29,7 @@ from perseverer.api.routers import (
     activities,
     auth,
     calendar,
+    calendar_feed,
     fitness,
     goals,
     health,
@@ -81,6 +83,10 @@ app.include_router(share.management_router, prefix="/api/v1")
 # /healthz//version/auth/login. See share.py's own module docstring for why (and how the
 # reverse proxy/nginx get a same-origin /share/{token} URL to this route at all).
 app.include_router(share.router)
+# GET /share/calendar/{token}.ics -- a second, structurally distinct public route (one standing
+# per-athlete secret + text/calendar, not a one-off HTML share) reusing the same /share/ nginx
+# prefix rule. See calendar_feed.py's own module docstring.
+app.include_router(calendar_feed.router, prefix="/share")
 
 
 @app.get("/api/v1/healthz")

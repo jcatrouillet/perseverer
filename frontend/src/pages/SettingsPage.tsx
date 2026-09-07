@@ -18,6 +18,7 @@ import type { DuplicateCandidateOut, TrimCandidateOut } from "../api/types";
 import { hrZoneRangeLabel } from "../activityMetrics";
 import { formatDurationHM, formatMinPerKm } from "../runningStats";
 import { BulkImportCard } from "../components/BulkImportCard";
+import { CalendarFeedCard } from "../components/CalendarFeedCard";
 import { GarminConnectCard } from "../components/GarminConnectCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { RebuildCard } from "../components/RebuildCard";
@@ -319,6 +320,8 @@ export function SettingsPage() {
           )}
         </form>
       </section>
+
+      <CalendarFeedCard />
 
       <section className="card">
         <h2>Activities that may need trimming</h2>

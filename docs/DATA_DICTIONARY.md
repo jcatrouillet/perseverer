@@ -967,3 +967,73 @@ installed package) -- switched to the generic `upload_workout(workout.to_dict())
 `GET /planned-workouts/{date}` unconditionally re-parsed `source_text` for parse errors
 regardless of sport, producing bogus errors on yoga/bouldering's freeform notes -- gated to
 `sport == "running"` only. See `docs/adr/0015-scheduled-workouts.md` decision 9.
+
+## Calendar feed: publishing planned_workout to Google Calendar
+
+`calendar_feed.py` builds a public iCalendar (RFC 5545) feed of the athlete's own `planned_workout`
+calendar, so it can be subscribed to from Google Calendar (Settings > Add calendar > From URL) or
+any other .ics-reading client. Deliberately a parallel mechanism to `share_link`
+(`sharing.py`/`api/routers/share.py`), not a third `target_type` grafted onto it -- see
+CLAUDE.md's own bullet for the full reasoning. Two new nullable columns on `athlete`:
+`calendar_feed_token_hash`, `calendar_feed_created_at` -- mirroring `athlete.api_key_hash`/
+`api_key_created_at`'s exact shape (one standing secret, replace-on-rotate, `NULL` = not
+published), not a growing history of tokens.
+
+**Token mechanics**: `secrets.token_urlsafe(32)` + SHA-256 hex digest, same crypto
+`auth/api_keys.py` already uses for the per-athlete API key, duplicated as two small local
+functions in `calendar_feed.py` rather than imported -- that module is semantically scoped to
+REST API-key auth, a different domain from a calendar-feed secret, matching this codebase's own
+precedent of duplicating small helpers rather than cross-importing unrelated modules. The raw
+token is shown exactly once, at publish/rotate time (`POST /settings/calendar-feed`) -- never
+recoverable again; losing it means rotating to a fresh link.
+
+**Feed content**: every `planned_workout` row for the athlete, all dates (no lower bound) -- the
+table only exists since ADR 0015, so it's already small. One `VEVENT` per row:
+
+- `UID`: `f"planned-workout-{row.id}@perseverer"`. Safe to use the raw autoincrement `id` directly
+  because `planned_workout`/`planned_workout_step` are **not** in `rebuild.py::
+  _REBUILDABLE_TABLES` (pure user input, never replayed from the raw archive) -- their `id`s are
+  permanently stable across any `sync rebuild`, unlike a rebuildable table's own autoincrement ids.
+- **Timed vs. all-day**: if `scheduled_time` is set, a timed event using the athlete's own stored
+  `athlete.timezone` (a real IANA name, via `zoneinfo.ZoneInfo`) for `DTSTART`, with `DTEND` =
+  start + `estimated_duration_s` (defaulting to **60 minutes** if duration is unknown -- a labeled
+  judgment call, not derived from anywhere). If `scheduled_time` is unset (`scheduled_time` is
+  genuinely optional per ADR 0015 -- Garmin's own push has no time-of-day API either), an honest
+  all-day `VALUE=DATE` event spanning just `local_date`, rather than guessing a time.
+  `Calendar.add_missing_timezones()` (icalendar >=7.3.0) is called before serializing, generating
+  a real `VTIMEZONE` block with correct DST rules for any `TZID` actually used -- verified
+  empirically against the installed version (not assumed) that without this call, a timed event's
+  `DTSTART`/`DTEND` would carry a bare `TZID=` parameter with no accompanying zone definition,
+  under-specified per RFC 5545 even though major clients tolerate a well-known IANA `TZID` alone
+  in practice.
+- **`SUMMARY`**: `"{Sport label}"`, or `"{Sport label}: {name}"` if the athlete set one. Sport
+  labels come from a small local dict in `calendar_feed.py` (no existing backend sport-label
+  mapping to reuse -- the frontend's icon/tone system, `metricStyle.ts`, is frontend-only).
+- **`DESCRIPTION`**, per sport tier: running/yoga/bouldering already have a human-readable
+  `source_text` (the athlete's own workout-syntax text or freeform notes respectively -- see
+  `planned_workouts.py::save_planned_workout`'s own docstring), used verbatim. hiit/
+  strength_training never has `source_text` at all ("steps arrive already-structured, never
+  parsed from text" -- ADR 0015), so `_render_exercise_description` is a small purpose-built
+  renderer: one line per real exercise/rest step (`"{Exercise name} — {reps or duration} @
+  {weight}kg"`), with an `"Nx:"` header (matching running's own `<N>x` repeat-block wording)
+  inserted ahead of any block a `repeat_until_steps_cmplt` marker covers. Deliberately not a reuse
+  of `workout_syntax.py::steps_to_source_text` -- that function is shaped for *recorded* activity
+  steps (`RecordedStepLike`: pace-only "speed" target, no exercise/reps/weight fields at all), a
+  different domain from `planned_workout_step`'s own reps/exercise/weight columns.
+
+**Routes**: `GET/POST/DELETE /settings/calendar-feed` (authenticated, `api/routers/settings.py`,
+same file/pattern as the existing hr-zones/running-load config endpoints) publish/rotate/
+unpublish -- `POST` always mints a fresh token whether this is the first publish or a rotation,
+since "give me a current link" is the only operation that ever makes sense here. The public feed
+itself is a separate, unauthenticated route: `GET /share/calendar/{token}.ics`
+(`api/routers/calendar_feed.py`, mounted with `prefix="/share"` in `api/main.py`) -- reuses the
+existing `location /share/` nginx prefix rule (`docker/nginx.conf`) with zero infra change, same
+"public by omission" convention `share.py` already established (a route is public purely by never
+taking `Depends(require_api_key)`).
+
+Frontend: `CalendarFeedCard.tsx` (Settings page), modeled on `RebuildCard.tsx`'s status-query-
+plus-mutation shape -- button label swaps "Publish calendar" / "Rotate link" based on current
+status, revealing the fresh URL inline (via the same `share-button__url-row` markup
+`ShareButton.tsx` already uses for activity/period shares) only immediately after a publish/
+rotate, matching this codebase's "raw secret shown once, never re-shown" posture for every other
+hashed token.

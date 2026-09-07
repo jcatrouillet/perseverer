@@ -17,6 +17,13 @@ docstring for why it's safe: human-initiated, one-shot, only the resulting token
 persisted). Sync/rebuild/import all run via BackgroundTasks and are polled through the generic
 GET /settings/jobs/latest -- there is no job-queue table in this project; `ingest_run` (already
 written by every sync/import entrypoint) already is one.
+
+Also GET/POST/DELETE /settings/calendar-feed -- publish/rotate/unpublish the athlete's own
+Google-Calendar-subscribable feed of their planned_workout calendar. These are the authenticated
+management routes; the public `.ics` response itself is `GET /share/calendar/{token}.ics`
+(api/routers/calendar_feed.py, mounted separately with no auth at all). See calendar_feed.py's
+own module docstring for why this is a single standing per-athlete secret (mirroring
+athlete.api_key_hash), not a share_link-style growing history.
 """
 
 from __future__ import annotations
@@ -28,7 +35,16 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from garminconnect import GarminConnectAuthenticationError, GarminConnectTooManyRequestsError
 from sqlalchemy import Connection, Row, desc, select
 from sqlalchemy.engine import Engine
@@ -43,6 +59,8 @@ from perseverer.adapters.garmin_export import import_garmin_export
 from perseverer.adapters.strava_export import import_strava_export
 from perseverer.api.dependencies import get_conn, get_engine, require_api_key
 from perseverer.api.schemas.settings import (
+    CalendarFeedStatusOut,
+    CalendarFeedUrlOut,
     GarminAuthStatusOut,
     GarminLoginIn,
     GarminLoginOut,
@@ -53,8 +71,14 @@ from perseverer.api.schemas.settings import (
     RunningLoadConfigIn,
     RunningLoadConfigOut,
 )
+from perseverer.calendar_feed import generate_feed_token, hash_feed_token
 from perseverer.config import Settings, get_settings
-from perseverer.db.schema import athlete_hr_zone_config, athlete_running_load_config, ingest_run
+from perseverer.db.schema import (
+    athlete,
+    athlete_hr_zone_config,
+    athlete_running_load_config,
+    ingest_run,
+)
 from perseverer.fitness import refresh_fitness_rollup
 from perseverer.insights.engine import refresh_insights
 from perseverer.performance_rollup import refresh_performance_rollup
@@ -158,6 +182,67 @@ def set_running_load_config(
     refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
     return RunningLoadConfigOut(threshold_pace_sec_per_km=payload.threshold_pace_sec_per_km)
+
+
+def _public_base_url(request: Request, settings: Settings) -> str:
+    # Duplicated from share.py's own module-private helper of the same name -- same "duplicate
+    # the small private helper" precedent this codebase already uses elsewhere (e.g. weather.py::
+    # _read_cached) rather than importing a router module for a four-line function.
+    if settings.public_base_url:
+        return settings.public_base_url.rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
+@router.get("/settings/calendar-feed")
+def get_calendar_feed_status(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> CalendarFeedStatusOut:
+    row = conn.execute(
+        select(athlete.c.calendar_feed_token_hash, athlete.c.calendar_feed_created_at).where(
+            athlete.c.id == athlete_id
+        )
+    ).fetchone()
+    if row is None or row.calendar_feed_token_hash is None:
+        return CalendarFeedStatusOut(enabled=False, created_at=None)
+    created_at = row.calendar_feed_created_at.isoformat() if row.calendar_feed_created_at else None
+    return CalendarFeedStatusOut(enabled=True, created_at=created_at)
+
+
+@router.post("/settings/calendar-feed")
+def post_calendar_feed(
+    request: Request,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> CalendarFeedUrlOut:
+    # Always generates a fresh token, whether this is the first publish or a rotation -- the only
+    # operation that ever makes sense here is "give me a current link" (see calendar_feed.py's
+    # own module docstring for why this is one standing secret, not a growing history of shares).
+    raw_token = generate_feed_token()
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    conn.execute(
+        athlete.update()
+        .where(athlete.c.id == athlete_id)
+        .values(calendar_feed_token_hash=hash_feed_token(raw_token), calendar_feed_created_at=now)
+    )
+    conn.commit()
+    base = _public_base_url(request, settings)
+    return CalendarFeedUrlOut(url=f"{base}/share/calendar/{raw_token}.ics")
+
+
+@router.delete("/settings/calendar-feed")
+def delete_calendar_feed(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> CalendarFeedStatusOut:
+    conn.execute(
+        athlete.update()
+        .where(athlete.c.id == athlete_id)
+        .values(calendar_feed_token_hash=None, calendar_feed_created_at=None)
+    )
+    conn.commit()
+    return CalendarFeedStatusOut(enabled=False, created_at=None)
 
 
 def _latest_ingest_run(conn: Connection, athlete_id: str, source: str) -> Row[Any] | None:

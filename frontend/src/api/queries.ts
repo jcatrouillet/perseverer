@@ -22,6 +22,8 @@ import type {
   ActivitySummary,
   ActivityWeatherOut,
   ActivityWorkoutOut,
+  CalendarFeedStatusOut,
+  CalendarFeedUrlOut,
   CalendarResponse,
   ClimbComparisonsOut,
   ClimbingSummaryOut,
@@ -722,6 +724,38 @@ export function useSetRunningLoadConfig() {
       // picks up the new CTL/ATL/TSB without a manual refresh.
       void queryClient.invalidateQueries({ queryKey: ["fitness"] });
       void queryClient.invalidateQueries({ queryKey: ["insights"] });
+    },
+  });
+}
+
+/** Whether the athlete has published a Google-Calendar-subscribable feed of their planned_workout
+ * calendar (see calendar_feed.py's own module docstring), and when. Never carries the feed URL
+ * itself -- that's returned once by usePublishCalendarFeed, on create/rotate. */
+export function useCalendarFeedStatus() {
+  return useQuery({
+    queryKey: ["calendar-feed-status"],
+    queryFn: () => apiGet<CalendarFeedStatusOut>("/api/v1/settings/calendar-feed"),
+  });
+}
+
+/** Always mints a fresh token, whether this is the first publish or a rotation -- the only
+ * operation that ever makes sense here (see settings.py's own POST handler docstring). */
+export function usePublishCalendarFeed() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<CalendarFeedUrlOut>("/api/v1/settings/calendar-feed", {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["calendar-feed-status"] });
+    },
+  });
+}
+
+export function useUnpublishCalendarFeed() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiDelete<CalendarFeedStatusOut>("/api/v1/settings/calendar-feed"),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["calendar-feed-status"] });
     },
   });
 }

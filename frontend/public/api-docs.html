@@ -1038,6 +1038,13 @@ const SCHEMAS = [
   { name: "RevokeShareOut", note: "Returned by POST /share/{id}/revoke.", fields: [
       ["revoked","boolean","False (not an error) if the id doesn't exist or isn't owned by the authenticated athlete — never leaks which."],
     ] },
+  { name: "CalendarFeedStatusOut", note: "Returned by GET and DELETE /settings/calendar-feed.", fields: [
+      ["enabled","boolean","Whether a calendar feed is currently published."],
+      ["created_at","string(date-time)|null","When the current token was created/rotated — null when not published."],
+    ] },
+  { name: "CalendarFeedUrlOut", note: "Returned by POST /settings/calendar-feed.", fields: [
+      ["url","string","The full public feed URL, e.g. https://your-perseverer-host/share/calendar/<token>.ics. Only ever returned here — the raw token cannot be recovered later."],
+    ] },
   { name: "PlannedWorkoutListItemOut", note: "One row of GET /planned-workouts — the calendar grid's own per-day indicator.", fields: [
       ["local_date","string(date)",""],
       ["id","integer",""],
@@ -1750,6 +1757,37 @@ const GROUPS = [
       params: [ ["token","path","req","string","—",""] ],
       responses: [ { code: 200, note: "text/html — either the rendered share page or the \"no longer available\" fallback." } ],
       example: { curl: `curl https://your-perseverer-host/share/TOKEN` }
+    },
+  ]},
+
+  { id: "calendar-feed", title: "Calendar feed", endpoints: [
+    { method: "GET", path: "/api/v1/settings/calendar-feed", summary: "Whether a Google-Calendar-subscribable feed is currently published.",
+      description: "A parallel mechanism to Sharing above — one standing per-athlete secret (mirroring the API key), not a growing list of one-off tokens. Never returns the feed URL or token itself.",
+      responses: [ { code: 200, ref: "CalendarFeedStatusOut" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/settings/calendar-feed \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/settings/calendar-feed", summary: "Publish (or rotate) the planned-workout calendar feed.",
+      description: "Always mints a fresh token, whether this is the first publish or a rotation — invalidating any previously issued link. The raw token is only ever returned here; only its SHA-256 hash is stored, and it cannot be recovered later.",
+      responses: [ { code: 200, ref: "CalendarFeedUrlOut" } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/calendar-feed \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "DELETE", path: "/api/v1/settings/calendar-feed", summary: "Unpublish the calendar feed.",
+      description: "The existing link stops working immediately.",
+      responses: [ { code: 200, ref: "CalendarFeedStatusOut", note: "enabled: false, created_at: null." } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/settings/calendar-feed \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/share/calendar/{token}.ics", summary: "The iCalendar feed itself — no authentication.",
+      description: "Same \"public by omission\" posture as GET /share/{token}, reusing the same /share/ nginx forwarding rule. Freshly regenerated on every request from the athlete's own planned_workout rows (running/yoga/bouldering's own human-readable source_text becomes the event description; hiit/strength_training gets a small rendered exercise list instead). Google Calendar itself polls a subscribed feed roughly every 8-24 hours, not live. An unknown or unpublished token returns a plain 404 (there's no HTML fallback page here).",
+      auth: "none",
+      params: [ ["token","path","req","string","—",""] ],
+      responses: [
+        { code: 200, note: "text/calendar; charset=utf-8 — a full VCALENDAR, one VEVENT per planned workout." },
+        { code: 404, note: "The token doesn't exist or the feed was unpublished." },
+      ],
+      example: { curl: `curl https://your-perseverer-host/share/calendar/TOKEN.ics` }
     },
   ]},
 

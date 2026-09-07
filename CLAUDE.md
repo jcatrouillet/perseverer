@@ -630,6 +630,36 @@ because you don't recognize it — stop, that's the bug.
   whenever the reverse proxy fronts api/frontend on different ports, which is exactly bercy's own
   setup; leaving it unset falls back to the *incoming* request's own base URL, which is the api's
   own port when the create-share call arrives there, not the origin a browser should open.
+- **Calendar feed (`calendar_feed.py`, `api/routers/calendar_feed.py`)**: a Google-Calendar-
+  subscribable public iCalendar (.ics) feed of the athlete's own `planned_workout` calendar —
+  deliberately a *parallel* mechanism to `share_link` above, not a third `target_type` grafted onto
+  it: `share_link.target_type` is a closed two-way branch (`"activity"`|`"period"`) with a bespoke
+  `target_id` encoding per kind, and the whole file only ever emits `HTMLResponse`; a calendar feed
+  is one continuously-regenerated view (not one activity/period) needing `text/calendar`, not HTML.
+  Instead mirrors `athlete.api_key_hash`/`api_key_created_at`'s own shape — two new nullable
+  columns directly on `athlete` (`calendar_feed_token_hash`/`calendar_feed_created_at`), one
+  standing secret per athlete, replace-on-rotate, not a growing history of one-off tokens.
+  `GET /share/calendar/{token}.ics` (mounted with `prefix="/share"`) reuses the exact same
+  `location /share/` nginx prefix rule `share.py`'s own docstring describes — zero infra change.
+  Never includes completed activities, only the athlete's own authored planned workouts — Google
+  polls a subscribed feed roughly every 8-24h, not live, so this is rebuilt fresh on every request
+  (no caching, no rollup precedent needed — `planned_workout` has none of its own either). Event
+  rendering per sport tier (`planned_workouts.py::EXERCISE_SPORTS`/`PLACEHOLDER_SPORTS`):
+  running/yoga/bouldering already have a human-readable `source_text` (workout syntax or freeform
+  notes respectively), used verbatim as the event `DESCRIPTION`; hiit/strength_training has no
+  `source_text` at all (steps arrive already-structured, never parsed from text — ADR 0015), so a
+  small purpose-built renderer lists each real exercise/rest step instead — deliberately not a
+  reuse of `workout_syntax.py::steps_to_source_text`, which is shaped for *recorded* pace-only
+  steps, a different domain. A workout with `scheduled_time` set becomes a timed event using the
+  athlete's own stored `athlete.timezone` (`zoneinfo.ZoneInfo`, real VTIMEZONE block via
+  `icalendar`'s own `add_missing_timezones()` — verified empirically against the installed
+  version rather than assumed); one without becomes an honest all-day event rather than a guessed
+  time. `GET/POST/DELETE /settings/calendar-feed` (authenticated, alongside hr-zones/running-load
+  in `settings.py`) publish/rotate/unpublish; the frontend's `CalendarFeedCard.tsx` mirrors
+  `RebuildCard.tsx`'s status-query-plus-mutation shape, showing the fresh URL inline (via the same
+  `share-button__url-row` markup `ShareButton.tsx` already uses) only once per publish/rotate,
+  never re-shown afterward — same "raw token never recoverable again" posture as every other
+  hashed secret in this codebase.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

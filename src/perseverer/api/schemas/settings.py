@@ -132,3 +132,13 @@ class JobStatusOut(BaseModel):
     items_new: int
     error_count: int
     first_error: str | None
+
+
+# GET/POST/DELETE /settings/calendar-feed -- see calendar_feed.py's own module docstring.
+class CalendarFeedStatusOut(BaseModel):
+    enabled: bool
+    created_at: str | None
+
+
+class CalendarFeedUrlOut(BaseModel):
+    url: str
