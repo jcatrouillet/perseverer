@@ -530,6 +530,47 @@ fetched for that page's period) — deliberately the *best* value in the period,
 trend: an easy/recovery run's VDOT reads low purely from intensity, not fitness, so a day-to-day
 chart would look like fitness constantly craters on easy days and spikes on hard ones.
 
+## Independently-computed race predictions, threshold pace/HR, and max HR
+
+New table `performance_daily_rollup` (`performance_rollup.py::refresh_performance_rollup`), one
+row per calendar day per athlete, populated from the earliest day the athlete has a
+`perseverer.performance.vdot` reading (see above) through today. Deliberately independent of
+Garmin's own `garmin.daily_race_predictions.*` and `garmin.daily_lactate_threshold.*` fields —
+both stay ingested and displayed unchanged, shown alongside rather than reconciled against, same
+posture as `fitness_daily_rollup` vs. Garmin's own Training Readiness/Status. Also independent of
+`athlete_running_load_config`'s manually-configured threshold pace (which still feeds
+`running_load.py`'s rTSS calculation) — the computed value here is a separate, display-only
+Insights figure.
+
+Columns:
+
+| Column | Meaning | Basis |
+|---|---|---|
+| `rolling_vdot` | 42-day trailing **maximum** of `perseverer.performance.vdot` | Judgment call: reuses this app's own CTL lookback length, but as a hard-window max (not an EWMA) because an easy run's VDOT reads low from intensity, not fitness — the same reasoning `runningStats.ts::bestVdot` already applies. Labeled explicitly as a different mechanism from CTL's EWMA so the two 42-day windows are never confused. |
+| `max_hr_bpm` | 365-day trailing **maximum** of `{fit,strava}.session.max_heart_rate`, priority-merged, **all sports** | Judgment call, own choice: a genuine max-HR effort is rare week-to-week, so a shorter window would flicker based on incidental recent effort; all sports because a max-HR effort from cycling/hiit is physiologically just as real as one from running, and restricting to running would silently discard it. Empirical own-data max HR is used instead of any age-based formula (220-age, Tanaka 208-0.7×age, HUNT-study 211-0.64×age) — [Validity of the Maximal Heart Rate Prediction Models among Runners and Cyclists](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10146295/) found measured vs. predicted HRmax differs significantly for 9 of 13 formulas across 4,043 runners; [The 220-Age Formula Is Wrong](https://marathonhandbook.com/calculate-maximum-heart-rate/) puts the average error at 10-15bpm, with even the best alternative formulas still ~10.8bpm off. |
+| `threshold_pace_s_per_km` | Pace (s/km) at 88% of vVO2max, solved from `rolling_vdot` | Literature: [Jack Daniels VDOT Calculator: Paces & Race Times](https://www.brenoamelo.com/blog/jack-daniels-vdot-explained) cites threshold pace as 86-92% of vVO2max; 88% is a representative point within that range (judgment call). Closed-form: solves `VO2(v) = 0.88 × VDOT` as a quadratic in velocity `v` (m/min) using `vdot.py`'s own `VO2(v) = -4.60 + 0.182258v + 0.000104v²` — `a > 0`, `c < 0` for any realistic VDOT guarantees exactly one positive root (`compute_threshold_pace_s_per_km`). Hand-verified: VDOT=50 → v≈235.1 m/min → pace≈4:15/km, matching published Daniels tables. |
+| `threshold_hr_bpm` / `threshold_hr_source` | Empirical median HR among runs within ±5% of that day's own `threshold_pace_s_per_km` (by `perseverer.performance.avg_gap_speed_mps`) over the trailing 365 days, min. 3 qualifying runs (`source="empirical"`); else 88% of that day's `max_hr_bpm` (`source="fallback"`) | Literature: [How to Calculate Lactate Threshold: 3 Tests That Work](https://runnersconnect.net/how-to-calculate-your-lactate-threshold/) cites LT HR as commonly 85-92% of max HR for well-trained runners, and describes a practitioner method that derives LT pace from a recent race then reads the real HR sustained at that pace from training data — the basis for this empirical-first approach. ±5% tolerance and the 3-run minimum, the median (not mean), and 88% as the fallback fraction (a representative point within the cited 85-92% range) are judgment calls: median resists a single outlier (a cold-start HR spike, a strap dropout); the tolerance band is wide enough to catch real threshold-session pace variance while excluding easy runs and intervals. `threshold_hr_source` records which path fired, per this project's raw-first/provenance discipline — same reason `fitness_daily_rollup` stores `training_load` alongside CTL/ATL rather than just the derived output. |
+| `predicted_5k_s`, `predicted_10k_s`, `predicted_half_marathon_s`, `predicted_marathon_s` | Predicted race time (seconds) at `rolling_vdot`, one column per distance | Literature: [How Accurate Are Race Calculators? A Riegel Formula Guide](https://runnersconnect.net/race-calculators/) reports Riegel's simpler power-law formula underestimates marathon time by 10+ minutes for half of runners when extrapolating from a much shorter race, while VDOT stays roughly 1% accurate 10k→half-marathon and 2-2.5% accurate 5k→marathon for trained runners — the basis for extending this codebase's existing VDOT model (`vdot.py`) rather than adding a second formula. Computed by `predict_race_time_s`: bisection search over duration, to 1-second tolerance, until `compute_vdot(distance, T) == rolling_vdot` — valid because `compute_vdot(distance, T)` is monotonically decreasing in `T` (verified numerically across all four target distances over an 11-400 minute range, not just assumed from the model's shape). Per-distance search bounds run from a just-sub-elite pace to a generous slow ceiling; a `rolling_vdot` outside what's achievable within those bounds returns `None` rather than extrapolating. Round-trip accuracy (`compute_vdot(distance, predict_race_time_s(distance, vdot))`) verified within 0.05 VDOT of the input across tested values. |
+
+`refreshed_at` records when the row was (re)computed, same convention as `fitness_daily_rollup`.
+Full delete-and-reinsert per athlete per run (`refresh_performance_rollup`), single forward
+day-by-day pass — same precedent as `fitness.py::refresh_fitness_rollup`, cheap even at ~1,400+
+days. Wired unconditionally alongside `refresh_fitness_rollup` in `garmin_connect.py`'s daily sync
+(both have rolling-window dependencies on "today", unlike VDOT itself, so both must keep advancing
+through rest days), and inside the `touched_dates` guard at every other ingest entry point
+(`fit_folder.py`, `garmin_export.py`, `strava_export.py`, `rebuild.py`), plus the
+sport-correction/merge cascade and threshold-pace-config save (`api/routers/activities.py`,
+`api/routers/settings.py`).
+
+Exposed via `GET /performance` (`api/routers/performance.py`, mirroring `GET /fitness` exactly).
+Frontend: two new Insights tabs — `RacePredictionsChart.tsx` (four separate single-series charts,
+one per distance, since the ~10x time-range spread between 5k and marathon would flatten the
+shorter distances to near-invisibility on one shared axis and `TrendChart` only supports two
+y-axes) and `ThresholdMaxHrChart.tsx` (threshold pace as its own single-line chart; threshold HR
+shares a chart with max HR instead of with pace, since both are bpm on the same axis and directly
+comparable — pairing pace with HR would need two separate axes) — both reuse the
+`MetricExplorer`/`TrendControls`/`trendWindow.ts` wiring `FitnessPage.tsx` established.
+
 ## Live daily wellness sync via garmin_connect
 
 Until this change, `garmin_connect.py`'s daily-scheduled sync only ever downloaded **activity**

@@ -44,6 +44,7 @@ from perseverer.db.schema import (
     lap,
     merge_decision,
     metadata,
+    performance_daily_rollup,
     period_rollup,
     raw_object,
     route_geom,
@@ -79,6 +80,7 @@ from perseverer.ingest_dispatch import ingest_fit_bytes
 from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
+from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.rollups import refresh_daily_and_period_rollups
 from perseverer.running_load import refresh_running_tss
 from perseverer.sport_override import apply_sport_overrides
@@ -114,6 +116,11 @@ _REBUILDABLE_TABLES = (
     health_metric_daily_rollup,
     day_rollup,
     fitness_daily_rollup,
+    # Missing here would silently mean this table's rows are never wiped/replayed by a shadow
+    # rebuild at all -- the exact same class of bug `insight`'s own comment above documents (ADR
+    # 0013), caught the same way: `sync rebuild` ran clean (no FK error, since nothing references
+    # this table) but left performance_daily_rollup permanently empty on the live side.
+    performance_daily_rollup,
 )
 
 # The shadow-rebuild swap (rebuild_database_via_shadow) needs the *opposite* traversal from
@@ -137,6 +144,7 @@ _SHADOW_SWAP_INSERT_ORDER = (
     health_metric_daily_rollup,
     health_metric_period_rollup,
     fitness_daily_rollup,
+    performance_daily_rollup,
     sleep_stage,
     activity,
     health_observation,
@@ -517,6 +525,10 @@ def rebuild_database(
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
         conn.commit()
         refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
+        # After refresh_vdot/refresh_avg_gap, not before -- both feed its rolling-VDOT/
+        # threshold-HR-candidate inputs.
+        refresh_performance_rollup(conn, athlete_id=athlete_id)
         conn.commit()
         # After refresh_avg_gap, not before -- running_tss's rTSS formula consumes the
         # grade-adjusted speed refresh_avg_gap just wrote.

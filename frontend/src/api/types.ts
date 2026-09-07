@@ -632,6 +632,19 @@ export interface FitnessDailyRollupOut {
   tsb: number;
 }
 
+export interface PerformanceDailyRollupOut {
+  local_date: string;
+  rolling_vdot: number | null;
+  max_hr_bpm: number | null;
+  threshold_pace_s_per_km: number | null;
+  threshold_hr_bpm: number | null;
+  threshold_hr_source: "empirical" | "fallback" | null;
+  predicted_5k_s: number | null;
+  predicted_10k_s: number | null;
+  predicted_half_marathon_s: number | null;
+  predicted_marathon_s: number | null;
+}
+
 export interface HealthDashboardDayOut {
   local_date: string;
   value_sum: number | null;

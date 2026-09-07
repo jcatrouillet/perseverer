@@ -38,6 +38,7 @@ from perseverer.ingest_dispatch import ingest_fit_bytes
 from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
+from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.rollups import refresh_daily_and_period_rollups
 from perseverer.running_load import refresh_running_tss
 from perseverer.weather_titles import backfill_weather_titles
@@ -247,6 +248,7 @@ def import_garmin_export(
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
         refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
+        refresh_performance_rollup(conn, athlete_id=athlete_id)
         refresh_running_tss(conn, athlete_id=athlete_id)
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
         refresh_insights(conn, athlete_id=athlete_id)

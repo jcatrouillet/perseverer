@@ -192,6 +192,53 @@ because you don't recognize it — stop, that's the bug.
   tone everywhere else in the app (that's metricStyle.ts's whole point, one hue per metric), but
   reusing it for both lines on this one *combined* chart made them indistinguishable, so Resting
   gets `toneColor("pace")` instead, scoped to just this chart.
+- **Insights: independently-computed race predictions + threshold/max-HR**:
+  `performance_daily_rollup` (`performance_rollup.py::refresh_performance_rollup`) is a second,
+  separate rollup alongside `fitness_daily_rollup` — same full-history-recompute-on-every-ingest
+  contract, same "shown alongside, never reconciled" posture toward Garmin's own precomputed
+  fields (`garmin.daily_race_predictions.*`, `garmin.daily_lactate_threshold.*` stay untouched;
+  `athlete_running_load_config`'s manually-configured threshold pace for rTSS is untouched too —
+  this is a separate, display-only value). Everything derives from one **42-day trailing
+  maximum** of the athlete's own rolling VDOT (`vdot.py`, already used by the Pace-trends tab and
+  `fitness_daily_rollup`'s own training-load input) — a *maximum*, not an average/EWMA, because
+  an easy run's VDOT reads low from intensity rather than fitness (`DATA_DICTIONARY.md`'s own
+  VDOT section already warns about this; `runningStats.ts::bestVdot` already takes the highest
+  for the same reason). From that rolling VDOT: threshold pace is a closed-form inversion of
+  `vdot.py`'s own `VO2(v)` equation at 88% of vVO2max (`compute_threshold_pace_s_per_km` — a
+  representative point within Daniels' cited 86-92% range, verified by hand against published
+  VDOT tables); the four race times (5k/10k/half/marathon) come from `predict_race_time_s`, a
+  bisection search over duration exploiting that `compute_vdot(distance, T)` is monotonically
+  decreasing in `T` (verified numerically, not assumed) — chosen over Riegel's simpler power-law
+  formula because research shows Riegel underestimates marathon time from shorter races for many
+  runners, while VDOT stays close across the same gap. Max HR is a **365-day** trailing maximum,
+  deliberately much longer than VDOT's 42-day window since a true max-HR effort is rare
+  week-to-week and a shorter window would flicker based on incidental recent effort rather than
+  physiology — and deliberately **all sports**, not running-only, since a max-HR effort from
+  cycling or hiit is equally real and restricting to running would silently discard it. This
+  project's own empirical max HR is used in place of any age-based formula (220-age, Tanaka,
+  HUNT) — research shows all of them carry ~10-15bpm error even in their best forms. Threshold
+  HR is **empirical-first**: the median HR among runs within ±5% of that day's own threshold pace
+  (by grade-adjusted pace) over the same 365-day window, requiring at least 3 qualifying runs to
+  resist a single outlier; below that it falls back to 88% of that day's max HR (a representative
+  point within the 85-92%-of-max-HR range research cites for well-trained runners) —
+  `threshold_hr_source` (`"empirical"|"fallback"`) records which path fired, same provenance
+  instinct as storing `training_load` alongside CTL/ATL. Wired unconditionally alongside
+  `refresh_fitness_rollup` in `garmin_connect.py` (its rolling windows are date-dependent, so it
+  must keep advancing through rest days exactly like `fitness_daily_rollup` does), and inside the
+  touched-dates guard everywhere else (`fit_folder.py`, `garmin_export.py`, `strava_export.py`,
+  `rebuild.py`, plus the trim/merge cascade and threshold-pace-config save in
+  `api/routers/activities.py`/`settings.py`). `GET /performance` mirrors `GET /fitness` exactly.
+  Frontend: two more Insights tabs, `RacePredictionsChart.tsx` (4 *separate* single-series
+  charts, not one combined chart — the four distances span a ~10x time range that would flatten
+  5k/10k to near-invisibility on one shared axis, and `TrendChart` only supports two y-axes
+  anyway) and `ThresholdMaxHrChart.tsx` (threshold pace as its own single-line chart; threshold HR
+  paired with max HR on one shared-axis chart instead, not with pace — both are bpm and directly
+  comparable, e.g. threshold HR always sitting below max HR, whereas pace+HR together would need
+  two separate axes) — both reuse the exact `MetricExplorer`/`TrendControls`/`trendWindow.ts`
+  wiring `FitnessPage.tsx` established. `TrendChart.tsx`'s Y-axis ticks now use each axis's own
+  series `formatValue` too (previously only the tooltip and the "latest" note did) — a bare-number
+  axis reading e.g. "1529" for a race-time-in-seconds series was confirmed confusing in practice,
+  not just a cosmetic gap.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash

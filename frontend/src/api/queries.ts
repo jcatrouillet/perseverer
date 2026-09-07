@@ -46,6 +46,7 @@ import type {
   PaceBandOut,
   Page,
   PeriodCalendarResponse,
+  PerformanceDailyRollupOut,
   PlannedWorkoutListItemOut,
   PlannedWorkoutOut,
   PlannedWorkoutStepIn,
@@ -113,6 +114,16 @@ export function useFitness(startDate: string, endDate: string) {
     queryFn: () =>
       apiGet<FitnessDailyRollupOut[]>(
         `/api/v1/fitness${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+export function usePerformance(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["performance", startDate, endDate],
+    queryFn: () =>
+      apiGet<PerformanceDailyRollupOut[]>(
+        `/api/v1/performance${buildQuery({ start_date: startDate, end_date: endDate })}`,
       ),
   });
 }

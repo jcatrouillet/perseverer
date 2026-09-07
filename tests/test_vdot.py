@@ -1,6 +1,12 @@
 import pytest
 
-from perseverer.vdot import compute_gap_factor, compute_vdot
+from perseverer.vdot import (
+    RACE_DISTANCES_M,
+    compute_gap_factor,
+    compute_threshold_pace_s_per_km,
+    compute_vdot,
+    predict_race_time_s,
+)
 
 
 class TestComputeVdot:
@@ -101,3 +107,71 @@ class TestComputeGapFactor:
         altitudes = [100.0, None, 100.0]
         # Both segments touch the None altitude point, so nothing usable remains.
         assert compute_gap_factor(distances, altitudes) is None
+
+
+class TestComputeThresholdPaceSPerKm:
+    def test_returns_none_for_non_positive_or_missing_vdot(self) -> None:
+        assert compute_threshold_pace_s_per_km(0) is None
+        assert compute_threshold_pace_s_per_km(-5) is None
+        assert compute_threshold_pace_s_per_km(None) is None
+
+    def test_matches_independently_hand_worked_value_at_vdot_50(self) -> None:
+        # Independently re-derived from the quadratic in the module docstring:
+        # 0.000104*v^2 + 0.182258*v - (4.60 + 0.88*50) = 0 -> v ~= 235.11 m/min -> pace ~= 4:15/km
+        # (consistent with publicly known Daniels VDOT=50 Threshold-pace tables).
+        pace = compute_threshold_pace_s_per_km(50)
+        assert pace is not None
+        assert pace == pytest.approx(255.1, abs=0.5)  # ~4:15/km in seconds
+
+    def test_higher_vdot_gives_a_faster_threshold_pace(self) -> None:
+        slow = compute_threshold_pace_s_per_km(40)
+        fast = compute_threshold_pace_s_per_km(60)
+        assert slow is not None
+        assert fast is not None
+        assert fast < slow
+
+
+class TestPredictRaceTimeS:
+    def test_returns_none_for_non_positive_or_missing_vdot(self) -> None:
+        assert predict_race_time_s(RACE_DISTANCES_M["5k"], 0) is None
+        assert predict_race_time_s(RACE_DISTANCES_M["5k"], -1) is None
+        assert predict_race_time_s(RACE_DISTANCES_M["5k"], None) is None
+
+    def test_returns_none_for_an_unknown_distance(self) -> None:
+        assert predict_race_time_s(1234.0, 50) is None
+
+    @pytest.mark.parametrize("vdot", [35, 45, 50, 55, 65])
+    @pytest.mark.parametrize("label", list(RACE_DISTANCES_M))
+    def test_round_trips_through_compute_vdot(self, label: str, vdot: float) -> None:
+        # The correct way to validate a numeric inversion of an already-verified formula: feed
+        # the predicted time back into the original, already-verified compute_vdot and confirm
+        # it reproduces the target VDOT, rather than hand-deriving a second set of reference
+        # race times.
+        distance_m = RACE_DISTANCES_M[label]
+        predicted_s = predict_race_time_s(distance_m, vdot)
+        assert predicted_s is not None
+        roundtrip_vdot = compute_vdot(distance_m, predicted_s)
+        assert roundtrip_vdot is not None
+        # The 1-second bisection tolerance (_BISECTION_TOLERANCE_S) has proportionally more VDOT
+        # impact on a short/fast race than a long/slow one -- 0.05 stays tight (~0.1% of a
+        # typical VDOT) while accommodating that.
+        assert roundtrip_vdot == pytest.approx(vdot, abs=0.05)
+
+    def test_higher_vdot_gives_a_faster_predicted_time(self) -> None:
+        slow = predict_race_time_s(RACE_DISTANCES_M["10k"], 40)
+        fast = predict_race_time_s(RACE_DISTANCES_M["10k"], 60)
+        assert slow is not None
+        assert fast is not None
+        assert fast < slow
+
+    def test_longer_distances_take_longer_at_the_same_vdot(self) -> None:
+        times = [predict_race_time_s(m, 50) for m in RACE_DISTANCES_M.values()]
+        assert all(t is not None for t in times)
+        non_none_times = [t for t in times if t is not None]
+        # 5k < 10k < half < marathon, in RACE_DISTANCES_M's own declared order.
+        assert non_none_times == sorted(non_none_times)
+
+    def test_returns_none_for_a_vdot_outside_the_search_bounds(self) -> None:
+        # Effectively unachievable at any real distance, in either direction.
+        assert predict_race_time_s(RACE_DISTANCES_M["marathon"], 1.0) is None
+        assert predict_race_time_s(RACE_DISTANCES_M["5k"], 10000.0) is None

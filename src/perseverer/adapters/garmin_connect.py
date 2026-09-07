@@ -65,6 +65,7 @@ from perseverer.health.json_parser import (
 from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
+from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.rollups import refresh_daily_and_period_rollups
 from perseverer.running_load import refresh_running_tss
 from perseverer.weather_titles import backfill_weather_titles
@@ -1006,6 +1007,10 @@ def sync_garmin_connect(
     # with zero new ingests, and this daily cron run is this codebase's only naturally-daily
     # trigger point -- no separate scheduled job needed.
     refresh_fitness_rollup(conn, athlete_id=athlete_id)
+    # Same "must keep advancing through rest days" reasoning as refresh_fitness_rollup above --
+    # rolling_vdot/max_hr_bpm are trailing-window maxima, so a run that ages out of its own
+    # window still needs today's row to reflect that even with zero new activity.
+    refresh_performance_rollup(conn, athlete_id=athlete_id)
     refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 

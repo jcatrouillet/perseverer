@@ -843,6 +843,35 @@ fitness_daily_rollup = Table(
     UniqueConstraint("athlete_id", "local_date", name="uq_fitness_daily_rollup_identity"),
 )
 
+# Independently-computed race-time predictions + max HR/threshold pace/threshold HR -- see
+# performance_rollup.py::refresh_performance_rollup for the full model (a Daniels-Gilbert VDOT
+# extension, not Garmin's own daily_race_predictions/daily_lactate_threshold, which stay shown
+# separately and are never reconciled against this, same posture fitness_daily_rollup above
+# already takes with Garmin's own Training Readiness). Whole-athlete-history grain, full
+# recompute on every relevant ingest run, same precedent as fitness_daily_rollup.
+performance_daily_rollup = Table(
+    "performance_daily_rollup",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("local_date", String, nullable=False),
+    # The 42-day rolling-max VDOT that every derived column below is computed from -- stored
+    # alongside them for the same debuggability reason fitness_daily_rollup stores training_load.
+    Column("rolling_vdot", Float, nullable=True),
+    Column("max_hr_bpm", Float, nullable=True),
+    Column("threshold_pace_s_per_km", Float, nullable=True),
+    Column("threshold_hr_bpm", Float, nullable=True),
+    # "empirical" (derived from real runs near threshold pace) | "fallback" (% of max_hr_bpm) |
+    # null (no threshold_hr_bpm at all yet) -- so a chart/tooltip can show which path produced it.
+    Column("threshold_hr_source", String, nullable=True),
+    Column("predicted_5k_s", Float, nullable=True),
+    Column("predicted_10k_s", Float, nullable=True),
+    Column("predicted_half_marathon_s", Float, nullable=True),
+    Column("predicted_marathon_s", Float, nullable=True),
+    Column("refreshed_at", DateTime(), nullable=False),
+    UniqueConstraint("athlete_id", "local_date", name="uq_performance_daily_rollup_identity"),
+)
+
 # --- Insights (Phase 8): a rules-based, deterministic derived table -- see
 # src/perseverer/insights/ and docs/adr/0012-phase-8-strava-merge-insights.md. Full
 # delete-and-reinsert per athlete per refresh (same justified precedent as fitness_daily_rollup's

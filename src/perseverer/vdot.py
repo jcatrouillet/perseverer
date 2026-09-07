@@ -118,3 +118,112 @@ def compute_vdot(
         return None
 
     return vo2 / pct_vo2max
+
+
+# --- Threshold pace + race-time prediction: extensions of the same Daniels-Gilbert model above,
+# not a second formula -- deliberately never Garmin's own precomputed daily_lactate_threshold/
+# daily_race_predictions fields (see performance_rollup.py's own docstring for why: shown
+# alongside, never reconciled, same posture fitness.py already takes with Garmin's Training
+# Readiness). Riegel's simpler power-law race-time formula was considered and rejected: research
+# shows it systematically underestimates marathon time predicted from shorter races (by 10+
+# minutes for half of runners in one study), while VDOT -- being grounded in the same aerobic
+# model already verified above -- stays within ~1% (10k->half) to ~2-2.5% (5k->marathon) for
+# trained runners. One model, extended twice, is also simpler to keep correct than two.
+
+
+# A representative point within Daniels' own published "Threshold" pace range of 86-92% of
+# vVO2max (velocity at VO2max) -- Daniels' Running Formula's own training-pace table. Verified by
+# hand: at VDOT=50 this yields a threshold pace of ~4:15/km, matching publicly known VDOT=50
+# Threshold-pace tables.
+THRESHOLD_VO2MAX_FRACTION = 0.88
+
+
+def compute_threshold_pace_s_per_km(vdot: float | None) -> float | None:
+    """Threshold running pace for a given VDOT -- the velocity at which VO2 equals
+    `THRESHOLD_VO2MAX_FRACTION` of VDOT (VDOT standing in for VO2max here, same substitution
+    `compute_vdot` itself is built on). Solving the module's own `VO2(v)` quadratic for `v`:
+
+        0.000104*v^2 + 0.182258*v - (4.60 + THRESHOLD_VO2MAX_FRACTION*vdot) = 0
+
+    `a > 0` and `c < 0` for any realistic VDOT, so the discriminant always exceeds `b^2` and
+    exactly one positive root exists (the `+` branch) -- no branch-selection ambiguity to get
+    wrong. Returns `None` for a non-positive/missing VDOT.
+    """
+    if vdot is None or vdot <= 0:
+        return None
+
+    a, b = 0.000104, 0.182258
+    c = -(4.60 + THRESHOLD_VO2MAX_FRACTION * vdot)
+    discriminant = b * b - 4 * a * c
+    if discriminant < 0:
+        return None
+    velocity_m_per_min = (-b + math.sqrt(discriminant)) / (2 * a)
+    if velocity_m_per_min <= 0:
+        return None
+    return 60_000 / velocity_m_per_min
+
+
+# One entry per predicted distance -- the label is also this feature's own external vocabulary
+# (API field suffixes, frontend chart labels), so a fifth distance later is a one-line addition
+# here, not a scattered find-and-replace.
+RACE_DISTANCES_M: dict[str, float] = {
+    "5k": 5000.0,
+    "10k": 10000.0,
+    "half_marathon": 21097.5,
+    "marathon": 42195.0,
+}
+
+# (fastest, slowest) duration bounds to bisect within, in seconds, per distance -- fastest sits
+# just below world-record pace (so a real elite VDOT still resolves), slowest is a generous
+# walking-pace ceiling. `predict_race_time_s` returns `None` rather than extrapolate past these.
+_RACE_TIME_SEARCH_BOUNDS_S: dict[str, tuple[float, float]] = {
+    "5k": (720.0, 5400.0),
+    "10k": (1560.0, 10800.0),
+    "half_marathon": (3420.0, 21600.0),
+    "marathon": (7200.0, 43200.0),
+}
+_BISECTION_TOLERANCE_S = 1.0
+_BISECTION_MAX_ITERATIONS = 100
+
+
+def predict_race_time_s(distance_m: float, vdot: float | None) -> float | None:
+    """Predicted race time for `distance_m` at the given VDOT, by bisection over duration until
+    `compute_vdot(distance_m, T) == vdot` to within `_BISECTION_TOLERANCE_S`. `compute_vdot` is
+    monotonically decreasing in duration for a fixed distance (confirmed numerically against this
+    module's own implementation, not assumed) -- both velocity and %VO2max fall as duration
+    grows, so VDOT has a unique root here and bisection is exact, not a heuristic.
+
+    Returns `None` if `vdot` is missing/non-positive, or falls outside what's representable
+    within the search bounds for this distance (faster than the fast bound's own elite-pace VDOT,
+    or slower than the slow bound's) -- deliberately not extrapolated past bounds already wide
+    enough to cover amateur-to-elite performances.
+    """
+    if vdot is None or vdot <= 0 or distance_m <= 0:
+        return None
+
+    # Search bounds are keyed by the same label RACE_DISTANCES_M uses -- find it by matching
+    # distance_m, since callers pass a raw distance (e.g. from RACE_DISTANCES_M itself).
+    label = next((lbl for lbl, m in RACE_DISTANCES_M.items() if m == distance_m), None)
+    if label is None:
+        return None
+    lo, hi = _RACE_TIME_SEARCH_BOUNDS_S[label]
+
+    vdot_at_lo = compute_vdot(distance_m, lo)
+    vdot_at_hi = compute_vdot(distance_m, hi)
+    if vdot_at_lo is None or vdot_at_hi is None:
+        return None
+    if vdot > vdot_at_lo or vdot < vdot_at_hi:
+        return None  # faster than the fast bound, or slower than the slow bound
+
+    for _ in range(_BISECTION_MAX_ITERATIONS):
+        if hi - lo <= _BISECTION_TOLERANCE_S:
+            break
+        mid = (lo + hi) / 2
+        vdot_at_mid = compute_vdot(distance_m, mid)
+        if vdot_at_mid is None:
+            return None
+        if vdot_at_mid > vdot:
+            lo = mid  # still faster than target -- need a longer (slower) duration
+        else:
+            hi = mid
+    return (lo + hi) / 2

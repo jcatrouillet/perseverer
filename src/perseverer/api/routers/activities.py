@@ -100,6 +100,7 @@ from perseverer.geocoding import get_or_fetch_activity_location, read_cached_loc
 from perseverer.insights.engine import load_insight_activities, refresh_insights
 from perseverer.insights.rules_activity import compute_activity_insights
 from perseverer.performance import VDOT_METRIC_KEY
+from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.reparse import reparse_raw_object
 from perseverer.rollups import refresh_daily_and_period_rollups
 from perseverer.running_load import RUNNING_TSS_METRIC_KEY
@@ -1939,6 +1940,7 @@ def _refresh_after_activity_change(
         return
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates={local_date})
     refresh_fitness_rollup(conn, athlete_id=athlete_id)
+    refresh_performance_rollup(conn, athlete_id=athlete_id)
     refresh_insights(conn, athlete_id=athlete_id)
 
 

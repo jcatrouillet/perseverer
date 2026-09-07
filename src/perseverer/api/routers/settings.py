@@ -57,6 +57,7 @@ from perseverer.config import Settings, get_settings
 from perseverer.db.schema import athlete_hr_zone_config, athlete_running_load_config, ingest_run
 from perseverer.fitness import refresh_fitness_rollup
 from perseverer.insights.engine import refresh_insights
+from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.running_load import refresh_running_tss
 from perseverer.staleness import check_garmin_connect_staleness
 
@@ -153,6 +154,7 @@ def set_running_load_config(
     # over already-ingested data, no Parquet/network access.
     refresh_running_tss(conn, athlete_id=athlete_id)
     refresh_fitness_rollup(conn, athlete_id=athlete_id)
+    refresh_performance_rollup(conn, athlete_id=athlete_id)
     refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
     return RunningLoadConfigOut(threshold_pace_sec_per_km=payload.threshold_pace_sec_per_km)

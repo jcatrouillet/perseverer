@@ -56,6 +56,14 @@ export function TrendChart({
   const needsRightAxis = present.some((s) => s.axis === "right");
   const latest = [...points].reverse().find((p) => present.some((s) => typeof p[s.key] === "number"));
 
+  // Each axis's own tick labels use whichever series reads against it -- same formatter the
+  // Tooltip and "latest" note already apply, so an axis of raw seconds (race predictions) or
+  // pace (threshold/GAP charts) reads as "25:30"/"4:15 /km" on its ticks too, not a bare number
+  // with no unit. When two series share an axis (rare) the first one's formatter wins, matching
+  // how they'd already agree on the same scale to share an axis at all.
+  const leftFormat = present.find((s) => (s.axis ?? "left") === "left")?.formatValue ?? defaultFormat;
+  const rightFormat = present.find((s) => s.axis === "right")?.formatValue ?? defaultFormat;
+
   return (
     <div>
       <ResponsiveContainer width="100%" height={height}>
@@ -66,8 +74,9 @@ export function TrendChart({
             yAxisId="left"
             stroke="var(--color-text-muted)"
             fontSize={11}
-            width={40}
+            width={48}
             domain={["auto", "auto"]}
+            tickFormatter={leftFormat}
           />
           {needsRightAxis && (
             <YAxis
@@ -75,8 +84,9 @@ export function TrendChart({
               orientation="right"
               stroke="var(--color-text-muted)"
               fontSize={11}
-              width={40}
+              width={48}
               domain={["auto", "auto"]}
+              tickFormatter={rightFormat}
             />
           )}
           {referenceZeroAxis && (
