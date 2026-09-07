@@ -458,7 +458,14 @@ because you don't recognize it — stop, that's the bug.
   target riding alongside a pace target on the same step (`_cadence_extra`, an
   initially-undocumented Garmin field) does reach and round-trip correctly — Garmin's server
   echoes it back as `workoutTargetTypeKey: "cadence"` on read. See
-  `docs/adr/0015-scheduled-workouts.md`.
+  `docs/adr/0015-scheduled-workouts.md`. A separate `planned_workout_step.comment` column (added
+  later) attaches a freeform note to one specific step — for running, an inline trailing
+  `# comment` token on that step's own `source_text` line (`workout_syntax.py`'s grammar, works
+  on a repeat-marker `<N>x` line too, attaching to that block); for hiit/strength_training, a
+  small input on that exercise/rest row in `ExerciseStepEditor.tsx` (and one for a "set"/group
+  itself, mapping to its own repeat-marker row — lost if the set's repeat count stays at 1, since
+  no marker row is ever emitted then). Yoga/bouldering get neither — they already have an
+  equivalent via their own freeform `source_text`. Never parsed further, never pushed to Garmin.
 - **Exercise library page (`/exercises`, `ExerciseLibraryPage.tsx`)**: a browsable reference for
   every exercise the hiit/strength_training picker's catalog supports — 47 categories collapsed
   by default (native `<details>`, same convention as `ActivitySourcesPanel.tsx`'s own "Why these
@@ -650,7 +657,11 @@ because you don't recognize it — stop, that's the bug.
   `source_text` at all (steps arrive already-structured, never parsed from text — ADR 0015), so a
   small purpose-built renderer lists each real exercise/rest step instead — deliberately not a
   reuse of `workout_syntax.py::steps_to_source_text`, which is shaped for *recorded* pace-only
-  steps, a different domain. A workout with `scheduled_time` set becomes a timed event using the
+  steps, a different domain — each step's own `comment` (see the scheduled-workouts bullet above)
+  is appended to that step's own line here. Running/yoga/bouldering need no code of their own for
+  this at all: an inline `# comment` the athlete typed is already part of `source_text`'s raw
+  text, flowing straight through to `DESCRIPTION` verbatim. A workout with `scheduled_time` set
+  becomes a timed event using the
   athlete's own stored `athlete.timezone` (`zoneinfo.ZoneInfo`, real VTIMEZONE block via
   `icalendar`'s own `add_missing_timezones()` — verified empirically against the installed
   version rather than assumed); one without becomes an honest all-day event rather than a guessed

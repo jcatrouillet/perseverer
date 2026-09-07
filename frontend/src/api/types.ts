@@ -446,6 +446,10 @@ export interface PlannedWorkoutStepOut {
   exercise_category: string | null;
   exercise_name: string | null;
   weight_kg: number | null;
+  // A freeform note on this specific step -- running: parsed from an inline trailing "# comment"
+  // token on that step's own source_text line. hiit/strength_training: typed directly against
+  // that row in the exercise picker. Never parsed further, never sent to Garmin.
+  comment: string | null;
 }
 
 /** One step of a hiit/strength_training workout, as authored by the exercise picker -- never
@@ -465,6 +469,7 @@ export interface PlannedWorkoutStepIn {
   exercise_category?: string | null;
   exercise_name?: string | null;
   weight_kg?: number | null;
+  comment?: string | null;
 }
 
 export interface ParseErrorOut {

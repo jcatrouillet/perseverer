@@ -410,6 +410,9 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
               placeholder={"Warmup 10m\n\n4x\n3m 5:00-5:10/km Pace\n2m Z2 HR\n\nCooldown 5m"}
             />
           </label>
+          <p className="chart-note">
+            Add &quot;# your note&quot; at the end of a line to comment on that step.
+          </p>
 
           <button type="button" className="button" onClick={() => setStepBuilderOpen(true)}>
             + Add step
@@ -436,6 +439,7 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
                         {formatStepDurationLabel(s)}
                         {plannedTargetLabel(s) ? ` @ ${plannedTargetLabel(s)}` : ""}
                         {plannedCadenceLabel(s) ? ` · ${plannedCadenceLabel(s)}` : ""}
+                        {s.comment ? ` — ${s.comment}` : ""}
                       </li>
                     ))}
                   </ul>

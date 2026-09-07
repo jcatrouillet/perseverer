@@ -93,6 +93,18 @@
   margin-left: auto;
 }
 
+/* Wraps one entry's own controls row plus its comment input below, so they read as one unit
+   without affecting .exercise-step-editor's own row-to-row gap. */
+.exercise-step-editor__entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.exercise-step-editor__comment {
+  font-size: var(--font-size-sm);
+}
+
 /* A "set" -- several exercises/rests repeated together N times. Bordered/tinted so it reads as
    one grouped unit distinct from the plain standalone rows around it. */
 .exercise-step-editor__group {

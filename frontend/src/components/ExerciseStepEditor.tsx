@@ -86,20 +86,23 @@ export interface ExerciseEntry {
   durationReps: string;
   durationTimeS: string;
   weightKg: string;
+  comment: string;
 }
 
 /** A "set": several exercises/rests repeated together N times (e.g. "3 rounds of squat,
  * push-up, rest"). `repeatCount` of "" or "1" means "just run through it once" -- same
- * "no marker means no repeat" contract save_planned_workout already uses. */
+ * "no marker means no repeat" contract save_planned_workout already uses. Its own `comment`
+ * lives on the repeat_until_steps_cmplt marker row -- lost if repeatCount stays at 1, since no
+ * marker row is ever emitted then (see itemsToApiSteps). */
 export interface ExerciseGroup {
   key: number;
   repeatCount: string;
+  comment: string;
   entries: ExerciseEntry[];
 }
 
 export type ExerciseItem =
-  | { type: "entry"; entry: ExerciseEntry }
-  | { type: "group"; group: ExerciseGroup };
+  { type: "entry"; entry: ExerciseEntry } | { type: "group"; group: ExerciseGroup };
 
 let nextEntryKey = 0;
 
@@ -114,6 +117,7 @@ export function emptyExerciseEntry(): ExerciseEntry {
     durationReps: "10",
     durationTimeS: "30",
     weightKg: "",
+    comment: "",
   };
 }
 
@@ -128,11 +132,12 @@ export function emptyRestEntry(): ExerciseEntry {
     durationReps: "",
     durationTimeS: "60",
     weightKg: "",
+    comment: "",
   };
 }
 
 export function emptyGroup(): ExerciseGroup {
-  return { key: nextEntryKey++, repeatCount: "3", entries: [] };
+  return { key: nextEntryKey++, repeatCount: "3", comment: "", entries: [] };
 }
 
 function stepOutToEntry(s: PlannedWorkoutStepOut): ExerciseEntry {
@@ -146,6 +151,7 @@ function stepOutToEntry(s: PlannedWorkoutStepOut): ExerciseEntry {
     durationReps: s.duration_reps != null ? String(s.duration_reps) : "",
     durationTimeS: s.duration_time_s != null ? String(s.duration_time_s) : "",
     weightKg: s.weight_kg != null ? String(s.weight_kg) : "",
+    comment: s.comment ?? "",
   };
 }
 
@@ -156,6 +162,7 @@ function entryToStep(e: ExerciseEntry, stepIndex: number): PlannedWorkoutStepIn 
       duration_type: "time",
       duration_time_s: Number(e.durationTimeS) || 0,
       intensity: "rest",
+      comment: e.comment.trim() || null,
     };
   }
   return {
@@ -167,6 +174,7 @@ function entryToStep(e: ExerciseEntry, stepIndex: number): PlannedWorkoutStepIn 
     exercise_category: e.exerciseCategory,
     exercise_name: e.exerciseName ?? "",
     weight_kg: e.weightKg ? Number(e.weightKg) : null,
+    comment: e.comment.trim() || null,
   };
 }
 
@@ -200,6 +208,7 @@ export function apiStepsToItems(steps: PlannedWorkoutStepOut[]): ExerciseItem[] 
         group: {
           key: nextEntryKey++,
           repeatCount: s.repeat_count != null ? String(s.repeat_count) : "",
+          comment: s.comment ?? "",
           entries: children.map(stepOutToEntry),
         },
       });
@@ -239,6 +248,7 @@ export function itemsToApiSteps(items: ExerciseItem[]): PlannedWorkoutStepIn[] {
         duration_type: "repeat_until_steps_cmplt",
         repeat_from_step: startIndex,
         repeat_count: count,
+        comment: item.group.comment.trim() || null,
       });
     }
   }
@@ -257,8 +267,7 @@ export function estimateItemsDurationS(items: ExerciseItem[]): number {
     }
     const perRound = item.group.entries.reduce((sum, e) => sum + entryDurationS(e), 0);
     const count = Number(item.group.repeatCount);
-    const multiplier =
-      item.group.repeatCount && Number.isFinite(count) && count > 1 ? count : 1;
+    const multiplier = item.group.repeatCount && Number.isFinite(count) && count > 1 ? count : 1;
     total += perRound * multiplier;
   }
   return total;
@@ -278,106 +287,110 @@ function ExerciseEntryRow({
   setPickerOpenFor: (key: number | null) => void;
 }) {
   return (
-    <div className="exercise-step-editor__row">
-      {entry.kind === "exercise" ? (
-        <>
-          <div className="exercise-step-editor__search">
-            <input
+    <div className="exercise-step-editor__entry">
+      <div className="exercise-step-editor__row">
+        {entry.kind === "exercise" ? (
+          <>
+            <div className="exercise-step-editor__search">
+              <input
+                className="input"
+                placeholder="Search exercises… (e.g. Bench Press)"
+                value={entry.exerciseQuery}
+                onChange={(e) => {
+                  onUpdate({
+                    exerciseQuery: e.target.value,
+                    exerciseCategory: null,
+                    exerciseName: null,
+                  });
+                  setPickerOpenFor(entry.key);
+                }}
+                onFocus={() => setPickerOpenFor(entry.key)}
+                onBlur={() => setTimeout(() => setPickerOpenFor(null), 150)}
+              />
+              {pickerOpenFor === entry.key && entry.exerciseQuery.trim().length >= 2 && (
+                <ul className="exercise-step-editor__results">
+                  {searchExerciseCatalog(entry.exerciseQuery).map((r) => (
+                    <li key={`${r.category}:${r.exercise}`}>
+                      <button
+                        type="button"
+                        onMouseDown={() =>
+                          onUpdate({
+                            exerciseCategory: r.category,
+                            exerciseName: r.exercise === r.category ? "" : r.exercise,
+                            exerciseQuery: r.name,
+                          })
+                        }
+                      >
+                        {r.name}
+                        <span className="exercise-step-editor__category">{r.categoryLabel}</span>
+                      </button>
+                    </li>
+                  ))}
+                  {searchExerciseCatalog(entry.exerciseQuery).length === 0 && (
+                    <li className="exercise-step-editor__no-results">No matching exercise</li>
+                  )}
+                </ul>
+              )}
+            </div>
+
+            <select
               className="input"
-              placeholder="Search exercises… (e.g. Bench Press)"
-              value={entry.exerciseQuery}
-              onChange={(e) => {
-                onUpdate({
-                  exerciseQuery: e.target.value,
-                  exerciseCategory: null,
-                  exerciseName: null,
-                });
-                setPickerOpenFor(entry.key);
-              }}
-              onFocus={() => setPickerOpenFor(entry.key)}
-              onBlur={() => setTimeout(() => setPickerOpenFor(null), 150)}
+              value={entry.durationType}
+              onChange={(e) => onUpdate({ durationType: e.target.value as "reps" | "time" })}
+            >
+              <option value="reps">reps</option>
+              <option value="time">time</option>
+            </select>
+
+            <input
+              className="input exercise-step-editor__number"
+              type="number"
+              min="1"
+              value={entry.durationType === "reps" ? entry.durationReps : entry.durationTimeS}
+              onChange={(e) =>
+                onUpdate(
+                  entry.durationType === "reps"
+                    ? { durationReps: e.target.value }
+                    : { durationTimeS: e.target.value },
+                )
+              }
             />
-            {pickerOpenFor === entry.key && entry.exerciseQuery.trim().length >= 2 && (
-              <ul className="exercise-step-editor__results">
-                {searchExerciseCatalog(entry.exerciseQuery).map((r) => (
-                  <li key={`${r.category}:${r.exercise}`}>
-                    <button
-                      type="button"
-                      onMouseDown={() =>
-                        onUpdate({
-                          exerciseCategory: r.category,
-                          exerciseName: r.exercise === r.category ? "" : r.exercise,
-                          exerciseQuery: r.name,
-                        })
-                      }
-                    >
-                      {r.name}
-                      <span className="exercise-step-editor__category">{r.categoryLabel}</span>
-                    </button>
-                  </li>
-                ))}
-                {searchExerciseCatalog(entry.exerciseQuery).length === 0 && (
-                  <li className="exercise-step-editor__no-results">No matching exercise</li>
-                )}
-              </ul>
-            )}
-          </div>
+            <span className="chart-note">{entry.durationType === "reps" ? "reps" : "sec"}</span>
 
-          <select
-            className="input"
-            value={entry.durationType}
-            onChange={(e) => onUpdate({ durationType: e.target.value as "reps" | "time" })}
-          >
-            <option value="reps">reps</option>
-            <option value="time">time</option>
-          </select>
+            <input
+              className="input exercise-step-editor__number"
+              type="number"
+              min="0"
+              step="0.5"
+              placeholder="kg"
+              value={entry.weightKg}
+              onChange={(e) => onUpdate({ weightKg: e.target.value })}
+            />
+          </>
+        ) : (
+          <>
+            <span className="exercise-step-editor__rest-label">Rest</span>
+            <input
+              className="input exercise-step-editor__number"
+              type="number"
+              min="1"
+              value={entry.durationTimeS}
+              onChange={(e) => onUpdate({ durationTimeS: e.target.value })}
+            />
+            <span className="chart-note">sec</span>
+          </>
+        )}
 
-          <input
-            className="input exercise-step-editor__number"
-            type="number"
-            min="1"
-            value={entry.durationType === "reps" ? entry.durationReps : entry.durationTimeS}
-            onChange={(e) =>
-              onUpdate(
-                entry.durationType === "reps"
-                  ? { durationReps: e.target.value }
-                  : { durationTimeS: e.target.value },
-              )
-            }
-          />
-          <span className="chart-note">{entry.durationType === "reps" ? "reps" : "sec"}</span>
-
-          <input
-            className="input exercise-step-editor__number"
-            type="number"
-            min="0"
-            step="0.5"
-            placeholder="kg"
-            value={entry.weightKg}
-            onChange={(e) => onUpdate({ weightKg: e.target.value })}
-          />
-        </>
-      ) : (
-        <>
-          <span className="exercise-step-editor__rest-label">Rest</span>
-          <input
-            className="input exercise-step-editor__number"
-            type="number"
-            min="1"
-            value={entry.durationTimeS}
-            onChange={(e) => onUpdate({ durationTimeS: e.target.value })}
-          />
-          <span className="chart-note">sec</span>
-        </>
-      )}
-
-      <button
-        type="button"
-        className="button exercise-step-editor__remove"
-        onClick={onRemove}
-      >
-        Remove
-      </button>
+        <button type="button" className="button exercise-step-editor__remove" onClick={onRemove}>
+          Remove
+        </button>
+      </div>
+      <input
+        className="input exercise-step-editor__comment"
+        placeholder="Comment (optional)"
+        value={entry.comment}
+        onChange={(e) => onUpdate({ comment: e.target.value })}
+      />
     </div>
   );
 }
@@ -450,6 +463,17 @@ export function ExerciseStepEditor({
                 />
               </label>
               <span className="chart-note">times</span>
+              <input
+                className="input exercise-step-editor__comment"
+                placeholder="Comment (optional)"
+                value={item.group.comment}
+                onChange={(e) =>
+                  updateAt(index, {
+                    type: "group",
+                    group: { ...item.group, comment: e.target.value },
+                  })
+                }
+              />
               <button
                 type="button"
                 className="button exercise-step-editor__remove"

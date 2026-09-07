@@ -47,6 +47,14 @@ Target and cadence tokens are recognized wherever they appear after the duration
 them doesn't matter); an unrecognized token records a `ParseError` for that line but does not
 stop the line's step from being emitted with whatever *was* understood -- better to show a
 partial live preview than nothing, matching intervals.icu's own forgiving-editor UX.
+
+A trailing `# comment text` on any line (a step line or a standalone `<N>x` repeat-marker line)
+attaches a freeform note to that specific step/block -- stored verbatim on
+`planned_workout_step.comment`, never parsed further, never sent to Garmin. Only the first `#`
+starts the comment; anything after it, including further `#` characters, is comment text. A line
+that is *only* a comment (nothing left once the `#...` part is removed) is not a supported
+feature -- it falls through to the ordinary "missing duration" error, same as any other
+content-free line, since a comment is only ever an annotation on a real step.
 """
 
 from __future__ import annotations
@@ -95,6 +103,7 @@ class ParsedStep:
     intensity: str | None = None
     repeat_from_step: int | None = None
     repeat_count: int | None = None
+    comment: str | None = None
 
 
 @dataclass
@@ -134,6 +143,16 @@ def _pace_to_speed_mps(minutes: str, seconds: str) -> float:
     if total_s <= 0:
         return 0.0
     return 1000.0 / total_s
+
+
+def _split_comment(line: str) -> tuple[str, str | None]:
+    """Splits a trailing '# comment text' off a line -- only the FIRST '#' starts the comment;
+    further '#' characters are just part of the comment text. No '#' at all -> (line, None)."""
+    if "#" not in line:
+        return line, None
+    step_part, _, comment_part = line.partition("#")
+    comment = comment_part.strip()
+    return step_part.rstrip(), comment or None
 
 
 def _parse_step_line(line: str, *, line_no: int, errors: list[ParseError]) -> ParsedStep | None:
@@ -277,10 +296,11 @@ def parse_workout_syntax(text: str) -> ParsedWorkout:
     i = 0
     n = len(lines)
     while i < n:
-        line = lines[i].strip()
-        if not line:
+        raw_line = lines[i].strip()
+        if not raw_line:
             i += 1
             continue
+        line, comment = _split_comment(raw_line)
 
         if m := _REPEAT_MARKER_RE.match(line):
             count = int(m.group(1))
@@ -288,9 +308,11 @@ def parse_workout_syntax(text: str) -> ParsedWorkout:
             i += 1
             children_start = step_index
             while i < n and lines[i].strip():
-                child = _parse_step_line(lines[i].strip(), line_no=i + 1, errors=errors)
+                child_line, child_comment = _split_comment(lines[i].strip())
+                child = _parse_step_line(child_line, line_no=i + 1, errors=errors)
                 if child is not None:
                     child.step_index = step_index
+                    child.comment = child_comment
                     steps.append(child)
                     step_index += 1
                 i += 1
@@ -305,6 +327,7 @@ def parse_workout_syntax(text: str) -> ParsedWorkout:
                         duration_type="repeat_until_steps_cmplt",
                         repeat_from_step=children_start,
                         repeat_count=count,
+                        comment=comment,
                     )
                 )
                 step_index += 1
@@ -313,6 +336,7 @@ def parse_workout_syntax(text: str) -> ParsedWorkout:
         step = _parse_step_line(line, line_no=i + 1, errors=errors)
         if step is not None:
             step.step_index = step_index
+            step.comment = comment
             steps.append(step)
             step_index += 1
         i += 1

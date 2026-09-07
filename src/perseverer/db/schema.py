@@ -640,6 +640,11 @@ planned_workout_step = Table(
     Column("exercise_category", String, nullable=True),
     Column("exercise_name", String, nullable=True),
     Column("weight_kg", Float, nullable=True),
+    # A freeform note attached to this specific step -- for running, parsed from an inline
+    # trailing "# comment" token on that step's own source_text line (workout_syntax.py); for
+    # hiit/strength_training, typed directly against that exercise/rest row
+    # (ExerciseStepEditor.tsx). Never parsed further, never sport-gated here, never sent to Garmin.
+    Column("comment", Text, nullable=True),
     UniqueConstraint(
         "athlete_id",
         "planned_workout_id",

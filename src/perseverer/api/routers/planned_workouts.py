@@ -103,6 +103,7 @@ def _steps_in_to_planned_step_like(steps: list[PlannedWorkoutStepIn]) -> list[Pl
             exercise_category=s.exercise_category,
             exercise_name=s.exercise_name,
             weight_kg=s.weight_kg,
+            comment=s.comment,
         )
         for s in steps
     ]
@@ -137,6 +138,7 @@ def _to_out(row: Row, steps: list[Row], parse_errors: list[ParseError]) -> Plann
                 exercise_category=s.exercise_category,
                 exercise_name=s.exercise_name,
                 weight_kg=s.weight_kg,
+                comment=s.comment,
             )
             for s in steps
         ],

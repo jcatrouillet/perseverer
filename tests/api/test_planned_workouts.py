@@ -50,6 +50,56 @@ def test_put_creates_and_parses_steps(client: TestClient, auth_headers: dict[str
     assert len(get.json()["steps"]) == 5
 
 
+def test_put_parses_an_inline_comment_onto_that_steps_own_row(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    put = client.put(
+        "/api/v1/planned-workouts/2026-09-01",
+        json={"sport": "running", "source_text": "Warmup 10m # legs still sore from Tuesday"},
+        headers=auth_headers,
+    )
+    assert put.status_code == 200
+    body = put.json()
+    assert body["source_text"] == "Warmup 10m # legs still sore from Tuesday"
+    assert body["steps"][0]["comment"] == "legs still sore from Tuesday"
+
+    get = client.get("/api/v1/planned-workouts/2026-09-01", headers=auth_headers)
+    assert get.json()["steps"][0]["comment"] == "legs still sore from Tuesday"
+
+    # A second save without a comment overwrites it (upsert semantics, same as every other field).
+    put2 = client.put(
+        "/api/v1/planned-workouts/2026-09-01",
+        json={"sport": "running", "source_text": "Warmup 15m"},
+        headers=auth_headers,
+    )
+    assert put2.json()["steps"][0]["comment"] is None
+
+
+def test_put_stores_a_hiit_steps_own_comment(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    put = client.put(
+        "/api/v1/planned-workouts/2026-09-01",
+        json={
+            "sport": "hiit",
+            "steps": [
+                {
+                    "step_index": 0,
+                    "duration_type": "reps",
+                    "duration_reps": 10,
+                    "intensity": "active",
+                    "exercise_category": "PUSH_UP",
+                    "exercise_name": "",
+                    "comment": "Full range of motion",
+                }
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert put.status_code == 200
+    assert put.json()["steps"][0]["comment"] == "Full range of motion"
+
+
 def test_put_upserts_and_replaces_steps_rather_than_duplicating(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
@@ -381,6 +431,25 @@ class TestRecurring:
         body = r.json()
         assert body["created_dates"] == ["2026-09-01", "2026-09-08", "2026-09-15"]
         assert body["skipped_dates"] == []
+
+    def test_carries_an_inline_step_comment_onto_every_created_occurrence(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        r = client.post(
+            "/api/v1/planned-workouts/recurring",
+            json={
+                "local_date": "2026-09-01",
+                "sport": "running",
+                "source_text": "Warmup 10m # marathon block, week 3",
+                "frequency": "weekly",
+                "count": 2,
+            },
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        for d in r.json()["created_dates"]:
+            got = client.get(f"/api/v1/planned-workouts/{d}", headers=auth_headers)
+            assert got.json()["steps"][0]["comment"] == "marathon block, week 3"
 
     def test_monthly_clamps_short_months(
         self, client: TestClient, auth_headers: dict[str, str]

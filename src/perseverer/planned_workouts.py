@@ -108,6 +108,10 @@ class PlannedStepLike:
     exercise_category: str | None = None
     exercise_name: str | None = None
     weight_kg: float | None = None
+    # A freeform note on this specific step -- see db/schema.py::planned_workout_step's own
+    # docstring. Appended last for the same positional-construction-compatibility reason as the
+    # fields above.
+    comment: str | None = None
 
 
 _PLANNED_STEP_FIELD_NAMES = [f.name for f in fields(PlannedStepLike)]
@@ -706,6 +710,11 @@ def save_planned_workout(
     `scheduled_time` ("HH:MM", validated by the API schema layer) is stored either way -- it's
     Perseverer's own calendar display metadata, orthogonal to which sport tier a workout is in.
 
+    Each step in `steps`/`parsed.steps` may carry its own `comment` (running: parsed from an
+    inline trailing `# ...` token on that step's own source_text line, workout_syntax.py;
+    hiit/strength_training: typed directly against that row in the exercise picker) -- stored
+    verbatim per `planned_workout_step` row, never parsed further.
+
     Resets `push_status` back to "draft" whenever an already-`"pushed"` workout is edited: the
     old Garmin copy is now stale, and `push_planned_workout` re-pushes fresh (delete + re-upload)
     the next time it runs, matching `GarminConnectAdapter.push_planned_workout`'s own "edit means
@@ -796,6 +805,7 @@ def save_planned_workout(
                     "exercise_category": getattr(s, "exercise_category", None),
                     "exercise_name": getattr(s, "exercise_name", None),
                     "weight_kg": getattr(s, "weight_kg", None),
+                    "comment": getattr(s, "comment", None),
                 }
                 # rows_to_insert holds either workout_syntax.ParsedStep (running) or
                 # PlannedStepLike (hiit/strength_training) -- getattr() above covers whichever

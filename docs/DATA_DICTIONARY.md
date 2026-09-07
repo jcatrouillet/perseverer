@@ -968,6 +968,30 @@ installed package) -- switched to the generic `upload_workout(workout.to_dict())
 regardless of sport, producing bogus errors on yoga/bouldering's freeform notes -- gated to
 `sport == "running"` only. See `docs/adr/0015-scheduled-workouts.md` decision 9.
 
+**`planned_workout_step.comment` column** (added later): a freeform note on **one specific step**,
+stored verbatim, never parsed further or pushed to Garmin. Two authoring paths, per sport tier:
+
+- **running**: an inline trailing `# comment text` on that step's own `source_text` line --
+  `workout_syntax.py`'s grammar extension (`_split_comment`, applied before the rest of the line
+  is tokenized): only the first `#` starts the comment, further `#` characters are just comment
+  text. Works on a standalone `<N>x` repeat-marker line too, attaching to that block's own
+  summarizing `planned_workout_step` row. A line that's *only* a comment (nothing left once the
+  `#...` part is removed) is not a supported feature -- it falls through to the ordinary "missing
+  duration" error, the same as any other content-free line, since a comment is only ever an
+  annotation on a real step. Mirrored token-for-token in `workoutSyntax.ts` for the live preview.
+- **hiit/strength_training**: typed directly into a small input on that exercise/rest row in
+  `ExerciseStepEditor.tsx` (`ExerciseEntry.comment`), or on a "set"/`ExerciseGroup`'s own head row
+  (`ExerciseGroup.comment`, which maps to its `repeat_until_steps_cmplt` marker row -- **lost** if
+  the set's repeat count stays at 1, since no marker row is ever emitted then; a known, accepted
+  limitation, not special-cased).
+
+Yoga/bouldering get neither -- they already have an equivalent via their own freeform
+`source_text` ("Notes"). `save_planned_workout`'s step-insert loop stores it as a plain
+passthrough (`getattr(s, "comment", None)`, the same pattern every other type-specific field
+there already uses), so both `workout_syntax.ParsedStep` (running) and `planned_workouts.
+PlannedStepLike` (hiit/strength) feed it identically; `POST /planned-workouts/recurring` applies
+whatever `source_text`/`steps` already carry to every created occurrence, comments included.
+
 ## Calendar feed: publishing planned_workout to Google Calendar
 
 `calendar_feed.py` builds a public iCalendar (RFC 5545) feed of the athlete's own `planned_workout`
@@ -1019,7 +1043,12 @@ table only exists since ADR 0015, so it's already small. One `VEVENT` per row:
   inserted ahead of any block a `repeat_until_steps_cmplt` marker covers. Deliberately not a reuse
   of `workout_syntax.py::steps_to_source_text` -- that function is shaped for *recorded* activity
   steps (`RecordedStepLike`: pace-only "speed" target, no exercise/reps/weight fields at all), a
-  different domain from `planned_workout_step`'s own reps/exercise/weight columns.
+  different domain from `planned_workout_step`'s own reps/exercise/weight columns. Each step's own
+  `comment` (added later -- see the Scheduled workouts section above), when set, is appended to
+  that step's own line; a group's own comment is embedded in its `"Nx:"` header
+  (`"Nx: {comment}"` vs. the bare `"Nx:"`). Running/yoga/bouldering need no code of their own for
+  this at all -- an inline `#` comment the athlete typed is already part of `source_text`'s raw
+  text, flowing straight through to `DESCRIPTION` verbatim.
 
 **Routes**: `GET/POST/DELETE /settings/calendar-feed` (authenticated, `api/routers/settings.py`,
 same file/pattern as the existing hr-zones/running-load config endpoints) publish/rotate/

@@ -34,6 +34,7 @@ function toSnakeCase(step: ParsedStep): Record<string, unknown> {
     intensity: step.intensity,
     repeat_from_step: step.repeatFromStep,
     repeat_count: step.repeatCount,
+    comment: step.comment,
   };
 }
 

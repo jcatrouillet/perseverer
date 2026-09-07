@@ -199,6 +199,82 @@ class TestBuildIcsFeed:
         assert "12 reps" in description
         assert "40kg" in description
 
+    def test_running_inline_comment_shows_up_verbatim_in_description(self, tmp_path: Path) -> None:
+        # running/yoga/bouldering need no calendar_feed.py code of their own for comments --
+        # source_text already carries the raw text, inline "#" comments included, straight
+        # through to DESCRIPTION verbatim.
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            save_planned_workout(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-09-16",
+                sport="running",
+                name=None,
+                source_text="30m easy # new shoes today",
+            )
+            conn.commit()
+            ics_bytes = build_ics_feed(conn, athlete_id=DEFAULT_ATHLETE_ID, timezone_name="UTC")
+        cal = Calendar.from_ical(ics_bytes)
+        event = cal.walk("VEVENT")[0]
+        assert str(event["description"]) == "30m easy # new shoes today"
+
+    def test_hiit_step_comment_appended_to_that_steps_own_line(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        steps = [
+            PlannedStepLike(
+                0, "reps", None, None, None, None, None, None, None, None, None, None, None,
+                duration_reps=10, exercise_category="PUSH_UP", exercise_name="", weight_kg=None,
+                comment="Bring the resistance bands",
+            ),
+        ]
+        with engine.connect() as conn:
+            save_planned_workout(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-09-17",
+                sport="hiit",
+                name=None,
+                source_text=None,
+                steps=steps,
+            )
+            conn.commit()
+            ics_bytes = build_ics_feed(conn, athlete_id=DEFAULT_ATHLETE_ID, timezone_name="UTC")
+        cal = Calendar.from_ical(ics_bytes)
+        event = cal.walk("VEVENT")[0]
+        description = str(event["description"])
+        assert "Push Up" in description
+        assert description.endswith("Bring the resistance bands")
+
+    def test_hiit_group_comment_appended_to_its_repeat_header(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        steps = [
+            PlannedStepLike(
+                0, "reps", None, None, None, None, None, None, None, None, None, None, None,
+                duration_reps=12, exercise_category="SQUAT", exercise_name="", weight_kg=None,
+            ),
+            PlannedStepLike(
+                1, "repeat_until_steps_cmplt", None, None, None, None, None, None, None, None,
+                None, 0, 3, comment="superset, no rest between rounds",
+            ),
+        ]
+        with engine.connect() as conn:
+            save_planned_workout(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-09-18",
+                sport="hiit",
+                name=None,
+                source_text=None,
+                steps=steps,
+            )
+            conn.commit()
+            ics_bytes = build_ics_feed(conn, athlete_id=DEFAULT_ATHLETE_ID, timezone_name="UTC")
+        cal = Calendar.from_ical(ics_bytes)
+        event = cal.walk("VEVENT")[0]
+        description = str(event["description"])
+        assert "3x: superset, no rest between rounds" in description
+
     def test_uid_is_stable_and_unique_per_workout(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
         with engine.connect() as conn:

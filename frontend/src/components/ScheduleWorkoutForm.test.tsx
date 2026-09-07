@@ -68,6 +68,7 @@ const SCHEDULED: PlannedWorkoutOut = {
       exercise_category: null,
       exercise_name: null,
       weight_kg: null,
+      comment: null,
     },
   ],
   parse_errors: [],
@@ -153,6 +154,28 @@ describe("ScheduleWorkoutForm", () => {
     expect(screen.getByText("Duration (minutes)")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Warmup 10m/)).not.toBeInTheDocument();
     expect(screen.queryByText("+ Add step")).not.toBeInTheDocument();
+  });
+
+  it("shows a hint about the inline comment syntax for running", () => {
+    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Schedule a workout"));
+
+    expect(screen.getByText(/comment on that step/)).toBeInTheDocument();
+  });
+
+  it("an inline '# comment' on a step line shows up in the live preview", () => {
+    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Schedule a workout"));
+
+    fireEvent.change(screen.getByPlaceholderText(/Warmup 10m/), {
+      target: { value: "Warmup 10m # legs still sore from Tuesday" },
+    });
+
+    // The step preview list, not the textarea itself (whose own rendered value also contains
+    // this substring) -- scope to the <li> the preview renders.
+    expect(screen.getByRole("listitem")).toHaveTextContent("legs still sore from Tuesday");
   });
 
   it("Save for yoga sends duration_minutes and scheduled_time, no source_text required", () => {
@@ -336,6 +359,7 @@ describe("ScheduleWorkoutForm", () => {
               exercise_category: "TOTAL_BODY",
               exercise_name: "BURPEE",
               weight_kg: null,
+              comment: null,
             },
           ],
         },

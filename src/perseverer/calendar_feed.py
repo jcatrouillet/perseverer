@@ -107,20 +107,25 @@ def _step_line(step: Row) -> str:  # type: ignore[type-arg]
     line = f"{label} — {amount}" if amount else label
     if step.weight_kg:
         line += f" @ {step.weight_kg:g}kg"
+    if step.comment:
+        line += f" — {step.comment}"
     return line
 
 
 def _render_exercise_description(steps: list[Row]) -> str:  # type: ignore[type-arg]
-    """One line per real exercise/rest step, in step_index order, with an "Nx:" header (same
-    "<N>x" repeat-block wording workout_syntax.py's own running text syntax uses) inserted ahead
-    of any block a repeat_until_steps_cmplt marker covers -- same consumed-step idiom
-    workout_syntax.py::steps_to_source_text uses for the analogous running-syntax case."""
+    """One line per real exercise/rest step (each with its own comment, when set, appended --
+    see _step_line), in step_index order, with an "Nx:" header (same "<N>x" repeat-block wording
+    workout_syntax.py's own running text syntax uses, its own comment embedded when the athlete
+    set one on the set/group) inserted ahead of any block a repeat_until_steps_cmplt marker
+    covers -- same consumed-step idiom workout_syntax.py::steps_to_source_text uses for the
+    analogous running-syntax case."""
     sorted_steps = sorted(steps, key=lambda s: s.step_index)
-    repeat_headers: dict[int, int] = {}  # first step_index of the block -> repeat_count
+    # first step_index of the block -> (repeat_count, the marker's own comment)
+    repeat_headers: dict[int, tuple[int, str | None]] = {}
     consumed: set[int] = set()
     for s in sorted_steps:
         if s.duration_type == "repeat_until_steps_cmplt" and s.repeat_from_step is not None:
-            repeat_headers[s.repeat_from_step] = s.repeat_count or 1
+            repeat_headers[s.repeat_from_step] = (s.repeat_count or 1, s.comment)
             consumed.add(s.step_index)
 
     lines: list[str] = []
@@ -128,18 +133,24 @@ def _render_exercise_description(steps: list[Row]) -> str:  # type: ignore[type-
         if s.step_index in consumed:
             continue
         if s.step_index in repeat_headers:
-            lines.append(f"{repeat_headers[s.step_index]}x:")
+            count, group_comment = repeat_headers[s.step_index]
+            header = f"{count}x: {group_comment}" if group_comment else f"{count}x:"
+            lines.append(header)
         lines.append(_step_line(s))
     return "\n".join(lines)
 
 
 def _event_description(row: Row, steps: list[Row]) -> str | None:  # type: ignore[type-arg]
     if row.sport in EXERCISE_SPORTS:
-        return _render_exercise_description(steps) or None
-    # running, yoga, bouldering: source_text is already the athlete's own human-readable text
-    # (workout syntax for running, freeform notes for yoga/bouldering -- see
-    # planned_workouts.py::save_planned_workout's own docstring).
-    return row.source_text or None
+        structured = _render_exercise_description(steps) or None
+    else:
+        # running, yoga, bouldering: source_text is already the athlete's own human-readable text
+        # (workout syntax for running, freeform notes for yoga/bouldering -- see
+        # planned_workouts.py::save_planned_workout's own docstring). Any inline "#" comment the
+        # athlete added to a line is already part of this raw text verbatim -- no extra handling
+        # needed here.
+        structured = row.source_text or None
+    return structured
 
 
 def _build_event(row: Row, steps: list[Row], timezone_name: str) -> Event:  # type: ignore[type-arg]

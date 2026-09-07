@@ -28,7 +28,10 @@ export interface WorkoutClipboardItem {
   // in the same *Out shape `GET /planned-workouts/{date}` returns (reused rather than converting
   // to *In shape at copy time, since apiStepsToEntries -- the hydration helper ScheduleWorkoutForm
   // already uses for Edit -- takes exactly this shape). Absent from a copy off a completed
-  // activity: recorded FIT-parsed steps carry no exercise_category/exercise_name/weight_kg at all.
+  // activity: recorded FIT-parsed steps carry no exercise_category/exercise_name/weight_kg at
+  // all. Also how a per-step comment travels for hiit/strength_training -- it's already part of
+  // each step's own `comment` field, no separate clipboard handling needed (running's own
+  // per-step comments are embedded inline in `source_text` above instead).
   steps?: PlannedWorkoutStepOut[] | null;
 }
 

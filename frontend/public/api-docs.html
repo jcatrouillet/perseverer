@@ -1059,7 +1059,7 @@ const SCHEMAS = [
       ["local_date","string(date)|null","optional","opt"],
       ["sport","string|null","optional","opt"],
       ["name","string|null","optional","opt"],
-      ["source_text","string|null","running: the athlete's own typed workout-syntax text, verbatim. yoga/bouldering: freeform notes only, never parsed. hiit/strength_training: always null — see steps.","opt"],
+      ["source_text","string|null","running: the athlete's own typed workout-syntax text, verbatim (inline \"#\" comments included). yoga/bouldering: freeform notes only, never parsed. hiit/strength_training: always null — see steps.","opt"],
       ["scheduled_time","string|null","\"HH:MM\" (24h) — display-only, not sent to Garmin.","opt"],
       ["estimated_duration_s","number|null","running: an estimate — a distance-based step's real duration depends on the athlete's actual pace. yoga/bouldering: exactly the duration_minutes given at save time, in seconds. hiit/strength_training: an estimate computed from steps.","opt"],
       ["steps","array<PlannedWorkoutStepOut>","Defaults to []. Raw, unexpanded (repeat-block markers included). Always [] for yoga/bouldering.","opt"],
@@ -1087,6 +1087,7 @@ const SCHEMAS = [
       ["exercise_category","string|null","hiit/strength_training only — the exact (category, exercise) pair from garminconnect.exercises."],
       ["exercise_name","string|null","hiit/strength_training only — \"\" (not null) when the step names just the category with no specific variant."],
       ["weight_kg","number|null","hiit/strength_training only."],
+      ["comment","string|null","A freeform note on this specific step. running: parsed from an inline trailing \"# comment\" token on that step's own source_text line. hiit/strength_training: typed directly against that row in the exercise picker (a repeat-marker row's own comment is the \"set\"'s comment). Never parsed further, never sent to Garmin."],
     ] },
   { name: "PlannedWorkoutStepIn", note: "Body field of PlannedWorkoutIn/RecurringWorkoutIn's own steps array — hiit/strength_training only, arriving already-structured from the exercise picker (never parsed from text).", fields: [
       ["step_index","integer","required"],
@@ -1099,6 +1100,7 @@ const SCHEMAS = [
       ["exercise_category","string|null","The exact (category, exercise) pair from garminconnect.exercises, e.g. \"BENCH_PRESS\". Omitted for a rest step.","opt"],
       ["exercise_name","string|null","\"\" (not omitted) when the step names just the category with no specific variant.","opt"],
       ["weight_kg","number|null","Converted to grams (Garmin's own wire unit) only at push time.","opt"],
+      ["comment","string|null","A freeform note on this specific step (a repeat-marker's own comment is the \"set\"'s comment). Never parsed, never pushed to Garmin.","opt"],
     ] },
   { name: "ParseErrorOut", fields: [
       ["line_no","integer","1-indexed."],
@@ -1582,7 +1584,7 @@ const GROUPS = [
       body: { schema: "PlannedWorkoutIn", fields: [
         ["sport","string","req","","running | yoga | bouldering | fitness | hiit | strength_training — open string, not an enum."],
         ["name","string|null","opt","",""],
-        ["source_text","string|null","opt","","running: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting parse_errors come back in the response. yoga/bouldering: freeform notes only, never parsed. Ignored for hiit/strength_training."],
+        ["source_text","string|null","opt","","running: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting parse_errors come back in the response. A trailing \"# comment\" on any line attaches a freeform note to that step (see PlannedWorkoutStepOut.comment); a comment-only line errors as a missing duration. yoga/bouldering: freeform notes only, never parsed. Ignored for hiit/strength_training."],
         ["scheduled_time","string|null","opt","","\"HH:MM\" (24h). Display-only — Garmin's own scheduling has no time-of-day API."],
         ["duration_minutes","number|null","opt","","yoga/bouldering only — sets the workout's duration directly. Ignored for running/hiit/strength_training."],
         ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — the exercise-picker steps, already-structured. Ignored for every other sport."],
@@ -1612,7 +1614,7 @@ const GROUPS = [
         ["local_date","string","req","","First occurrence, ISO date."],
         ["sport","string","req","",""],
         ["name","string|null","opt","",""],
-        ["source_text","string|null","opt","",""],
+        ["source_text","string|null","opt","","Applied to every created occurrence, comments (inline \"#\" tokens) included."],
         ["scheduled_time","string|null","opt","","\"HH:MM\" (24h) — see PlannedWorkoutIn."],
         ["duration_minutes","number|null","opt","","yoga/bouldering only — see PlannedWorkoutIn."],
         ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — see PlannedWorkoutIn."],

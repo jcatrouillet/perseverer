@@ -48,6 +48,7 @@ export interface ParsedStep {
   intensity: string | null;
   repeatFromStep: number | null;
   repeatCount: number | null;
+  comment: string | null;
 }
 
 export interface ParseError {
@@ -76,6 +77,7 @@ function emptyStep(stepIndex: number): ParsedStep {
     intensity: null,
     repeatFromStep: null,
     repeatCount: null,
+    comment: null,
   };
 }
 
@@ -100,6 +102,16 @@ function parseDuration(
 function paceToSpeedMps(minutes: string, seconds: string): number {
   const totalS = parseInt(minutes, 10) * 60 + parseInt(seconds, 10);
   return totalS > 0 ? 1000 / totalS : 0;
+}
+
+/** Splits a trailing "# comment text" off a line -- only the FIRST "#" starts the comment;
+ * further "#" characters are just part of the comment text. No "#" at all -> [line, null]. */
+function splitComment(line: string): [string, string | null] {
+  const hashIndex = line.indexOf("#");
+  if (hashIndex === -1) return [line, null];
+  const stepPart = line.slice(0, hashIndex).trimEnd();
+  const comment = line.slice(hashIndex + 1).trim();
+  return [stepPart, comment || null];
 }
 
 function parseStepLine(line: string, lineNo: number, errors: ParseError[]): ParsedStep | null {
@@ -246,11 +258,12 @@ export function parseWorkoutSyntax(text: string): ParsedWorkout {
   const n = lines.length;
 
   while (i < n) {
-    const line = lines[i].trim();
-    if (!line) {
+    const rawLine = lines[i].trim();
+    if (!rawLine) {
       i += 1;
       continue;
     }
+    const [line, comment] = splitComment(rawLine);
 
     const repeatMatch = REPEAT_MARKER_RE.exec(line);
     if (repeatMatch) {
@@ -259,9 +272,11 @@ export function parseWorkoutSyntax(text: string): ParsedWorkout {
       i += 1;
       const childrenStart = stepIndex;
       while (i < n && lines[i].trim()) {
-        const child = parseStepLine(lines[i].trim(), i + 1, errors);
+        const [childLine, childComment] = splitComment(lines[i].trim());
+        const child = parseStepLine(childLine, i + 1, errors);
         if (child !== null) {
           child.stepIndex = stepIndex;
+          child.comment = childComment;
           steps.push(child);
           stepIndex += 1;
         }
@@ -274,6 +289,7 @@ export function parseWorkoutSyntax(text: string): ParsedWorkout {
         repeatStep.durationType = "repeat_until_steps_cmplt";
         repeatStep.repeatFromStep = childrenStart;
         repeatStep.repeatCount = count;
+        repeatStep.comment = comment;
         steps.push(repeatStep);
         stepIndex += 1;
       }
@@ -283,6 +299,7 @@ export function parseWorkoutSyntax(text: string): ParsedWorkout {
     const step = parseStepLine(line, i + 1, errors);
     if (step !== null) {
       step.stepIndex = stepIndex;
+      step.comment = comment;
       steps.push(step);
       stepIndex += 1;
     }
@@ -426,6 +443,7 @@ export function parsedStepToApiShape(step: ParsedStep): PlannedWorkoutStepOut {
     intensity: step.intensity,
     repeat_from_step: step.repeatFromStep,
     repeat_count: step.repeatCount,
+    comment: step.comment,
     // hiit/strength_training only -- a running step (the only kind workout_syntax.py/this file
     // parse) never carries these.
     duration_reps: null,

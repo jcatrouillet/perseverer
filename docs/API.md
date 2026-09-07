@@ -811,7 +811,7 @@ stale and gets re-pushed fresh on the next push.
 |---|---|---|---|
 | `sport` | string | required | `running` / `yoga` / `bouldering` / `fitness` / `hiit` / `strength_training` — open string, not an enum. |
 | `name` | string, nullable | optional | |
-| `source_text` | string, nullable | optional | For `running`: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting `parse_errors` come back in the response. For `yoga`/`bouldering`: freeform notes only, never parsed. Ignored for `hiit`/`strength_training` — use `steps` instead. |
+| `source_text` | string, nullable | optional | For `running`: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting `parse_errors` come back in the response. A trailing `# comment` on any line attaches a freeform note to that step (see `PlannedWorkoutStepOut.comment` below); a line that's only a comment errors as a missing duration. For `yoga`/`bouldering`: freeform notes only, never parsed. Ignored for `hiit`/`strength_training` — use `steps` instead. |
 | `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h). Perseverer's own calendar display metadata only — Garmin's own scheduling has no time-of-day API. |
 | `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — sets the workout's duration directly (there's no syntax to derive one from). Ignored for `running`/`hiit`/`strength_training`, where duration is derived instead. |
 | `steps` | array\<`PlannedWorkoutStepIn`\>, nullable | optional | `hiit`/`strength_training` only — the exercise-picker steps, arriving already-structured (never parsed from text). Ignored for every other sport. |
@@ -832,6 +832,7 @@ stale and gets re-pushed fresh on the next push.
 | `exercise_category` | string, nullable | optional | The exact `(category, exercise)` pair from `garminconnect.exercises`, e.g. `"BENCH_PRESS"`. Omitted for a rest step. |
 | `exercise_name` | string, nullable | optional | `""` (not omitted) when the step names just the category with no specific variant, matching Garmin's own catalog convention. |
 | `weight_kg` | number, nullable | optional | Converted to grams (Garmin's own wire unit) only at push time. |
+| `comment` | string, nullable | optional | A freeform note on this specific step — typed directly for `hiit`/`strength_training` (a repeat-marker's own comment is the "set"'s comment). Never parsed, never pushed to Garmin. For `running`, ignored here — comes from an inline `#` token in `source_text` instead. |
 
 ### `DELETE /planned-workouts/{local_date}`
 
@@ -873,7 +874,7 @@ reported back in `skipped_dates`.
 | `local_date` | string (date) | required | First occurrence. |
 | `sport` | string | required | |
 | `name` | string, nullable | optional | |
-| `source_text` | string, nullable | optional | |
+| `source_text` | string, nullable | optional | Applied to every created occurrence, comments (inline `#` tokens) included. |
 | `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h) — see `PlannedWorkoutIn` above. |
 | `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — see `PlannedWorkoutIn` above. |
 | `steps` | array\<`PlannedWorkoutStepIn`\>, nullable | optional | `hiit`/`strength_training` only — see `PlannedWorkoutIn` above. |
@@ -1578,7 +1579,7 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 | `local_date` | string (date), nullable | |
 | `sport` | string, nullable | |
 | `name` | string, nullable | |
-| `source_text` | string, nullable | `running`: the athlete's own typed workout-syntax text, verbatim. `yoga`/`bouldering`: freeform notes only, never parsed. `hiit`/`strength_training`: always `null` — see `steps`. |
+| `source_text` | string, nullable | `running`: the athlete's own typed workout-syntax text, verbatim (inline `#` comments included). `yoga`/`bouldering`: freeform notes only, never parsed. `hiit`/`strength_training`: always `null` — see `steps`. |
 | `scheduled_time` | string, nullable | `"HH:MM"` (24h) — display-only, not sent to Garmin. |
 | `estimated_duration_s` | number, nullable | `running`: an estimate — a distance-based step's real duration depends on the athlete's actual pace. `yoga`/`bouldering`: exactly the `duration_minutes` given at save time, in seconds. `hiit`/`strength_training`: an estimate computed from `steps` (a rough assumed seconds/rep for a reps-based step, real seconds otherwise). |
 | `steps` | array\<`PlannedWorkoutStepOut`\> | Defaults to `[]`. Raw, unexpanded (repeat-block markers included). Always `[]` for `yoga`/`bouldering` — no structured syntax for those sports. |
@@ -1605,6 +1606,7 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 | `duration_reps` | integer, nullable | `hiit`/`strength_training` only — a rep-counted set. |
 | `exercise_category`, `exercise_name` | string, nullable | `hiit`/`strength_training` only — the exact `(category, exercise)` pair from `garminconnect.exercises`. `exercise_name` is `""` (not `null`) when the step names just the category with no specific variant. |
 | `weight_kg` | number, nullable | `hiit`/`strength_training` only. |
+| `comment` | string, nullable | A freeform note on this specific step. `running`: parsed from an inline trailing `# comment` token on that step's own `source_text` line. `hiit`/`strength_training`: typed directly against that row in the exercise picker (a repeat-marker row's own comment is the "set"'s comment). Never parsed further, never sent to Garmin. |
 
 ### ParseErrorOut
 

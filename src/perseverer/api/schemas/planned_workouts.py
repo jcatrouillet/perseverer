@@ -41,6 +41,11 @@ class PlannedWorkoutStepOut(BaseModel):
     exercise_category: str | None = None
     exercise_name: str | None = None
     weight_kg: float | None = None
+    # A freeform note on this specific step -- running: parsed from an inline trailing
+    # "# comment" token on that step's own source_text line (workout_syntax.py). hiit/
+    # strength_training: typed directly against that row in the exercise picker. Never parsed
+    # further, never sent to Garmin.
+    comment: str | None = None
 
 
 class PlannedWorkoutStepIn(BaseModel):
@@ -63,6 +68,9 @@ class PlannedWorkoutStepIn(BaseModel):
     exercise_category: str | None = None
     exercise_name: str | None = None
     weight_kg: float | None = None
+    # See PlannedWorkoutStepOut above -- a per-step freeform note, hiit/strength_training typed
+    # directly, running ignores this on the *In shape (comes from parsing source_text instead).
+    comment: str | None = None
 
 
 class ParseErrorOut(BaseModel):

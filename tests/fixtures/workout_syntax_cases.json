@@ -262,5 +262,51 @@
       }
     ],
     "error_line_nos": [1]
+  },
+  {
+    "name": "step_line_with_trailing_comment",
+    "text": "3m 5:00-5:10/km Pace # focus on form",
+    "steps": [
+      {
+        "step_index": 0,
+        "duration_type": "time",
+        "duration_time_s": 180,
+        "target_type": "pace",
+        "comment": "focus on form"
+      }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "repeat_marker_with_trailing_comment",
+    "text": "4x # tempo block\n3m 5:00-5:10/km Pace\n2m Z2 HR",
+    "steps": [
+      { "step_index": 0, "comment": null },
+      { "step_index": 1, "comment": null },
+      { "step_index": 2, "duration_type": "repeat_until_steps_cmplt", "comment": "tempo block" }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "comment_with_internal_hash_keeps_it_all_as_comment_text",
+    "text": "10m # warmup #1 of the week",
+    "steps": [
+      { "step_index": 0, "duration_type": "time", "comment": "warmup #1 of the week" }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "comment_whitespace_is_trimmed",
+    "text": "10m   #   plenty of space around it   ",
+    "steps": [
+      { "step_index": 0, "duration_type": "time", "comment": "plenty of space around it" }
+    ],
+    "error_line_nos": []
+  },
+  {
+    "name": "comment_only_line_has_no_duration_and_errors",
+    "text": "# just a note, no step here",
+    "steps": [],
+    "error_line_nos": [1]
   }
 ]

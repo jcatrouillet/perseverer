@@ -11,6 +11,7 @@ import {
   preloadExerciseCatalog,
   searchExerciseCatalog,
   type ExerciseEntry,
+  type ExerciseGroup,
   type ExerciseItem,
 } from "./ExerciseStepEditor";
 
@@ -37,6 +38,7 @@ function step(overrides: Partial<PlannedWorkoutStepOut>): PlannedWorkoutStepOut 
     exercise_category: null,
     exercise_name: null,
     weight_kg: null,
+    comment: null,
     ...overrides,
   };
 }
@@ -82,6 +84,7 @@ describe("itemsToApiSteps", () => {
         exercise_category: "BENCH_PRESS",
         exercise_name: "",
         weight_kg: 60,
+        comment: null,
       },
     ]);
   });
@@ -92,7 +95,13 @@ describe("itemsToApiSteps", () => {
 
     const steps = itemsToApiSteps([entryItem(entry)]);
     expect(steps).toEqual([
-      { step_index: 0, duration_type: "time", duration_time_s: 90, intensity: "rest" },
+      {
+        step_index: 0,
+        duration_type: "time",
+        duration_time_s: 90,
+        intensity: "rest",
+        comment: null,
+      },
     ]);
   });
 
@@ -107,6 +116,7 @@ describe("itemsToApiSteps", () => {
       duration_type: "repeat_until_steps_cmplt",
       repeat_from_step: 0,
       repeat_count: 3,
+      comment: null,
     });
   });
 
@@ -136,6 +146,7 @@ describe("itemsToApiSteps", () => {
       duration_type: "repeat_until_steps_cmplt",
       repeat_from_step: 0,
       repeat_count: 4,
+      comment: null,
     });
   });
 
@@ -174,6 +185,28 @@ describe("itemsToApiSteps", () => {
       repeat_count: 2,
     });
   });
+
+  it("includes a typed comment on an entry", () => {
+    const entry = { ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" };
+    entry.comment = "Full depth";
+    const steps = itemsToApiSteps([entryItem(entry)]);
+    expect(steps[0].comment).toBe("Full depth");
+  });
+
+  it("includes a typed comment on a set's own repeat marker", () => {
+    const entry = { ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" };
+    const group = { ...emptyGroup(), repeatCount: "3", comment: "superset", entries: [entry] };
+    const steps = itemsToApiSteps([{ type: "group", group }]);
+    expect(steps[1].comment).toBe("superset");
+  });
+
+  it("a set's comment is lost when repeatCount stays at 1 (no marker row emitted)", () => {
+    const entry = { ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" };
+    const group = { ...emptyGroup(), repeatCount: "1", comment: "lost", entries: [entry] };
+    const steps = itemsToApiSteps([{ type: "group", group }]);
+    expect(steps).toHaveLength(1);
+    expect(steps[0].comment).toBe(null); // the entry's own comment, not the group's
+  });
 });
 
 describe("apiStepsToItems", () => {
@@ -205,6 +238,45 @@ describe("apiStepsToItems", () => {
     const entry = (items[0] as { type: "entry"; entry: ExerciseEntry }).entry;
     expect(entry.kind).toBe("rest");
     expect(entry.durationTimeS).toBe("60");
+  });
+
+  it("hydrates an entry's own comment", () => {
+    const steps = [
+      step({
+        duration_type: "reps",
+        duration_reps: 10,
+        intensity: "active",
+        exercise_category: "SQUAT",
+        exercise_name: "",
+        comment: "Full depth",
+      }),
+    ];
+    const items = apiStepsToItems(steps);
+    const entry = (items[0] as { type: "entry"; entry: ExerciseEntry }).entry;
+    expect(entry.comment).toBe("Full depth");
+  });
+
+  it("hydrates a group's own comment from its repeat marker", () => {
+    const steps = [
+      step({
+        step_index: 0,
+        duration_type: "reps",
+        intensity: "active",
+        exercise_category: "SQUAT",
+        exercise_name: "",
+      }),
+      step({
+        step_index: 1,
+        duration_type: "repeat_until_steps_cmplt",
+        repeat_from_step: 0,
+        repeat_count: 3,
+        comment: "superset",
+      }),
+    ];
+    const items = apiStepsToItems(steps);
+    expect(items[0].type).toBe("group");
+    const group = (items[0] as { type: "group"; group: ExerciseGroup }).group;
+    expect(group.comment).toBe("superset");
   });
 
   it("consumes a trailing repeat marker into one group item, not its own entry", () => {
