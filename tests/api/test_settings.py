@@ -19,6 +19,7 @@ import perseverer.api.routers.settings as settings_router
 from perseverer.config import Settings
 from perseverer.db.schema import (
     activity_metric,
+    athlete,
     athlete_hr_zone_config,
     athlete_running_load_config,
     fitness_daily_rollup,
@@ -300,6 +301,62 @@ def test_calendar_feed_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/settings/calendar-feed").status_code in (401, 403)
     assert client.post("/api/v1/settings/calendar-feed").status_code in (401, 403)
     assert client.delete("/api/v1/settings/calendar-feed").status_code in (401, 403)
+
+
+# --- GET/PUT /settings/profile ------------------------------------------------------------
+
+
+def test_profile_returns_all_null_when_unconfigured(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/settings/profile", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {"birthdate": None, "height_cm": None, "sex": None}
+
+
+def test_put_profile_stores_and_returns_the_values(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    r = client.put(
+        "/api/v1/settings/profile",
+        json={"birthdate": "1990-01-01", "height_cm": 178.0, "sex": "male"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json() == {"birthdate": "1990-01-01", "height_cm": 178.0, "sex": "male"}
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex)
+        ).fetchone()
+    assert row is not None
+    assert (row.birthdate, row.height_cm, row.sex) == ("1990-01-01", 178.0, "male")
+
+
+def test_put_profile_rejects_a_future_birthdate(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        "/api/v1/settings/profile", json={"birthdate": "2999-01-01"}, headers=auth_headers
+    )
+    assert r.status_code == 422
+
+
+def test_put_profile_rejects_out_of_range_height(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.put("/api/v1/settings/profile", json={"height_cm": 900.0}, headers=auth_headers)
+    assert r.status_code == 422
+
+
+def test_put_profile_rejects_invalid_sex(client: TestClient, auth_headers: dict[str, str]) -> None:
+    r = client.put("/api/v1/settings/profile", json={"sex": "other"}, headers=auth_headers)
+    assert r.status_code == 422
+
+
+def test_profile_endpoints_require_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/settings/profile").status_code in (401, 403)
+    assert client.put("/api/v1/settings/profile", json={}).status_code in (401, 403)
 
 
 # --- GET /settings/garmin/status ----------------------------------------------------------

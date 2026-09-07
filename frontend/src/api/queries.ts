@@ -22,6 +22,8 @@ import type {
   ActivitySummary,
   ActivityWeatherOut,
   ActivityWorkoutOut,
+  AthleteProfileIn,
+  AthleteProfileOut,
   CalendarFeedStatusOut,
   CalendarFeedUrlOut,
   CalendarResponse,
@@ -724,6 +726,33 @@ export function useSetRunningLoadConfig() {
       // picks up the new CTL/ATL/TSB without a manual refresh.
       void queryClient.invalidateQueries({ queryKey: ["fitness"] });
       void queryClient.invalidateQueries({ queryKey: ["insights"] });
+    },
+  });
+}
+
+/** An athlete's optional profile facts (birthdate/height/sex) -- used only as inputs to
+ * formula-based fallbacks elsewhere (max HR, BMR) when there isn't enough empirical/device data
+ * yet. See api/schemas/settings.py::AthleteProfileIn. */
+export function useAthleteProfile() {
+  return useQuery({
+    queryKey: ["athlete-profile"],
+    queryFn: () => apiGet<AthleteProfileOut>("/api/v1/settings/profile"),
+  });
+}
+
+export function useSetAthleteProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AthleteProfileIn) =>
+      apiPut<AthleteProfileOut>("/api/v1/settings/profile", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["athlete-profile"] });
+      // Both fallbacks are computed at read time (BMR) or on next ingest (max HR) from this
+      // profile -- invalidate so an already-open Insights/Health view picks up the change without
+      // a manual refresh (BMR immediately; max HR after the next sync recomputes
+      // performance_daily_rollup).
+      void queryClient.invalidateQueries({ queryKey: ["performance"] });
+      void queryClient.invalidateQueries({ queryKey: ["health-dashboard"] });
     },
   });
 }

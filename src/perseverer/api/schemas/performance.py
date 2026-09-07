@@ -12,6 +12,7 @@ class PerformanceDailyRollupOut(BaseModel):
     local_date: str
     rolling_vdot: float | None
     max_hr_bpm: float | None
+    max_hr_source: str | None
     threshold_pace_s_per_km: float | None
     threshold_hr_bpm: float | None
     threshold_hr_source: str | None

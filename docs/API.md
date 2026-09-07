@@ -931,6 +931,27 @@ optional, must be positive if given.
 
 **Response `200`:** `RunningLoadConfigOut`.
 
+### `GET /settings/profile`
+
+The athlete's optional profile facts (birthdate, height, biological sex). Used only as inputs to
+formula-based fallbacks elsewhere (`GET /performance`'s `max_hr_bpm`, `GET /health/dashboard`'s
+`bmr_kcal`) when there isn't enough empirical/device data yet — never reconciled against or
+overriding real data once it exists. `null` for any field means not set.
+
+**Response `200`:** `AthleteProfileOut` — `birthdate` (string, nullable, ISO date), `height_cm`
+(number, nullable), `sex` (`"male"|"female"`, nullable).
+
+### `PUT /settings/profile`
+
+Replaces the athlete's profile. **A full replacement, not a partial patch**, same convention as
+`PUT /settings/hr-zones`.
+
+**Request body** (`AthleteProfileIn`): `birthdate` (string, nullable, ISO date — rejected if in
+the future or implies an age over 120 years), `height_cm` (number, nullable, 50-250), `sex`
+(`"male"|"female"`, nullable) — all optional.
+
+**Response `200`:** `AthleteProfileOut`. **`422`** — a value fails validation.
+
 ### `GET /settings/garmin/status`
 
 Garmin Connect connection status — a token store presence/age check (no network call to Garmin

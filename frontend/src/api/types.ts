@@ -343,6 +343,21 @@ export interface RunningLoadConfigIn {
   threshold_pace_sec_per_km: number | null;
 }
 
+// GET/PUT /settings/profile -- optional profile facts used only as inputs to formula-based
+// fallbacks elsewhere (max HR, BMR) when there isn't enough empirical/device data yet. See
+// api/schemas/settings.py::AthleteProfileIn.
+export interface AthleteProfileOut {
+  birthdate: string | null;
+  height_cm: number | null;
+  sex: "male" | "female" | null;
+}
+
+export interface AthleteProfileIn {
+  birthdate: string | null;
+  height_cm: number | null;
+  sex: "male" | "female" | null;
+}
+
 // GET/POST/DELETE /settings/calendar-feed -- see calendar_feed.py's own module docstring.
 export interface CalendarFeedStatusOut {
   enabled: boolean;
@@ -651,6 +666,9 @@ export interface PerformanceDailyRollupOut {
   local_date: string;
   rolling_vdot: number | null;
   max_hr_bpm: number | null;
+  // "empirical" (real observed max HR) | "formula_fallback" (Tanaka, only when there's no
+  // empirical value yet and the athlete has a configured birthdate) | null.
+  max_hr_source: "empirical" | "formula_fallback" | null;
   threshold_pace_s_per_km: number | null;
   threshold_hr_bpm: number | null;
   threshold_hr_source: "empirical" | "fallback" | null;

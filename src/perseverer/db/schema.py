@@ -65,6 +65,16 @@ athlete = Table(
     # api_key_hash above, not a growing history like share_link. NULL means "not published".
     Column("calendar_feed_token_hash", String, nullable=True),
     Column("calendar_feed_created_at", DateTime(), nullable=True),
+    # Optional profile facts, settable via GET/PUT /settings/profile -- used only as inputs to
+    # formula-based FALLBACKS when there isn't enough empirical data yet (max HR via
+    # performance_rollup.py, BMR via api/routers/health.py::get_health_dashboard), never to
+    # override real observed/device data. birthdate is an ISO date string ("YYYY-MM-DD"), matching
+    # the local_date convention used everywhere else in this schema rather than a native Date
+    # type. sex is "male"|"female" (validated at the API layer, not here) -- the Mifflin-St Jeor
+    # BMR formula's own binary constant, not a general demographic field.
+    Column("birthdate", String, nullable=True),
+    Column("height_cm", Float, nullable=True),
+    Column("sex", String, nullable=True),
 )
 
 # An athlete's own configured HR training zones -- independent of the per-activity, device-
@@ -889,6 +899,12 @@ performance_daily_rollup = Table(
     # alongside them for the same debuggability reason fitness_daily_rollup stores training_load.
     Column("rolling_vdot", Float, nullable=True),
     Column("max_hr_bpm", Float, nullable=True),
+    # "empirical" (365-day trailing max of real observed max HR) | "formula_fallback" (Tanaka,
+    # 208 - 0.7*age, used only when there's no empirical value yet and the athlete has a
+    # configured birthdate) | null (neither is possible yet) -- same provenance-tagging pattern as
+    # threshold_hr_source below, deliberately not overriding real data once it exists (see
+    # athlete_age.py / this module's own docstring for the fallback's exact scope).
+    Column("max_hr_source", String, nullable=True),
     Column("threshold_pace_s_per_km", Float, nullable=True),
     Column("threshold_hr_bpm", Float, nullable=True),
     # "empirical" (derived from real runs near threshold pace) | "fallback" (% of max_hr_bpm) |

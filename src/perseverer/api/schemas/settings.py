@@ -11,11 +11,15 @@ db/schema.py::athlete_running_load_config, which this mirrors deliberately.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, model_validator
 
 from perseverer.hr_zones import compute_hr_zone_boundaries
+
+_MIN_HEIGHT_CM = 50.0
+_MAX_HEIGHT_CM = 250.0
+_MAX_PLAUSIBLE_AGE_YEARS = 120
 
 
 class HrZoneConfigIn(BaseModel):
@@ -83,6 +87,39 @@ class RunningLoadConfigIn(BaseModel):
 
 class RunningLoadConfigOut(BaseModel):
     threshold_pace_sec_per_km: float | None
+
+
+# GET/PUT /settings/profile -- optional athlete profile facts used only as inputs to
+# formula-based FALLBACKS elsewhere (max HR: performance_rollup.py; BMR:
+# api/routers/health.py::get_health_dashboard) when there isn't enough empirical/device data yet.
+# See db/schema.py::athlete's own birthdate/height_cm/sex columns.
+class AthleteProfileIn(BaseModel):
+    birthdate: str | None = None
+    height_cm: float | None = None
+    sex: str | None = None
+
+    @model_validator(mode="after")
+    def _sane_values(self) -> AthleteProfileIn:
+        if self.birthdate is not None:
+            try:
+                parsed = date.fromisoformat(self.birthdate)
+            except ValueError as e:
+                raise ValueError("birthdate must be an ISO date (YYYY-MM-DD)") from e
+            if parsed > date.today():
+                raise ValueError("birthdate cannot be in the future")
+            if (date.today() - parsed).days / 365.25 > _MAX_PLAUSIBLE_AGE_YEARS:
+                raise ValueError(f"birthdate implies an age over {_MAX_PLAUSIBLE_AGE_YEARS} years")
+        if self.height_cm is not None and not (_MIN_HEIGHT_CM <= self.height_cm <= _MAX_HEIGHT_CM):
+            raise ValueError(f"height_cm must be between {_MIN_HEIGHT_CM} and {_MAX_HEIGHT_CM}")
+        if self.sex is not None and self.sex not in ("male", "female"):
+            raise ValueError("sex must be 'male' or 'female'")
+        return self
+
+
+class AthleteProfileOut(BaseModel):
+    birthdate: str | None
+    height_cm: float | None
+    sex: str | None
 
 
 # GET /settings/garmin/status

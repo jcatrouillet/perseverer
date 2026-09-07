@@ -7,9 +7,11 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 
 import {
+  useAthleteProfile,
   useDuplicatePairs,
   useHrZoneConfig,
   useRunningLoadConfig,
+  useSetAthleteProfile,
   useSetHrZoneConfig,
   useSetRunningLoadConfig,
   useTrimCandidates,
@@ -105,6 +107,8 @@ export function SettingsPage() {
   const mutation = useSetHrZoneConfig();
   const runningLoadConfig = useRunningLoadConfig();
   const runningLoadMutation = useSetRunningLoadConfig();
+  const profileConfig = useAthleteProfile();
+  const profileMutation = useSetAthleteProfile();
   const trimCandidates = useTrimCandidates();
   const duplicatePairs = useDuplicatePairs();
 
@@ -112,6 +116,28 @@ export function SettingsPage() {
   const [thresholdHr, setThresholdHr] = useState("");
   const [restingHr, setRestingHr] = useState("");
   const [thresholdPaceText, setThresholdPaceText] = useState("");
+  const [birthdate, setBirthdate] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [sex, setSex] = useState<"" | "male" | "female">("");
+
+  // Same once-on-arrival pre-fill as the HR zone/running-load config above.
+  useEffect(() => {
+    if (!profileConfig.data) return;
+    setBirthdate(profileConfig.data.birthdate ?? "");
+    setHeightCm(toInputValue(profileConfig.data.height_cm));
+    setSex(profileConfig.data.sex ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileConfig.isSuccess]);
+
+  const heightCmNum = parseField(heightCm);
+  const profileClientError =
+    heightCm.trim() !== "" && heightCmNum == null
+      ? "Height must be a number."
+      : heightCmNum != null && (heightCmNum < 50 || heightCmNum > 250)
+        ? "Height must be between 50 and 250 cm."
+        : birthdate !== "" && new Date(birthdate) > new Date()
+          ? "Birthdate can't be in the future."
+          : null;
 
   // Same once-on-arrival pre-fill as the HR zone config below.
   useEffect(() => {
@@ -185,6 +211,71 @@ export function SettingsPage() {
       <GarminConnectCard />
       <RebuildCard />
       <BulkImportCard />
+
+      <section className="card">
+        <h2>Profile</h2>
+        <p className="chart-note">
+          Optional. Only used to fill in max HR and BMR (calorie) estimates with a formula when
+          there isn't enough of your own real data yet -- your own observed max HR and any
+          Eufy-scale readings always take priority once they exist.
+        </p>
+        <form
+          className="settings-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (profileClientError) return;
+            profileMutation.mutate({
+              birthdate: birthdate === "" ? null : birthdate,
+              height_cm: heightCmNum,
+              sex: sex === "" ? null : sex,
+            });
+          }}
+        >
+          <label>
+            Birthdate
+            <input
+              type="date"
+              value={birthdate}
+              onChange={(e) => setBirthdate(e.target.value)}
+            />
+          </label>
+          <label>
+            Height (cm)
+            <input
+              type="number"
+              inputMode="numeric"
+              value={heightCm}
+              onChange={(e) => setHeightCm(e.target.value)}
+              placeholder="e.g. 178"
+            />
+          </label>
+          <label>
+            Biological sex
+            <select
+              value={sex}
+              onChange={(e) => setSex(e.target.value as "" | "male" | "female")}
+            >
+              <option value="">Not set</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </label>
+          <button type="submit" disabled={profileMutation.isPending || profileClientError != null}>
+            {profileMutation.isPending ? "Saving…" : "Save"}
+          </button>
+          {profileClientError && (
+            <span role="alert" className="settings-form__error">
+              {profileClientError}
+            </span>
+          )}
+          {profileMutation.isError && !profileClientError && (
+            <span role="alert" className="settings-form__error">
+              Could not save.
+            </span>
+          )}
+          {profileMutation.isSuccess && <span className="settings-form__saved">Saved.</span>}
+        </form>
+      </section>
 
       <section className="card">
         <h2>HR training zones</h2>

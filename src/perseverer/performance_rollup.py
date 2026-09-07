@@ -36,8 +36,17 @@ reasoning:
                         doesn't happen every week; a shorter window would make this value flicker
                         based on incidental recent effort rather than physiology. Peer-reviewed
                         research is consistent that an individual's own empirically observed max
-                        beats any age-based formula (220-age carries ~10-15bpm error even in its
-                        best documented forms) -- this is deliberately not a formula at all.
+                        beats any age-based formula as the PRIMARY source (220-age carries
+                        ~10-15bpm error even in its best documented forms) -- so this stays
+                        empirical-first, never overridden by a formula once real data exists. A
+                        brand-new athlete has no empirical max HR at all for weeks, though, so
+                        when the empirical window is empty AND the athlete has a configured
+                        `athlete.birthdate`, `max_hr_bpm` instead falls back to the Tanaka formula
+                        (`208 - 0.7*age`, chosen over the older/cruder 220-age for its lower
+                        documented error) for just that gap -- `max_hr_source` ("empirical" |
+                        "formula_fallback" | null) records which path fired, same idea as
+                        `threshold_hr_source` below. The moment one real max-HR observation
+                        exists, the empirical value takes back over for that day forward.
 
   threshold_pace_s_per_km / predicted_5k_s / predicted_10k_s / predicted_half_marathon_s /
   predicted_marathon_s
@@ -65,7 +74,8 @@ from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import Connection, delete, select
 
-from perseverer.db.schema import activity, activity_metric, performance_daily_rollup
+from perseverer.athlete_age import age_years_as_of
+from perseverer.db.schema import activity, activity_metric, athlete, performance_daily_rollup
 from perseverer.gap import AVG_GAP_METRIC_KEY
 from perseverer.performance import VDOT_METRIC_KEY
 from perseverer.vdot import (
@@ -83,6 +93,10 @@ _THRESHOLD_HR_WINDOW_DAYS = 365
 _THRESHOLD_PACE_TOLERANCE = 0.05
 _MIN_THRESHOLD_HR_SAMPLES = 3
 _THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR = 0.88
+# Tanaka, Monahan & Seals (2001) -- max_hr_bpm's own formula fallback, used only when the 365-day
+# empirical window (below) is empty. See this module's docstring for why empirical stays primary.
+_TANAKA_MAX_HR_INTERCEPT = 208.0
+_TANAKA_MAX_HR_AGE_COEFFICIENT = 0.7
 
 # Same duplicated-tuple precedent already used four times in this codebase (activity_merge.py,
 # activity_trim.py, insights/engine.py, api/routers/activities.py) -- add a fifth here rather
@@ -123,6 +137,11 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
     nothing) if the athlete has no qualifying activity at all.
     """
     now = datetime.now(UTC)
+
+    birthdate_str = conn.execute(
+        select(athlete.c.birthdate).where(athlete.c.id == athlete_id)
+    ).scalar_one_or_none()
+    birthdate = date.fromisoformat(birthdate_str) if birthdate_str else None
 
     vdot_rows = conn.execute(
         select(
@@ -250,6 +269,14 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
         max_hr_cutoff = (day - timedelta(days=_MAX_HR_WINDOW_DAYS - 1)).isoformat()
         max_hr_window = [(d, v) for d, v in max_hr_window if d >= max_hr_cutoff]
         max_hr_bpm = max((v for _, v in max_hr_window), default=None)
+        if max_hr_bpm is not None:
+            max_hr_source: str | None = "empirical"
+        elif birthdate is not None:
+            age = age_years_as_of(birthdate, day)
+            max_hr_bpm = _TANAKA_MAX_HR_INTERCEPT - _TANAKA_MAX_HR_AGE_COEFFICIENT * age
+            max_hr_source = "formula_fallback"
+        else:
+            max_hr_source = None
 
         while (
             threshold_i < len(threshold_candidates)
@@ -292,6 +319,7 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
                 "local_date": iso,
                 "rolling_vdot": rolling_vdot,
                 "max_hr_bpm": max_hr_bpm,
+                "max_hr_source": max_hr_source,
                 "threshold_pace_s_per_km": threshold_pace_s_per_km,
                 "threshold_hr_bpm": threshold_hr_bpm,
                 "threshold_hr_source": threshold_hr_source,

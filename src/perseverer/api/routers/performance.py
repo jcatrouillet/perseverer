@@ -38,6 +38,7 @@ def get_performance(
             local_date=r.local_date,
             rolling_vdot=r.rolling_vdot,
             max_hr_bpm=r.max_hr_bpm,
+            max_hr_source=r.max_hr_source,
             threshold_pace_s_per_km=r.threshold_pace_s_per_km,
             threshold_hr_bpm=r.threshold_hr_bpm,
             threshold_hr_source=r.threshold_hr_source,

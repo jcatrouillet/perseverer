@@ -15,6 +15,7 @@ function row(local_date: string, overrides: Partial<PerformanceDailyRollupOut> =
     local_date,
     rolling_vdot: null,
     max_hr_bpm: null,
+    max_hr_source: null,
     threshold_pace_s_per_km: null,
     threshold_hr_bpm: null,
     threshold_hr_source: null,

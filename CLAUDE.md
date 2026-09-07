@@ -218,8 +218,15 @@ because you don't recognize it — stop, that's the bug.
   week-to-week and a shorter window would flicker based on incidental recent effort rather than
   physiology — and deliberately **all sports**, not running-only, since a max-HR effort from
   cycling or hiit is equally real and restricting to running would silently discard it. This
-  project's own empirical max HR is used in place of any age-based formula (220-age, Tanaka,
-  HUNT) — research shows all of them carry ~10-15bpm error even in their best forms. Threshold
+  project's own empirical max HR is used as the PRIMARY source in place of any age-based formula
+  (220-age, Tanaka, HUNT) — research shows all of them carry ~10-15bpm error even in their best
+  forms — and is never overridden by a formula once real data exists. A brand-new athlete has
+  zero empirical max HR for weeks, though, so `max_hr_bpm` falls back to the Tanaka formula
+  (`208 - 0.7×age`, via the athlete's own optional `athlete.birthdate` set through
+  `GET/PUT /settings/profile`, and `athlete_age.py::age_years_as_of`) for just that gap —
+  `max_hr_source` (`"empirical"|"formula_fallback"|null`) records which path fired. This also
+  unblocks threshold HR's own existing 88%-of-max-HR fallback below for a new athlete, since that
+  fallback needs a non-null `max_hr_bpm` to compute from. Threshold
   HR is **empirical-first**: the median HR among runs within ±5% of that day's own threshold pace
   (by grade-adjusted pace) over the same 365-day window, requiring at least 3 qualifying runs to
   resist a single outlier; below that it falls back to 88% of that day's max HR (a representative
@@ -338,6 +345,16 @@ because you don't recognize it — stop, that's the bug.
     `Settings.eufy_*` env-var set — `resolve_eufy_credentials` (also in `adapters/eufy.py`) picks
     a DB row when one exists and falls back to those original env vars only for
     `DEFAULT_ATHLETE_ID`, so the original single-athlete deployment needs no migration.
+    `GET /health/dashboard`'s `bmr_kcal` gets a formula-computed FALLBACK (`bmr.py::
+    compute_bmr_kcal`, Mifflin-St Jeor) for a day with a resolved weight but no real Eufy `bmr`
+    reading — e.g. any athlete with no Eufy scale at all — using that day's weight plus the
+    athlete's own optional `birthdate`/`height_cm`/`sex` profile (`GET/PUT /settings/profile`).
+    Only fires when all three profile fields are set; a real Eufy reading always wins and is
+    marked with a synthetic `source_metric_key = "computed.mifflin_st_jeor"` +
+    `n_observations = 0` when it's the formula instead — same provenance instinct as
+    `threshold_hr_source` above, reusing fields `HealthDashboardDayOut` already had rather than a
+    schema change. `metabolic_age` gets no such fallback (no legitimate formula for a
+    Eufy-proprietary population-comparison figure).
   - `apple_health_export` (`adapters/apple_health_export.py`) — historical backfill from an
     Apple Health "export.xml" archive (Settings > [Name] > Export All Health Data on iOS), zero
     network calls. Imports blood pressure (full history — nothing else in this project has any

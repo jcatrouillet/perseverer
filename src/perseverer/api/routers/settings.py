@@ -24,6 +24,12 @@ management routes; the public `.ics` response itself is `GET /share/calendar/{to
 (api/routers/calendar_feed.py, mounted separately with no auth at all). See calendar_feed.py's
 own module docstring for why this is a single standing per-athlete secret (mirroring
 athlete.api_key_hash), not a share_link-style growing history.
+
+Also GET/PUT /settings/profile -- optional birthdate/height/sex, mutated directly on the
+`athlete` row (same shape as the calendar-feed endpoints above, not the hr-zones/running-load
+insert-or-update dance, since the athlete row always already exists). Used only as inputs to
+formula-based fallbacks elsewhere (performance_rollup.py's max HR, health.py's BMR) when there
+isn't enough empirical/device data yet -- see api/schemas/settings.py::AthleteProfileIn.
 """
 
 from __future__ import annotations
@@ -59,6 +65,8 @@ from perseverer.adapters.garmin_export import import_garmin_export
 from perseverer.adapters.strava_export import import_strava_export
 from perseverer.api.dependencies import get_conn, get_engine, require_api_key
 from perseverer.api.schemas.settings import (
+    AthleteProfileIn,
+    AthleteProfileOut,
     CalendarFeedStatusOut,
     CalendarFeedUrlOut,
     GarminAuthStatusOut,
@@ -243,6 +251,38 @@ def delete_calendar_feed(
     )
     conn.commit()
     return CalendarFeedStatusOut(enabled=False, created_at=None)
+
+
+@router.get("/settings/profile")
+def get_athlete_profile(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> AthleteProfileOut:
+    row = conn.execute(
+        select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex).where(
+            athlete.c.id == athlete_id
+        )
+    ).fetchone()
+    if row is None:
+        return AthleteProfileOut(birthdate=None, height_cm=None, sex=None)
+    return AthleteProfileOut(birthdate=row.birthdate, height_cm=row.height_cm, sex=row.sex)
+
+
+@router.put("/settings/profile")
+def put_athlete_profile(
+    payload: AthleteProfileIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> AthleteProfileOut:
+    conn.execute(
+        athlete.update()
+        .where(athlete.c.id == athlete_id)
+        .values(birthdate=payload.birthdate, height_cm=payload.height_cm, sex=payload.sex)
+    )
+    conn.commit()
+    return AthleteProfileOut(
+        birthdate=payload.birthdate, height_cm=payload.height_cm, sex=payload.sex
+    )
 
 
 def _latest_ingest_run(conn: Connection, athlete_id: str, source: str) -> Row[Any] | None:

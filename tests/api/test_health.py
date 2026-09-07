@@ -2,11 +2,31 @@
 
 import datetime as dt
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from perseverer.db.schema import health_metric_daily_rollup, health_observation, metric_definition
+from perseverer.athlete_age import age_years_as_of
+from perseverer.bmr import compute_bmr_kcal
+from perseverer.db.schema import (
+    athlete,
+    health_metric_daily_rollup,
+    health_observation,
+    metric_definition,
+)
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
+
+
+def _set_profile(
+    engine: Engine, *, birthdate: str | None, height_cm: float | None, sex: str | None
+) -> None:
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.update()
+            .where(athlete.c.id == DEFAULT_ATHLETE_ID)
+            .values(birthdate=birthdate, height_cm=height_cm, sex=sex)
+        )
+        conn.commit()
 
 
 def _seed_observation(engine: Engine, *, metric_key: str, local_date: str, value: float) -> None:
@@ -451,3 +471,70 @@ def test_health_dashboard_does_not_filter_non_body_composition_outliers(
     metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
     dates = {d["local_date"] for d in metrics["steps"]["daily"]}
     assert dates == {"2026-08-08", "2026-08-09", "2026-08-11", "2026-08-12"}
+
+
+# --- bmr_kcal formula fallback (Mifflin-St Jeor) -------------------------------------------
+
+
+def test_health_dashboard_bmr_falls_back_to_formula_when_no_eufy_reading(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    _set_profile(engine, birthdate="1990-01-01", height_cm=178.0, sex="male")
+    _seed_body_observation(
+        engine, metric_key="eufy.scale.weight", local_date="2026-08-08", value=75.0
+    )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2026-08-01&end_date=2026-08-31",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    day = next(d for d in metrics["bmr_kcal"]["daily"] if d["local_date"] == "2026-08-08")
+    assert day["source_metric_key"] == "computed.mifflin_st_jeor"
+    assert day["n_observations"] == 0
+    expected = compute_bmr_kcal(
+        75.0, 178.0, age_years_as_of(dt.date(1990, 1, 1), dt.date(2026, 8, 8)), "male"
+    )
+    assert day["value_last"] == pytest.approx(expected)
+
+
+def test_health_dashboard_bmr_prefers_a_real_eufy_reading_over_the_formula(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    _set_profile(engine, birthdate="1990-01-01", height_cm=178.0, sex="male")
+    _seed_body_observation(
+        engine, metric_key="eufy.scale.weight", local_date="2026-08-08", value=75.0
+    )
+    _seed_body_observation(
+        engine, metric_key="eufy.scale.bmr", local_date="2026-08-08", value=1700.0
+    )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2026-08-01&end_date=2026-08-31",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    day = next(d for d in metrics["bmr_kcal"]["daily"] if d["local_date"] == "2026-08-08")
+    assert day["source_metric_key"] == "eufy.scale.bmr"
+    assert day["value_last"] == 1700.0
+    assert day["n_observations"] == 1
+
+
+def test_health_dashboard_bmr_has_no_fallback_when_profile_is_incomplete(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # Only birthdate set -- height/sex missing -- the formula can't run at all.
+    _set_profile(engine, birthdate="1990-01-01", height_cm=None, sex=None)
+    _seed_body_observation(
+        engine, metric_key="eufy.scale.weight", local_date="2026-08-08", value=75.0
+    )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2026-08-01&end_date=2026-08-31",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    assert "bmr_kcal" not in metrics

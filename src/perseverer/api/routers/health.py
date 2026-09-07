@@ -18,8 +18,20 @@ from perseverer.api.schemas.health import (
     HealthObservationOut,
     HealthStreamResponse,
 )
+from perseverer.athlete_age import age_years_as_of
+from perseverer.bmr import compute_bmr_kcal
 from perseverer.config import Settings, get_settings
-from perseverer.db.schema import health_metric_daily_rollup, health_observation, health_stream
+from perseverer.db.schema import (
+    athlete,
+    health_metric_daily_rollup,
+    health_observation,
+    health_stream,
+)
+
+# The formula-computed BMR fallback's own synthetic source_metric_key -- self-describing rather
+# than a real health_observation row, so a day computed this way is never confused with a real
+# Eufy reading (see _bmr_fallback_days's own docstring).
+_BMR_FORMULA_SOURCE_KEY = "computed.mifflin_st_jeor"
 
 router = APIRouter()
 
@@ -329,6 +341,52 @@ def _merge_logical_metric(
     )
 
 
+def _bmr_fallback_days(
+    conn: Connection,
+    *,
+    athlete_id: str,
+    weight_metric: HealthDashboardMetricOut | None,
+    existing_bmr_dates: set[str],
+) -> list[HealthDashboardDayOut]:
+    """A formula-computed (Mifflin-St Jeor) BMR value for each day that has a resolved weight
+    (from the same `weight_kg` merge the dashboard already computed) but no real Eufy `bmr_kcal`
+    reading -- only when the athlete has a fully configured profile (birthdate, height, sex).
+    Never touches a date that already has a real reading (`existing_bmr_dates`); marked with a
+    synthetic `_BMR_FORMULA_SOURCE_KEY` and `n_observations=0` so it's never mistaken for a real
+    device observation (see api/schemas/health.py::HealthDashboardDayOut's own `source_metric_key`
+    docstring for why that field already exists for exactly this kind of transparency)."""
+    if weight_metric is None:
+        return []
+    profile = conn.execute(
+        select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex).where(
+            athlete.c.id == athlete_id
+        )
+    ).fetchone()
+    if profile is None or not (profile.birthdate and profile.height_cm and profile.sex):
+        return []
+    birthdate = date.fromisoformat(profile.birthdate)
+
+    fallback_days = []
+    for day in weight_metric.daily:
+        if day.local_date in existing_bmr_dates or day.value_last is None:
+            continue
+        age_years = age_years_as_of(birthdate, date.fromisoformat(day.local_date))
+        bmr = compute_bmr_kcal(day.value_last, profile.height_cm, age_years, profile.sex)
+        fallback_days.append(
+            HealthDashboardDayOut(
+                local_date=day.local_date,
+                value_sum=bmr,
+                value_avg=bmr,
+                value_min=bmr,
+                value_max=bmr,
+                value_last=bmr,
+                n_observations=0,
+                source_metric_key=_BMR_FORMULA_SOURCE_KEY,
+            )
+        )
+    return fallback_days
+
+
 @router.get("/health/dashboard")
 def get_health_dashboard(
     athlete_id: Annotated[str, Depends(require_api_key)],
@@ -337,6 +395,7 @@ def get_health_dashboard(
     conn: Connection = Depends(get_conn),
 ) -> HealthDashboardOut:
     metrics = []
+    metrics_by_name: dict[str, HealthDashboardMetricOut] = {}
     for logical_metric, aliases in LOGICAL_METRICS.items():
         if logical_metric in _OUTLIER_FILTERED_METRICS:
             merged = _body_composition_daily(
@@ -355,7 +414,36 @@ def get_health_dashboard(
                 end_date=end_date,
             )
         if merged is not None:
-            metrics.append(merged.model_copy(update={"logical_metric": logical_metric}))
+            merged = merged.model_copy(update={"logical_metric": logical_metric})
+            metrics.append(merged)
+            metrics_by_name[logical_metric] = merged
+
+    # BMR formula fallback -- runs after the main loop so weight_kg's own merge (computed above,
+    # since it's a normal LOGICAL_METRICS entry) is already available to feed the formula. See
+    # _bmr_fallback_days's own docstring for why this can't just be another LOGICAL_METRICS alias.
+    bmr_metric = metrics_by_name.get("bmr_kcal")
+    existing_bmr_dates = {d.local_date for d in bmr_metric.daily} if bmr_metric else set()
+    fallback_days = _bmr_fallback_days(
+        conn,
+        athlete_id=athlete_id,
+        weight_metric=metrics_by_name.get("weight_kg"),
+        existing_bmr_dates=existing_bmr_dates,
+    )
+    if fallback_days:
+        if bmr_metric is None:
+            metrics.append(
+                HealthDashboardMetricOut(
+                    logical_metric="bmr_kcal",
+                    last_observed=max(d.local_date for d in fallback_days),
+                    daily=sorted(fallback_days, key=lambda d: d.local_date),
+                )
+            )
+        else:
+            combined = sorted(bmr_metric.daily + fallback_days, key=lambda d: d.local_date)
+            metrics[metrics.index(bmr_metric)] = bmr_metric.model_copy(
+                update={"daily": combined}
+            )
+
     return HealthDashboardOut(metrics=metrics)
 
 

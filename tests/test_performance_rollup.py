@@ -153,11 +153,62 @@ def test_max_hr_rolls_over_365_days_and_includes_non_running_sports(tmp_path: Pa
         row = _row(conn, "2025-06-01")
         assert row is not None
         assert row.max_hr_bpm == 180.0
+        assert row.max_hr_source == "empirical"
 
-        # More than 365 days later -- aged out.
+        # More than 365 days later -- aged out, and no birthdate configured -- stays null exactly
+        # like before the formula fallback existed.
         row = _row(conn, "2026-06-01")
         assert row is not None
         assert row.max_hr_bpm is None
+        assert row.max_hr_source is None
+
+
+def test_max_hr_falls_back_to_tanaka_formula_once_empirical_data_ages_out(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.update()
+            .where(athlete.c.id == DEFAULT_ATHLETE_ID)
+            .values(birthdate="1990-01-01")
+        )
+        _add_activity(conn, activity_id="a0", local_date="2025-01-01", sport="cycling")
+        _add_metric(
+            conn, activity_id="a0", metric_key=_MAX_HR_KEY, value=180.0, source="fit_folder"
+        )
+        conn.commit()
+        refresh_performance_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+
+        # Still within the 365-day empirical window -- real data wins, no fallback.
+        row = _row(conn, "2025-06-01")
+        assert row is not None
+        assert row.max_hr_bpm == 180.0
+        assert row.max_hr_source == "empirical"
+
+        # Aged out -- falls back to Tanaka (208 - 0.7*age) using the configured birthdate.
+        row = _row(conn, "2026-06-01")
+        assert row is not None
+        assert row.max_hr_source == "formula_fallback"
+        age_years = (dt.date(2026, 6, 1) - dt.date(1990, 1, 1)).days / 365.25
+        assert row.max_hr_bpm == 208.0 - 0.7 * age_years
+
+
+def test_max_hr_stays_null_with_no_empirical_data_and_no_birthdate(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        # A VDOT-bearing run with no HR data at all -- rollup rows exist, but nothing feeds
+        # max_hr_bpm, and there's no birthdate to fall back to.
+        _add_activity(conn, activity_id="a0", local_date="2025-06-01")
+        _add_metric(conn, activity_id="a0", metric_key=VDOT_METRIC_KEY, value=45.0)
+        conn.commit()
+        refresh_performance_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+        row = _row(conn, "2025-06-01")
+    assert row is not None
+    assert row.max_hr_bpm is None
+    assert row.max_hr_source is None
 
 
 def test_threshold_pace_matches_the_closed_form_value(tmp_path: Path) -> None:

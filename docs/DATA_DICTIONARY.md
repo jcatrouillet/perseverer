@@ -57,13 +57,19 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
 
 ### Core
 
-- **`athlete`** — single row today (multi-tenancy scaffolding for a possible future).
-  `last_full_export_at` is set by `garmin_export` on successful completion — the "days since
-  last full Garmin export" health signal `perseverer.staleness` nags on past 90 days.
-  `username`/`password_hash`/`api_key_hash`/`api_key_created_at` (Phase 5) are nullable —
-  an athlete may have neither, either, or both credential types; provisioned via
-  `sync athlete set-password`/`create-key`, never a self-service UI. See
-  `docs/adr/0008-phase-5-frontend.md`.
+- **`athlete`** — one row per athlete (multiple real athletes are supported end-to-end: their
+  own login, Garmin/Eufy credentials, and scheduled-workout calendar — see docs/DEPLOY.md's
+  "Provisioning a second athlete"). `last_full_export_at` is set by `garmin_export` on
+  successful completion — the "days since last full Garmin export" health signal
+  `perseverer.staleness` nags on past 90 days. `username`/`password_hash`/`api_key_hash`/
+  `api_key_created_at` (Phase 5) are nullable — an athlete may have neither, either, or both
+  credential types; provisioned via `sync athlete set-password`/`create-key`, never a
+  self-service UI. See `docs/adr/0008-phase-5-frontend.md`. `birthdate` (ISO date string, like
+  every other `local_date`-shaped column in this schema)/`height_cm`/`sex` ("male"|"female",
+  nullable, validated at the API layer) are optional, settable via `GET/PUT /settings/profile` —
+  used ONLY as inputs to formula-based fallbacks elsewhere (max HR, see the Insights section
+  below; BMR, see the Eufy section below) when there isn't enough empirical/device data yet.
+  They never override or get reconciled against real data once it exists.
 - **`device`** — one row per distinct `(manufacturer, product, serial_number)` seen in a FIT
   file's `file_id` message. `product` prefers the SDK's friendly name (e.g. `"fr955"`) over
   the raw numeric product code.
@@ -547,7 +553,7 @@ Columns:
 | Column | Meaning | Basis |
 |---|---|---|
 | `rolling_vdot` | 42-day trailing **maximum** of `perseverer.performance.vdot` | Judgment call: reuses this app's own CTL lookback length, but as a hard-window max (not an EWMA) because an easy run's VDOT reads low from intensity, not fitness — the same reasoning `runningStats.ts::bestVdot` already applies. Labeled explicitly as a different mechanism from CTL's EWMA so the two 42-day windows are never confused. |
-| `max_hr_bpm` | 365-day trailing **maximum** of `{fit,strava}.session.max_heart_rate`, priority-merged, **all sports** | Judgment call, own choice: a genuine max-HR effort is rare week-to-week, so a shorter window would flicker based on incidental recent effort; all sports because a max-HR effort from cycling/hiit is physiologically just as real as one from running, and restricting to running would silently discard it. Empirical own-data max HR is used instead of any age-based formula (220-age, Tanaka 208-0.7×age, HUNT-study 211-0.64×age) — [Validity of the Maximal Heart Rate Prediction Models among Runners and Cyclists](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10146295/) found measured vs. predicted HRmax differs significantly for 9 of 13 formulas across 4,043 runners; [The 220-Age Formula Is Wrong](https://marathonhandbook.com/calculate-maximum-heart-rate/) puts the average error at 10-15bpm, with even the best alternative formulas still ~10.8bpm off. |
+| `max_hr_bpm` / `max_hr_source` | 365-day trailing **maximum** of `{fit,strava}.session.max_heart_rate`, priority-merged, **all sports** (`source="empirical"`); else, if `athlete.birthdate` is configured, the Tanaka formula `208 - 0.7×age` (`source="formula_fallback"`); else null | Judgment call, own choice: a genuine max-HR effort is rare week-to-week, so a shorter window would flicker based on incidental recent effort; all sports because a max-HR effort from cycling/hiit is physiologically just as real as one from running, and restricting to running would silently discard it. Empirical own-data max HR stays the PRIMARY source, never overridden by a formula once real data exists — [Validity of the Maximal Heart Rate Prediction Models among Runners and Cyclists](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10146295/) found measured vs. predicted HRmax differs significantly for 9 of 13 formulas across 4,043 runners; [The 220-Age Formula Is Wrong](https://marathonhandbook.com/calculate-maximum-heart-rate/) puts the average error at 10-15bpm, with even the best alternative formulas still ~10.8bpm off. A brand-new athlete has zero empirical max HR for weeks, though, so `max_hr_bpm` falls back to Tanaka (`athlete_age.py::age_years_as_of`, chosen over the cruder 220-age for its lower documented error) for just that gap — `max_hr_source` records which path fired, same idea as `threshold_hr_source` below. This in turn unblocks `threshold_hr_bpm`'s own existing 88%-of-max-HR fallback (below) for a new athlete too, since that fallback needs a non-null `max_hr_bpm` to compute from. |
 | `threshold_pace_s_per_km` | Pace (s/km) at 88% of vVO2max, solved from `rolling_vdot` | Literature: [Jack Daniels VDOT Calculator: Paces & Race Times](https://www.brenoamelo.com/blog/jack-daniels-vdot-explained) cites threshold pace as 86-92% of vVO2max; 88% is a representative point within that range (judgment call). Closed-form: solves `VO2(v) = 0.88 × VDOT` as a quadratic in velocity `v` (m/min) using `vdot.py`'s own `VO2(v) = -4.60 + 0.182258v + 0.000104v²` — `a > 0`, `c < 0` for any realistic VDOT guarantees exactly one positive root (`compute_threshold_pace_s_per_km`). Hand-verified: VDOT=50 → v≈235.1 m/min → pace≈4:15/km, matching published Daniels tables. |
 | `threshold_hr_bpm` / `threshold_hr_source` | Empirical median HR among runs within ±5% of that day's own `threshold_pace_s_per_km` (by `perseverer.performance.avg_gap_speed_mps`) over the trailing 365 days, min. 3 qualifying runs (`source="empirical"`); else 88% of that day's `max_hr_bpm` (`source="fallback"`) | Literature: [How to Calculate Lactate Threshold: 3 Tests That Work](https://runnersconnect.net/how-to-calculate-your-lactate-threshold/) cites LT HR as commonly 85-92% of max HR for well-trained runners, and describes a practitioner method that derives LT pace from a recent race then reads the real HR sustained at that pace from training data — the basis for this empirical-first approach. ±5% tolerance and the 3-run minimum, the median (not mean), and 88% as the fallback fraction (a representative point within the cited 85-92% range) are judgment calls: median resists a single outlier (a cold-start HR spike, a strap dropout); the tolerance band is wide enough to catch real threshold-session pace variance while excluding easy runs and intervals. `threshold_hr_source` records which path fired, per this project's raw-first/provenance discipline — same reason `fitness_daily_rollup` stores `training_load` alongside CTL/ATL rather than just the derived output. |
 | `predicted_5k_s`, `predicted_10k_s`, `predicted_half_marathon_s`, `predicted_marathon_s` | Predicted race time (seconds) at `rolling_vdot`, one column per distance | Literature: [How Accurate Are Race Calculators? A Riegel Formula Guide](https://runnersconnect.net/race-calculators/) reports Riegel's simpler power-law formula underestimates marathon time by 10+ minutes for half of runners when extrapolating from a much shorter race, while VDOT stays roughly 1% accurate 10k→half-marathon and 2-2.5% accurate 5k→marathon for trained runners — the basis for extending this codebase's existing VDOT model (`vdot.py`) rather than adding a second formula. Computed by `predict_race_time_s`: bisection search over duration, to 1-second tolerance, until `compute_vdot(distance, T) == rolling_vdot` — valid because `compute_vdot(distance, T)` is monotonically decreasing in `T` (verified numerically across all four target distances over an 11-400 minute range, not just assumed from the model's shape). Per-distance search bounds run from a just-sub-elite pace to a generous slow ceiling; a `rolling_vdot` outside what's achievable within those bounds returns `None` rather than extrapolating. Round-trip accuracy (`compute_vdot(distance, predict_race_time_s(distance, vdot))`) verified within 0.05 VDOT of the input across tested values. |
@@ -739,7 +745,19 @@ human-meaningful dashboard names (`weight_kg`, `bmi`, `body_fat_pct`, `muscle_ma
 `bone_mass_kg`, `water_pct`, `bmr_kcal`, `visceral_fat`, `metabolic_age`, `protein_ratio_pct`) —
 single-alias entries, since Eufy is the only source for any of them, except `weight_kg`/`bmi`/
 `body_fat_pct`, which each carry a second `apple_health.*` alias for the pre-Eufy era (see the
-Apple Health export section below). The remaining ~14 raw
+Apple Health export section below).
+
+`bmr_kcal` additionally gets a formula-computed FALLBACK for a day that has a resolved
+`weight_kg` but no real Eufy `bmr` reading (e.g. any athlete without a Eufy scale at all, like a
+newly-provisioned second athlete) — Mifflin-St Jeor (`bmr.py::compute_bmr_kcal`, the standard
+`10×weight_kg + 6.25×height_cm - 5×age + (5 if male else -161)` equation), using that day's own
+weight plus the athlete's configured `birthdate`/`height_cm`/`sex`. Only fires when all three
+profile fields are set; a real Eufy reading for a given day always wins and is never overwritten.
+Marked with a synthetic `source_metric_key = "computed.mifflin_st_jeor"` and `n_observations = 0`
+(the existing per-day `source_metric_key`/`n_observations` fields already carry exactly this kind
+of provenance for a real reading — no schema change needed to signal "this one is computed, not
+observed"). `metabolic_age` gets no such fallback — it's a Eufy-proprietary population-comparison
+figure, not a standard formula. The remaining ~14 raw
 fields (`impedance`, `mode`, `head_size`, etc.) are still fully stored/queryable via
 `GET /health/observations`, just not promoted to the dashboard — the same "catalog broadly, surface
 a curated subset" split Garmin's own much larger raw field set already uses. Surfaced in the
