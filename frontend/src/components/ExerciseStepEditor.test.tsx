@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { PlannedWorkoutStepOut } from "../api/types";
 import {
   apiStepsToItems,
+  countExerciseCatalogMatches,
   emptyExerciseEntry,
   emptyGroup,
   emptyRestEntry,
@@ -71,6 +72,30 @@ describe("searchExerciseCatalog", () => {
     // SQUAT-category entries that also match this query only via categoryLabel.
     const results = searchExerciseCatalog("squat");
     expect(results[0]).toMatchObject({ name: "Squat", category: "SQUAT" });
+  });
+
+  it("respects a caller-supplied limit larger than the default", () => {
+    // "squat" matches well over 20 entries in the real catalog -- confirmed when the ranking
+    // bug above was fixed. A caller-supplied limit (the "load more" affordance) must return more
+    // than the default page once asked.
+    const defaultPage = searchExerciseCatalog("squat");
+    const biggerPage = searchExerciseCatalog("squat", 40);
+    expect(defaultPage.length).toBe(20);
+    expect(biggerPage.length).toBe(40);
+    // Extending the page must never reorder or drop what was already on the first page.
+    expect(biggerPage.slice(0, 20)).toEqual(defaultPage);
+  });
+});
+
+describe("countExerciseCatalogMatches", () => {
+  it("counts every match regardless of any display limit", () => {
+    const total = countExerciseCatalogMatches("squat");
+    expect(total).toBeGreaterThan(20);
+    expect(total).toBe(searchExerciseCatalog("squat", total).length);
+  });
+
+  it("returns 0 for a too-short query, matching searchExerciseCatalog", () => {
+    expect(countExerciseCatalogMatches("b")).toBe(0);
   });
 });
 

@@ -80,6 +80,15 @@
   font-size: var(--font-size-sm);
 }
 
+/* Shown at the end of the results list once more than MAX_RESULTS entries match -- centered and
+   muted so it reads as "more of the same list", not another exercise choice. Specificity bumped
+   to beat .exercise-step-editor__results button's own justify-content, not !important. */
+.exercise-step-editor__results button.exercise-step-editor__load-more {
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
 .exercise-step-editor__number {
   width: 4.5rem;
 }

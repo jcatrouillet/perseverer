@@ -68,14 +68,27 @@ function matchRank(entry: ExerciseCatalogEntry, q: string): number {
   return 3; // categoryLabel-only match -- caller already filtered to a real match of some kind
 }
 
-export function searchExerciseCatalog(query: string): ExerciseCatalogEntry[] {
-  const q = query.trim().toLowerCase();
+function matchingCatalogEntries(q: string): ExerciseCatalogEntry[] {
   if (q.length < 2 || catalog == null) return [];
   const matches = catalog.filter(
     (entry) => entry.name.toLowerCase().includes(q) || entry.categoryLabel.toLowerCase().includes(q),
   );
   matches.sort((a, b) => matchRank(a, q) - matchRank(b, q));
-  return matches.slice(0, MAX_RESULTS);
+  return matches;
+}
+
+export function searchExerciseCatalog(
+  query: string,
+  limit: number = MAX_RESULTS,
+): ExerciseCatalogEntry[] {
+  return matchingCatalogEntries(query.trim().toLowerCase()).slice(0, limit);
+}
+
+/** How many entries `searchExerciseCatalog` would match in total, ignoring any `limit` --
+ * lets a caller offer "load more" only when there's actually more to load, without re-running
+ * the same filter+sort twice per render. */
+export function countExerciseCatalogMatches(query: string): number {
+  return matchingCatalogEntries(query.trim().toLowerCase()).length;
 }
 
 /** The catalog's own display name for an already-picked (category, exerciseName) pair -- used to
@@ -299,6 +312,14 @@ function ExerciseEntryRow({
   pickerOpenFor: number | null;
   setPickerOpenFor: (key: number | null) => void;
 }) {
+  // How many results to show for THIS row's own search -- local, not part of `entry` (a plain
+  // data object that also feeds itemsToApiSteps/the saved workout, which this has nothing to do
+  // with). Reset to the default page size whenever the query text itself changes, so "load more"
+  // on one search doesn't linger once the athlete starts typing a different one.
+  const [resultLimit, setResultLimit] = useState(MAX_RESULTS);
+  const results = searchExerciseCatalog(entry.exerciseQuery, resultLimit);
+  const totalMatches = countExerciseCatalogMatches(entry.exerciseQuery);
+
   return (
     <div className="exercise-step-editor__entry">
       <div className="exercise-step-editor__row">
@@ -316,13 +337,14 @@ function ExerciseEntryRow({
                     exerciseName: null,
                   });
                   setPickerOpenFor(entry.key);
+                  setResultLimit(MAX_RESULTS);
                 }}
                 onFocus={() => setPickerOpenFor(entry.key)}
                 onBlur={() => setTimeout(() => setPickerOpenFor(null), 150)}
               />
               {pickerOpenFor === entry.key && entry.exerciseQuery.trim().length >= 2 && (
                 <ul className="exercise-step-editor__results">
-                  {searchExerciseCatalog(entry.exerciseQuery).map((r) => (
+                  {results.map((r) => (
                     <li key={`${r.category}:${r.exercise}`}>
                       <button
                         type="button"
@@ -339,8 +361,27 @@ function ExerciseEntryRow({
                       </button>
                     </li>
                   ))}
-                  {searchExerciseCatalog(entry.exerciseQuery).length === 0 && (
+                  {results.length === 0 && (
                     <li className="exercise-step-editor__no-results">No matching exercise</li>
+                  )}
+                  {totalMatches > results.length && (
+                    <li>
+                      <button
+                        type="button"
+                        className="exercise-step-editor__load-more"
+                        onMouseDown={(e) => {
+                          // Unlike picking a result (where closing the dropdown afterward is the
+                          // whole point), this must NOT blur the search input -- that would fire
+                          // its own onBlur close-the-dropdown timeout and immediately undo the
+                          // expansion this click just asked for. preventDefault on mousedown stops
+                          // the browser from shifting focus to the button at all.
+                          e.preventDefault();
+                          setResultLimit((n) => n + MAX_RESULTS);
+                        }}
+                      >
+                        Load more ({totalMatches - results.length} more)
+                      </button>
+                    </li>
                   )}
                 </ul>
               )}
