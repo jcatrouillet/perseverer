@@ -1008,10 +1008,21 @@ const SCHEMAS = [
   { name: "RunningLoadConfigOut", note: "Returned by GET and PUT /settings/running-load.", fields: [
       ["threshold_pace_sec_per_km","number|null","null means not configured yet -- Fitness & Form keeps using Garmin's own training_load_peak for every activity in that case."],
     ] },
-  { name: "AthleteProfileOut", note: "Returned by GET and PUT /settings/profile. Used only as inputs to formula-based fallbacks elsewhere (GET /performance's max_hr_bpm, GET /health/dashboard's bmr_kcal) when there isn't enough empirical/device data yet.", fields: [
+  { name: "AthleteProfileOut", note: "Returned by GET and PUT /settings/profile. birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (GET /performance's max_hr_bpm, GET /health/dashboard's bmr_kcal) when there isn't enough empirical/device data yet. email is currently inert -- stored for a future feature.", fields: [
       ["birthdate","string(date)|null",""],
       ["height_cm","number|null",""],
       ["sex","string|null","male | female"],
+      ["email","string|null",""],
+    ] },
+  { name: "ChangePasswordOut", note: "Returned by PUT /settings/password.", fields: [
+      ["success","boolean",""],
+    ] },
+  { name: "EufyStatusOut", note: "Returned by GET /settings/eufy/status.", fields: [
+      ["configured","boolean",""],
+      ["email","string|null","The configured Eufy account email -- never the password."],
+    ] },
+  { name: "EufyLoginOut", note: "Returned by POST /settings/eufy/login.", fields: [
+      ["success","boolean",""],
     ] },
   { name: "LoginResponse", fields: [ ["access_token","string","JWT — send as Authorization: Bearer <token>."], ["expires_at","string(date-time)",""] ] },
   { name: "GarminAuthStatusOut", note: "Returned by GET /settings/garmin/status. No real token expiry is reportable -- Garmin exposes no readable expiry for the refresh token that actually matters -- so staleness_severity/staleness_message (how many days the last sync has been failing) is the practical substitute.", fields: [
@@ -1671,8 +1682,8 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"threshold_pace_sec_per_km": 308}'` }
     },
-    { method: "GET", path: "/api/v1/settings/profile", summary: "Get the athlete's optional profile (birthdate, height, sex).",
-      description: "Used only as inputs to formula-based fallbacks elsewhere (max_hr_bpm on GET /performance, bmr_kcal on GET /health/dashboard) when there isn't enough empirical/device data yet -- never reconciled against or overriding real data once it exists. null for any field means not set.",
+    { method: "GET", path: "/api/v1/settings/profile", summary: "Get the athlete's optional profile (birthdate, height, sex, email).",
+      description: "birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (max_hr_bpm on GET /performance, bmr_kcal on GET /health/dashboard) when there isn't enough empirical/device data yet -- never reconciled against or overriding real data once it exists. email is currently inert (stored for a future feature). null for any field means not set.",
       responses: [ { code: 200, ref: "AthleteProfileOut" } ],
       example: {}
     },
@@ -1682,11 +1693,50 @@ const GROUPS = [
         ["birthdate","string(date)|null","opt","","Rejected if in the future or implies an age over 120 years."],
         ["height_cm","number|null","opt","","50-250."],
         ["sex","string|null","opt","","male | female."],
+        ["email","string|null","opt","","A light format check only -- not used for anything yet."],
       ]},
       responses: [ { code: 200, ref: "AthleteProfileOut" }, { code: 422, note: "A value fails validation." } ],
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/profile \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
-  -d '{"birthdate": "1990-01-01", "height_cm": 178, "sex": "male"}'` }
+  -d '{"birthdate": "1990-01-01", "height_cm": 178, "sex": "male", "email": "me@example.com"}'` }
+    },
+    { method: "PUT", path: "/api/v1/settings/password", summary: "Change the athlete's own login password.",
+      description: "Verifies current_password first -- the same is_locked_out/verify_password/record_attempt sequence POST /auth/login uses, so repeated wrong attempts lock the username out the same way a brute-forced login would. Skips that check only when the athlete has no password set yet. Never changes username.",
+      body: { schema: "ChangePasswordIn", fields: [
+        ["current_password","string","req","",""],
+        ["new_password","string","req","","At least 8 characters."],
+      ]},
+      responses: [
+        { code: 200, ref: "ChangePasswordOut" },
+        { code: 400, note: "Incorrect current password, or no username configured yet." },
+        { code: 401, note: "Too many recent attempts -- try again later." },
+        { code: 422, note: "new_password is too short." },
+      ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/password \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"current_password": "old", "new_password": "a-new-longer-password"}'` }
+    },
+    { method: "GET", path: "/api/v1/settings/eufy/status", summary: "Whether the athlete has a Eufy scale account connected.",
+      description: "Never carries the password -- only the configured email, so the athlete can confirm which account is linked.",
+      responses: [ { code: 200, ref: "EufyStatusOut" } ],
+      example: {}
+    },
+    { method: "POST", path: "/api/v1/settings/eufy/login", summary: "Save Eufy scale credentials.",
+      description: "The web counterpart of `sync athlete set-eufy-credentials`. Verifies the credential against Eufy's own login endpoint BEFORE saving it, mirroring POST /settings/garmin/login's own \"don't persist something we haven't confirmed works\" posture. device_id/customer_id can't be verified this way (only exercised by a real sync) -- stored as given either way. Unlike Garmin, the credential is persisted in full (plaintext, same as this project's legacy env-var precedent) -- Eufy sync needs it again for every future run.",
+      body: { schema: "EufyLoginIn", fields: [
+        ["email","string","req","",""],
+        ["password","string","req","",""],
+        ["device_id","string","req","",""],
+        ["customer_id","string","req","",""],
+      ]},
+      responses: [
+        { code: 200, ref: "EufyLoginOut" },
+        { code: 400, note: "Incorrect Eufy email or password." },
+        { code: 502, note: "Could not reach Eufy -- try again." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/eufy/login \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"email": "me@example.com", "password": "...", "device_id": "...", "customer_id": "..."}'` }
     },
     { method: "GET", path: "/api/v1/settings/garmin/status", summary: "Garmin Connect connection status.",
       description: "Token store presence/age (a filesystem check, no network call to Garmin) plus the most recent garmin_connect sync result. No real token expiry is reportable -- Garmin exposes no readable expiry for the refresh token that actually matters -- so staleness_severity/staleness_message (an escalating warning/critical signal off how many days the last sync has been failing) is the practical substitute.",

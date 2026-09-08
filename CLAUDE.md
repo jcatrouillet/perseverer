@@ -97,8 +97,11 @@ because you don't recognize it — stop, that's the bug.
   --display-name ...` creates the row itself (the one athlete-provisioning step no other command
   does — `set-password`/`create-key` only `UPDATE` a row that already exists); credentials are
   then provisioned via `sync athlete set-password`/`create-key` — CLI-only, no self-service
-  signup. See `docs/adr/0008-phase-5-frontend.md` and docs/DEPLOY.md's "Provisioning a second
-  athlete" for the full second-athlete sequence.
+  signup. Once logged in, an athlete CAN change their own password thereafter via `PUT
+  /settings/password` (Settings page) — verifies the current password first through the exact
+  same `is_locked_out`/`verify_password`/`record_attempt` sequence `POST /auth/login` uses, then
+  writes only `password_hash` (never `username`). See `docs/adr/0008-phase-5-frontend.md` and
+  docs/DEPLOY.md's "Provisioning a second athlete" for the full second-athlete sequence.
 - **Frontend** (`frontend/src/`): Vite + React 19 + TS-strict, `wouter` for routing,
   `@tanstack/react-query` for data fetching, a hand-rolled SVG chart (no charting library) for
   the one stream-chart need. The API base URL is runtime-configured
@@ -345,6 +348,12 @@ because you don't recognize it — stop, that's the bug.
     `Settings.eufy_*` env-var set — `resolve_eufy_credentials` (also in `adapters/eufy.py`) picks
     a DB row when one exists and falls back to those original env vars only for
     `DEFAULT_ATHLETE_ID`, so the original single-athlete deployment needs no migration.
+    `athlete_eufy_config` is now settable from the Settings page too (`EufyCard.tsx`,
+    `POST /settings/eufy/login`), not just `sync athlete set-eufy-credentials` — the web path
+    verifies the credential against Eufy's own login endpoint before saving, mirroring
+    `POST /settings/garmin/login`'s own "don't persist something we haven't confirmed works"
+    posture (`device_id`/`customer_id` can't be verified this way, so they're stored as given
+    either way, same as the CLI).
     `GET /health/dashboard`'s `bmr_kcal` gets a formula-computed FALLBACK (`bmr.py::
     compute_bmr_kcal`, Mifflin-St Jeor) for a day with a resolved weight but no real Eufy `bmr`
     reading — e.g. any athlete with no Eufy scale at all — using that day's weight plus the

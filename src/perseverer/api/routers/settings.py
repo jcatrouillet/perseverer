@@ -25,11 +25,19 @@ management routes; the public `.ics` response itself is `GET /share/calendar/{to
 own module docstring for why this is a single standing per-athlete secret (mirroring
 athlete.api_key_hash), not a share_link-style growing history.
 
-Also GET/PUT /settings/profile -- optional birthdate/height/sex, mutated directly on the
+Also GET/PUT /settings/profile -- optional birthdate/height/sex/email, mutated directly on the
 `athlete` row (same shape as the calendar-feed endpoints above, not the hr-zones/running-load
-insert-or-update dance, since the athlete row always already exists). Used only as inputs to
+insert-or-update dance, since the athlete row always already exists). birthdate/height/sex feed
 formula-based fallbacks elsewhere (performance_rollup.py's max HR, health.py's BMR) when there
-isn't enough empirical/device data yet -- see api/schemas/settings.py::AthleteProfileIn.
+isn't enough empirical/device data yet; email is currently inert (stored for a future feature) --
+see api/schemas/settings.py::AthleteProfileIn.
+
+Also PUT /settings/password -- self-service password change, verifying the current password via
+the same is_locked_out/verify_password/record_attempt sequence POST /auth/login uses.
+
+Also GET/POST /settings/eufy/status,/login -- the web counterpart of `sync athlete
+set-eufy-credentials`, verifying the credential against Eufy's own login endpoint before saving,
+mirroring the Garmin login endpoint's own "verify before persisting" posture.
 """
 
 from __future__ import annotations
@@ -41,6 +49,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
+import requests
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -55,6 +64,7 @@ from garminconnect import GarminConnectAuthenticationError, GarminConnectTooMany
 from sqlalchemy import Connection, Row, desc, select
 from sqlalchemy.engine import Engine
 
+from perseverer.adapters.eufy import EufyAuthError, EufyClient
 from perseverer.adapters.garmin_connect import (
     RateLimitSettings,
     login_with_credentials,
@@ -69,6 +79,11 @@ from perseverer.api.schemas.settings import (
     AthleteProfileOut,
     CalendarFeedStatusOut,
     CalendarFeedUrlOut,
+    ChangePasswordIn,
+    ChangePasswordOut,
+    EufyLoginIn,
+    EufyLoginOut,
+    EufyStatusOut,
     GarminAuthStatusOut,
     GarminLoginIn,
     GarminLoginOut,
@@ -79,10 +94,13 @@ from perseverer.api.schemas.settings import (
     RunningLoadConfigIn,
     RunningLoadConfigOut,
 )
+from perseverer.auth.lockout import is_locked_out, record_attempt
+from perseverer.auth.passwords import hash_password, verify_password
 from perseverer.calendar_feed import generate_feed_token, hash_feed_token
 from perseverer.config import Settings, get_settings
 from perseverer.db.schema import (
     athlete,
+    athlete_eufy_config,
     athlete_hr_zone_config,
     athlete_running_load_config,
     ingest_run,
@@ -92,6 +110,10 @@ from perseverer.insights.engine import refresh_insights
 from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.running_load import refresh_running_tss
 from perseverer.staleness import check_garmin_connect_staleness
+
+# Constant-time comparison target for an athlete with no password set yet -- same precedent as
+# api/routers/auth.py's own _DUMMY_HASH.
+_DUMMY_PASSWORD_HASH = hash_password("")
 
 router = APIRouter()
 
@@ -259,13 +281,15 @@ def get_athlete_profile(
     conn: Connection = Depends(get_conn),
 ) -> AthleteProfileOut:
     row = conn.execute(
-        select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex).where(
+        select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex, athlete.c.email).where(
             athlete.c.id == athlete_id
         )
     ).fetchone()
     if row is None:
-        return AthleteProfileOut(birthdate=None, height_cm=None, sex=None)
-    return AthleteProfileOut(birthdate=row.birthdate, height_cm=row.height_cm, sex=row.sex)
+        return AthleteProfileOut(birthdate=None, height_cm=None, sex=None, email=None)
+    return AthleteProfileOut(
+        birthdate=row.birthdate, height_cm=row.height_cm, sex=row.sex, email=row.email
+    )
 
 
 @router.put("/settings/profile")
@@ -277,12 +301,131 @@ def put_athlete_profile(
     conn.execute(
         athlete.update()
         .where(athlete.c.id == athlete_id)
-        .values(birthdate=payload.birthdate, height_cm=payload.height_cm, sex=payload.sex)
+        .values(
+            birthdate=payload.birthdate,
+            height_cm=payload.height_cm,
+            sex=payload.sex,
+            email=payload.email,
+        )
     )
     conn.commit()
     return AthleteProfileOut(
-        birthdate=payload.birthdate, height_cm=payload.height_cm, sex=payload.sex
+        birthdate=payload.birthdate,
+        height_cm=payload.height_cm,
+        sex=payload.sex,
+        email=payload.email,
     )
+
+
+@router.put("/settings/password")
+def put_password(
+    payload: ChangePasswordIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ChangePasswordOut:
+    """Self-service password change -- verifies the CURRENT password first (same
+    is_locked_out/verify_password/record_attempt sequence POST /auth/login uses, see that
+    router's own docstring), even though this request already arrived authenticated (by JWT or a
+    standing API key) -- defense in depth against a leaked API key also being able to take over
+    the athlete's login. Skips that check only for an athlete with no password set yet (nothing
+    to verify against). Never touches `username` -- this is password-only, matching the request
+    that introduced it; only `sync athlete set-password` (CLI) changes both together.
+    """
+    row = conn.execute(
+        select(athlete.c.username, athlete.c.password_hash).where(athlete.c.id == athlete_id)
+    ).one()
+    if row.username is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No login username configured yet -- ask an administrator to run "
+            "`sync athlete set-password` first.",
+        )
+
+    password_already_set = row.password_hash is not None
+    if password_already_set:
+        locked_out = is_locked_out(conn, row.username)
+        stored_hash = row.password_hash or _DUMMY_PASSWORD_HASH
+        current_ok = verify_password(payload.current_password, stored_hash)
+        record_attempt(conn, row.username, success=current_ok and not locked_out)
+        conn.commit()
+        if locked_out:
+            raise HTTPException(
+                status_code=401, detail="too many recent attempts -- try again later"
+            )
+        if not current_ok:
+            raise HTTPException(status_code=400, detail="incorrect current password")
+
+    conn.execute(
+        athlete.update()
+        .where(athlete.c.id == athlete_id)
+        .values(password_hash=hash_password(payload.new_password))
+    )
+    conn.commit()
+    return ChangePasswordOut(success=True)
+
+
+@router.get("/settings/eufy/status")
+def get_eufy_status(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> EufyStatusOut:
+    row = conn.execute(
+        select(athlete_eufy_config.c.email).where(
+            athlete_eufy_config.c.athlete_id == athlete_id
+        )
+    ).fetchone()
+    if row is None:
+        return EufyStatusOut(configured=False, email=None)
+    return EufyStatusOut(configured=True, email=row.email)
+
+
+@router.post("/settings/eufy/login")
+def post_eufy_login(
+    payload: EufyLoginIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> EufyLoginOut:
+    """Verifies the credential against Eufy's own login endpoint BEFORE saving it -- mirrors
+    POST /settings/garmin/login's own "don't persist something we haven't confirmed works"
+    posture. `device_id`/`customer_id` can't be verified this way (EufyClient.login() doesn't
+    need them -- they're only exercised by a real sync, see adapters/eufy.py), so they're stored
+    as given, same as the CLI (`sync athlete set-eufy-credentials`). Unlike Garmin, Eufy
+    credentials ARE persisted in full (plaintext, same as this project's own legacy env-var
+    precedent) -- see db/schema.py::athlete_eufy_config's own docstring for why.
+    """
+    client = EufyClient(payload.email, payload.password, payload.device_id, payload.customer_id)
+    try:
+        client.login()
+    except EufyAuthError as e:
+        raise HTTPException(status_code=400, detail="Incorrect Eufy email or password.") from e
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=502, detail="Could not reach Eufy -- try again."
+        ) from e
+
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    existing = conn.execute(
+        select(athlete_eufy_config.c.athlete_id).where(
+            athlete_eufy_config.c.athlete_id == athlete_id
+        )
+    ).scalar_one_or_none()
+    values = {
+        "email": payload.email,
+        "password": payload.password,
+        "device_id": payload.device_id,
+        "customer_id": payload.customer_id,
+        "updated_at": now,
+    }
+    if existing is None:
+        conn.execute(athlete_eufy_config.insert().values(athlete_id=athlete_id, **values))
+    else:
+        conn.execute(
+            athlete_eufy_config.update()
+            .where(athlete_eufy_config.c.athlete_id == athlete_id)
+            .values(**values)
+        )
+    conn.commit()
+    return EufyLoginOut(success=True)
 
 
 def _latest_ingest_run(conn: Connection, athlete_id: str, source: str) -> Row[Any] | None:

@@ -11,6 +11,7 @@ db/schema.py::athlete_running_load_config, which this mirrors deliberately.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 
 from pydantic import BaseModel, model_validator
@@ -20,6 +21,10 @@ from perseverer.hr_zones import compute_hr_zone_boundaries
 _MIN_HEIGHT_CM = 50.0
 _MAX_HEIGHT_CM = 250.0
 _MAX_PLAUSIBLE_AGE_YEARS = 120
+_MIN_PASSWORD_LENGTH = 8
+# A light sanity check, not a full RFC 5322 parse -- email isn't used for anything yet (see
+# AthleteProfileIn's own docstring), so this only needs to catch obvious typos/garbage.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class HrZoneConfigIn(BaseModel):
@@ -89,14 +94,16 @@ class RunningLoadConfigOut(BaseModel):
     threshold_pace_sec_per_km: float | None
 
 
-# GET/PUT /settings/profile -- optional athlete profile facts used only as inputs to
-# formula-based FALLBACKS elsewhere (max HR: performance_rollup.py; BMR:
+# GET/PUT /settings/profile -- optional athlete profile facts. birthdate/height_cm/sex are used
+# only as inputs to formula-based FALLBACKS elsewhere (max HR: performance_rollup.py; BMR:
 # api/routers/health.py::get_health_dashboard) when there isn't enough empirical/device data yet.
-# See db/schema.py::athlete's own birthdate/height_cm/sex columns.
+# email is currently inert -- stored for a future feature, no consumer reads it yet. See
+# db/schema.py::athlete's own birthdate/height_cm/sex/email columns.
 class AthleteProfileIn(BaseModel):
     birthdate: str | None = None
     height_cm: float | None = None
     sex: str | None = None
+    email: str | None = None
 
     @model_validator(mode="after")
     def _sane_values(self) -> AthleteProfileIn:
@@ -113,6 +120,8 @@ class AthleteProfileIn(BaseModel):
             raise ValueError(f"height_cm must be between {_MIN_HEIGHT_CM} and {_MAX_HEIGHT_CM}")
         if self.sex is not None and self.sex not in ("male", "female"):
             raise ValueError("sex must be 'male' or 'female'")
+        if self.email is not None and not _EMAIL_RE.match(self.email):
+            raise ValueError("email must look like a valid email address")
         return self
 
 
@@ -120,6 +129,42 @@ class AthleteProfileOut(BaseModel):
     birthdate: str | None
     height_cm: float | None
     sex: str | None
+    email: str | None
+
+
+# PUT /settings/password -- self-service password change, see api/routers/settings.py for the
+# verify-current-password + lockout logic (mirrors POST /auth/login exactly).
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+    @model_validator(mode="after")
+    def _new_password_long_enough(self) -> ChangePasswordIn:
+        if len(self.new_password) < _MIN_PASSWORD_LENGTH:
+            raise ValueError(f"new_password must be at least {_MIN_PASSWORD_LENGTH} characters")
+        return self
+
+
+class ChangePasswordOut(BaseModel):
+    success: bool
+
+
+# GET /settings/eufy/status, POST /settings/eufy/login -- the web counterpart of `sync athlete
+# set-eufy-credentials`, see adapters/eufy.py and db/schema.py::athlete_eufy_config.
+class EufyStatusOut(BaseModel):
+    configured: bool
+    email: str | None
+
+
+class EufyLoginIn(BaseModel):
+    email: str
+    password: str
+    device_id: str
+    customer_id: str
+
+
+class EufyLoginOut(BaseModel):
+    success: bool
 
 
 # GET /settings/garmin/status

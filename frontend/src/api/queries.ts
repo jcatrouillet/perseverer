@@ -27,9 +27,14 @@ import type {
   CalendarFeedStatusOut,
   CalendarFeedUrlOut,
   CalendarResponse,
+  ChangePasswordIn,
+  ChangePasswordOut,
   ClimbComparisonsOut,
   ClimbingSummaryOut,
   DuplicatePairOut,
+  EufyLoginIn,
+  EufyLoginOut,
+  EufyStatusOut,
   FitnessDailyRollupOut,
   GarminAuthStatusOut,
   GarminLoginIn,
@@ -753,6 +758,36 @@ export function useSetAthleteProfile() {
       // performance_daily_rollup).
       void queryClient.invalidateQueries({ queryKey: ["performance"] });
       void queryClient.invalidateQueries({ queryKey: ["health-dashboard"] });
+    },
+  });
+}
+
+/** Self-service password change -- verifies the current password server-side first. */
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (body: ChangePasswordIn) =>
+      apiPut<ChangePasswordOut>("/api/v1/settings/password", body),
+  });
+}
+
+/** Whether the athlete has a Eufy scale account connected (see adapters/eufy.py's own module
+ * docstring) -- never carries the password, only the configured email so the athlete can
+ * confirm which account is linked. */
+export function useEufyStatus() {
+  return useQuery({
+    queryKey: ["eufy-status"],
+    queryFn: () => apiGet<EufyStatusOut>("/api/v1/settings/eufy/status"),
+  });
+}
+
+/** Verifies the credential against Eufy's own login endpoint before saving it -- see
+ * settings.py::post_eufy_login's own docstring. */
+export function useEufyLogin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: EufyLoginIn) => apiPost<EufyLoginOut>("/api/v1/settings/eufy/login", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["eufy-status"] });
     },
   });
 }

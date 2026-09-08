@@ -343,19 +343,46 @@ export interface RunningLoadConfigIn {
   threshold_pace_sec_per_km: number | null;
 }
 
-// GET/PUT /settings/profile -- optional profile facts used only as inputs to formula-based
-// fallbacks elsewhere (max HR, BMR) when there isn't enough empirical/device data yet. See
-// api/schemas/settings.py::AthleteProfileIn.
+// GET/PUT /settings/profile -- birthdate/height/sex are used only as inputs to formula-based
+// fallbacks elsewhere (max HR, BMR) when there isn't enough empirical/device data yet; email is
+// currently inert (stored for a future feature). See api/schemas/settings.py::AthleteProfileIn.
 export interface AthleteProfileOut {
   birthdate: string | null;
   height_cm: number | null;
   sex: "male" | "female" | null;
+  email: string | null;
 }
 
 export interface AthleteProfileIn {
   birthdate: string | null;
   height_cm: number | null;
   sex: "male" | "female" | null;
+  email: string | null;
+}
+
+// PUT /settings/password -- self-service password change.
+export interface ChangePasswordIn {
+  current_password: string;
+  new_password: string;
+}
+export interface ChangePasswordOut {
+  success: boolean;
+}
+
+// GET/POST /settings/eufy/status,/login -- the web counterpart of `sync athlete
+// set-eufy-credentials`.
+export interface EufyStatusOut {
+  configured: boolean;
+  email: string | null;
+}
+export interface EufyLoginIn {
+  email: string;
+  password: string;
+  device_id: string;
+  customer_id: string;
+}
+export interface EufyLoginOut {
+  success: boolean;
 }
 
 // GET/POST/DELETE /settings/calendar-feed -- see calendar_feed.py's own module docstring.

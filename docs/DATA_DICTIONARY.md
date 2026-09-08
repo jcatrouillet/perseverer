@@ -63,13 +63,17 @@ Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, pe
   successful completion — the "days since last full Garmin export" health signal
   `perseverer.staleness` nags on past 90 days. `username`/`password_hash`/`api_key_hash`/
   `api_key_created_at` (Phase 5) are nullable — an athlete may have neither, either, or both
-  credential types; provisioned via `sync athlete set-password`/`create-key`, never a
-  self-service UI. See `docs/adr/0008-phase-5-frontend.md`. `birthdate` (ISO date string, like
-  every other `local_date`-shaped column in this schema)/`height_cm`/`sex` ("male"|"female",
-  nullable, validated at the API layer) are optional, settable via `GET/PUT /settings/profile` —
-  used ONLY as inputs to formula-based fallbacks elsewhere (max HR, see the Insights section
-  below; BMR, see the Eufy section below) when there isn't enough empirical/device data yet.
-  They never override or get reconciled against real data once it exists.
+  credential types; the initial username/password is CLI-only (`sync athlete set-password`/
+  `create-key`, never a self-service signup) but an already-logged-in athlete can change their
+  own password via `PUT /settings/password` (verifies the current password first, same
+  lockout-protected check `POST /auth/login` uses). See `docs/adr/0008-phase-5-frontend.md`.
+  `birthdate` (ISO date string, like every other `local_date`-shaped column in this schema)/
+  `height_cm`/`sex` ("male"|"female", nullable, validated at the API layer) are optional,
+  settable via `GET/PUT /settings/profile` — used ONLY as inputs to formula-based fallbacks
+  elsewhere (max HR, see the Insights section below; BMR, see the Eufy section below) when there
+  isn't enough empirical/device data yet. They never override or get reconciled against real
+  data once it exists. `email` (also via `GET/PUT /settings/profile`) is currently inert — stored
+  for a future feature, no consumer reads it yet.
 - **`device`** — one row per distinct `(manufacturer, product, serial_number)` seen in a FIT
   file's `file_id` message. `product` prefers the SDK's friendly name (e.g. `"fr955"`) over
   the raw numeric product code.
@@ -729,8 +733,13 @@ never-auto-login model: there's no evidence Eufy's API shares Garmin's SSO 429-l
 and the sibling project's own plain-env-var pattern has run this exact login flow safely, daily,
 unattended, for months. Storage is now per-athlete: **`athlete_eufy_config`** (one row per
 athlete, upsert — same shape/contract as `athlete_hr_zone_config`) holds `email`/`password`/
-`device_id`/`customer_id`, set via `sync athlete set-eufy-credentials --athlete-id <id>`.
-`adapters/eufy.py::resolve_eufy_credentials` reads that row first; when none exists and the
+`device_id`/`customer_id`, set via `sync athlete set-eufy-credentials --athlete-id <id>` (CLI) or
+`POST /settings/eufy/login` (the Settings page's own Eufy card) — the web path verifies the
+credential against Eufy's own login endpoint before saving, same "don't persist something we
+haven't confirmed works" posture `POST /settings/garmin/login` already has; `device_id`/
+`customer_id` can't be verified this way (only exercised by a real sync), so they're stored as
+given either way. `adapters/eufy.py::resolve_eufy_credentials` reads that row first; when none
+exists and the
 athlete is `DEFAULT_ATHLETE_ID`, it falls back to the original global env vars
 (`PERSEVERER_EUFY_EMAIL`/`_PASSWORD`/`_DEVICE_ID`/`_CUSTOMER_ID`, all optional) — so the original
 single-athlete deployment needed no migration when this became per-athlete; any other athlete

@@ -18,6 +18,28 @@
   width: 9ch;
 }
 
+/* A date picker needs room for the full "MM/DD/YYYY"-shaped value plus the browser's own
+   calendar-icon affordance -- the general 9ch above reads fine for a bpm/pace number but leaves
+   a date input's own text and icon cramped together. */
+.settings-form input[type="date"] {
+  width: 12rem;
+}
+
+/* Groups the Settings page's cards under one labeled section (Profile, External tools, Physical
+   profile, Activities) -- introduced fresh, no prior grouping existed on this page. Member
+   `.card`s are untouched; this only adds a heading and a bigger gap between groups than
+   `.card + .card`'s own within-group spacing. */
+.settings-group + .settings-group {
+  margin-top: var(--space-6);
+}
+
+.settings-group__title {
+  font-size: 1.25rem;
+  margin: 0 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
 .settings-form__error {
   color: var(--color-danger);
   font-size: 13px;
@@ -26,6 +48,10 @@
 .settings-form__saved {
   color: var(--color-success);
   font-size: 13px;
+}
+
+.settings-suggest {
+  margin-bottom: var(--space-3);
 }
 
 .settings-hr-zones__preview {

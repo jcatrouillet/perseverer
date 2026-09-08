@@ -933,13 +933,14 @@ optional, must be positive if given.
 
 ### `GET /settings/profile`
 
-The athlete's optional profile facts (birthdate, height, biological sex). Used only as inputs to
-formula-based fallbacks elsewhere (`GET /performance`'s `max_hr_bpm`, `GET /health/dashboard`'s
-`bmr_kcal`) when there isn't enough empirical/device data yet — never reconciled against or
-overriding real data once it exists. `null` for any field means not set.
+The athlete's optional profile facts (birthdate, height, biological sex, email). birthdate/
+height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (`GET /performance`'s
+`max_hr_bpm`, `GET /health/dashboard`'s `bmr_kcal`) when there isn't enough empirical/device data
+yet — never reconciled against or overriding real data once it exists. `email` is currently inert
+(stored for a future feature). `null` for any field means not set.
 
 **Response `200`:** `AthleteProfileOut` — `birthdate` (string, nullable, ISO date), `height_cm`
-(number, nullable), `sex` (`"male"|"female"`, nullable).
+(number, nullable), `sex` (`"male"|"female"`, nullable), `email` (string, nullable).
 
 ### `PUT /settings/profile`
 
@@ -948,9 +949,46 @@ Replaces the athlete's profile. **A full replacement, not a partial patch**, sam
 
 **Request body** (`AthleteProfileIn`): `birthdate` (string, nullable, ISO date — rejected if in
 the future or implies an age over 120 years), `height_cm` (number, nullable, 50-250), `sex`
-(`"male"|"female"`, nullable) — all optional.
+(`"male"|"female"`, nullable), `email` (string, nullable, a light format check only) — all
+optional.
 
 **Response `200`:** `AthleteProfileOut`. **`422`** — a value fails validation.
+
+### `PUT /settings/password`
+
+Self-service password change. Verifies `current_password` first — the same `is_locked_out`/
+`verify_password`/`record_attempt` sequence `POST /auth/login` uses, so repeated wrong attempts
+lock the athlete's username out the same way a brute-forced login would. Skips that check only
+when the athlete has no password set yet (nothing to verify against). Never changes `username`.
+
+**Request body** (`ChangePasswordIn`): `current_password` (string, required), `new_password`
+(string, required, at least 8 characters).
+
+**Response `200`:** `ChangePasswordOut` — `{"success": true}`. **`400`** — incorrect current
+password, or no username configured yet. **`401`** — too many recent attempts, try again later.
+**`422`** — `new_password` is too short.
+
+### `GET /settings/eufy/status`
+
+Whether the athlete has a Eufy scale account connected. Never carries the password — only the
+configured email, so the athlete can confirm which account is linked.
+
+**Response `200`:** `EufyStatusOut` — `configured` (bool), `email` (string, nullable).
+
+### `POST /settings/eufy/login`
+
+The web counterpart of `sync athlete set-eufy-credentials`. Verifies the credential against
+Eufy's own login endpoint BEFORE saving it, mirroring `POST /settings/garmin/login`'s own "don't
+persist something we haven't confirmed works" posture. `device_id`/`customer_id` can't be
+verified this way (only exercised by a real sync) — stored as given either way. Unlike Garmin,
+the credential is persisted in full (plaintext, same as this project's legacy env-var
+precedent) — Eufy sync needs it again for every future run.
+
+**Request body** (`EufyLoginIn`): `email` (string), `password` (string), `device_id` (string),
+`customer_id` (string) — all required.
+
+**Response `200`:** `EufyLoginOut` — `{"success": true}`. **`400`** — incorrect Eufy email or
+password. **`502`** — could not reach Eufy, try again.
 
 ### `GET /settings/garmin/status`
 

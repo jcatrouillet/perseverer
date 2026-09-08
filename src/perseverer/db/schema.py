@@ -75,6 +75,9 @@ athlete = Table(
     Column("birthdate", String, nullable=True),
     Column("height_cm", Float, nullable=True),
     Column("sex", String, nullable=True),
+    # Inert for now -- stored for a future feature, no consumer reads it yet. Validated at the API
+    # layer (a light regex, not a full RFC 5322 parse) since it isn't used for anything yet.
+    Column("email", String, nullable=True),
 )
 
 # An athlete's own configured HR training zones -- independent of the per-activity, device-

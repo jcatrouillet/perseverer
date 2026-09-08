@@ -16,10 +16,14 @@ from garminconnect import GarminConnectAuthenticationError, GarminConnectTooMany
 from sqlalchemy import Connection, Engine, select
 
 import perseverer.api.routers.settings as settings_router
+from perseverer.adapters.eufy import EufyAuthError, EufyClient
+from perseverer.auth.lockout import MAX_FAILED_ATTEMPTS
+from perseverer.auth.passwords import hash_password
 from perseverer.config import Settings
 from perseverer.db.schema import (
     activity_metric,
     athlete,
+    athlete_eufy_config,
     athlete_hr_zone_config,
     athlete_running_load_config,
     fitness_daily_rollup,
@@ -311,7 +315,7 @@ def test_profile_returns_all_null_when_unconfigured(
 ) -> None:
     r = client.get("/api/v1/settings/profile", headers=auth_headers)
     assert r.status_code == 200
-    assert r.json() == {"birthdate": None, "height_cm": None, "sex": None}
+    assert r.json() == {"birthdate": None, "height_cm": None, "sex": None, "email": None}
 
 
 def test_put_profile_stores_and_returns_the_values(
@@ -319,18 +323,42 @@ def test_put_profile_stores_and_returns_the_values(
 ) -> None:
     r = client.put(
         "/api/v1/settings/profile",
-        json={"birthdate": "1990-01-01", "height_cm": 178.0, "sex": "male"},
+        json={
+            "birthdate": "1990-01-01",
+            "height_cm": 178.0,
+            "sex": "male",
+            "email": "erwan@example.com",
+        },
         headers=auth_headers,
     )
     assert r.status_code == 200
-    assert r.json() == {"birthdate": "1990-01-01", "height_cm": 178.0, "sex": "male"}
+    assert r.json() == {
+        "birthdate": "1990-01-01",
+        "height_cm": 178.0,
+        "sex": "male",
+        "email": "erwan@example.com",
+    }
 
     with engine.connect() as conn:
         row = conn.execute(
-            select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex)
+            select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex, athlete.c.email)
         ).fetchone()
     assert row is not None
-    assert (row.birthdate, row.height_cm, row.sex) == ("1990-01-01", 178.0, "male")
+    assert (row.birthdate, row.height_cm, row.sex, row.email) == (
+        "1990-01-01",
+        178.0,
+        "male",
+        "erwan@example.com",
+    )
+
+
+def test_put_profile_rejects_an_invalid_email(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        "/api/v1/settings/profile", json={"email": "not-an-email"}, headers=auth_headers
+    )
+    assert r.status_code == 422
 
 
 def test_put_profile_rejects_a_future_birthdate(
@@ -357,6 +385,203 @@ def test_put_profile_rejects_invalid_sex(client: TestClient, auth_headers: dict[
 def test_profile_endpoints_require_auth(client: TestClient) -> None:
     assert client.get("/api/v1/settings/profile").status_code in (401, 403)
     assert client.put("/api/v1/settings/profile", json={}).status_code in (401, 403)
+
+
+# --- PUT /settings/password ----------------------------------------------------------------
+
+
+def _set_password(engine: Engine, *, username: str, password: str) -> None:
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.update()
+            .where(athlete.c.id == DEFAULT_ATHLETE_ID)
+            .values(username=username, password_hash=hash_password(password))
+        )
+        conn.commit()
+
+
+def test_change_password_succeeds_with_correct_current_password(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    _set_password(engine, username="jerome", password="old-password")
+    r = client.put(
+        "/api/v1/settings/password",
+        json={"current_password": "old-password", "new_password": "new-password-123"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json() == {"success": True}
+
+    login = client.post(
+        "/api/v1/auth/login", json={"username": "jerome", "password": "new-password-123"}
+    )
+    assert login.status_code == 200
+
+
+def test_change_password_rejects_wrong_current_password(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    _set_password(engine, username="jerome", password="old-password")
+    r = client.put(
+        "/api/v1/settings/password",
+        json={"current_password": "wrong", "new_password": "new-password-123"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 400
+
+
+def test_change_password_rejects_a_too_short_new_password(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    _set_password(engine, username="jerome", password="old-password")
+    r = client.put(
+        "/api/v1/settings/password",
+        json={"current_password": "old-password", "new_password": "short"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+
+
+def test_change_password_allows_a_first_time_set_with_no_existing_password(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # A username with no password_hash yet (e.g. an athlete only ever using a standing API key)
+    # -- nothing to verify the "current" password against, so this must succeed regardless of
+    # what current_password is sent.
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.update().where(athlete.c.id == DEFAULT_ATHLETE_ID).values(username="jerome")
+        )
+        conn.commit()
+    r = client.put(
+        "/api/v1/settings/password",
+        json={"current_password": "anything", "new_password": "new-password-123"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+
+
+def test_change_password_locks_out_after_max_failed_attempts(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    _set_password(engine, username="jerome", password="old-password")
+    for _ in range(MAX_FAILED_ATTEMPTS):
+        r = client.put(
+            "/api/v1/settings/password",
+            json={"current_password": "wrong", "new_password": "new-password-123"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 400
+
+    # The next attempt is locked out even with the CORRECT current password.
+    r = client.put(
+        "/api/v1/settings/password",
+        json={"current_password": "old-password", "new_password": "new-password-123"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 401
+
+
+def test_change_password_requires_auth(client: TestClient) -> None:
+    r = client.put(
+        "/api/v1/settings/password",
+        json={"current_password": "x", "new_password": "new-password-123"},
+    )
+    assert r.status_code in (401, 403)
+
+
+# --- GET/POST /settings/eufy/status,/login --------------------------------------------------
+
+
+def test_eufy_status_not_configured_by_default(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/settings/eufy/status", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {"configured": False, "email": None}
+
+
+def test_eufy_login_success_stores_credentials_and_updates_status(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(EufyClient, "login", lambda self: None)
+    r = client.post(
+        "/api/v1/settings/eufy/login",
+        json={
+            "email": "me@example.com",
+            "password": "hunter2",
+            "device_id": "dev-1",
+            "customer_id": "cust-1",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json() == {"success": True}
+
+    with engine.connect() as conn:
+        row = conn.execute(select(athlete_eufy_config)).fetchone()
+    assert row is not None
+    assert (row.email, row.password, row.device_id, row.customer_id) == (
+        "me@example.com",
+        "hunter2",
+        "dev-1",
+        "cust-1",
+    )
+
+    status = client.get("/api/v1/settings/eufy/status", headers=auth_headers)
+    assert status.json() == {"configured": True, "email": "me@example.com"}
+
+
+def test_eufy_login_upserts_a_second_time_rather_than_duplicating(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(EufyClient, "login", lambda self: None)
+    for device_id in ("dev-1", "dev-2"):
+        client.post(
+            "/api/v1/settings/eufy/login",
+            json={
+                "email": "me@example.com",
+                "password": "hunter2",
+                "device_id": device_id,
+                "customer_id": "cust-1",
+            },
+            headers=auth_headers,
+        )
+    with engine.connect() as conn:
+        rows = conn.execute(select(athlete_eufy_config)).fetchall()
+    assert len(rows) == 1
+    assert rows[0].device_id == "dev-2"
+
+
+def test_eufy_login_wrong_credentials_returns_400_not_401(
+    client: TestClient, auth_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def raise_auth_error(self: object) -> None:
+        raise EufyAuthError("bad credentials")
+
+    monkeypatch.setattr(EufyClient, "login", raise_auth_error)
+    r = client.post(
+        "/api/v1/settings/eufy/login",
+        json={
+            "email": "me@example.com",
+            "password": "wrong",
+            "device_id": "dev-1",
+            "customer_id": "cust-1",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 400
+
+
+def test_eufy_endpoints_require_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/settings/eufy/status").status_code in (401, 403)
+    assert client.post("/api/v1/settings/eufy/login", json={}).status_code in (401, 403)
 
 
 # --- GET /settings/garmin/status ----------------------------------------------------------
