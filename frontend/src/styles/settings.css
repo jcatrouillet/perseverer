@@ -41,8 +41,16 @@
   font-size: 13px;
 }
 
+/* The suggested-value line above the HR-zones/threshold-pace forms -- shows what a click on the
+   button would actually fill in, not just an opaque "Use suggested values" label. */
 .settings-suggest {
-  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: 13px;
+  color: var(--color-text-muted);
 }
 
 .settings-hr-zones__preview {

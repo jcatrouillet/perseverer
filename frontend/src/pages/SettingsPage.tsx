@@ -257,6 +257,15 @@ export function SettingsPage() {
   const suggestedRestingHr = restingHrMetric?.daily.at(-1)?.value_last ?? null;
   const hasHrSuggestion =
     suggestedMaxHr != null || suggestedThresholdHr != null || suggestedRestingHr != null;
+  // Shown alongside the button itself, not just on it -- the user should see what a click would
+  // actually fill in before committing to it, not just an opaque "Use suggested values" label.
+  const hrSuggestionLabel = [
+    suggestedMaxHr != null && `Max HR ${Math.round(suggestedMaxHr)} bpm`,
+    suggestedThresholdHr != null && `Threshold HR ${Math.round(suggestedThresholdHr)} bpm`,
+    suggestedRestingHr != null && `Resting HR ${Math.round(suggestedRestingHr)} bpm`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   function applySuggestedHrValues() {
     if (suggestedMaxHr != null) setMaxHr(toInputValue(Math.round(suggestedMaxHr)));
@@ -464,13 +473,12 @@ export function SettingsPage() {
               activity's own device-reported zones.
             </p>
             {hasHrSuggestion && (
-              <button
-                type="button"
-                className="button settings-suggest"
-                onClick={applySuggestedHrValues}
-              >
-                Use suggested values
-              </button>
+              <p className="settings-suggest">
+                Suggested: {hrSuggestionLabel}{" "}
+                <button type="button" className="button" onClick={applySuggestedHrValues}>
+                  Use suggested values
+                </button>
+              </p>
             )}
             <form
               className="settings-form"
@@ -560,13 +568,16 @@ export function SettingsPage() {
               sport.
             </p>
             {suggestedThresholdPace != null && (
-              <button
-                type="button"
-                className="button settings-suggest"
-                onClick={() => setThresholdPaceText(formatPaceInput(suggestedThresholdPace))}
-              >
-                Use suggested value
-              </button>
+              <p className="settings-suggest">
+                Suggested: {formatPaceInput(suggestedThresholdPace)} /km{" "}
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => setThresholdPaceText(formatPaceInput(suggestedThresholdPace))}
+                >
+                  Use suggested value
+                </button>
+              </p>
             )}
             <form
               className="settings-form"
