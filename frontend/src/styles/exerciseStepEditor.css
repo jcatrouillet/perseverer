@@ -98,8 +98,21 @@
   color: var(--color-text-muted);
 }
 
-.exercise-step-editor__remove {
+/* Groups move-up/move-down/remove at the end of a row (standalone exercise/rest) or a set's own
+   head row -- one cluster pushed to the right, rather than margin-left:auto on Remove alone
+   leaving the move buttons stranded mid-row wherever they fall in normal flex flow. */
+.exercise-step-editor__row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   margin-left: auto;
+}
+
+/* Compact -- these sit right next to each other and next to Remove, not spread across the row
+   the way every other control here is. */
+.exercise-step-editor__move {
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
 }
 
 /* Wraps one entry's own controls row plus its comment input below, so they read as one unit

@@ -303,12 +303,18 @@ function ExerciseEntryRow({
   entry,
   onUpdate,
   onRemove,
+  onMoveUp,
+  onMoveDown,
   pickerOpenFor,
   setPickerOpenFor,
 }: {
   entry: ExerciseEntry;
   onUpdate: (patch: Partial<ExerciseEntry>) => void;
   onRemove: () => void;
+  /** Omitted (not just a no-op) at whichever end of its own list this entry is already at, so
+   * the button can be disabled there instead of silently doing nothing. */
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   pickerOpenFor: number | null;
   setPickerOpenFor: (key: number | null) => void;
 }) {
@@ -435,9 +441,31 @@ function ExerciseEntryRow({
           </>
         )}
 
-        <button type="button" className="button exercise-step-editor__remove" onClick={onRemove}>
-          Remove
-        </button>
+        <div className="exercise-step-editor__row-actions">
+          <button
+            type="button"
+            className="button exercise-step-editor__move"
+            onClick={onMoveUp}
+            disabled={onMoveUp == null}
+            aria-label="Move up"
+            title="Move up"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="button exercise-step-editor__move"
+            onClick={onMoveDown}
+            disabled={onMoveDown == null}
+            aria-label="Move down"
+            title="Move down"
+          >
+            ↓
+          </button>
+          <button type="button" className="button" onClick={onRemove}>
+            Remove
+          </button>
+        </div>
       </div>
       <input
         className="input exercise-step-editor__comment"
@@ -482,6 +510,34 @@ export function ExerciseStepEditor({
     updateAt(index, { type: "group", group: { ...group, entries } });
   }
 
+  // Reordering a standalone exercise/rest or a whole set among its siblings -- step_index is
+  // assigned purely by array position at save time (itemsToApiSteps), so swapping two entries
+  // here is the entire feature; nothing else in the wire format needs to change.
+  function moveItemAt(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= items.length) return;
+    const next = [...items];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    onChange(next);
+  }
+
+  // Same idea, one level down: reordering exercises/rests within one set.
+  function moveGroupEntryAt(
+    index: number,
+    group: ExerciseGroup,
+    entryIndex: number,
+    direction: -1 | 1,
+  ) {
+    const target = entryIndex + direction;
+    if (target < 0 || target >= group.entries.length) return;
+    const nextEntries = [...group.entries];
+    [nextEntries[entryIndex], nextEntries[target]] = [
+      nextEntries[target]!,
+      nextEntries[entryIndex]!,
+    ];
+    updateGroupEntries(index, group, nextEntries);
+  }
+
   return (
     <div className="exercise-step-editor">
       {items.map((item, index) =>
@@ -493,6 +549,8 @@ export function ExerciseStepEditor({
               updateAt(index, { type: "entry", entry: { ...item.entry, ...patch } })
             }
             onRemove={() => removeAt(index)}
+            onMoveUp={index > 0 ? () => moveItemAt(index, -1) : undefined}
+            onMoveDown={index < items.length - 1 ? () => moveItemAt(index, 1) : undefined}
             pickerOpenFor={pickerOpenFor}
             setPickerOpenFor={setPickerOpenFor}
           />
@@ -528,16 +586,34 @@ export function ExerciseStepEditor({
                   })
                 }
               />
-              <button
-                type="button"
-                className="button exercise-step-editor__remove"
-                onClick={() => removeAt(index)}
-              >
-                Remove set
-              </button>
+              <div className="exercise-step-editor__row-actions">
+                <button
+                  type="button"
+                  className="button exercise-step-editor__move"
+                  onClick={() => moveItemAt(index, -1)}
+                  disabled={index === 0}
+                  aria-label="Move set up"
+                  title="Move set up"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="button exercise-step-editor__move"
+                  onClick={() => moveItemAt(index, 1)}
+                  disabled={index === items.length - 1}
+                  aria-label="Move set down"
+                  title="Move set down"
+                >
+                  ↓
+                </button>
+                <button type="button" className="button" onClick={() => removeAt(index)}>
+                  Remove set
+                </button>
+              </div>
             </div>
 
-            {item.group.entries.map((entry) => (
+            {item.group.entries.map((entry, entryIndex) => (
               <ExerciseEntryRow
                 key={entry.key}
                 entry={entry}
@@ -554,6 +630,16 @@ export function ExerciseStepEditor({
                     item.group,
                     item.group.entries.filter((e) => e.key !== entry.key),
                   )
+                }
+                onMoveUp={
+                  entryIndex > 0
+                    ? () => moveGroupEntryAt(index, item.group, entryIndex, -1)
+                    : undefined
+                }
+                onMoveDown={
+                  entryIndex < item.group.entries.length - 1
+                    ? () => moveGroupEntryAt(index, item.group, entryIndex, 1)
+                    : undefined
                 }
                 pickerOpenFor={pickerOpenFor}
                 setPickerOpenFor={setPickerOpenFor}
