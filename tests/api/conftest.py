@@ -28,6 +28,15 @@ from perseverer.db.schema import activity, athlete, metadata
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 TEST_API_KEY = "test-api-key"
+# Explicit, not left to ambient env/.env resolution -- Settings(...) still falls through to real
+# environment variables/.env for any field not passed here (see config.py's own
+# settings_customise_sources), so a developer's own local .env (this project's repo-root .env
+# commonly sets a real PERSEVERER_JWT_SECRET for live dev-server testing) could silently make a
+# test pass locally that fails in CI's clean environment, where no .env exists at all. Confirmed
+# the hard way: a login-after-password-change test 503'd in CI (jwt_secret resolved to None)
+# while passing locally. Every test using the shared `client` fixture gets a real secret now, so
+# this can never happen again for any test that happens to touch JWT-issuing endpoints.
+TEST_JWT_SECRET = "test-jwt-secret"
 
 
 @pytest.fixture
@@ -55,7 +64,7 @@ def duckdb_con(tmp_path: Path, engine: Engine) -> duckdb.DuckDBPyConnection:
 
 @pytest.fixture
 def test_settings(tmp_path: Path) -> Settings:
-    return Settings(data_dir=tmp_path, api_key=TEST_API_KEY)
+    return Settings(data_dir=tmp_path, api_key=TEST_API_KEY, jwt_secret=TEST_JWT_SECRET)
 
 
 @pytest.fixture
