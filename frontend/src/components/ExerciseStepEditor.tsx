@@ -52,17 +52,30 @@ export function preloadExerciseCatalog(): Promise<ExerciseCatalogEntry[]> {
   return catalogPromise;
 }
 
+// Lower is more relevant. Without this, a plain, simple exercise (e.g. "Squat", the bare
+// category with no specific variant -- Garmin's own connect.garmin.com/app/exercises/SQUAT/SQUAT)
+// could never appear for its own obvious query: every category's specific variants also carry
+// that category's label (e.g. all ~100 SQUAT-category entries have categoryLabel "Squat"), so a
+// plain substring match against a 1,527-entry catalog puts well over MAX_RESULTS entries in a
+// three-way tie for "squat" -- confirmed live, where the bare "Squat" entry ranked 95th and
+// never reached the (then-unordered) top 20. Ranking exact/prefix name matches first fixes this
+// without dropping the broader "search by category" behavior category-label matches provide.
+function matchRank(entry: ExerciseCatalogEntry, q: string): number {
+  const name = entry.name.toLowerCase();
+  if (name === q) return 0;
+  if (name.startsWith(q)) return 1;
+  if (name.includes(q)) return 2;
+  return 3; // categoryLabel-only match -- caller already filtered to a real match of some kind
+}
+
 export function searchExerciseCatalog(query: string): ExerciseCatalogEntry[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2 || catalog == null) return [];
-  const results: ExerciseCatalogEntry[] = [];
-  for (const entry of catalog) {
-    if (entry.name.toLowerCase().includes(q) || entry.categoryLabel.toLowerCase().includes(q)) {
-      results.push(entry);
-      if (results.length >= MAX_RESULTS) break;
-    }
-  }
-  return results;
+  const matches = catalog.filter(
+    (entry) => entry.name.toLowerCase().includes(q) || entry.categoryLabel.toLowerCase().includes(q),
+  );
+  matches.sort((a, b) => matchRank(a, q) - matchRank(b, q));
+  return matches.slice(0, MAX_RESULTS);
 }
 
 /** The catalog's own display name for an already-picked (category, exerciseName) pair -- used to

@@ -64,6 +64,14 @@ describe("searchExerciseCatalog", () => {
       true,
     );
   });
+
+  it("ranks an exact name match first even when far more entries match only by category label", () => {
+    // "Squat" -- the bare category with no specific variant (Garmin's own
+    // connect.garmin.com/app/exercises/SQUAT/SQUAT) -- must not get buried behind the ~100 other
+    // SQUAT-category entries that also match this query only via categoryLabel.
+    const results = searchExerciseCatalog("squat");
+    expect(results[0]).toMatchObject({ name: "Squat", category: "SQUAT" });
+  });
 });
 
 describe("itemsToApiSteps", () => {
