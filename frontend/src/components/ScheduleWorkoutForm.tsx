@@ -10,17 +10,19 @@
 // (ExerciseStepEditor) -- the athlete's own choice over a simpler placeholder or a free-text
 // syntax. All of these push to Garmin -- "fitness" (no structured syntax and no placeholder
 // builder either) was dropped from the sport list entirely rather than kept as a dead option.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
+  useCompletePlannedWorkout,
   useCreatePlannedWorkout,
   useCreateRecurringPlannedWorkouts,
   useDeletePlannedWorkout,
   usePlannedWorkoutsForDate,
   usePushPlannedWorkout,
+  useUncompletePlannedWorkout,
   useUpdatePlannedWorkout,
 } from "../api/queries";
-import type { PlannedWorkoutOut } from "../api/types";
+import type { PlannedWorkoutOut, PlannedWorkoutStepOut } from "../api/types";
 import {
   apiStepsToItems,
   estimateItemsDurationS,
@@ -29,7 +31,14 @@ import {
   preloadExerciseCatalog,
   type ExerciseItem,
 } from "./ExerciseStepEditor";
-import { formatStepDurationLabel, groupWorkoutStepsForDisplay, plannedCadenceLabel, plannedTargetLabel } from "../workoutSteps";
+import {
+  formatStepDurationLabel,
+  groupWorkoutStepsForDisplay,
+  plannedCadenceLabel,
+  plannedExerciseLabel,
+  plannedTargetLabel,
+  type WorkoutDisplayGroup,
+} from "../workoutSteps";
 import { parsedStepToApiShape, parseWorkoutSyntax } from "../workoutSyntax";
 import { copyWorkoutToClipboard, readWorkoutClipboard } from "../workoutClipboard";
 import { Icon } from "./Icon";
@@ -69,6 +78,74 @@ function statusLabel(status: PlannedWorkoutOut["push_status"]): string {
   return "Draft";
 }
 
+// The Warmup/5x[...]/Cooldown step list -- shared by the running text-syntax editor's own live
+// parse preview (below) and WorkoutSummary's read-only step detail (also used for hiit/
+// strength_training there, isExercise=true prefixing each line with its exercise name and
+// appending its weight, since those steps carry no target/cadence of their own to show
+// instead). One renderer, so the live preview and the saved-workout summary can never drift
+// apart in how they format the same step.
+function WorkoutStepGroups({
+  groups,
+  isExercise,
+  footer,
+}: {
+  groups: WorkoutDisplayGroup<PlannedWorkoutStepOut>[];
+  isExercise: boolean;
+  /** Rendered inside the same bordered box, after the groups -- e.g. the live-edit form's own
+   * "Estimated duration" note, which only applies while actively typing/previewing. */
+  footer?: ReactNode;
+}) {
+  if (groups.length === 0) return null;
+  return (
+    <div className="planned-workout-form__preview">
+      {groups.map((g, i) => (
+        <div key={i} className="planned-workout-form__preview-group">
+          <strong>{g.label}</strong>
+          <ul>
+            {g.steps.map((s, j) => (
+              <li key={j}>
+                {isExercise && `${plannedExerciseLabel(s)} `}
+                {formatStepDurationLabel(s)}
+                {plannedTargetLabel(s) ? ` @ ${plannedTargetLabel(s)}` : ""}
+                {plannedCadenceLabel(s) ? ` · ${plannedCadenceLabel(s)}` : ""}
+                {isExercise && s.weight_kg ? ` @ ${s.weight_kg}kg` : ""}
+                {s.comment ? ` — ${s.comment}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {footer}
+    </div>
+  );
+}
+
+// Sports with no structured syntax at all -- just a name, a duration, and a time of day. Mirrors
+// planned_workouts.py::PLACEHOLDER_SPORTS exactly. Declared here (ahead of its first use in
+// WorkoutSummary) since the later, form-scoped declaration below is for the editing form only.
+const DETAIL_PLACEHOLDER_SPORTS = new Set(["yoga", "bouldering"]);
+const DETAIL_EXERCISE_SPORTS = new Set(["hiit", "strength_training"]);
+
+/** Read-only step-by-step detail for a saved workout -- running and hiit/strength_training via
+ * the shared WorkoutStepGroups grouping above (steps arrive structured either way, see
+ * db/schema.py::planned_workout_step's own docstring); yoga/bouldering have no structured steps
+ * at all, so their own freeform source_text notes are shown verbatim instead. Absent entirely
+ * for a workout with nothing to show (no steps, no notes). */
+function WorkoutDetails({ workout }: { workout: ScheduledWorkout }) {
+  if (workout.sport == null) return null;
+  if (DETAIL_PLACEHOLDER_SPORTS.has(workout.sport)) {
+    if (!workout.source_text) return null;
+    return <p className="chart-note planned-workout__notes">{workout.source_text}</p>;
+  }
+  if (workout.steps.length === 0) return null;
+  return (
+    <WorkoutStepGroups
+      groups={groupWorkoutStepsForDisplay(workout.steps)}
+      isExercise={DETAIL_EXERCISE_SPORTS.has(workout.sport)}
+    />
+  );
+}
+
 function formatDurationMinutes(estimatedDurationS: number | null): string | null {
   if (estimatedDurationS == null || estimatedDurationS <= 0) return null;
   return `${Math.round(estimatedDurationS / 60)} min`;
@@ -77,8 +154,11 @@ function formatDurationMinutes(estimatedDurationS: number | null): string | null
 function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
   const del = useDeletePlannedWorkout();
   const push = usePushPlannedWorkout();
+  const complete = useCompletePlannedWorkout();
+  const uncomplete = useUncompletePlannedWorkout();
   const duration = formatDurationMinutes(workout.estimated_duration_s);
   const [copied, setCopied] = useState(false);
+  const isDone = workout.completed_at != null;
 
   function handleCopy() {
     copyWorkoutToClipboard({
@@ -104,6 +184,9 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
         <span className={`planned-workout__status planned-workout__status--${workout.push_status}`}>
           {statusLabel(workout.push_status)}
         </span>
+        {isDone && (
+          <span className="planned-workout__status planned-workout__status--completed">Done</span>
+        )}
       </div>
       {(workout.scheduled_time || duration) && (
         <p className="chart-note">
@@ -113,6 +196,7 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
         </p>
       )}
       <WorkoutLoadBar workout={workout} />
+      <WorkoutDetails workout={workout} />
       {workout.push_error && (
         <p className="chart-note" role="alert">
           {workout.push_error}
@@ -129,6 +213,14 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
             {push.isPending ? "Pushing…" : "Push to Garmin"}
           </button>
         )}
+        <button
+          type="button"
+          className="button"
+          onClick={() => (isDone ? uncomplete.mutate(workout.id) : complete.mutate(workout.id))}
+          disabled={complete.isPending || uncomplete.isPending}
+        >
+          {isDone ? "Mark as not done" : "Mark as done"}
+        </button>
         <button type="button" className="button" onClick={handleCopy}>
           {copied ? "Copied — paste it on another day" : "Copy"}
         </button>
@@ -409,30 +501,17 @@ function WorkoutEditForm({
             </ul>
           )}
 
-          {groups.length > 0 && (
-            <div className="planned-workout-form__preview">
-              {groups.map((g, i) => (
-                <div key={i} className="planned-workout-form__preview-group">
-                  <strong>{g.label}</strong>
-                  <ul>
-                    {g.steps.map((s, j) => (
-                      <li key={j}>
-                        {formatStepDurationLabel(s)}
-                        {plannedTargetLabel(s) ? ` @ ${plannedTargetLabel(s)}` : ""}
-                        {plannedCadenceLabel(s) ? ` · ${plannedCadenceLabel(s)}` : ""}
-                        {s.comment ? ` — ${s.comment}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-              {preview && (
+          <WorkoutStepGroups
+            groups={groups}
+            isExercise={false}
+            footer={
+              preview && (
                 <p className="chart-note">
                   Estimated duration: {Math.round(preview.estimatedDurationS / 60)} min
                 </p>
-              )}
-            </div>
-          )}
+              )
+            }
+          />
         </>
       )}
 

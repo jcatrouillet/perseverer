@@ -1028,6 +1028,30 @@ export function usePushPlannedWorkout() {
   });
 }
 
+// The athlete's own manual "I did this" marker -- independent of push_status entirely, so it
+// works even for a workout never pushed to (or recorded by) Garmin at all.
+export function useCompletePlannedWorkout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (workoutId: number) =>
+      apiPost<PlannedWorkoutOut>(`/api/v1/planned-workouts/${workoutId}/complete`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-workouts"] });
+    },
+  });
+}
+
+export function useUncompletePlannedWorkout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (workoutId: number) =>
+      apiPost<PlannedWorkoutOut>(`/api/v1/planned-workouts/${workoutId}/uncomplete`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-workouts"] });
+    },
+  });
+}
+
 export interface RecurringPlannedWorkoutInput {
   local_date: string;
   sport: string;

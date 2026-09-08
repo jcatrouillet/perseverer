@@ -2,9 +2,11 @@
 a day can hold any number of workouts, so there's no date-keyed single-object route any more),
 GET /planned-workouts/by-date/{local_date} (every workout on one date), GET /planned-workouts
 (date-range summary list for the calendar grid), POST /planned-workouts/{workout_id}/push,
-POST /planned-workouts/recurring -- scheduled (future) workouts authored on the calendar and
-pushed to the Garmin watch. See db/schema.py::planned_workout for the storage shape,
-workout_syntax.py for the text syntax, and planned_workouts.py for the parse/save/push
+POST /planned-workouts/{workout_id}/complete and .../uncomplete (the athlete's own manual
+completion marker, independent of push_status -- see db/schema.py::planned_workout's own
+docstring), POST /planned-workouts/recurring -- scheduled (future) workouts authored on the
+calendar and pushed to the Garmin watch. See db/schema.py::planned_workout for the storage
+shape, workout_syntax.py for the text syntax, and planned_workouts.py for the parse/save/push
 orchestration this router stays a thin layer over (same balance goals.py/api/routers/goals.py
 already strikes).
 """
@@ -12,7 +14,7 @@ already strikes).
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -212,6 +214,7 @@ def _to_out(
         garmin_scheduled_at=row.garmin_scheduled_at.isoformat()
         if row.garmin_scheduled_at
         else None,
+        completed_at=row.completed_at.isoformat() if row.completed_at else None,
         estimated_distance_m=estimate.distance_m if estimate is not None else None,
         estimated_load=estimate.load if estimate is not None else None,
         segments=[
@@ -398,6 +401,49 @@ def delete_planned_workout(
     )
     conn.execute(planned_workout.delete().where(planned_workout.c.id == row.id))
     conn.commit()
+
+
+def _set_completed(
+    conn: Connection, athlete_id: str, workout_id: int, completed_at: datetime | None
+) -> PlannedWorkoutOut:
+    existing = conn.execute(
+        select(planned_workout.c.id).where(
+            planned_workout.c.id == workout_id, planned_workout.c.athlete_id == athlete_id
+        )
+    ).fetchone()
+    if existing is None:
+        raise HTTPException(status_code=404, detail="planned workout not found")
+    conn.execute(
+        planned_workout.update()
+        .where(planned_workout.c.id == workout_id)
+        .values(completed_at=completed_at)
+    )
+    conn.commit()
+    return _fetch_full_out(conn, athlete_id, workout_id)
+
+
+@router.post("/planned-workouts/{workout_id}/complete")
+def post_complete_planned_workout(
+    workout_id: int,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> PlannedWorkoutOut:
+    """The athlete's own manual "I did this" marker -- entirely independent of push_status, so
+    it works for a workout that was never pushed (or failed to push) at all: a manual session, a
+    watch that didn't record, or just checking off the plan. No link to any recorded `activity`
+    row -- this app has no automatic planned-vs-recorded matching, completion is a separate,
+    athlete-asserted fact. Idempotent: calling this again just refreshes completed_at to now."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    return _set_completed(conn, athlete_id, workout_id, now)
+
+
+@router.post("/planned-workouts/{workout_id}/uncomplete")
+def post_uncomplete_planned_workout(
+    workout_id: int,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> PlannedWorkoutOut:
+    return _set_completed(conn, athlete_id, workout_id, None)
 
 
 @router.post("/planned-workouts/{workout_id}/push")

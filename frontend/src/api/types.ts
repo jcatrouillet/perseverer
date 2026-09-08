@@ -542,6 +542,10 @@ export interface PlannedWorkoutOut {
   push_error: string | null;
   garmin_workout_id: number | null;
   garmin_scheduled_at: string | null;
+  // The athlete's own manual "I did this" marker, set/cleared via POST .../complete and
+  // .../uncomplete -- independent of push_status (a workout can be completed with no Garmin
+  // record of it at all).
+  completed_at: string | null;
   // running only (planned_workout_stats.py) -- always null/empty for every other sport, and for
   // running itself when the athlete hasn't configured a running-load threshold pace yet
   // (estimated_load only; distance/duration/segments still populate from the steps alone).

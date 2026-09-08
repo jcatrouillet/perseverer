@@ -1,14 +1,39 @@
 import { describe, expect, it } from "vitest";
 
-import type { ActivityWorkoutStepOut } from "./api/types";
+import type { ActivityWorkoutStepOut, PlannedWorkoutStepOut } from "./api/types";
 import {
   estimatedStepDistanceM,
   expandWorkoutSteps,
   formatStepDistanceKm,
   formatStepDurationLabel,
   groupWorkoutStepsForDisplay,
+  plannedExerciseLabel,
   targetPaceRangeLabel,
 } from "./workoutSteps";
+
+function plannedStep(overrides: Partial<PlannedWorkoutStepOut>): PlannedWorkoutStepOut {
+  return {
+    step_index: 0,
+    duration_type: null,
+    duration_time_s: null,
+    duration_distance_m: null,
+    target_type: null,
+    target_low: null,
+    target_high: null,
+    target_hr_zone: null,
+    cadence_low: null,
+    cadence_high: null,
+    intensity: null,
+    repeat_from_step: null,
+    repeat_count: null,
+    duration_reps: null,
+    exercise_category: null,
+    exercise_name: null,
+    weight_kg: null,
+    comment: null,
+    ...overrides,
+  };
+}
 
 // Direct transcription of a real structured-workout FIT file (a warmup, a 5x-repeated [1km
 // interval, 75s recovery] block, and a cooldown, each with a target pace range) -- see
@@ -172,5 +197,39 @@ describe("formatStepDurationLabel", () => {
 
   it("returns null for a step with neither a time nor a distance duration", () => {
     expect(formatStepDurationLabel(REPEAT)).toBeNull();
+  });
+
+  it("shows a hiit/strength_training reps-based step's own rep count", () => {
+    expect(
+      formatStepDurationLabel(plannedStep({ duration_type: "reps", duration_reps: 10 })),
+    ).toBe("10 reps");
+  });
+
+  it("returns null for a reps-type step missing its own duration_reps", () => {
+    expect(formatStepDurationLabel(plannedStep({ duration_type: "reps" }))).toBeNull();
+  });
+});
+
+describe("plannedExerciseLabel", () => {
+  it("prefers the specific exercise_name over the bare category", () => {
+    expect(
+      plannedExerciseLabel(
+        plannedStep({ exercise_category: "CURL", exercise_name: "HAMMER_CURL" }),
+      ),
+    ).toBe("Hammer Curl");
+  });
+
+  it("falls back to the category when exercise_name is the empty string", () => {
+    expect(
+      plannedExerciseLabel(plannedStep({ exercise_category: "BENCH_PRESS", exercise_name: "" })),
+    ).toBe("Bench Press");
+  });
+
+  it("labels a rest step as Rest even with no exercise fields at all", () => {
+    expect(plannedExerciseLabel(plannedStep({ intensity: "rest" }))).toBe("Rest");
+  });
+
+  it("falls back to a generic 'Exercise' label when nothing at all is set", () => {
+    expect(plannedExerciseLabel(plannedStep({}))).toBe("Exercise");
   });
 });

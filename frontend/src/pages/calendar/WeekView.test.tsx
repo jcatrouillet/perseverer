@@ -58,6 +58,7 @@ const RUNNING_WORKOUT: PlannedWorkoutOut = {
   push_error: null,
   garmin_workout_id: null,
   garmin_scheduled_at: null,
+  completed_at: null,
   estimated_distance_m: 2000,
   estimated_load: 30,
   segments: [{ duration_s: 600, zone: 2 }],

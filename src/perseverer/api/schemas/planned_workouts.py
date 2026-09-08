@@ -138,6 +138,10 @@ class PlannedWorkoutOut(BaseModel):
     push_error: str | None = None
     garmin_workout_id: int | None = None
     garmin_scheduled_at: str | None = None
+    # The athlete's own manual "I did this" marker, set/cleared via POST .../complete and
+    # .../uncomplete -- independent of push_status, see db/schema.py::planned_workout's own
+    # docstring for why (a workout can be completed with no Garmin record of it at all).
+    completed_at: str | None = None
     # running only (planned_workout_stats.py) -- always null/empty for every other sport, and
     # for running itself when the athlete hasn't configured a running-load threshold pace yet
     # (estimated_load only; distance/duration/segments still populate from the steps alone).

@@ -10,6 +10,8 @@ const mockCreate = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 const mockPush = vi.fn();
+const mockComplete = vi.fn();
+const mockUncomplete = vi.fn();
 const mockRecurring = vi.fn();
 
 vi.mock("../api/queries", () => ({
@@ -18,6 +20,8 @@ vi.mock("../api/queries", () => ({
   useUpdatePlannedWorkout: () => ({ mutate: mockUpdate, isPending: false }),
   useDeletePlannedWorkout: () => ({ mutate: mockDelete, isPending: false }),
   usePushPlannedWorkout: () => ({ mutate: mockPush, isPending: false }),
+  useCompletePlannedWorkout: () => ({ mutate: mockComplete, isPending: false }),
+  useUncompletePlannedWorkout: () => ({ mutate: mockUncomplete, isPending: false }),
   useCreateRecurringPlannedWorkouts: () => ({
     mutate: mockRecurring,
     isPending: false,
@@ -67,6 +71,7 @@ const SCHEDULED: PlannedWorkoutOut = {
   push_error: null,
   garmin_workout_id: null,
   garmin_scheduled_at: null,
+  completed_at: null,
   estimated_distance_m: null,
   estimated_load: null,
   segments: [],
@@ -230,6 +235,87 @@ describe("ScheduleWorkoutForm", () => {
     expect(screen.getByText("Push to Garmin")).toBeInTheDocument();
     expect(screen.getByText(/18:30/)).toBeInTheDocument();
     expect(screen.getByText(/45 min/)).toBeInTheDocument();
+  });
+
+  it("shows a Mark as done button and calls the complete mutation with the workout's id", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(withOne(SCHEDULED));
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.queryByText("Done")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Mark as done"));
+
+    expect(mockComplete).toHaveBeenCalledWith(1);
+  });
+
+  it("shows a Done badge and a Mark as not done button once completed_at is set", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(
+      withOne({ ...SCHEDULED, completed_at: "2026-09-01T12:00:00" }),
+    );
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.getByText("Done")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Mark as not done"));
+
+    expect(mockUncomplete).toHaveBeenCalledWith(1);
+  });
+
+  it("shows the running workout's steps as read-only text detail", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(withOne(SCHEDULED));
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.getByText("Warmup")).toBeInTheDocument();
+    expect(screen.getByText("10m")).toBeInTheDocument();
+  });
+
+  it("shows a hiit workout's steps as read-only text detail, exercise name included", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(
+      withOne({
+        ...SCHEDULED,
+        sport: "hiit",
+        source_text: null,
+        steps: [
+          {
+            step_index: 0,
+            duration_type: "reps",
+            duration_time_s: null,
+            duration_distance_m: null,
+            target_type: null,
+            target_low: null,
+            target_high: null,
+            target_hr_zone: null,
+            cadence_low: null,
+            cadence_high: null,
+            intensity: "active",
+            repeat_from_step: null,
+            repeat_count: null,
+            duration_reps: 10,
+            exercise_category: "BENCH_PRESS",
+            exercise_name: "",
+            weight_kg: 60,
+            comment: null,
+          },
+        ],
+      }),
+    );
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.getByText(/Bench Press/)).toBeInTheDocument();
+    expect(screen.getByText(/10 reps/)).toBeInTheDocument();
+    expect(screen.getByText(/60kg/)).toBeInTheDocument();
+  });
+
+  it("shows a yoga workout's own notes as read-only text detail", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(
+      withOne({
+        ...SCHEDULED,
+        sport: "yoga",
+        source_text: "Bring the good mat",
+        steps: [],
+      }),
+    );
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.getByText("Bring the good mat")).toBeInTheDocument();
   });
 
   it("shows more than one workout on the same date, each with its own actions", () => {

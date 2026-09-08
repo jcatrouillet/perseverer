@@ -184,13 +184,21 @@ interface DurationStepLike {
   duration_type: string | null;
   duration_time_s: number | null;
   duration_distance_m: number | null;
+  // hiit/strength_training only ("reps" duration_type) -- absent from ActivityWorkoutStepOut
+  // entirely, hence optional: a recorded step never has this, only an authored planned one.
+  duration_reps?: number | null;
 }
 
-/** "15m" / "75s" -- Garmin's own convention, confirmed against real figures: an exact multiple
- * of 60s is shown in minutes (900s -> "15m", 600s -> "10m"), anything else in raw seconds (75s
- * stays "75s", not "1m15s" or "1.25m"). Generalized (see WorkoutStepLike above) so the planned-
- * workout schedule form's own preview reuses this rather than a second duration formatter. */
+/** "15m" / "75s" / "10 reps" -- Garmin's own convention for time (confirmed against real
+ * figures: an exact multiple of 60s is shown in minutes, 900s -> "15m", 600s -> "10m"; anything
+ * else in raw seconds, 75s stays "75s", not "1m15s" or "1.25m"). Generalized (see
+ * WorkoutStepLike above) so both the planned-workout schedule form's own live preview and its
+ * read-only summary (WorkoutSummary, ScheduleWorkoutForm.tsx) reuse this rather than a second
+ * duration formatter. */
 export function formatStepDurationLabel(step: DurationStepLike): string | null {
+  if (step.duration_type === "reps" && step.duration_reps != null) {
+    return `${step.duration_reps} reps`;
+  }
   if (step.duration_type === "distance" && step.duration_distance_m != null) {
     const km = step.duration_distance_m / 1000;
     return `${Number.isInteger(km) ? km : km.toFixed(2)}km`;
@@ -236,4 +244,26 @@ export function plannedCadenceLabel(step: PlannedWorkoutStepOut): string | null 
   return step.cadence_low === step.cadence_high
     ? `${step.cadence_low} spm`
     : `${step.cadence_low}-${step.cadence_high} spm`;
+}
+
+function humanizeExerciseToken(token: string): string {
+  return token
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/** "Bench Press" / "Push-up" / "Rest" / "Exercise" -- a hiit/strength_training step's own
+ * exercise name, humanized from Garmin's own SCREAMING_SNAKE_CASE catalog tokens (prefers the
+ * specific exercise_name over the bare exercise_category, same rule calendar_feed.py::
+ * _step_line already uses for the calendar-feed description of these sports). Kept as an
+ * independent frontend-only formatter rather than a port of that Python function -- this is a
+ * read-only display concern with no live-typed-preview-vs-authoritative-parse split the way
+ * workout_syntax.py/workoutSyntax.ts have, so there's nothing to keep in sync across languages. */
+export function plannedExerciseLabel(step: PlannedWorkoutStepOut): string {
+  if (step.exercise_name) return humanizeExerciseToken(step.exercise_name);
+  if (step.exercise_category) return humanizeExerciseToken(step.exercise_category);
+  if (step.intensity === "rest") return "Rest";
+  return "Exercise";
 }

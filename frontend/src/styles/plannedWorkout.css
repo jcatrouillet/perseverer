@@ -45,6 +45,18 @@
   color: var(--color-danger, var(--color-text));
 }
 
+/* The athlete's own manual completion marker -- shown alongside (never instead of) the
+   push-status badge above, since the two are deliberately independent facts. */
+.planned-workout__status--completed {
+  background: var(--color-success-bg, var(--color-surface-raised));
+  color: var(--color-success, var(--color-text));
+}
+
+/* WorkoutDetails' own yoga/bouldering branch -- the athlete's freeform notes, verbatim. */
+.planned-workout__notes {
+  white-space: pre-wrap;
+}
+
 .planned-workout__actions {
   display: flex;
   gap: var(--space-2);

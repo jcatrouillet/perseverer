@@ -628,6 +628,14 @@ planned_workout = Table(
     Column("garmin_scheduled_at", DateTime(), nullable=True),
     Column("push_status", String, nullable=False),  # "draft" | "pushed" | "push_failed"
     Column("push_error", Text, nullable=True),
+    # The athlete's own manual "I did this" marker -- independent of push_status entirely, since
+    # a workout can be completed without ever having been pushed to (or recorded by) Garmin at
+    # all: a manual session, a watch that didn't record, or the athlete just checking off a
+    # plan. Null means not completed; set to the instant it was marked, not a bare boolean, for
+    # the same "when did this happen" provenance instinct every other timestamp in this app
+    # already carries. No link to any `activity` row -- this app has no automatic planned-vs-
+    # recorded matching, so completion is deliberately a separate, athlete-asserted fact.
+    Column("completed_at", DateTime(), nullable=True),
     Column("created_at", DateTime(), nullable=False),
     Column("updated_at", DateTime(), nullable=False),
 )

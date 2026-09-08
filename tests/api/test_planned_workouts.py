@@ -522,6 +522,60 @@ def test_push_trigger_404s_for_nonexistent_workout(
     assert r.status_code == 404
 
 
+class TestCompletion:
+    """The athlete's own manual "I did this" marker -- independent of push_status entirely, so
+    it works even for a workout never pushed to (or recorded by) Garmin at all."""
+
+    def test_complete_sets_completed_at_even_with_no_push_at_all(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        created = _create(client, auth_headers, "2026-09-01", sport="running", source_text="10m")
+        assert created["completed_at"] is None
+        assert created["push_status"] == "draft"
+
+        r = client.post(f"/api/v1/planned-workouts/{created['id']}/complete", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json()["completed_at"] is not None
+        # Completion never touches push_status -- they're deliberately independent facts.
+        assert r.json()["push_status"] == "draft"
+
+    def test_uncomplete_clears_completed_at(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        created = _create(client, auth_headers, "2026-09-01", sport="running", source_text="10m")
+        client.post(f"/api/v1/planned-workouts/{created['id']}/complete", headers=auth_headers)
+
+        r = client.post(
+            f"/api/v1/planned-workouts/{created['id']}/uncomplete", headers=auth_headers
+        )
+        assert r.status_code == 200
+        assert r.json()["completed_at"] is None
+
+    def test_complete_works_for_a_push_failed_workout(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        created = _create(client, auth_headers, "2026-09-01", sport="running", source_text="10m")
+        client.post(f"/api/v1/planned-workouts/{created['id']}/push", headers=auth_headers)
+        pushed = client.get(f"/api/v1/planned-workouts/{created['id']}", headers=auth_headers)
+        assert pushed.json()["push_status"] == "push_failed"  # no token store in this test env
+
+        r = client.post(f"/api/v1/planned-workouts/{created['id']}/complete", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json()["completed_at"] is not None
+
+    def test_complete_404s_for_nonexistent_workout(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        r = client.post("/api/v1/planned-workouts/999999/complete", headers=auth_headers)
+        assert r.status_code == 404
+
+    def test_uncomplete_404s_for_nonexistent_workout(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        r = client.post("/api/v1/planned-workouts/999999/uncomplete", headers=auth_headers)
+        assert r.status_code == 404
+
+
 class TestRecurring:
     def test_weekly_creates_the_right_dates(
         self, client: TestClient, auth_headers: dict[str, str]
