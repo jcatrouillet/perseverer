@@ -129,3 +129,12 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+
+/* WeekView's own read-only planned-workout row(s) -- WeekDayPlannedWorkouts, one card per
+   scheduled workout on that date, shown before the day's actual (recorded) activities below. */
+.activity-day-group__planned {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}

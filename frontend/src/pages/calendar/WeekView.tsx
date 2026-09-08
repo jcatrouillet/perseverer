@@ -8,22 +8,27 @@ import {
   useClimbingSummary,
   useFitness,
   useHealthDashboard,
+  usePlannedWorkoutsForDate,
   useSleep,
 } from "../../api/queries";
 import { ActivityCard } from "../../components/ActivityCard";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
+import { Icon } from "../../components/Icon";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { NotesPanel } from "../../components/NotesPanel";
 import { MetricChip, StatTile } from "../../components/StatTile";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
 import { WeekWellnessCharts } from "../../components/WeekWellnessCharts";
+import { WorkoutLoadBar } from "../../components/WorkoutLoadBar";
 import { eachDate, isoDate, parseIsoDate, weekRange } from "../../dateUtils";
+import { plannedWorkoutSportStyle } from "../../metricStyle";
 import { formatDurationHM, personalRecords } from "../../runningStats";
 import { groupByLocalDate } from "../../yearStats";
 import "../../styles/activity-list.css";
 import "../../styles/calendar.css";
+import "../../styles/plannedWorkout.css";
 
 const RUNNING_HISTORY_WEEKS = 52;
 
@@ -32,6 +37,31 @@ function formatDayHeading(localDate: string): { date: string; weekday: string } 
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   const weekday = d.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
   return { date, weekday };
+}
+
+// One `usePlannedWorkoutsForDate` call per day, each in its own component instance -- a week has
+// 7 dates and this hook only takes one date at a time (no bulk-range full-detail endpoint
+// exists, only the summary-list one MonthView's grid cell uses), so a small per-day component is
+// what lets each day fetch its own date without breaking the Rules of Hooks inside WeekView's
+// own single render. Read-only (icon + WorkoutLoadBar only, no Edit/Delete/Push) -- Week view
+// isn't an editing surface, Day/Month view already are.
+function WeekDayPlannedWorkouts({ date }: { date: string }) {
+  const workouts = usePlannedWorkoutsForDate(date);
+  if (!workouts.data || workouts.data.length === 0) return null;
+  return (
+    <div className="activity-day-group__planned">
+      {workouts.data.map((w) => (
+        <div key={w.id}>
+          <div className="month-grid__planned">
+            {w.sport != null && <Icon name={plannedWorkoutSportStyle(w.sport).icon} />}
+            {w.scheduled_time && `${w.scheduled_time} `}
+            {w.name || w.sport}
+          </div>
+          <WorkoutLoadBar workout={w} />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 // This got left behind when Milestones B/D built ActivityCard-based day groups for the
@@ -245,6 +275,7 @@ export function WeekView({ date }: { date: string }) {
                 </button>
               </div>
             </div>
+            <WeekDayPlannedWorkouts date={d} />
             {dayActivities.length > 0 && (
               <div className="activity-day-group__list">
                 {dayActivities.map((activity) => (

@@ -13,6 +13,7 @@ import {
   usePlannedWorkoutsList,
   useSleep,
 } from "../../api/queries";
+import type { PlannedWorkoutListItemOut } from "../../api/types";
 import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
@@ -22,6 +23,7 @@ import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
+import { Icon } from "../../components/Icon";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { NotesPanel } from "../../components/NotesPanel";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
@@ -31,6 +33,7 @@ import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { eachDate, monthGridWeeks, monthName, monthRange, parseIsoDate } from "../../dateUtils";
 import { anyMetricHasData } from "../../healthStats";
 import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
+import { plannedWorkoutSportStyle } from "../../metricStyle";
 import { personalRecords } from "../../runningStats";
 import { busiestWeekStart } from "../../yearStats";
 import "../../styles/calendar.css";
@@ -88,7 +91,28 @@ export function MonthView({ year, month }: { year: number; month: number }) {
 
   const dayByDate = new Map(calendar.data?.days.map((d) => [d.local_date, d]));
   const weekByStart = new Map(weeks.data?.periods.map((p) => [p.period_start, p]));
-  const plannedByDate = new Map(plannedWorkouts.data?.map((w) => [w.local_date, w]));
+  // A day can hold more than one planned workout now -- group rather than collapse to the last
+  // one, sorted the same way the day panel itself orders them (scheduled_time, nulls last, then
+  // id/creation order).
+  const plannedByDate = new Map<string, PlannedWorkoutListItemOut[]>();
+  for (const w of plannedWorkouts.data ?? []) {
+    const forDate = plannedByDate.get(w.local_date);
+    if (forDate) {
+      forDate.push(w);
+    } else {
+      plannedByDate.set(w.local_date, [w]);
+    }
+  }
+  for (const workoutsForDate of plannedByDate.values()) {
+    workoutsForDate.sort((a, b) => {
+      if (a.scheduled_time !== b.scheduled_time) {
+        if (a.scheduled_time == null) return 1;
+        if (b.scheduled_time == null) return -1;
+        return a.scheduled_time < b.scheduled_time ? -1 : 1;
+      }
+      return a.id - b.id;
+    });
+  }
 
   const all = allActivities.data?.items ?? [];
   const busiestWeek = busiestWeekStart(all);
@@ -249,12 +273,13 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                             ` · ${(day.activity_moving_duration_s / 3600).toFixed(1)}h`}
                         </div>
                       )}
-                      {planned && (
-                        <div className="month-grid__planned">
-                          📅 {planned.scheduled_time && `${planned.scheduled_time} `}
-                          {planned.name || planned.sport}
+                      {planned?.map((p) => (
+                        <div key={p.id} className="month-grid__planned">
+                          <Icon name={plannedWorkoutSportStyle(p.sport).icon} />
+                          {p.scheduled_time && `${p.scheduled_time} `}
+                          {p.name || p.sport}
                         </div>
-                      )}
+                      ))}
                     </td>
                   );
                 })}

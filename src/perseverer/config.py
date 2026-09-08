@@ -123,8 +123,8 @@ class Settings(BaseSettings):
     # A planned workout gets automatically pushed once its local_date is within this many days --
     # the user's own choice ("push it if it's within the coming week"), not a full-calendar push
     # (pushing a workout scheduled months out would just clutter the watch's own workout list
-    # long before the athlete cares). "Push now" (POST /planned-workouts/{date}/push) bypasses
-    # this window entirely for a manual override.
+    # long before the athlete cares). "Push now" (POST /planned-workouts/{workout_id}/push)
+    # bypasses this window entirely for a manual override.
     planned_workout_push_window_days: int = 7
     # Its own hour/minute, right after the daily Garmin sync (default 04:15) -- late enough that
     # any workout scheduled *today* by the athlete overnight is still caught by the same

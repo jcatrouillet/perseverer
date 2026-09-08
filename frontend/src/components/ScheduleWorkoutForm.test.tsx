@@ -5,15 +5,17 @@ import type { PlannedWorkoutOut } from "../api/types";
 import { preloadExerciseCatalog } from "./ExerciseStepEditor";
 import { ScheduleWorkoutForm } from "./ScheduleWorkoutForm";
 
-const mockUsePlannedWorkout = vi.fn();
-const mockSave = vi.fn();
+const mockUsePlannedWorkoutsForDate = vi.fn();
+const mockCreate = vi.fn();
+const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 const mockPush = vi.fn();
 const mockRecurring = vi.fn();
 
 vi.mock("../api/queries", () => ({
-  usePlannedWorkout: (...args: unknown[]) => mockUsePlannedWorkout(...args),
-  useSavePlannedWorkout: () => ({ mutate: mockSave, isPending: false }),
+  usePlannedWorkoutsForDate: (...args: unknown[]) => mockUsePlannedWorkoutsForDate(...args),
+  useCreatePlannedWorkout: () => ({ mutate: mockCreate, isPending: false }),
+  useUpdatePlannedWorkout: () => ({ mutate: mockUpdate, isPending: false }),
   useDeletePlannedWorkout: () => ({ mutate: mockDelete, isPending: false }),
   usePushPlannedWorkout: () => ({ mutate: mockPush, isPending: false }),
   useCreateRecurringPlannedWorkouts: () => ({
@@ -23,21 +25,10 @@ vi.mock("../api/queries", () => ({
   }),
 }));
 
-const NONE: PlannedWorkoutOut = {
-  available: false,
-  id: null,
-  local_date: null,
-  sport: null,
-  name: null,
-  source_text: null,
-  scheduled_time: null,
-  estimated_duration_s: null,
-  steps: [],
-  parse_errors: [],
-  push_status: null,
-  push_error: null,
-  garmin_workout_id: null,
-  garmin_scheduled_at: null,
+const NONE: { data: PlannedWorkoutOut[]; isLoading: boolean; isError: boolean } = {
+  data: [],
+  isLoading: false,
+  isError: false,
 };
 
 const SCHEDULED: PlannedWorkoutOut = {
@@ -76,7 +67,14 @@ const SCHEDULED: PlannedWorkoutOut = {
   push_error: null,
   garmin_workout_id: null,
   garmin_scheduled_at: null,
+  estimated_distance_m: null,
+  estimated_load: null,
+  segments: [],
 };
+
+function withOne(workout: PlannedWorkoutOut) {
+  return { data: [workout], isLoading: false, isError: false };
+}
 
 describe("ScheduleWorkoutForm", () => {
   beforeAll(async () => {
@@ -89,13 +87,13 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("shows 'Schedule a workout' when nothing is planned for the date", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     expect(screen.getByText("Schedule a workout")).toBeInTheDocument();
   });
 
   it("clicking 'Schedule a workout' reveals the form with a live parse preview", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     fireEvent.click(screen.getByText("Schedule a workout"));
@@ -107,7 +105,7 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("shows parse errors for a malformed line", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
 
@@ -117,8 +115,8 @@ describe("ScheduleWorkoutForm", () => {
     expect(screen.getByText(/unrecognized token/)).toBeInTheDocument();
   });
 
-  it("Save calls the save mutation with the current form content", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+  it("Save calls the create mutation with the current form content", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
 
@@ -130,7 +128,7 @@ describe("ScheduleWorkoutForm", () => {
     });
     fireEvent.click(screen.getByText("Save"));
 
-    expect(mockSave).toHaveBeenCalledWith(
+    expect(mockCreate).toHaveBeenCalledWith(
       {
         localDate: "2026-09-01",
         sport: "running",
@@ -145,7 +143,7 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("switching to yoga shows duration/time fields instead of the syntax textarea", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
 
@@ -157,7 +155,7 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("shows a hint about the inline comment syntax for running", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
 
@@ -165,7 +163,7 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("an inline '# comment' on a step line shows up in the live preview", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
 
@@ -179,7 +177,7 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("Save for yoga sends duration_minutes and scheduled_time, no source_text required", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "yoga" } });
@@ -191,7 +189,7 @@ describe("ScheduleWorkoutForm", () => {
     fireEvent.change(screen.getByLabelText("Time of day"), { target: { value: "18:30" } });
     fireEvent.click(screen.getByText("Save"));
 
-    expect(mockSave).toHaveBeenCalledWith(
+    expect(mockCreate).toHaveBeenCalledWith(
       {
         localDate: "2026-09-01",
         sport: "yoga",
@@ -206,7 +204,7 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("shows the push status and a Push/Delete action once a workout is scheduled", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: SCHEDULED, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(withOne(SCHEDULED));
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     expect(screen.getByText("Tempo run")).toBeInTheDocument();
@@ -214,21 +212,19 @@ describe("ScheduleWorkoutForm", () => {
     expect(screen.getByText("Push to Garmin")).toBeInTheDocument();
   });
 
-  it("Push to Garmin calls the push mutation with the date", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: SCHEDULED, isLoading: false, isError: false });
+  it("Push to Garmin calls the push mutation with the workout's id", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(withOne(SCHEDULED));
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     fireEvent.click(screen.getByText("Push to Garmin"));
 
-    expect(mockPush).toHaveBeenCalledWith("2026-09-01");
+    expect(mockPush).toHaveBeenCalledWith(1);
   });
 
   it("shows Push to Garmin for a scheduled yoga workout too", () => {
-    mockUsePlannedWorkout.mockReturnValue({
-      data: { ...SCHEDULED, sport: "yoga", scheduled_time: "18:30", estimated_duration_s: 2700 },
-      isLoading: false,
-      isError: false,
-    });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(
+      withOne({ ...SCHEDULED, sport: "yoga", scheduled_time: "18:30", estimated_duration_s: 2700 }),
+    );
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     expect(screen.getByText("Push to Garmin")).toBeInTheDocument();
@@ -236,9 +232,23 @@ describe("ScheduleWorkoutForm", () => {
     expect(screen.getByText(/45 min/)).toBeInTheDocument();
   });
 
+  it("shows more than one workout on the same date, each with its own actions", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue({
+      data: [SCHEDULED, { ...SCHEDULED, id: 2, name: "Evening HIIT", sport: "hiit" }],
+      isLoading: false,
+      isError: false,
+    });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.getByText("Tempo run")).toBeInTheDocument();
+    expect(screen.getByText("Evening HIIT")).toBeInTheDocument();
+    expect(screen.getAllByText("Edit")).toHaveLength(2);
+    expect(screen.getByText("Add another workout")).toBeInTheDocument();
+  });
+
   it("Copy writes the full scheduled workout to the clipboard, not just name/source_text", () => {
-    mockUsePlannedWorkout.mockReturnValue({
-      data: {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(
+      withOne({
         ...SCHEDULED,
         sport: "yoga",
         name: "Evening yoga",
@@ -246,10 +256,8 @@ describe("ScheduleWorkoutForm", () => {
         scheduled_time: "18:30",
         estimated_duration_s: 2700,
         steps: [],
-      },
-      isLoading: false,
-      isError: false,
-    });
+      }),
+    );
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     fireEvent.click(screen.getByText("Copy"));
@@ -269,18 +277,14 @@ describe("ScheduleWorkoutForm", () => {
     // "fitness" is no longer offered in the sport dropdown at all, but a workout saved under it
     // before that removal must still degrade gracefully rather than offering a push that would
     // just fail.
-    mockUsePlannedWorkout.mockReturnValue({
-      data: { ...SCHEDULED, sport: "fitness" },
-      isLoading: false,
-      isError: false,
-    });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(withOne({ ...SCHEDULED, sport: "fitness" }));
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     expect(screen.queryByText("Push to Garmin")).not.toBeInTheDocument();
   });
 
   it("no longer offers fitness as a sport option", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
 
@@ -289,7 +293,7 @@ describe("ScheduleWorkoutForm", () => {
 
   describe("hiit/strength_training exercise picker", () => {
     it("switching to strength_training shows the exercise picker instead of the textarea", () => {
-      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
       render(<ScheduleWorkoutForm localDate="2026-09-01" />);
       fireEvent.click(screen.getByText("Schedule a workout"));
 
@@ -302,7 +306,7 @@ describe("ScheduleWorkoutForm", () => {
     });
 
     it("picking a real exercise and saving sends a structured step", () => {
-      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
       render(<ScheduleWorkoutForm localDate="2026-09-01" />);
       fireEvent.click(screen.getByText("Schedule a workout"));
       fireEvent.change(screen.getByRole("combobox"), { target: { value: "strength_training" } });
@@ -315,7 +319,7 @@ describe("ScheduleWorkoutForm", () => {
 
       fireEvent.click(screen.getByText("Save"));
 
-      expect(mockSave).toHaveBeenCalledWith(
+      expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           sport: "strength_training",
           source_text: null,
@@ -335,8 +339,8 @@ describe("ScheduleWorkoutForm", () => {
     });
 
     it("editing an already-saved hiit workout hydrates the picker from its steps", () => {
-      mockUsePlannedWorkout.mockReturnValue({
-        data: {
+      mockUsePlannedWorkoutsForDate.mockReturnValue(
+        withOne({
           ...SCHEDULED,
           sport: "hiit",
           source_text: null,
@@ -362,10 +366,8 @@ describe("ScheduleWorkoutForm", () => {
               comment: null,
             },
           ],
-        },
-        isLoading: false,
-        isError: false,
-      });
+        }),
+      );
       render(<ScheduleWorkoutForm localDate="2026-09-01" />);
       fireEvent.click(screen.getByText("Edit"));
 
@@ -375,8 +377,24 @@ describe("ScheduleWorkoutForm", () => {
       expect((screen.getByDisplayValue("15") as HTMLInputElement)).toBeInTheDocument();
     });
 
+    it("saving an edit calls the update mutation with the workout's id", () => {
+      mockUsePlannedWorkoutsForDate.mockReturnValue(withOne(SCHEDULED));
+      render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+      fireEvent.click(screen.getByText("Edit"));
+
+      fireEvent.change(screen.getByPlaceholderText(/Warmup 10m/), {
+        target: { value: "Warmup 20m" },
+      });
+      fireEvent.click(screen.getByText("Save"));
+
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ workoutId: 1, source_text: "Warmup 20m" }),
+        expect.anything(),
+      );
+    });
+
     it("building a set of several exercises with rest, repeated, sends one repeat marker after them", () => {
-      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
       render(<ScheduleWorkoutForm localDate="2026-09-01" />);
       fireEvent.click(screen.getByText("Schedule a workout"));
       fireEvent.change(screen.getByRole("combobox"), { target: { value: "strength_training" } });
@@ -394,7 +412,7 @@ describe("ScheduleWorkoutForm", () => {
 
       fireEvent.click(screen.getByText("Save"));
 
-      expect(mockSave).toHaveBeenCalledWith(
+      expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           sport: "strength_training",
           steps: [
@@ -413,7 +431,7 @@ describe("ScheduleWorkoutForm", () => {
     });
 
     it("supports a standalone exercise alongside a separate set", () => {
-      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
       render(<ScheduleWorkoutForm localDate="2026-09-01" />);
       fireEvent.click(screen.getByText("Schedule a workout"));
       fireEvent.change(screen.getByRole("combobox"), { target: { value: "hiit" } });
@@ -435,7 +453,7 @@ describe("ScheduleWorkoutForm", () => {
 
       fireEvent.click(screen.getByText("Save"));
 
-      expect(mockSave).toHaveBeenCalledWith(
+      expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           steps: [
             expect.objectContaining({ step_index: 0, exercise_category: "TOTAL_BODY" }),
@@ -453,7 +471,7 @@ describe("ScheduleWorkoutForm", () => {
     });
 
     it("Remove set deletes the whole set, not just one exercise inside it", () => {
-      mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+      mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
       render(<ScheduleWorkoutForm localDate="2026-09-01" />);
       fireEvent.click(screen.getByText("Schedule a workout"));
       fireEvent.change(screen.getByRole("combobox"), { target: { value: "hiit" } });
@@ -468,13 +486,13 @@ describe("ScheduleWorkoutForm", () => {
     });
   });
 
-  it("Delete calls the delete mutation with the date", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: SCHEDULED, isLoading: false, isError: false });
+  it("Delete calls the delete mutation with the workout's id", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(withOne(SCHEDULED));
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     fireEvent.click(screen.getByText("Delete"));
 
-    expect(mockDelete).toHaveBeenCalledWith("2026-09-01");
+    expect(mockDelete).toHaveBeenCalledWith(1);
   });
 
   it("a copied workout in the clipboard offers a Paste action that pre-fills the form", () => {
@@ -482,7 +500,7 @@ describe("ScheduleWorkoutForm", () => {
       "perseverer_workout_clipboard",
       JSON.stringify({ sport: "running", name: "Copied run", source_text: "Warmup 5m" }),
     );
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     fireEvent.click(screen.getByText("Paste copied workout"));
@@ -506,7 +524,7 @@ describe("ScheduleWorkoutForm", () => {
         duration_minutes: 60,
       }),
     );
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     fireEvent.click(screen.getByText("Paste copied workout"));
@@ -548,7 +566,7 @@ describe("ScheduleWorkoutForm", () => {
         ],
       }),
     );
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
 
     fireEvent.click(screen.getByText("Paste copied workout"));
@@ -561,7 +579,7 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("Repeat this schedule reveals the recurrence controls, and creating one calls the mutation", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
     fireEvent.change(screen.getByPlaceholderText(/Warmup 10m/), {
@@ -585,7 +603,7 @@ describe("ScheduleWorkoutForm", () => {
   });
 
   it("Repeat this schedule also carries exercise steps for hiit/strength_training", () => {
-    mockUsePlannedWorkout.mockReturnValue({ data: NONE, isLoading: false, isError: false });
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
     render(<ScheduleWorkoutForm localDate="2026-09-01" />);
     fireEvent.click(screen.getByText("Schedule a workout"));
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "strength_training" } });

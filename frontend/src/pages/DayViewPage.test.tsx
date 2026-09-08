@@ -24,7 +24,7 @@ beforeAll(() => {
     }));
 });
 
-const mockUsePlannedWorkout = vi.fn();
+const mockUsePlannedWorkoutsForDate = vi.fn();
 const EMPTY_QUERY = { data: undefined, isLoading: false, isError: false };
 
 vi.mock("../api/queries", () => ({
@@ -40,8 +40,9 @@ vi.mock("../api/queries", () => ({
   useActivityYears: () => EMPTY_QUERY,
   useNotes: () => ({ data: [], isLoading: false, isError: false }),
   useCreateNote: () => ({ mutate: vi.fn(), isPending: false }),
-  usePlannedWorkout: (...args: unknown[]) => mockUsePlannedWorkout(...args),
-  useSavePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
+  usePlannedWorkoutsForDate: (...args: unknown[]) => mockUsePlannedWorkoutsForDate(...args),
+  useCreatePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdatePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   useDeletePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   usePushPlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateRecurringPlannedWorkouts: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
@@ -49,11 +50,7 @@ vi.mock("../api/queries", () => ({
 
 describe("DayViewPage", () => {
   it("shows a 'Planned workout' section with a Schedule a workout button", () => {
-    mockUsePlannedWorkout.mockReturnValue({
-      data: { available: false, steps: [] },
-      isLoading: false,
-      isError: false,
-    });
+    mockUsePlannedWorkoutsForDate.mockReturnValue({ data: [], isLoading: false, isError: false });
     render(<DayViewPage date="2026-09-10" />);
 
     expect(screen.getByText("Planned workout")).toBeInTheDocument();
@@ -61,13 +58,9 @@ describe("DayViewPage", () => {
   });
 
   it("passes the page's own date through to the schedule form", () => {
-    mockUsePlannedWorkout.mockReturnValue({
-      data: { available: false, steps: [] },
-      isLoading: false,
-      isError: false,
-    });
+    mockUsePlannedWorkoutsForDate.mockReturnValue({ data: [], isLoading: false, isError: false });
     render(<DayViewPage date="2026-09-10" />);
 
-    expect(mockUsePlannedWorkout).toHaveBeenCalledWith("2026-09-10");
+    expect(mockUsePlannedWorkoutsForDate).toHaveBeenCalledWith("2026-09-10");
   });
 });

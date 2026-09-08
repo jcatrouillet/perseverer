@@ -1,5 +1,19 @@
 /* ScheduleWorkoutForm -- the "Planned workout" section of MonthView's expanded-day card. */
 
+/* Wraps one workout's own summary + Edit button -- a day can hold more than one now, so a
+   divider between entries keeps them from reading as one workout's worth of controls. */
+.planned-workout__entry {
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.planned-workout__entry:last-of-type {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
 .planned-workout__summary {
   display: flex;
   flex-direction: column;
@@ -35,6 +49,36 @@
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* WorkoutLoadBar.tsx -- a running workout's distance/duration/load line + its zone-colored load
+   bar. */
+.workout-load {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.workout-load__label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.workout-load-bar {
+  display: flex;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-text-faint) 18%, transparent);
+}
+
+.workout-load-bar__segment {
+  /* A bare <span> is display:inline by default, which ignores width/height entirely --
+     TimeInZoneChart's own bar-fill CSS already documents this exact bug once; restating it here
+     since this is a second, independent bar implementation, not a shared component. */
+  display: block;
+  height: 100%;
 }
 
 .planned-workout-form {
@@ -99,8 +143,16 @@
 }
 
 /* month-grid__summary already exists for activity-count -- this mirrors it for a scheduled
-   workout's own indicator, distinct color so it reads as "planned", not "happened". */
+   workout's own indicator, distinct color so it reads as "planned", not "happened". Flex row so
+   the sport icon sits inline with the time/name text rather than stacking above it. */
 .month-grid__planned {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--font-size-sm);
   color: var(--color-accent, var(--color-text-muted));
+}
+
+.month-grid__planned .icon {
+  flex-shrink: 0;
 }

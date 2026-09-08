@@ -9,8 +9,10 @@ import { formatDurationHM } from "../runningStats";
 
 // Cool-to-hot progression across the real tone palette, one per zone -- not a single flat
 // colour, since the whole point of the chart is to distinguish how effort was spread across
-// zones. A device with more or fewer zones just cycles/truncates this list.
-const ZONE_TONES = ["cadence", "elevation", "pace", "load", "power", "hr", "hr"] as const;
+// zones. A device with more or fewer zones just cycles/truncates this list. Exported so
+// WorkoutLoadBar.tsx's own 5-zone pace bar reuses the exact same progression rather than a
+// second copy of these tones.
+export const ZONE_TONES = ["cadence", "elevation", "pace", "load", "power", "hr", "hr"] as const;
 
 export function TimeInZoneChart({
   metrics,

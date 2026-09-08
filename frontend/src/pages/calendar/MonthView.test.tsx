@@ -70,12 +70,9 @@ vi.mock("../../api/queries", () => ({
   useActivityYears: () => ({ data: undefined, isLoading: false, isError: false }),
   // Needed once a day is expanded -- ScheduleWorkoutForm and NotesPanel both render inside the
   // expanded-date card (see the "expandedDate resets on month change" test below).
-  usePlannedWorkout: () => ({
-    data: { available: false, steps: [] },
-    isLoading: false,
-    isError: false,
-  }),
-  useSavePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
+  usePlannedWorkoutsForDate: () => ({ data: [], isLoading: false, isError: false }),
+  useCreatePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdatePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   useDeletePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   usePushPlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateRecurringPlannedWorkouts: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
@@ -127,6 +124,16 @@ describe("MonthView day-cell planned-workout indicator", () => {
     });
     render(<MonthView year={2026} month={9} />);
     expect(screen.getByText(/18:30 Tempo run/)).toBeInTheDocument();
+  });
+
+  it("shows a sport icon alongside the workout indicator", () => {
+    mockUsePlannedWorkoutsList.mockReturnValue({
+      data: [PLANNED],
+      isLoading: false,
+      isError: false,
+    });
+    render(<MonthView year={2026} month={9} />);
+    expect(document.querySelector(".month-grid__planned .icon")).toBeInTheDocument();
   });
 });
 

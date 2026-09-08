@@ -77,6 +77,16 @@ export function sportStyle(sport: string): MetricStyle {
   return SPORT_STYLES[sport] ?? { tone: "neutral", icon: "calendar" };
 }
 
+/** Same as `sportStyle`, for a *scheduled* workout's own sport strings -- "bouldering" is really
+ * a rock-climbing sub-discipline (this app already knows that for recorded activities, via
+ * `garmin_activity_summary.py`'s own sport="rock_climbing"/sub_sport="bouldering" pair) but has
+ * no icon slot of its own in `SPORT_STYLES` above, so it borrows `rock_climbing`'s. Every other
+ * planned-workout sport (running/yoga/hiit/strength_training) already has a real entry there. */
+export function plannedWorkoutSportStyle(sport: string): MetricStyle {
+  if (sport === "bouldering") return sportStyle("rock_climbing");
+  return sportStyle(sport);
+}
+
 /** The known sport catalog, for a picker (e.g. the manual sport-correction control) that should
  * only offer sports this app actually has an icon/tone for -- picking one outside this list
  * would still work (sport is a free-form string everywhere else), it just wouldn't render with

@@ -529,7 +529,7 @@ def push_planned_workout(
     client_factory: Any = Garmin,
 ) -> PushResult:
     """Loads one `planned_workout` + its steps, builds the Garmin `RunningWorkout`, and pushes
-    it -- called from both `POST /planned-workouts/{date}/push` (manual, one workout) and the
+    it -- called from both `POST /planned-workouts/{workout_id}/push` (manual, one workout) and the
     worker's `run_daily_workout_push` job (automatic, looping over every workout due within the
     coming week -- see worker/main.py). Never raises except `GarminRateLimitAborted`: every other
     failure (a build error, an auth failure, any Garmin API error) is caught, written back as
@@ -632,8 +632,9 @@ def push_planned_workout(
     return PushResult(success=True, garmin_workout_id=workout_id, error=None)
 
 
-# --- Save (parse + upsert) -- shared by PUT /planned-workouts/{date} and the recurring-schedule
-# endpoint, so both go through one parse-and-store path rather than two. --------------------
+# --- Save (parse + insert/update) -- shared by POST/PUT /planned-workouts and the
+# recurring-schedule endpoint, so all three go through one parse-and-store path rather than
+# three. --------------------------------------------------------------------------------------
 
 
 @dataclass
@@ -692,9 +693,14 @@ def save_planned_workout(
     scheduled_time: str | None = None,
     duration_minutes: float | None = None,
     steps: list[PlannedStepLike] | None = None,
+    workout_id: int | None = None,
 ) -> SavedWorkout:
-    """Upserts one `planned_workout` row by (athlete_id, local_date). Three sport tiers (see
-    module docstring):
+    """Inserts a new `planned_workout` row when `workout_id` is None, or updates that specific
+    row in place when given. No longer an upsert-by-date: an athlete can schedule more than one
+    workout on the same `local_date`, so create-vs-update is the caller's own decision (the
+    router looks the id up and 404s first for PUT, same pattern its delete/push routes already
+    use) rather than something this function infers from `(athlete_id, local_date)`. Three sport
+    tiers (see module docstring):
 
     - **running**: `source_text` is the athlete's own workout-syntax text, re-parsed on every
       save (not just the first) into fresh `planned_workout_step` rows -- `duration_minutes`/
@@ -735,13 +741,7 @@ def save_planned_workout(
 
     now = datetime.now(UTC).replace(tzinfo=None)
 
-    existing = conn.execute(
-        select(planned_workout.c.id, planned_workout.c.push_status).where(
-            planned_workout.c.athlete_id == athlete_id, planned_workout.c.local_date == local_date
-        )
-    ).fetchone()
-
-    if existing is None:
+    if workout_id is None:
         result = conn.execute(
             planned_workout.insert().values(
                 athlete_id=athlete_id,
@@ -760,7 +760,13 @@ def save_planned_workout(
         workout_id = result.inserted_primary_key[0]
         assert isinstance(workout_id, int)
     else:
-        workout_id = existing.id
+        # The router already resolved+404'd this id before calling in (same pattern its
+        # delete/push routes use) -- this select is just for the current push_status, not an
+        # existence check of our own.
+        existing = conn.execute(
+            select(planned_workout.c.push_status).where(planned_workout.c.id == workout_id)
+        ).fetchone()
+        assert existing is not None
         new_status = "draft" if existing.push_status == "pushed" else existing.push_status
         conn.execute(
             planned_workout.update()

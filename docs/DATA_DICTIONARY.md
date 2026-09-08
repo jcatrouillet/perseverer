@@ -351,8 +351,14 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
   `docs/adr/0014-phase-9-backup-hardening.md`.
 - **`planned_workout`**/**`planned_workout_step`** (scheduled workouts) — a *future*,
   athlete-authored workout on the calendar, pushed to the Garmin watch, and its unexpanded
-  steps. One `planned_workout` per athlete per `local_date` (Garmin's own `schedule_workout()`
-  is itself date-granular). Three sport tiers: **running**'s `source_text` is the athlete's own
+  steps. Any number of `planned_workout` rows per athlete per `local_date` — originally capped
+  at one via a `UniqueConstraint` (v1), lifted once the athlete asked to schedule more than one
+  workout on the same day; every row is addressed by its own id
+  (`api/routers/planned_workouts.py`: `POST /planned-workouts` to create, `GET/PUT/DELETE
+  /planned-workouts/{workout_id}` and `POST /planned-workouts/{workout_id}/push` per row, `GET
+  /planned-workouts/by-date/{local_date}` for every workout on one date). Garmin's own
+  `schedule_workout()` is itself date-granular with no concept of ordering within a day —
+  `scheduled_time` is what the UI sorts multiple same-day workouts by. Three sport tiers: **running**'s `source_text` is the athlete's own
   typed workout-syntax text, kept verbatim and re-parsed into `planned_workout_step` rows on
   every save (`workout_syntax.py`), with `estimated_duration_s` derived from that parse;
   **yoga/bouldering** (`planned_workouts.py::PLACEHOLDER_SPORTS`)'s `source_text` (if any) is

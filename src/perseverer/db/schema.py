@@ -589,11 +589,15 @@ activity_workout_step = Table(
 # keyed 1:1 on a completed activity_id, parsed out of a device's own recorded FIT workout_mesgs;
 # these are prospective, keyed on a future local_date, authored by the athlete as free text
 # (workout_syntax.py) and pushed to a Garmin watch as a real structured workout -- a push
-# lifecycle activity_workout has no concept of. One row per athlete per day (v1) -- Garmin's own
-# schedule_workout() is itself date-granular, so there's no finer grain to support yet. sport is
-# an open string, not an enum, so a 5th sport later (see workout_syntax.py's own docstring for
-# the "running first" scoping) needs a data-only addition, matching the project's own additive-
-# schema-evolution principle.
+# lifecycle activity_workout has no concept of. Any number of rows per (athlete_id, local_date) --
+# originally capped at one via a UniqueConstraint (v1), lifted once the athlete asked to schedule
+# more than one workout on the same day (e.g. a morning run plus an evening strength session);
+# every row is independently addressed by its own id (api/routers/planned_workouts.py), never by
+# date alone. Garmin's own schedule_workout() is itself date-granular with no further concept of
+# ordering within a day -- Perseverer's own scheduled_time is what the UI sorts multiple same-day
+# workouts by. sport is an open string, not an enum, so a 5th sport later (see workout_syntax.py's
+# own docstring for the "running first" scoping) needs a data-only addition, matching the
+# project's own additive-schema-evolution principle.
 planned_workout = Table(
     "planned_workout",
     metadata,
@@ -626,7 +630,6 @@ planned_workout = Table(
     Column("push_error", Text, nullable=True),
     Column("created_at", DateTime(), nullable=False),
     Column("updated_at", DateTime(), nullable=False),
-    UniqueConstraint("athlete_id", "local_date", name="uq_planned_workout_identity"),
 )
 
 # One row per planned step, in workout_syntax.py's own parse order -- unexpanded, same

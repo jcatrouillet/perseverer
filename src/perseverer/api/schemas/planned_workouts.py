@@ -101,6 +101,24 @@ class PlannedWorkoutIn(BaseModel):
     _validate_scheduled_time = field_validator("scheduled_time")(_validate_scheduled_time)
 
 
+class PlannedWorkoutCreateIn(PlannedWorkoutIn):
+    """POST /planned-workouts -- same body as PlannedWorkoutIn (used for PUT-by-id, where the
+    date is fixed) plus the one field a *new* workout needs: which date to create it on. A day
+    may hold any number of workouts now, so creation is never keyed off an existing date the way
+    the old PUT-by-date upsert was."""
+
+    local_date: str  # ISO date
+
+
+class PlannedWorkoutSegmentOut(BaseModel):
+    """One already-repeat-expanded step of a running workout's load estimate -- see
+    planned_workout_stats.py's own docstring for the zone/load rules. Rendered by the frontend
+    as one colored block in the workout's load bar, width proportional to duration_s."""
+
+    duration_s: float
+    zone: int | None  # 1 (easy) .. 5 (repetition), or None when no zone could be determined
+
+
 class PlannedWorkoutOut(BaseModel):
     # False whenever no workout is scheduled for this date yet -- every field below is null/
     # empty in that case, same "no-404-for-absence" idiom GET /goals already uses.
@@ -120,12 +138,18 @@ class PlannedWorkoutOut(BaseModel):
     push_error: str | None = None
     garmin_workout_id: int | None = None
     garmin_scheduled_at: str | None = None
+    # running only (planned_workout_stats.py) -- always null/empty for every other sport, and
+    # for running itself when the athlete hasn't configured a running-load threshold pace yet
+    # (estimated_load only; distance/duration/segments still populate from the steps alone).
+    estimated_distance_m: float | None = None
+    estimated_load: float | None = None
+    segments: list[PlannedWorkoutSegmentOut] = []
 
 
 class PlannedWorkoutListItemOut(BaseModel):
     """One row of GET /planned-workouts?start_date=&end_date= -- just enough for the calendar
     grid's own per-day indicator (mirrors day_rollup's own summary-row shape for GET /calendar);
-    fetch GET /planned-workouts/{date} for the full workout once a day is expanded."""
+    fetch GET /planned-workouts/by-date/{date} for the full workout(s) once a day is expanded."""
 
     local_date: str
     id: int
@@ -155,8 +179,6 @@ class RecurringWorkoutIn(BaseModel):
 
 
 class RecurringWorkoutOut(BaseModel):
+    # Every computed occurrence date gets its own new row, even one that already has a workout
+    # scheduled -- a day can hold more than one now, so there's nothing to skip.
     created_dates: list[str]
-    # A date that already had a planned workout is skipped, not overwritten and not an error --
-    # see planned_workouts.py::compute_recurrence_dates' own docstring / the router's own
-    # handling.
-    skipped_dates: list[str]

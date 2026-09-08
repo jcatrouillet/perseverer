@@ -657,7 +657,7 @@ class GarminConnectAdapter:
     def delete_workout(self, workout_id: int) -> None:
         """Deletes one workout template from the athlete's Garmin workout library. Used both by
         `push_planned_workout` below (replacing a stale copy on edit) and directly by
-        `DELETE /planned-workouts/{date}` (best-effort cleanup when a scheduled workout is
+        `DELETE /planned-workouts/{workout_id}` (best-effort cleanup when a scheduled workout is
         deleted locally, see that route's own docstring for why a Garmin-side failure there must
         never block the local delete)."""
         assert self._client is not None, "call authenticate() first"

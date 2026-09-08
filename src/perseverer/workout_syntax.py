@@ -85,7 +85,7 @@ _MILE_IN_METERS = 1609.34
 # Used only to turn a distance-based step into an *estimated* duration for
 # estimated_duration_s (display only -- the real duration is whatever pace the athlete actually
 # runs). A moderate easy-running speed, used when no pace target is available to average instead.
-_DEFAULT_ASSUMED_SPEED_MPS = 3.0
+DEFAULT_ASSUMED_SPEED_MPS = 3.0
 
 
 @dataclass
@@ -241,47 +241,81 @@ def _parse_step_line(line: str, *, line_no: int, errors: list[ParseError]) -> Pa
     )
 
 
+def step_target_speed_mps(step: ParsedStep) -> float | None:
+    """The step's own target pace, averaged, in m/s -- `None` if it has no pace target (a
+    heart-rate-targeted or untargeted step gives no speed to derive a distance/duration estimate
+    from either way). Public: also used by `planned_workout_stats.py` for zone bucketing/load."""
+    if step.target_type == "pace" and step.target_low is not None and step.target_high is not None:
+        return (step.target_low + step.target_high) / 2
+    return None
+
+
 def _step_duration_estimate_s(step: ParsedStep) -> float:
     if step.duration_time_s is not None:
         return step.duration_time_s
     if step.duration_distance_m is not None:
-        speed = _DEFAULT_ASSUMED_SPEED_MPS
-        if (
-            step.target_type == "pace"
-            and step.target_low is not None
-            and step.target_high is not None
-        ):
-            speed = (step.target_low + step.target_high) / 2
+        speed = step_target_speed_mps(step) or DEFAULT_ASSUMED_SPEED_MPS
         return step.duration_distance_m / speed if speed > 0 else 0.0
     return 0.0
 
 
-def _estimate_total_duration_s(steps: list[ParsedStep]) -> float:
-    by_index = {s.step_index: s for s in steps}
-    consumed: set[int] = set()
-    for s in steps:
-        if (
-            s.duration_type == "repeat_until_steps_cmplt"
-            and s.repeat_from_step is not None
-            and s.repeat_count is not None
-        ):
-            consumed.update(range(s.repeat_from_step, s.step_index))
+def estimate_step_distance_m(step: ParsedStep) -> float:
+    """Mirrors `_step_duration_estimate_s` for the other axis -- exact when the step's own
+    duration is already distance-based, estimated (same target-pace-or-default-speed source)
+    when it's time-based. Public: also used by `planned_workout_stats.py` to total a whole
+    workout's estimated distance."""
+    if step.duration_distance_m is not None:
+        return step.duration_distance_m
+    if step.duration_time_s is not None:
+        speed = step_target_speed_mps(step) or DEFAULT_ASSUMED_SPEED_MPS
+        return step.duration_time_s * speed
+    return 0.0
 
-    total = 0.0
-    for s in steps:
-        if s.step_index in consumed:
+
+def expand_repeat_groups(steps: list[ParsedStep]) -> list[ParsedStep]:
+    """Flattens repeat-group marker rows into `repeat_count` literal copies of their own
+    children, in the order the workout is actually executed -- a standalone step keeps its own
+    single place in the sequence; a `4x` block of 2 children becomes 8 concrete steps
+    (children, children, children, children), not 2 steps with a multiplier attached. Public:
+    used both by `_estimate_total_duration_s` below (sum over the flattened list) and by
+    `planned_workout_stats.py` (one visual segment per flattened step, so a repeated interval
+    reads as N equal-width blocks in the load bar, not one block scaled up). Any number of
+    independent repeat blocks in one workout is supported, each addressed by its own
+    `repeat_from_step` -- same assumption `build_workout_segment`
+    (`planned_workouts.py`)/`workoutSteps.ts::expandWorkoutSteps` already make."""
+    by_index = {s.step_index: s for s in steps}
+    markers: dict[int, ParsedStep] = {
+        s.repeat_from_step: s
+        for s in steps
+        if s.duration_type == "repeat_until_steps_cmplt"
+        and s.repeat_from_step is not None
+        and s.repeat_count is not None
+    }
+    consumed: set[int] = set()
+    for marker in markers.values():
+        assert marker.repeat_from_step is not None  # narrows for mypy; guaranteed by the dict above
+        consumed.update(range(marker.repeat_from_step, marker.step_index))
+
+    result: list[ParsedStep] = []
+    for s in sorted(steps, key=lambda s: s.step_index):
+        if s.duration_type == "repeat_until_steps_cmplt":
+            continue  # a marker row is never itself a real, executable step
+        if s.step_index not in consumed:
+            result.append(s)
             continue
-        if (
-            s.duration_type == "repeat_until_steps_cmplt"
-            and s.repeat_from_step is not None
-            and s.repeat_count is not None
-        ):
-            child_range = range(s.repeat_from_step, s.step_index)
-            children = [by_index[i] for i in child_range if i in by_index]
-            total += sum(_step_duration_estimate_s(c) for c in children) * s.repeat_count
-        else:
-            total += _step_duration_estimate_s(s)
-    return total
+        block = markers.get(s.step_index)
+        if block is None:
+            continue  # a later child of a block already expanded when its first child was hit
+        assert block.repeat_from_step is not None and block.repeat_count is not None
+        child_range = range(block.repeat_from_step, block.step_index)
+        children = [by_index[i] for i in child_range if i in by_index]
+        for _ in range(block.repeat_count):
+            result.extend(children)
+    return result
+
+
+def _estimate_total_duration_s(steps: list[ParsedStep]) -> float:
+    return sum(_step_duration_estimate_s(s) for s in expand_repeat_groups(steps))
 
 
 def parse_workout_syntax(text: str) -> ParsedWorkout:

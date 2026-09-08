@@ -489,3 +489,43 @@ repeat marker with `repeat_from_step: 0, repeat_count: 4` right after both child
 confirmed the same shape came back from `GET /planned-workouts/{date}`, then reopened Edit and
 confirmed the set (exercise, rest, and its own repeat count) reconstructed correctly with no
 backend changes involved. Confirmed the sport `<select>` no longer offers "Fitness" at all.
+
+## Revision: more than one workout per day
+
+Every decision above assumed "one row per athlete per day (v1)" (the `planned_workout.
+UniqueConstraint` on `(athlete_id, local_date)`, decision-era Garmin-is-date-granular reasoning
+still true and unaffected by this revision). The athlete later asked to schedule more than one
+workout on the same day (e.g. a morning run plus an evening strength session), which that
+constraint made impossible to represent at all.
+
+**Change**: dropped the `UniqueConstraint`; every `planned_workout` row is now addressed by its
+own `id`, never by `(athlete_id, local_date)`. The API's mutation surface moved from date-keyed
+single-object routes to id-keyed ones: `POST /planned-workouts` creates (body carries
+`local_date`), `GET/PUT/DELETE /planned-workouts/{workout_id}` and `POST
+/planned-workouts/{workout_id}/push` act on one specific workout, and a new `GET
+/planned-workouts/by-date/{local_date}` returns every workout on one date (ordered by
+`scheduled_time`, nulls last, then `id` — the athlete's own choice for how multiple same-day
+workouts should sort). `save_planned_workout` (`planned_workouts.py`) stopped being an
+upsert-by-date: it now always inserts when no `workout_id` is given and always updates that exact
+row in place otherwise, with the router responsible for 404-ing an unknown/foreign id first (the
+same pattern its delete/push routes already used). `POST /planned-workouts/recurring` no longer
+skips a date that already has a workout — the athlete's own explicit choice, since a day holding
+more than one workout is now the whole point.
+
+`ScheduleWorkoutForm.tsx` split into an outer list component (fetches every workout for the date
+via `usePlannedWorkoutsForDate`, renders each with its own summary/Edit button, plus a "Schedule
+a workout"/"Add another workout" affordance) and an inner `WorkoutEditForm` (the original
+create-or-edit form, parameterized by `workoutId: number | null` to know whether Save should
+create or update). `MonthView.tsx`'s per-day indicator changed from a `Map<date, workout>` that
+silently collapsed multiple same-date rows to the last one, to a `Map<date, workout[]>` rendering
+one line per workout, sorted the same way. `worker/main.py::run_daily_workout_push` and
+`calendar_feed.py` needed no changes — both already operated per-row/id and never assumed
+date-uniqueness.
+
+Verification: `uv run pytest -q` (1091 passed), `ruff`, `mypy` clean; `tests/api/
+test_planned_workouts.py` rewritten around the id-keyed contract (two `POST`s to the same date
+producing two independently-addressable rows, 404s for an unknown id on every id-keyed route,
+`by-date` ordering, recurring-always-creates). `cd frontend && npm run typecheck && npm run
+build && npx vitest run` (674 passed) all green. `alembic upgrade head` applied locally; `alembic
+downgrade -1` correctly recreates the `UniqueConstraint` (and would fail loudly if two same-date
+rows already existed at that point, as expected of a real uniqueness constraint).

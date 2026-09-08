@@ -579,6 +579,7 @@ const EX = {
   LINK: 2,
   GOAL: 14,
   PLANNED_DATE: "2026-09-01",
+  PLANNED_WORKOUT_ID: 42,
 };
 
 // ---------------------------------------------------------------------------
@@ -1069,9 +1070,9 @@ const SCHEMAS = [
       ["scheduled_time","string|null","\"HH:MM\" (24h)."],
       ["push_status","string","draft | pushed | push_failed."],
     ] },
-  { name: "PlannedWorkoutOut", note: "Returned by GET/PUT /planned-workouts/{local_date}. See “available: false” in Conventions.", fields: [
-      ["available","boolean","required"],
-      ["id","integer|null","optional — omitted when available is false","opt"],
+  { name: "PlannedWorkoutOut", note: "Returned by POST/GET/PUT /planned-workouts and GET .../by-date/{local_date}. available is always true here — a nonexistent workout_id is a 404, not an available:false object.", fields: [
+      ["available","boolean","required — always true"],
+      ["id","integer|null","optional","opt"],
       ["local_date","string(date)|null","optional","opt"],
       ["sport","string|null","optional","opt"],
       ["name","string|null","optional","opt"],
@@ -1123,8 +1124,7 @@ const SCHEMAS = [
       ["message","string",""],
     ] },
   { name: "RecurringWorkoutOut", note: "Returned by POST /planned-workouts/recurring.", fields: [
-      ["created_dates","array<string(date)>",""],
-      ["skipped_dates","array<string(date)>","Already had a planned workout — left untouched, not overwritten."],
+      ["created_dates","array<string(date)>","Every occurrence date got its own new row, even one that already had a workout scheduled."],
     ] },
 ];
 
@@ -1587,17 +1587,24 @@ const GROUPS = [
       responses: [ { code: 200, ref: "array&lt;PlannedWorkoutListItemOut&gt;" } ],
       example: { qs: "?start_date=2026-09-01&end_date=2026-09-30" }
     },
-    { method: "GET", path: "/api/v1/planned-workouts/{local_date}", summary: "Get one day's planned workout.",
-      description: "Its parsed steps plus any parse errors from the currently-stored source_text. available: false (not 404) when nothing is scheduled for that date.",
+    { method: "GET", path: "/api/v1/planned-workouts/by-date/{local_date}", summary: "Get every workout scheduled on one date.",
+      description: "An empty array, one, or many — a day can hold any number of independently id-addressed workouts. Ordered by scheduled_time (nulls last) then id.",
       params: [ ["local_date","path","req","string","—","ISO date."] ],
-      responses: [ { code: 200, ref: "PlannedWorkoutOut" } ],
-      example: { curl: `curl https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_DATE} \\
+      responses: [ { code: 200, ref: "array&lt;PlannedWorkoutOut&gt;" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/planned-workouts/by-date/${EX.PLANNED_DATE} \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
-    { method: "PUT", path: "/api/v1/planned-workouts/{local_date}", summary: "Create or replace the planned workout for one date.",
-      description: "Upsert keyed on (athlete_id, local_date) — re-parses source_text into a fresh set of steps every time. Editing a workout that was already \"pushed\" resets push_status back to \"draft\" (the old Garmin copy is stale and gets re-pushed fresh on the next push).",
-      params: [ ["local_date","path","req","string","—","ISO date."] ],
-      body: { schema: "PlannedWorkoutIn", fields: [
+    { method: "GET", path: "/api/v1/planned-workouts/{workout_id}", summary: "Get one workout.",
+      description: "Its parsed steps plus any parse errors from the currently-stored source_text.",
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."] ],
+      responses: [ { code: 200, ref: "PlannedWorkoutOut" }, { code: 404, note: 'detail: "planned workout not found"' } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/planned-workouts", summary: "Create a new workout on a date.",
+      description: "Creates alongside any others already scheduled on that date — a day can hold any number of workouts.",
+      body: { schema: "PlannedWorkoutCreateIn", fields: [
+        ["local_date","string","req","","Which date to create the workout on, ISO date."],
         ["sport","string","req","","running | yoga | bouldering | fitness | hiit | strength_training — open string, not an enum."],
         ["name","string|null","opt","",""],
         ["source_text","string|null","opt","","running: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting parse_errors come back in the response. A trailing \"# comment\" on any line attaches a freeform note to that step (see PlannedWorkoutStepOut.comment); a comment-only line errors as a missing duration. yoga/bouldering: freeform notes only, never parsed. Ignored for hiit/strength_training."],
@@ -1606,26 +1613,42 @@ const GROUPS = [
         ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — the exercise-picker steps, already-structured. Ignored for every other sport."],
       ]},
       responses: [ { code: 200, ref: "PlannedWorkoutOut" } ],
-      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_DATE} \\
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"local_date": "${EX.PLANNED_DATE}", "sport": "running", "name": "Tempo run", "source_text": "Warmup 10m\\n\\n4x\\n3m 5:00-5:10/km Pace\\n2m Z2 HR\\n\\nCooldown 5m"}'` }
+    },
+    { method: "PUT", path: "/api/v1/planned-workouts/{workout_id}", summary: "Update a workout in place.",
+      description: "Re-parses source_text into a fresh set of steps every time. Its date can't be changed via this route. Editing a workout that was already \"pushed\" resets push_status back to \"draft\" (the old Garmin copy is stale and gets re-pushed fresh on the next push).",
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."] ],
+      body: { schema: "PlannedWorkoutIn", fields: [
+        ["sport","string","req","","running | yoga | bouldering | fitness | hiit | strength_training — open string, not an enum."],
+        ["name","string|null","opt","",""],
+        ["source_text","string|null","opt","","running: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting parse_errors come back in the response. A trailing \"# comment\" on any line attaches a freeform note to that step (see PlannedWorkoutStepOut.comment); a comment-only line errors as a missing duration. yoga/bouldering: freeform notes only, never parsed. Ignored for hiit/strength_training."],
+        ["scheduled_time","string|null","opt","","\"HH:MM\" (24h). Display-only — Garmin's own scheduling has no time-of-day API."],
+        ["duration_minutes","number|null","opt","","yoga/bouldering only — sets the workout's duration directly. Ignored for running/hiit/strength_training."],
+        ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — the exercise-picker steps, already-structured. Ignored for every other sport."],
+      ]},
+      responses: [ { code: 200, ref: "PlannedWorkoutOut" }, { code: 404, note: 'detail: "planned workout not found"' } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID} \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"sport": "running", "name": "Tempo run", "source_text": "Warmup 10m\\n\\n4x\\n3m 5:00-5:10/km Pace\\n2m Z2 HR\\n\\nCooldown 5m"}'` }
     },
-    { method: "DELETE", path: "/api/v1/planned-workouts/{local_date}", summary: "Delete a planned workout.",
+    { method: "DELETE", path: "/api/v1/planned-workouts/{workout_id}", summary: "Delete a workout.",
       description: "If it was already pushed, also best-effort deletes the Garmin-side workout template — a Garmin-side failure there never blocks the local delete.",
-      params: [ ["local_date","path","req","string","—","ISO date."] ],
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."] ],
       responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "planned workout not found"' } ],
-      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_DATE} \\
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID} \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
-    { method: "POST", path: "/api/v1/planned-workouts/{local_date}/push", summary: "Push one workout to Garmin now.",
-      description: "The manual override alongside the worker's own automatic push for anything due within the coming week (PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS, default 7). Runs in the background; poll GET /planned-workouts/{local_date} afterward for the updated push_status/push_error.",
-      params: [ ["local_date","path","req","string","—","ISO date."] ],
+    { method: "POST", path: "/api/v1/planned-workouts/{workout_id}/push", summary: "Push one workout to Garmin now.",
+      description: "The manual override alongside the worker's own automatic push for anything due within the coming week (PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS, default 7). Runs in the background; poll GET /planned-workouts/{workout_id} afterward for the updated push_status/push_error.",
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."] ],
       responses: [ { code: 200, ref: "JobTriggerOut" }, { code: 404, note: 'detail: "planned workout not found"' } ],
-      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_DATE}/push \\
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID}/push \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "POST", path: "/api/v1/planned-workouts/recurring", summary: "Schedule the same workout on a repeating set of dates.",
-      description: "Creates one independent planned_workout row per occurrence date — not a recurring-rule object; each row can be edited or deleted independently afterward. A date that already has a planned workout is skipped, not overwritten, and reported back in skipped_dates.",
+      description: "Creates one independent planned_workout row per occurrence date — not a recurring-rule object; each row can be edited or deleted independently afterward. Always creates, even on a date that already has a workout scheduled — a day can hold more than one.",
       body: { schema: "RecurringWorkoutIn", fields: [
         ["local_date","string","req","","First occurrence, ISO date."],
         ["sport","string","req","",""],

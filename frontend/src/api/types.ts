@@ -519,6 +519,14 @@ export interface ParseErrorOut {
   message: string;
 }
 
+// One already-repeat-expanded step of a running workout's load estimate -- see
+// planned_workout_stats.py's own docstring for the zone/load rules. Rendered as one colored
+// block in the workout's load bar, width proportional to duration_s.
+export interface PlannedWorkoutSegmentOut {
+  duration_s: number;
+  zone: number | null; // 1 (easy) .. 5 (repetition), or null when no zone could be determined
+}
+
 export interface PlannedWorkoutOut {
   available: boolean;
   id: number | null;
@@ -534,6 +542,12 @@ export interface PlannedWorkoutOut {
   push_error: string | null;
   garmin_workout_id: number | null;
   garmin_scheduled_at: string | null;
+  // running only (planned_workout_stats.py) -- always null/empty for every other sport, and for
+  // running itself when the athlete hasn't configured a running-load threshold pace yet
+  // (estimated_load only; distance/duration/segments still populate from the steps alone).
+  estimated_distance_m: number | null;
+  estimated_load: number | null;
+  segments: PlannedWorkoutSegmentOut[];
 }
 
 export interface PlannedWorkoutListItemOut {
@@ -546,8 +560,9 @@ export interface PlannedWorkoutListItemOut {
 }
 
 export interface RecurringWorkoutOut {
+  // Every occurrence date gets its own new row, even one that already had a workout -- a day
+  // can hold more than one now, so there's nothing to skip.
   created_dates: string[];
-  skipped_dates: string[];
 }
 
 export interface ActivityWorkoutOut {

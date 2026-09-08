@@ -487,7 +487,8 @@ because you don't recognize it — stop, that's the bug.
   package itself; a real bug this project shipped once and fixed once yoga/bouldering exposed
   it). Push is automatic for anything due within `PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS`
   (default 7) days (`worker/main.py::run_daily_workout_push`, its own daily schedule), plus a
-  manual `POST /planned-workouts/{date}/push` override. Running's own push is live-verified end
+  manual `POST /planned-workouts/{workout_id}/push` override (id-keyed, not date-keyed -- see the
+  "more than one workout per day" bullet below). Running's own push is live-verified end
   to end (2026-09-03, a real push + read-back against the author's own Garmin account): a cadence
   target riding alongside a pace target on the same step (`_cadence_extra`, an
   initially-undocumented Garmin field) does reach and round-trip correctly — Garmin's server
@@ -500,6 +501,18 @@ because you don't recognize it — stop, that's the bug.
   itself, mapping to its own repeat-marker row — lost if the set's repeat count stays at 1, since
   no marker row is ever emitted then). Yoga/bouldering get neither — they already have an
   equivalent via their own freeform `source_text`. Never parsed further, never pushed to Garmin.
+  **Revision**: a day originally held at most one `planned_workout` row (`UniqueConstraint` on
+  `(athlete_id, local_date)`) -- lifted once the athlete asked to schedule more than one workout
+  on the same day (e.g. a morning run plus an evening strength session). Every workout is now
+  addressed by its own `id`, never by date alone: `POST /planned-workouts` creates, `GET/PUT/
+  DELETE /planned-workouts/{workout_id}` and `POST /planned-workouts/{workout_id}/push` act on one
+  workout, and `GET /planned-workouts/by-date/{local_date}` lists every workout on one date
+  (sorted by `scheduled_time`, nulls last, then `id`) -- the old date-keyed single-object GET/PUT/
+  DELETE/push routes are gone. `POST /planned-workouts/recurring` no longer skips a date that
+  already has a workout scheduled; it always creates alongside it. `ScheduleWorkoutForm.tsx`
+  renders a list of the date's own workouts (each with its own Edit/Push/Copy/Delete) plus an
+  "Add another workout" affordance, splitting what used to be one single-workout form into an
+  outer list view and an inner create-or-edit form component.
 - **Exercise library page (`/exercises`, `ExerciseLibraryPage.tsx`)**: a browsable reference for
   every exercise the hiit/strength_training picker's catalog supports — 47 categories collapsed
   by default (native `<details>`, same convention as `ActivitySourcesPanel.tsx`'s own "Why these

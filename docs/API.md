@@ -774,10 +774,14 @@ only, v1 — a non-running `sport` saves and lists fine but `POST .../push` fail
 from yet. See `docs/adr/0015-scheduled-workouts.md` and the workout-syntax text format described
 there (duration, a pace/HR/zone target, cadence, a simple `Nx` repeat block).
 
+A day can hold any number of independently-addressed workouts — every workout is identified by
+its own `id`, never by date alone.
+
 ### `GET /planned-workouts`
 
-Date-range list for the calendar grid's own per-day indicator — not the full workout, just
-enough to render one (see `GET /planned-workouts/{local_date}` for the rest).
+Date-range summary list for the calendar grid's own per-day indicator — not the full workout,
+just enough to render one per row (see `GET /planned-workouts/by-date/{local_date}` for the full
+detail of every workout on one date).
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
@@ -786,24 +790,49 @@ enough to render one (see `GET /planned-workouts/{local_date}` for the rest).
 
 **Response `200`:** array\<`PlannedWorkoutListItemOut`\>.
 
-### `GET /planned-workouts/{local_date}`
+### `GET /planned-workouts/by-date/{local_date}`
 
-One day's planned workout, its parsed steps, and any parse errors from the currently-stored
-`source_text`. `available: false` (not `404`) when nothing is scheduled for that date.
+Every workout scheduled on one date — an empty array, one, or many. Ordered by `scheduled_time`
+(nulls last) then `id`, the order the calendar's own day panel displays them in.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
 | `local_date` | path | **required** | string (date) | |
 
+**Response `200`:** array\<`PlannedWorkoutOut`\>.
+
+### `GET /planned-workouts/{workout_id}`
+
+One workout, its parsed steps, and any parse errors from the currently-stored `source_text`.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `workout_id` | path | **required** | integer | From `PlannedWorkoutOut.id`. |
+
+**Responses:** `200` → `PlannedWorkoutOut`. `404` → `detail: "planned workout not found"`.
+
+### `POST /planned-workouts`
+
+Creates a new workout on the given date, alongside any others already scheduled there.
+
+**Request body** (`PlannedWorkoutCreateIn` — `PlannedWorkoutIn` below plus `local_date`):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `local_date` | string (date) | required | Which date to create the workout on. |
+
 **Response `200`:** `PlannedWorkoutOut`.
 
-### `PUT /planned-workouts/{local_date}`
+### `PUT /planned-workouts/{workout_id}`
 
-Creates or replaces the planned workout for one date. Upsert keyed on `(athlete_id, local_date)`
-— calling this again for the same date replaces the existing workout (and re-parses
-`source_text` into a fresh set of steps) rather than creating a second one. Editing a workout
-that was already `"pushed"` resets `push_status` back to `"draft"` — the old Garmin copy is now
-stale and gets re-pushed fresh on the next push.
+Updates that specific workout in place (and re-parses `source_text` into a fresh set of steps).
+Its date can't be changed via this route. Editing a workout that was already `"pushed"` resets
+`push_status` back to `"draft"` — the old Garmin copy is now stale and gets re-pushed fresh on
+the next push.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `workout_id` | path | **required** | integer | From `PlannedWorkoutOut.id`. |
 
 **Request body** (`PlannedWorkoutIn`):
 
@@ -816,7 +845,7 @@ stale and gets re-pushed fresh on the next push.
 | `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — sets the workout's duration directly (there's no syntax to derive one from). Ignored for `running`/`hiit`/`strength_training`, where duration is derived instead. |
 | `steps` | array\<`PlannedWorkoutStepIn`\>, nullable | optional | `hiit`/`strength_training` only — the exercise-picker steps, arriving already-structured (never parsed from text). Ignored for every other sport. |
 
-**Response `200`:** `PlannedWorkoutOut`.
+**Responses:** `200` → `PlannedWorkoutOut`. `404` → `detail: "planned workout not found"`.
 
 `PlannedWorkoutStepIn`:
 
@@ -834,29 +863,29 @@ stale and gets re-pushed fresh on the next push.
 | `weight_kg` | number, nullable | optional | Converted to grams (Garmin's own wire unit) only at push time. |
 | `comment` | string, nullable | optional | A freeform note on this specific step — typed directly for `hiit`/`strength_training` (a repeat-marker's own comment is the "set"'s comment). Never parsed, never pushed to Garmin. For `running`, ignored here — comes from an inline `#` token in `source_text` instead. |
 
-### `DELETE /planned-workouts/{local_date}`
+### `DELETE /planned-workouts/{workout_id}`
 
-Deletes the planned workout for one date. If it was already pushed, also best-effort deletes the
-Garmin-side workout template — a Garmin-side failure there (e.g. unreachable, no token store)
-never blocks the local delete.
+Deletes that workout. If it was already pushed, also best-effort deletes the Garmin-side workout
+template — a Garmin-side failure there (e.g. unreachable, no token store) never blocks the local
+delete.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
-| `local_date` | path | **required** | string (date) | |
+| `workout_id` | path | **required** | integer | From `PlannedWorkoutOut.id`. |
 
 **Responses:** `200` (no response body). `404` → `detail: "planned workout not found"`.
 
-### `POST /planned-workouts/{local_date}/push`
+### `POST /planned-workouts/{workout_id}/push`
 
 Manually pushes one workout to Garmin right now, regardless of date — the override alongside the
 worker's own automatic push for anything due within the coming week
 (`PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS`, default 7). Runs in the background; poll
-`GET /planned-workouts/{local_date}` afterward for the updated `push_status`/`push_error`, since
+`GET /planned-workouts/{workout_id}` afterward for the updated `push_status`/`push_error`, since
 that status lives on the workout row itself, not a generic job log.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
-| `local_date` | path | **required** | string (date) | |
+| `workout_id` | path | **required** | integer | From `PlannedWorkoutOut.id`. |
 
 **Responses:** `200` → `JobTriggerOut`. `404` → `detail: "planned workout not found"`.
 
@@ -864,8 +893,8 @@ that status lives on the workout row itself, not a generic job log.
 
 Creates one independent `planned_workout` row per occurrence date — not a recurring-rule object;
 each row is a full copy of the same content and can be edited or deleted independently of the
-others afterward. A date that already has a planned workout is skipped, not overwritten, and
-reported back in `skipped_dates`.
+others afterward. Always creates, even on a date that already has a workout scheduled — a day
+can hold more than one, so there's nothing to skip.
 
 **Request body** (`RecurringWorkoutIn`):
 
@@ -1630,7 +1659,9 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 
 ### PlannedWorkoutOut
 
-`available` (boolean, required); when `false`, every field below is `null`/empty:
+`available` (boolean, required) — always `true` in every response from the routes above; a
+nonexistent `workout_id` is a `404`, not an `available: false` object, now that a workout is
+always addressed by id rather than by date:
 
 | Field | Type | Description |
 |---|---|---|
@@ -1673,5 +1704,5 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 
 ### RecurringWorkoutOut
 
-`created_dates` (array\<string\>, dates), `skipped_dates` (array\<string\>, dates — already had a
-planned workout, left untouched).
+`created_dates` (array\<string\>, dates) — every occurrence date got its own new row, even one
+that already had a workout scheduled.

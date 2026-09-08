@@ -1,6 +1,7 @@
 // The "Planned workout" section of MonthView's expanded-day card and DayViewPage
-// (docs/adr/0015-scheduled-workouts.md): shows the scheduled workout + push status if one
-// exists, or a "Schedule a workout" affordance if not. Three sport tiers, matching
+// (docs/adr/0015-scheduled-workouts.md): shows every workout scheduled for a date (a day can
+// hold more than one, each independently id-addressed) + its push status, or a "Schedule a
+// workout" affordance if none exist yet. Three sport tiers, matching
 // planned_workouts.py::save_planned_workout: running gets the full text-syntax editor + live
 // preview; yoga/bouldering (PLACEHOLDER_SPORTS) are deliberately simpler placeholders -- a
 // duration (minutes) + a time-of-day field, no structured syntax at all, per the user's own
@@ -12,11 +13,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  useCreatePlannedWorkout,
   useCreateRecurringPlannedWorkouts,
   useDeletePlannedWorkout,
-  usePlannedWorkout,
+  usePlannedWorkoutsForDate,
   usePushPlannedWorkout,
-  useSavePlannedWorkout,
+  useUpdatePlannedWorkout,
 } from "../api/queries";
 import type { PlannedWorkoutOut } from "../api/types";
 import {
@@ -30,8 +32,11 @@ import {
 import { formatStepDurationLabel, groupWorkoutStepsForDisplay, plannedCadenceLabel, plannedTargetLabel } from "../workoutSteps";
 import { parsedStepToApiShape, parseWorkoutSyntax } from "../workoutSyntax";
 import { copyWorkoutToClipboard, readWorkoutClipboard } from "../workoutClipboard";
+import { Icon } from "./Icon";
 import { LoadingSpinner } from "./LoadingSpinner";
+import { plannedWorkoutSportStyle } from "../metricStyle";
 import { StepBuilderModal } from "./StepBuilderModal";
+import { WorkoutLoadBar } from "./WorkoutLoadBar";
 import "../styles/plannedWorkout.css";
 
 const SPORTS = [
@@ -51,6 +56,13 @@ const PLACEHOLDER_SPORTS = new Set(["yoga", "bouldering"]);
 // EXERCISE_SPORTS exactly.
 const EXERCISE_SPORTS = new Set(["hiit", "strength_training"]);
 
+// usePlannedWorkoutsForDate only ever returns real, saved rows (never the old
+// available:false/id:null sentinel a single-object GET used to return for absence -- a
+// nonexistent workout is now just an entry missing from the list) so every element genuinely
+// has a non-null id; this narrows that once at the API boundary instead of guarding it at every
+// call site below.
+type ScheduledWorkout = PlannedWorkoutOut & { id: number };
+
 function statusLabel(status: PlannedWorkoutOut["push_status"]): string {
   if (status === "pushed") return "Pushed to Garmin";
   if (status === "push_failed") return "Push failed";
@@ -62,7 +74,7 @@ function formatDurationMinutes(estimatedDurationS: number | null): string | null
   return `${Math.round(estimatedDurationS / 60)} min`;
 }
 
-function WorkoutSummary({ localDate, workout }: { localDate: string; workout: PlannedWorkoutOut }) {
+function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
   const del = useDeletePlannedWorkout();
   const push = usePushPlannedWorkout();
   const duration = formatDurationMinutes(workout.estimated_duration_s);
@@ -87,6 +99,7 @@ function WorkoutSummary({ localDate, workout }: { localDate: string; workout: Pl
   return (
     <div className="planned-workout__summary">
       <div className="planned-workout__summary-header">
+        {workout.sport != null && <Icon name={plannedWorkoutSportStyle(workout.sport).icon} />}
         <strong>{workout.name || workout.sport}</strong>
         <span className={`planned-workout__status planned-workout__status--${workout.push_status}`}>
           {statusLabel(workout.push_status)}
@@ -99,6 +112,7 @@ function WorkoutSummary({ localDate, workout }: { localDate: string; workout: Pl
           {duration}
         </p>
       )}
+      <WorkoutLoadBar workout={workout} />
       {workout.push_error && (
         <p className="chart-note" role="alert">
           {workout.push_error}
@@ -109,7 +123,7 @@ function WorkoutSummary({ localDate, workout }: { localDate: string; workout: Pl
           <button
             type="button"
             className="button"
-            onClick={() => push.mutate(localDate)}
+            onClick={() => push.mutate(workout.id)}
             disabled={push.isPending}
           >
             {push.isPending ? "Pushing…" : "Push to Garmin"}
@@ -121,7 +135,7 @@ function WorkoutSummary({ localDate, workout }: { localDate: string; workout: Pl
         <button
           type="button"
           className="button"
-          onClick={() => del.mutate(localDate)}
+          onClick={() => del.mutate(workout.id)}
           disabled={del.isPending}
         >
           Delete
@@ -131,9 +145,21 @@ function WorkoutSummary({ localDate, workout }: { localDate: string; workout: Pl
   );
 }
 
-export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
-  const workout = usePlannedWorkout(localDate);
-  const save = useSavePlannedWorkout();
+function WorkoutEditForm({
+  localDate,
+  workoutId,
+  initial,
+  pasteOnMount,
+  onDone,
+}: {
+  localDate: string;
+  workoutId: number | null; // null means "creating a new workout on this date"
+  initial?: PlannedWorkoutOut;
+  pasteOnMount?: boolean;
+  onDone: () => void;
+}) {
+  const create = useCreatePlannedWorkout();
+  const update = useUpdatePlannedWorkout();
   const recurring = useCreateRecurringPlannedWorkouts();
 
   // Kicks off the (code-split, ~230KB) exercise catalog fetch as soon as this day's panel
@@ -143,14 +169,21 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
     void preloadExerciseCatalog();
   }, []);
 
-  const [editing, setEditing] = useState(false);
-  const [sport, setSport] = useState("running");
-  const [name, setName] = useState("");
-  const [sourceText, setSourceText] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState("");
-  const [scheduledTime, setScheduledTime] = useState("");
+  const [sport, setSport] = useState(initial?.sport ?? "running");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [sourceText, setSourceText] = useState(initial?.source_text ?? "");
+  const [durationMinutes, setDurationMinutes] = useState(
+    initial?.estimated_duration_s
+      ? String(Math.round(initial.estimated_duration_s / 60))
+      : "",
+  );
+  const [scheduledTime, setScheduledTime] = useState(initial?.scheduled_time ?? "");
   const [stepBuilderOpen, setStepBuilderOpen] = useState(false);
-  const [exerciseItems, setExerciseItems] = useState<ExerciseItem[]>([]);
+  const [exerciseItems, setExerciseItems] = useState<ExerciseItem[]>(
+    initial != null && EXERCISE_SPORTS.has(initial.sport ?? "")
+      ? apiStepsToItems(initial.steps)
+      : [],
+  );
   const [showRecurrence, setShowRecurrence] = useState(false);
   const [recurFrequency, setRecurFrequency] = useState<"weekly" | "every_n_days" | "monthly">(
     "weekly",
@@ -164,34 +197,6 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
   const clipboardItem = readWorkoutClipboard();
   const isPlaceholderSport = PLACEHOLDER_SPORTS.has(sport);
   const isExerciseSport = EXERCISE_SPORTS.has(sport);
-
-  function startEditing() {
-    if (workout.data?.available) {
-      const sp = workout.data.sport ?? "running";
-      setSport(sp);
-      setName(workout.data.name ?? "");
-      setSourceText(workout.data.source_text ?? "");
-      setScheduledTime(workout.data.scheduled_time ?? "");
-      setDurationMinutes(
-        workout.data.estimated_duration_s
-          ? String(Math.round(workout.data.estimated_duration_s / 60))
-          : "",
-      );
-      if (EXERCISE_SPORTS.has(sp)) {
-        setExerciseItems(apiStepsToItems(workout.data.steps));
-      } else {
-        setExerciseItems([]);
-      }
-    } else {
-      setSport("running");
-      setName("");
-      setSourceText("");
-      setScheduledTime("");
-      setDurationMinutes("");
-      setExerciseItems([]);
-    }
-    setEditing(true);
-  }
 
   function handlePaste() {
     const item = readWorkoutClipboard();
@@ -207,6 +212,14 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
       setExerciseItems([]);
     }
   }
+
+  // A one-click "Paste copied workout" from the list view (before this form even exists) skips
+  // straight to an already-filled create form, rather than opening it blank and making the
+  // athlete click Paste a second time.
+  useEffect(() => {
+    if (pasteOnMount) handlePaste();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function insertAtCursor(text: string) {
     const el = textareaRef.current;
@@ -236,18 +249,19 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    save.mutate(
-      {
-        localDate,
-        sport,
-        name: name.trim() || null,
-        source_text: isExerciseSport ? null : sourceText.trim() || null,
-        scheduled_time: scheduledTime || null,
-        duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
-        steps: isExerciseSport ? itemsToApiSteps(exerciseItems) : null,
-      },
-      { onSuccess: () => setEditing(false) },
-    );
+    const fields = {
+      sport,
+      name: name.trim() || null,
+      source_text: isExerciseSport ? null : sourceText.trim() || null,
+      scheduled_time: scheduledTime || null,
+      duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
+      steps: isExerciseSport ? itemsToApiSteps(exerciseItems) : null,
+    };
+    if (workoutId == null) {
+      create.mutate({ localDate, ...fields }, { onSuccess: onDone });
+    } else {
+      update.mutate({ workoutId, ...fields }, { onSuccess: onDone });
+    }
   }
 
   function handleRecurringSave() {
@@ -266,44 +280,11 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         count: recurStopMode === "count" ? Number(recurCount) || undefined : undefined,
         until: recurStopMode === "until" && recurUntil ? recurUntil : undefined,
       },
-      { onSuccess: () => setEditing(false) },
+      { onSuccess: onDone },
     );
   }
 
-  if (workout.isLoading) return <LoadingSpinner size="sm" />;
-  if (workout.isError) return <p role="alert">Could not load the planned workout.</p>;
-
-  if (!editing) {
-    if (workout.data?.available) {
-      return (
-        <>
-          <WorkoutSummary localDate={localDate} workout={workout.data} />
-          <button type="button" className="button" onClick={startEditing}>
-            Edit
-          </button>
-        </>
-      );
-    }
-    return (
-      <div className="planned-workout__actions">
-        <button type="button" className="button button--primary" onClick={startEditing}>
-          Schedule a workout
-        </button>
-        {clipboardItem && (
-          <button
-            type="button"
-            className="button"
-            onClick={() => {
-              handlePaste();
-              setEditing(true);
-            }}
-          >
-            Paste copied workout
-          </button>
-        )}
-      </div>
-    );
-  }
+  const saving = workoutId == null ? create.isPending : update.isPending;
 
   return (
     <form className="planned-workout-form" onSubmit={handleSave}>
@@ -456,10 +437,10 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
       )}
 
       <div className="planned-workout-form__actions">
-        <button type="submit" className="button button--primary" disabled={save.isPending}>
-          {save.isPending ? "Saving…" : "Save"}
+        <button type="submit" className="button button--primary" disabled={saving}>
+          {saving ? "Saving…" : "Save"}
         </button>
-        <button type="button" className="button" onClick={() => setEditing(false)}>
+        <button type="button" className="button" onClick={onDone}>
           Cancel
         </button>
         <button type="button" className="button" onClick={() => setShowRecurrence(!showRecurrence)}>
@@ -541,12 +522,7 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
             {recurring.isPending ? "Creating…" : "Create schedule"}
           </button>
           {recurring.data && (
-            <p className="chart-note">
-              Created {recurring.data.created_dates.length} workout(s)
-              {recurring.data.skipped_dates.length > 0 &&
-                `, skipped ${recurring.data.skipped_dates.length} already-scheduled date(s)`}
-              .
-            </p>
+            <p className="chart-note">Created {recurring.data.created_dates.length} workout(s).</p>
           )}
         </fieldset>
       )}
@@ -557,5 +533,80 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         onGenerate={insertAtCursor}
       />
     </form>
+  );
+}
+
+export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
+  const workouts = usePlannedWorkoutsForDate(localDate);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [addingNew, setAddingNew] = useState(false);
+  const [pasteOnCreate, setPasteOnCreate] = useState(false);
+
+  if (workouts.isLoading) return <LoadingSpinner size="sm" />;
+  if (workouts.isError) return <p role="alert">Could not load the planned workouts.</p>;
+
+  const list = (workouts.data ?? []) as ScheduledWorkout[];
+  const clipboardItem = readWorkoutClipboard();
+
+  function stopEditing() {
+    setEditingId(null);
+    setAddingNew(false);
+    setPasteOnCreate(false);
+  }
+
+  if (addingNew) {
+    return (
+      <WorkoutEditForm
+        localDate={localDate}
+        workoutId={null}
+        pasteOnMount={pasteOnCreate}
+        onDone={stopEditing}
+      />
+    );
+  }
+  if (editingId != null) {
+    const editing = list.find((w) => w.id === editingId);
+    return (
+      <WorkoutEditForm
+        localDate={localDate}
+        workoutId={editingId}
+        initial={editing}
+        onDone={stopEditing}
+      />
+    );
+  }
+
+  return (
+    <>
+      {list.map((workout) => (
+        <div key={workout.id} className="planned-workout__entry">
+          <WorkoutSummary workout={workout} />
+          <button type="button" className="button" onClick={() => setEditingId(workout.id)}>
+            Edit
+          </button>
+        </div>
+      ))}
+      <div className="planned-workout__actions">
+        <button
+          type="button"
+          className="button button--primary"
+          onClick={() => setAddingNew(true)}
+        >
+          {list.length === 0 ? "Schedule a workout" : "Add another workout"}
+        </button>
+        {clipboardItem && (
+          <button
+            type="button"
+            className="button"
+            onClick={() => {
+              setPasteOnCreate(true);
+              setAddingNew(true);
+            }}
+          >
+            Paste copied workout
+          </button>
+        )}
+      </div>
+    </>
   );
 }
