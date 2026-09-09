@@ -218,7 +218,9 @@ def _to_out(
         estimated_distance_m=estimate.distance_m if estimate is not None else None,
         estimated_load=estimate.load if estimate is not None else None,
         segments=[
-            PlannedWorkoutSegmentOut(duration_s=s.duration_s, zone=s.zone)
+            PlannedWorkoutSegmentOut(
+                duration_s=s.duration_s, zone=s.zone, intensity_factor=s.intensity_factor
+            )
             for s in estimate.segments
         ]
         if estimate is not None

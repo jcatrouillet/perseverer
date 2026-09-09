@@ -71,6 +71,13 @@ class StepEstimate:
     distance_m: float
     zone: int | None  # 1-5, or None when no zone could be determined (e.g. a rest step)
     load: float | None  # Coggan-style rTSS contribution, or None alongside an undetermined zone
+    # The continuous speed-to-threshold (or canonical-zone-IF) ratio behind `zone` -- exposed
+    # separately because `zone` alone is too coarse for the frontend's load bar to draw from: two
+    # steps can land in the same 1-5 zone bucket (e.g. 5:10-5:30/km and 4:50-5:15/km both landing
+    # in zone 2 for a fast-threshold athlete) while still being a real, athlete-visible pace
+    # difference the bar should show as different column heights, not identical ones. `None` iff
+    # `zone` is also `None` (no target resolvable, or no threshold pace configured at all).
+    intensity_factor: float | None
 
 
 @dataclass
@@ -159,19 +166,36 @@ def estimate_step(
         zone = _zone_for_speed_ratio(DEFAULT_ASSUMED_SPEED_MPS / threshold_speed_mps)
         speed_for_load = DEFAULT_ASSUMED_SPEED_MPS
 
+    # Same "concrete speed if we have one, else the zone's own canonical value" fallback as the
+    # load formula below -- computed once here so both load and the display-only field below stay
+    # in exact agreement about which number represents this step's intensity.
+    intensity_factor: float | None = None
+    if speed_for_load is not None and threshold_speed_mps is not None:
+        intensity_factor = speed_for_load / threshold_speed_mps
+    elif zone is not None:
+        intensity_factor = _CANONICAL_ZONE_IF[zone - 1]
+    elif step.intensity == "rest":
+        intensity_factor = 0.0
+
     load: float | None = None
     if zone is not None and threshold_pace_sec_per_km is not None:
         if speed_for_load is not None:
             load = compute_running_tss(duration_s, speed_for_load, threshold_pace_sec_per_km)
         else:
             # A zone was determined without a concrete speed (an HR-zone/bpm-bucketed step) --
-            # fall back to that zone's own canonical intensity factor instead.
-            intensity_factor = _CANONICAL_ZONE_IF[zone - 1]
-            load = (duration_s / 3600.0) * intensity_factor**2 * 100.0
+            # fall back to that zone's own canonical intensity factor instead (same value now
+            # held in `intensity_factor` above, for this exact branch).
+            load = (duration_s / 3600.0) * _CANONICAL_ZONE_IF[zone - 1] ** 2 * 100.0
     elif step.intensity == "rest":
         load = 0.0
 
-    return StepEstimate(duration_s=duration_s, distance_m=distance_m, zone=zone, load=load)
+    return StepEstimate(
+        duration_s=duration_s,
+        distance_m=distance_m,
+        zone=zone,
+        load=load,
+        intensity_factor=intensity_factor,
+    )
 
 
 def estimate_workout(

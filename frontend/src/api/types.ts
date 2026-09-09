@@ -520,11 +520,14 @@ export interface ParseErrorOut {
 }
 
 // One already-repeat-expanded step of a running workout's load estimate -- see
-// planned_workout_stats.py's own docstring for the zone/load rules. Rendered as one colored
-// block in the workout's load bar, width proportional to duration_s.
+// planned_workout_stats.py's own docstring for the zone/load rules. Rendered as one block in the
+// workout's load bar: width proportional to duration_s, color from zone, height from
+// intensity_factor (continuous, so two steps sharing one discrete zone still draw at visibly
+// different heights -- see WorkoutLoadBar.tsx).
 export interface PlannedWorkoutSegmentOut {
   duration_s: number;
   zone: number | null; // 1 (easy) .. 5 (repetition), or null when no zone could be determined
+  intensity_factor: number | null; // continuous speed-to-threshold ratio; null iff zone is null
 }
 
 export interface PlannedWorkoutOut {

@@ -1,8 +1,11 @@
 // A scheduled RUNNING workout's own distance/duration/load summary plus a Garmin-Connect-style
 // load bar -- one segment per (already repeat-expanded) step, width proportional to its share of
-// total duration, colored AND sized (height) by the effort zone `planned_workout_stats.py`
-// assigned it -- matching the athlete's own reference screenshots, where a hard interval reads
-// as both a hotter color and a taller column than the easy work around it, not color alone.
+// total duration, colored by the discrete effort zone `planned_workout_stats.py` assigned it AND
+// sized (height) from that same step's own continuous intensity_factor -- matching the athlete's
+// own reference screenshots, where a hard interval reads as both a hotter color and a taller
+// column than the easy work around it, not color alone. Height deliberately isn't just a lookup
+// off the discrete zone number: two steps can share a zone bucket (see segmentHeightPx below)
+// while still being visibly different paces, and only the continuous value tells them apart.
 // Running only: yoga/bouldering/hiit/strength_training have no pace/HR targets to build any of
 // this from, so `workout.segments` is always empty for them (api/routers/planned_workouts.py's
 // own sport-gating) and this component renders nothing.
@@ -25,13 +28,16 @@ const ZONE_COLOR_VARS = [
   "var(--color-zone-5)",
 ];
 
-// Column height per zone, in px, against the bar's own fixed BAR_HEIGHT_PX -- an easy zone is a
-// short column, a max-effort zone fills the whole height, same "taller = harder" reading as the
-// athlete's own reference image. A zone-less segment (rest, or no threshold pace configured at
-// all) gets the shortest column of all, distinguishing it from a real, if easy, zone 1 effort.
-// Tall overall (56px) with a wide low-to-high spread -- a shallow bar made adjacent zones only a
-// few px apart, too close to actually read as a pace change at a glance.
-const ZONE_HEIGHT_PX = [14, 24, 36, 46, 56];
+// Column height is driven by the segment's own CONTINUOUS intensity_factor, not its discrete
+// zone number -- two steps can share one zone bucket (a fast-threshold athlete's 5:10-5:30/km
+// and 4:50-5:15/km reps both land in zone 2) while still being a real, visible pace difference;
+// bucketing height by zone alone made those two intervals draw identically. A rough absolute
+// scale across real running efforts (an easy jog's IF sits around 0.65-0.75, a hard interval
+// 1.05-1.15+) rather than a per-workout min/max stretch -- so the same pace always draws the same
+// height regardless of what else is in this particular workout, and a genuinely uniform-pace
+// workout doesn't get artificially stretched into looking varied.
+const MIN_INTENSITY_FACTOR = 0.65;
+const MAX_INTENSITY_FACTOR = 1.15;
 const NEUTRAL_HEIGHT_PX = 8;
 const BAR_HEIGHT_PX = 56;
 
@@ -40,9 +46,14 @@ function zoneColor(zone: number | null): string {
   return ZONE_COLOR_VARS[zone - 1] ?? toneColor("neutral");
 }
 
-function zoneHeightPx(zone: number | null): number {
-  if (zone == null) return NEUTRAL_HEIGHT_PX;
-  return ZONE_HEIGHT_PX[zone - 1] ?? NEUTRAL_HEIGHT_PX;
+function segmentHeightPx(intensityFactor: number | null): number {
+  if (intensityFactor == null) return NEUTRAL_HEIGHT_PX;
+  const clamped = Math.min(
+    Math.max(intensityFactor, MIN_INTENSITY_FACTOR),
+    MAX_INTENSITY_FACTOR,
+  );
+  const t = (clamped - MIN_INTENSITY_FACTOR) / (MAX_INTENSITY_FACTOR - MIN_INTENSITY_FACTOR);
+  return NEUTRAL_HEIGHT_PX + t * (BAR_HEIGHT_PX - NEUTRAL_HEIGHT_PX);
 }
 
 export function WorkoutLoadBar({ workout }: { workout: PlannedWorkoutOut }) {
@@ -70,7 +81,7 @@ export function WorkoutLoadBar({ workout }: { workout: PlannedWorkoutOut }) {
             className="workout-load-bar__segment"
             style={{
               width: `${(segment.duration_s / totalDurationS) * 100}%`,
-              height: zoneHeightPx(segment.zone),
+              height: segmentHeightPx(segment.intensity_factor),
               background: zoneColor(segment.zone),
             }}
           />

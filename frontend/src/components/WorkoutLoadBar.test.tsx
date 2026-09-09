@@ -23,8 +23,8 @@ const BASE: PlannedWorkoutOut = {
   estimated_distance_m: 3000,
   estimated_load: 42,
   segments: [
-    { duration_s: 600, zone: 1 },
-    { duration_s: 300, zone: 5 },
+    { duration_s: 600, zone: 1, intensity_factor: 0.75 },
+    { duration_s: 300, zone: 5, intensity_factor: 1.2 },
   ],
 };
 
@@ -67,10 +67,35 @@ describe("WorkoutLoadBar", () => {
     expect(screen.getByText(/Configure a threshold pace/)).toBeInTheDocument();
   });
 
+  it("draws taller columns for a higher intensity_factor even within the same zone", () => {
+    // The reported bug: 5:10-5:30/km and 4:50-5:15/km both land in zone 2 against a fast
+    // threshold, so color alone can't distinguish them -- height must still differ.
+    const { container } = render(
+      <WorkoutLoadBar
+        workout={{
+          ...BASE,
+          segments: [
+            { duration_s: 180, zone: 2, intensity_factor: 0.878 },
+            { duration_s: 20, zone: 2, intensity_factor: 0.929 },
+          ],
+        }}
+      />,
+    );
+    const segments = container.querySelectorAll(".workout-load-bar__segment");
+    const heights = [...segments].map((el) => parseFloat((el as HTMLElement).style.height));
+    expect(heights[1]).toBeGreaterThan(heights[0]!);
+  });
+
   it("renders a neutral segment for a zone-less step (e.g. rest)", () => {
     const { container } = render(
       <WorkoutLoadBar
-        workout={{ ...BASE, segments: [{ duration_s: 60, zone: null }, { duration_s: 60, zone: 3 }] }}
+        workout={{
+          ...BASE,
+          segments: [
+            { duration_s: 60, zone: null, intensity_factor: null },
+            { duration_s: 60, zone: 3, intensity_factor: 0.97 },
+          ],
+        }}
       />,
     );
     const segments = container.querySelectorAll(".workout-load-bar__segment");

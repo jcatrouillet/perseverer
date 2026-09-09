@@ -60,6 +60,20 @@ class TestPaceTargetedStep:
         assert seg.distance_m == 2000.0
         assert seg.duration_s == 2000.0 / (1000.0 / 270.0)
 
+    def test_two_paces_in_the_same_zone_still_get_different_intensity_factors(self) -> None:
+        # A real bug report: 5:10-5:30/km and 4:50-5:15/km both land in zone 2 against a fast
+        # (4:41/km) threshold pace, so `zone` alone can't tell the frontend's load bar these are
+        # different efforts -- `intensity_factor` (continuous) must still differ between them.
+        we = _estimate(
+            "3m 5:10-5:30/km Pace\n20s 4:50-5:15/km Pace",
+            threshold_pace_sec_per_km=281.0,
+        )
+        slower, faster = we.segments
+        assert slower.zone == 2
+        assert faster.zone == 2
+        assert slower.intensity_factor is not None and faster.intensity_factor is not None
+        assert faster.intensity_factor > slower.intensity_factor
+
 
 class TestIntensityFallback:
     def test_warmup_lands_in_zone_1_with_no_target_at_all(self) -> None:
@@ -74,6 +88,7 @@ class TestIntensityFallback:
         seg = we.segments[0]
         assert seg.zone is None
         assert seg.load == 0.0
+        assert seg.intensity_factor == 0.0
         assert seg.duration_s == 120.0
 
     def test_untargeted_active_step_falls_back_to_default_assumed_speed(self) -> None:
@@ -102,6 +117,7 @@ class TestHeartRateTargetedStep:
         )
         assert we.segments[0].zone is None
         assert we.segments[0].load is None
+        assert we.segments[0].intensity_factor is None
 
 
 class TestRepeatGroupExpansion:

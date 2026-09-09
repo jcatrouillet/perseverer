@@ -113,10 +113,14 @@ class PlannedWorkoutCreateIn(PlannedWorkoutIn):
 class PlannedWorkoutSegmentOut(BaseModel):
     """One already-repeat-expanded step of a running workout's load estimate -- see
     planned_workout_stats.py's own docstring for the zone/load rules. Rendered by the frontend
-    as one colored block in the workout's load bar, width proportional to duration_s."""
+    as one block in the workout's load bar: width proportional to duration_s, color from `zone`,
+    height from `intensity_factor` (continuous, so two steps sharing one discrete zone -- e.g.
+    5:10-5:30/km and 4:50-5:15/km both landing in zone 2 for a fast-threshold athlete -- still
+    draw at visibly different heights)."""
 
     duration_s: float
     zone: int | None  # 1 (easy) .. 5 (repetition), or None when no zone could be determined
+    intensity_factor: float | None  # continuous speed-to-threshold ratio; None iff zone is None
 
 
 class PlannedWorkoutOut(BaseModel):

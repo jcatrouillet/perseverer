@@ -61,7 +61,7 @@ const RUNNING_WORKOUT: PlannedWorkoutOut = {
   completed_at: null,
   estimated_distance_m: 2000,
   estimated_load: 30,
-  segments: [{ duration_s: 600, zone: 2 }],
+  segments: [{ duration_s: 600, zone: 2, intensity_factor: 0.9 }],
 };
 
 describe("WeekView planned-workout indicator", () => {
