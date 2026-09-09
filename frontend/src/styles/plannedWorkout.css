@@ -79,7 +79,12 @@
 
 .workout-load-bar {
   display: flex;
-  height: 14px;
+  height: 10px;
+  /* Deliberately not full-width -- this sits inside a much wider card (Day/Month view), and a
+     10px-tall bar stretched edge-to-edge there reads as an oversized, low-information stripe.
+     Capped so it reads as a compact sparkline instead; still shrinks to fit a narrower parent
+     (Week view's own day column) since it's a max-width, not a fixed one. */
+  max-width: 260px;
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: color-mix(in srgb, var(--color-text-faint) 18%, transparent);

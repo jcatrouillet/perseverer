@@ -5,15 +5,27 @@
 // this from, so `workout.segments` is always empty for them (api/routers/planned_workouts.py's
 // own sport-gating) and this component renders nothing.
 import type { PlannedWorkoutOut } from "../api/types";
-import { toneColor, type Tone } from "../metricStyle";
-import { ZONE_TONES } from "./TimeInZoneChart";
+import { toneColor } from "../metricStyle";
 import "../styles/plannedWorkout.css";
+
+// A dedicated 5-rung effort gradient (--color-zone-1..5, theme.css), NOT a reuse of
+// TimeInZoneChart's ZONE_TONES: this bar packs many adjacent, often-narrow segments, and two
+// neighboring-but-merely-different metric tones (e.g. cadence-teal next to elevation-green) read
+// as one indistinguishable blob at that width. A real zone often repeats across many segments in
+// a row too (a warmup/cooldown/recovery block, or several reps of the same interval), so it's
+// the *between-zone* contrast that has to carry the workout's actual pace variation, not just a
+// palette that happens to have 5 distinct entries.
+const ZONE_COLOR_VARS = [
+  "var(--color-zone-1)",
+  "var(--color-zone-2)",
+  "var(--color-zone-3)",
+  "var(--color-zone-4)",
+  "var(--color-zone-5)",
+];
 
 function zoneColor(zone: number | null): string {
   if (zone == null) return toneColor("neutral");
-  // Zones are 1-5; ZONE_TONES' first 5 entries are already the same cool-to-hot progression
-  // TimeInZoneChart.tsx uses for HR zones elsewhere in the app.
-  return toneColor(ZONE_TONES[zone - 1] as Tone);
+  return ZONE_COLOR_VARS[zone - 1] ?? toneColor("neutral");
 }
 
 export function WorkoutLoadBar({ workout }: { workout: PlannedWorkoutOut }) {

@@ -36,6 +36,18 @@
   --color-warning: #e8a33d;
   --color-danger: #ef5a6f;
 
+  /* A true 5-rung effort-zone gradient (easy -> max), cool to hot -- deliberately its own token
+     set rather than a reuse of the data-type colors above: those are picked for hue variety
+     between *unrelated* metrics (pace vs. cadence vs. load), not for reading as an ordered
+     scale, and WorkoutLoadBar.tsx's zone bar packs many adjacent thin segments where two
+     merely-different-hue neighbors (e.g. the old cadence-teal/elevation-green pairing) read as
+     one indistinguishable color. See WorkoutLoadBar.tsx's own zoneColor(). */
+  --color-zone-1: #3fb6c9;
+  --color-zone-2: #4caf7d;
+  --color-zone-3: #d9c74b;
+  --color-zone-4: #e8a33d;
+  --color-zone-5: #ef5a6f;
+
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -86,6 +98,12 @@
   --color-warning: #c47f1a;
   --color-danger: #d43a52;
 
+  --color-zone-1: #1f92a3;
+  --color-zone-2: #2f9160;
+  --color-zone-3: #a8850a;
+  --color-zone-4: #c47f1a;
+  --color-zone-5: #d43a52;
+
   --shadow-card: 0 1px 3px rgba(20, 25, 35, 0.08);
 }
 
@@ -112,6 +130,11 @@
     --color-success: #2f9160;
     --color-warning: #c47f1a;
     --color-danger: #d43a52;
+    --color-zone-1: #1f92a3;
+    --color-zone-2: #2f9160;
+    --color-zone-3: #a8850a;
+    --color-zone-4: #c47f1a;
+    --color-zone-5: #d43a52;
     --shadow-card: 0 1px 3px rgba(20, 25, 35, 0.08);
   }
 }
