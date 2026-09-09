@@ -1,6 +1,8 @@
 // A scheduled RUNNING workout's own distance/duration/load summary plus a Garmin-Connect-style
-// load bar -- one colored segment per (already repeat-expanded) step, width proportional to its
-// share of total duration, colored by the effort zone `planned_workout_stats.py` assigned it.
+// load bar -- one segment per (already repeat-expanded) step, width proportional to its share of
+// total duration, colored AND sized (height) by the effort zone `planned_workout_stats.py`
+// assigned it -- matching the athlete's own reference screenshots, where a hard interval reads
+// as both a hotter color and a taller column than the easy work around it, not color alone.
 // Running only: yoga/bouldering/hiit/strength_training have no pace/HR targets to build any of
 // this from, so `workout.segments` is always empty for them (api/routers/planned_workouts.py's
 // own sport-gating) and this component renders nothing.
@@ -23,9 +25,22 @@ const ZONE_COLOR_VARS = [
   "var(--color-zone-5)",
 ];
 
+// Column height per zone, in px, against the bar's own fixed BAR_HEIGHT_PX -- an easy zone is a
+// short column, a max-effort zone fills the whole height, same "taller = harder" reading as the
+// athlete's own reference image. A zone-less segment (rest, or no threshold pace configured at
+// all) gets the shortest column of all, distinguishing it from a real, if easy, zone 1 effort.
+const ZONE_HEIGHT_PX = [10, 14, 19, 24, 28];
+const NEUTRAL_HEIGHT_PX = 6;
+const BAR_HEIGHT_PX = 28;
+
 function zoneColor(zone: number | null): string {
   if (zone == null) return toneColor("neutral");
   return ZONE_COLOR_VARS[zone - 1] ?? toneColor("neutral");
+}
+
+function zoneHeightPx(zone: number | null): number {
+  if (zone == null) return NEUTRAL_HEIGHT_PX;
+  return ZONE_HEIGHT_PX[zone - 1] ?? NEUTRAL_HEIGHT_PX;
 }
 
 export function WorkoutLoadBar({ workout }: { workout: PlannedWorkoutOut }) {
@@ -46,13 +61,14 @@ export function WorkoutLoadBar({ workout }: { workout: PlannedWorkoutOut }) {
       ) : (
         <p className="chart-note">Configure a threshold pace in Settings for a load estimate.</p>
       )}
-      <div className="workout-load-bar">
+      <div className="workout-load-bar" style={{ height: BAR_HEIGHT_PX }}>
         {workout.segments.map((segment, i) => (
           <span
             key={i}
             className="workout-load-bar__segment"
             style={{
               width: `${(segment.duration_s / totalDurationS) * 100}%`,
+              height: zoneHeightPx(segment.zone),
               background: zoneColor(segment.zone),
             }}
           />
