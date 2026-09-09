@@ -29,9 +29,11 @@ const ZONE_COLOR_VARS = [
 // short column, a max-effort zone fills the whole height, same "taller = harder" reading as the
 // athlete's own reference image. A zone-less segment (rest, or no threshold pace configured at
 // all) gets the shortest column of all, distinguishing it from a real, if easy, zone 1 effort.
-const ZONE_HEIGHT_PX = [10, 14, 19, 24, 28];
-const NEUTRAL_HEIGHT_PX = 6;
-const BAR_HEIGHT_PX = 28;
+// Tall overall (56px) with a wide low-to-high spread -- a shallow bar made adjacent zones only a
+// few px apart, too close to actually read as a pace change at a glance.
+const ZONE_HEIGHT_PX = [14, 24, 36, 46, 56];
+const NEUTRAL_HEIGHT_PX = 8;
+const BAR_HEIGHT_PX = 56;
 
 function zoneColor(zone: number | null): string {
   if (zone == null) return toneColor("neutral");
