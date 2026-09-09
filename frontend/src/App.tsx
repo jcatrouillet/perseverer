@@ -2,6 +2,7 @@ import { Link, Route, Switch, useLocation } from "wouter";
 
 import { AuthGate } from "./components/AuthGate";
 import { Icon, type IconName } from "./components/Icon";
+import { LogoutButton } from "./components/LogoutButton";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { isoDate } from "./dateUtils";
 import { ActivityDetailPage } from "./pages/ActivityDetailPage";
@@ -79,7 +80,10 @@ export function App() {
             Settings
           </NavLink>
         </div>
-        <ThemeToggle />
+        <div className="app-nav__actions">
+          <ThemeToggle />
+          <LogoutButton />
+        </div>
       </nav>
       <div className="app-main">
         <Switch>

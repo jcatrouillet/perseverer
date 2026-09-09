@@ -66,6 +66,14 @@ select {
   border-bottom: 1px solid var(--color-border);
 }
 
+/* Groups the theme toggle and logout button on the nav's right edge, so .app-nav's own
+   space-between still has exactly two flex children regardless of how many actions live here. */
+.app-nav__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 /* Stretches to the nav's full content height so the active tab's underline below can sit
    exactly on the nav's bottom border instead of floating at a guessed offset. */
 .app-nav__links {
