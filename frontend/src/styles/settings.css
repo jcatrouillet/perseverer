@@ -31,18 +31,23 @@
   width: 18rem;
 }
 
-/* EmailReportsCard's opt-in checkboxes -- a row (box beside its label), full width, overriding
-   the column layout `.settings-form label` uses for the profile card's stacked input fields. */
-.settings-form__checkbox {
+/* EmailReportsCard's opt-in checkboxes -- a row (box beside its label), full width. The
+   `.settings-form label` selector below (column layout, for the profile card's stacked number
+   inputs) has equal specificity, so this needs the extra `label` qualifier to actually win --
+   without it the checkbox sits centered *above* its text, which is not what any other form on
+   the page does. */
+.settings-form label.settings-form__checkbox {
   flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
   color: var(--color-text);
 }
 
-.settings-form__checkbox input {
+.settings-form label.settings-form__checkbox input {
   width: auto;
+  flex: none;
 }
 
 .settings-form__actions {
