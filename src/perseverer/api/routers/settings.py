@@ -29,8 +29,12 @@ Also GET/PUT /settings/profile -- optional birthdate/height/sex/email, mutated d
 `athlete` row (same shape as the calendar-feed endpoints above, not the hr-zones/running-load
 insert-or-update dance, since the athlete row always already exists). birthdate/height/sex feed
 formula-based fallbacks elsewhere (performance_rollup.py's max HR, health.py's BMR) when there
-isn't enough empirical/device data yet; email is currently inert (stored for a future feature) --
-see api/schemas/settings.py::AthleteProfileIn.
+isn't enough empirical/device data yet; email is the recipient for the opt-in weekly/monthly
+training-report emails (email_reports.py) -- see api/schemas/settings.py::AthleteProfileIn.
+
+Also GET/PUT /settings/email-reports + POST /settings/email-reports/test -- the two per-athlete
+opt-in switches for those report emails (db/schema.py::athlete_email_report_config), plus the
+"send this week's report right now" test send. See email_reports.py's own module docstring.
 
 Also PUT /settings/password -- self-service password change, verifying the current password via
 the same is_locked_out/verify_password/record_attempt sequence POST /auth/login uses.
@@ -81,6 +85,8 @@ from perseverer.api.schemas.settings import (
     CalendarFeedUrlOut,
     ChangePasswordIn,
     ChangePasswordOut,
+    EmailReportConfigIn,
+    EmailReportConfigOut,
     EufyLoginIn,
     EufyLoginOut,
     EufyStatusOut,
@@ -100,11 +106,13 @@ from perseverer.calendar_feed import generate_feed_token, hash_feed_token
 from perseverer.config import Settings, get_settings
 from perseverer.db.schema import (
     athlete,
+    athlete_email_report_config,
     athlete_eufy_config,
     athlete_hr_zone_config,
     athlete_running_load_config,
     ingest_run,
 )
+from perseverer.email_reports import send_report_email
 from perseverer.fitness import refresh_fitness_rollup
 from perseverer.insights.engine import refresh_insights
 from perseverer.performance_rollup import refresh_performance_rollup
@@ -273,6 +281,95 @@ def delete_calendar_feed(
     )
     conn.commit()
     return CalendarFeedStatusOut(enabled=False, created_at=None)
+
+
+def _email_report_out(
+    conn: Connection, settings: Settings, athlete_id: str
+) -> EmailReportConfigOut:
+    row = conn.execute(
+        select(
+            athlete_email_report_config.c.weekly_enabled,
+            athlete_email_report_config.c.monthly_enabled,
+        ).where(athlete_email_report_config.c.athlete_id == athlete_id)
+    ).fetchone()
+    recipient = conn.execute(
+        select(athlete.c.email).where(athlete.c.id == athlete_id)
+    ).scalar_one_or_none()
+    return EmailReportConfigOut(
+        weekly_enabled=bool(row.weekly_enabled) if row is not None else False,
+        monthly_enabled=bool(row.monthly_enabled) if row is not None else False,
+        smtp_configured=settings.smtp_configured,
+        recipient_email=recipient,
+    )
+
+
+@router.get("/settings/email-reports")
+def get_email_report_config(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> EmailReportConfigOut:
+    return _email_report_out(conn, settings, athlete_id)
+
+
+@router.put("/settings/email-reports")
+def set_email_report_config(
+    payload: EmailReportConfigIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> EmailReportConfigOut:
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    existing = conn.execute(
+        select(athlete_email_report_config.c.athlete_id).where(
+            athlete_email_report_config.c.athlete_id == athlete_id
+        )
+    ).scalar_one_or_none()
+    values = {
+        "weekly_enabled": payload.weekly_enabled,
+        "monthly_enabled": payload.monthly_enabled,
+        "updated_at": now,
+    }
+    if existing is None:
+        conn.execute(
+            athlete_email_report_config.insert().values(athlete_id=athlete_id, **values)
+        )
+    else:
+        conn.execute(
+            athlete_email_report_config.update()
+            .where(athlete_email_report_config.c.athlete_id == athlete_id)
+            .values(**values)
+        )
+    conn.commit()
+    return _email_report_out(conn, settings, athlete_id)
+
+
+@router.post("/settings/email-reports/test")
+def send_test_email_report(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> JobTriggerOut:
+    """Sends the *current* weekly report to the athlete's own email immediately -- the natural
+    way to verify SMTP + the Profile email are set up without waiting for Sunday. 400 if either
+    isn't configured, 502 if the send itself fails."""
+    if not settings.smtp_configured:
+        raise HTTPException(
+            status_code=400, detail="email delivery is not configured on this server"
+        )
+    try:
+        send_report_email(
+            settings,
+            conn,
+            athlete_id=athlete_id,
+            kind="weekly",
+            today=datetime.now(UTC).date(),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"could not send email: {e}") from e
+    return JobTriggerOut(triggered=True)
 
 
 @router.get("/settings/profile")

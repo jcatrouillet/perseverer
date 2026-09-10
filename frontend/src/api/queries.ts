@@ -32,6 +32,8 @@ import type {
   ClimbComparisonsOut,
   ClimbingSummaryOut,
   DuplicatePairOut,
+  EmailReportConfigIn,
+  EmailReportConfigOut,
   EufyLoginIn,
   EufyLoginOut,
   EufyStatusOut,
@@ -821,6 +823,35 @@ export function useUnpublishCalendarFeed() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["calendar-feed-status"] });
     },
+  });
+}
+
+/** The two opt-in switches for the weekly/monthly training-report emails, plus read-only
+ * context: whether the deployment has SMTP configured and where reports would be sent
+ * (athlete.email). See email_reports.py's own module docstring. */
+export function useEmailReportConfig() {
+  return useQuery({
+    queryKey: ["email-report-config"],
+    queryFn: () => apiGet<EmailReportConfigOut>("/api/v1/settings/email-reports"),
+  });
+}
+
+export function useSetEmailReportConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: EmailReportConfigIn) =>
+      apiPut<EmailReportConfigOut>("/api/v1/settings/email-reports", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["email-report-config"] });
+    },
+  });
+}
+
+/** Sends the current weekly report to the athlete's own email right now -- the way to verify
+ * SMTP + the Profile email without waiting for Sunday. */
+export function useSendTestEmailReport() {
+  return useMutation({
+    mutationFn: () => apiPost<JobTriggerOut>("/api/v1/settings/email-reports/test", {}),
   });
 }
 

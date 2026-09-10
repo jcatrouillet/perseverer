@@ -5,6 +5,7 @@ runtime environment always wins over the baked-in default file.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import (
     BaseSettings,
@@ -132,6 +133,26 @@ class Settings(BaseSettings):
     workout_push_schedule_hour: int = 4
     workout_push_schedule_minute: int = 45
 
+    # --- Weekly/monthly email reports (email_reports.py, worker/main.py) ---
+    # One shared SMTP relay for the whole deployment, not a per-athlete credential -- same
+    # env-var, skip-when-unset contract as the Eufy/backup blocks above (email_reports.py's
+    # scheduled jobs log and skip when `smtp_configured` is False). The recipient is each
+    # athlete's own `athlete.email` (Settings > Profile); opt-in is per-athlete via
+    # `athlete_email_report_config`. Port 587 is mail submission and uses STARTTLS ("starttls");
+    # implicit TLS is port 465 ("ssl"). "none" is for a local unauthenticated relay only.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    # When the reports go out, resolved against `schedule_timezone` like every other worker job.
+    # The athlete picked Sunday 18:00 for the weekly (week just ended + coming week's plan) and
+    # the month's last day 18:00 for the monthly (day="last", not exposed as its own env var).
+    email_report_hour: int = 18
+    email_report_minute: int = 0
+    email_report_weekly_day_of_week: str = "sun"
+
     @property
     def db_path(self) -> Path:
         return self.data_dir / "perseverer.db"
@@ -162,6 +183,14 @@ class Settings(BaseSettings):
         # accept-new's first-contact write needs a genuinely writable path once the worker
         # container's root filesystem is read-only (Phase 9 container hardening, ADR 0014).
         return self.data_dir / "backup_known_hosts"
+
+    @property
+    def smtp_configured(self) -> bool:
+        """All four of host/username/password/from present -- email_reports.py's scheduled jobs
+        and the test endpoint check this before attempting any send."""
+        return bool(
+            self.smtp_host and self.smtp_username and self.smtp_password and self.smtp_from
+        )
 
     @property
     def cors_origins_list(self) -> list[str]:

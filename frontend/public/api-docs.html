@@ -1009,7 +1009,7 @@ const SCHEMAS = [
   { name: "RunningLoadConfigOut", note: "Returned by GET and PUT /settings/running-load.", fields: [
       ["threshold_pace_sec_per_km","number|null","null means not configured yet -- Fitness & Form keeps using Garmin's own training_load_peak for every activity in that case."],
     ] },
-  { name: "AthleteProfileOut", note: "Returned by GET and PUT /settings/profile. birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (GET /performance's max_hr_bpm, GET /health/dashboard's bmr_kcal) when there isn't enough empirical/device data yet. email is currently inert -- stored for a future feature.", fields: [
+  { name: "AthleteProfileOut", note: "Returned by GET and PUT /settings/profile. birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (GET /performance's max_hr_bpm, GET /health/dashboard's bmr_kcal) when there isn't enough empirical/device data yet. email is the recipient for the opt-in weekly/monthly training-report emails.", fields: [
       ["birthdate","string(date)|null",""],
       ["height_cm","number|null",""],
       ["sex","string|null","male | female"],
@@ -1061,6 +1061,16 @@ const SCHEMAS = [
     ] },
   { name: "CalendarFeedUrlOut", note: "Returned by POST /settings/calendar-feed.", fields: [
       ["url","string","The full public feed URL, e.g. https://your-perseverer-host/share/calendar/<token>.ics. Only ever returned here — the raw token cannot be recovered later."],
+    ] },
+  { name: "EmailReportConfigOut", note: "Returned by GET and PUT /settings/email-reports.", fields: [
+      ["weekly_enabled","boolean","Whether the weekly training-report email is on (default false)."],
+      ["monthly_enabled","boolean","Whether the monthly training-report email is on (default false)."],
+      ["smtp_configured","boolean","Whether the deployment has an SMTP relay set up (PERSEVERER_SMTP_*). Read-only."],
+      ["recipient_email","string|null","Echoes athlete.email (set via PUT /settings/profile) — where reports are sent. Read-only."],
+    ] },
+  { name: "EmailReportConfigIn", note: "Body of PUT /settings/email-reports.", fields: [
+      ["weekly_enabled","boolean",""],
+      ["monthly_enabled","boolean",""],
     ] },
   { name: "PlannedWorkoutListItemOut", note: "One row of GET /planned-workouts — the calendar grid's own per-day indicator.", fields: [
       ["local_date","string(date)",""],
@@ -1885,6 +1895,33 @@ const GROUPS = [
         { code: 404, note: "The token doesn't exist or the feed was unpublished." },
       ],
       example: { curl: `curl https://your-perseverer-host/share/calendar/TOKEN.ics` }
+    },
+  ]},
+
+  { id: "email-reports", title: "Email reports", endpoints: [
+    { method: "GET", path: "/api/v1/settings/email-reports", summary: "The athlete's opt-in for the weekly/monthly training-report emails.",
+      description: "Both switches default off — no configuration means no emails. smtp_configured / recipient_email are read-only context: whether the deployment has an SMTP relay (PERSEVERER_SMTP_*) and where reports go (athlete.email, set via PUT /settings/profile).",
+      responses: [ { code: 200, ref: "EmailReportConfigOut" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/settings/email-reports \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "PUT", path: "/api/v1/settings/email-reports", summary: "Set the two opt-in switches.",
+      description: "Upsert. Weekly = Sunday 18:00 (the week just ended + the coming week's planned workouts); monthly = the month's last day 18:00 (that month's totals).",
+      body: "EmailReportConfigIn",
+      responses: [ { code: 200, ref: "EmailReportConfigOut" } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/email-reports \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"weekly_enabled": true, "monthly_enabled": false}'` }
+    },
+    { method: "POST", path: "/api/v1/settings/email-reports/test", summary: "Send this week's report right now.",
+      description: "Sends the current weekly report to the athlete's own athlete.email immediately — the way to verify SMTP + the Profile email without waiting for the scheduled send.",
+      responses: [
+        { code: 200, note: '{"triggered": true}' },
+        { code: 400, note: "SMTP or the Profile email isn't configured." },
+        { code: 502, note: "The SMTP send itself failed." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/email-reports/test \\
+  -H "X-API-Key: YOUR_API_KEY"` }
     },
   ]},
 

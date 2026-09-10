@@ -395,6 +395,19 @@ export interface CalendarFeedUrlOut {
   url: string;
 }
 
+// GET/PUT /settings/email-reports (+ POST .../test) -- see email_reports.py's module docstring.
+export interface EmailReportConfigOut {
+  weekly_enabled: boolean;
+  monthly_enabled: boolean;
+  smtp_configured: boolean;
+  recipient_email: string | null;
+}
+
+export interface EmailReportConfigIn {
+  weekly_enabled: boolean;
+  monthly_enabled: boolean;
+}
+
 // GET /settings/garmin/status
 export interface GarminAuthStatusOut {
   token_store_present: boolean;

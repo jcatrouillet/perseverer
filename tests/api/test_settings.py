@@ -307,6 +307,71 @@ def test_calendar_feed_endpoints_require_auth(client: TestClient) -> None:
     assert client.delete("/api/v1/settings/calendar-feed").status_code in (401, 403)
 
 
+# --- GET/PUT /settings/email-reports + POST .../test ------------------------------------------
+
+
+def test_email_reports_default_is_off_and_reports_smtp_unconfigured(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/settings/email-reports", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {
+        "weekly_enabled": False,
+        "monthly_enabled": False,
+        "smtp_configured": False,  # test_settings fixture sets no PERSEVERER_SMTP_*
+        "recipient_email": None,
+    }
+
+
+def test_email_reports_put_upserts_and_reflects_the_profile_email(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.update()
+            .where(athlete.c.id == DEFAULT_ATHLETE_ID)
+            .values(email="jerome@example.com")
+        )
+        conn.commit()
+
+    r = client.put(
+        "/api/v1/settings/email-reports",
+        headers=auth_headers,
+        json={"weekly_enabled": True, "monthly_enabled": False},
+    )
+    assert r.status_code == 200
+    assert r.json()["weekly_enabled"] is True
+    assert r.json()["recipient_email"] == "jerome@example.com"
+
+    # Re-PUT updates in place, no duplicate row.
+    r2 = client.put(
+        "/api/v1/settings/email-reports",
+        headers=auth_headers,
+        json={"weekly_enabled": False, "monthly_enabled": True},
+    )
+    assert r2.json()["weekly_enabled"] is False
+    assert r2.json()["monthly_enabled"] is True
+    assert client.get("/api/v1/settings/email-reports", headers=auth_headers).json() == {
+        "weekly_enabled": False,
+        "monthly_enabled": True,
+        "smtp_configured": False,
+        "recipient_email": "jerome@example.com",
+    }
+
+
+def test_email_reports_test_endpoint_400_when_smtp_unconfigured(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.post("/api/v1/settings/email-reports/test", headers=auth_headers)
+    assert r.status_code == 400
+
+
+def test_email_reports_endpoints_require_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/settings/email-reports").status_code in (401, 403)
+    assert client.put("/api/v1/settings/email-reports", json={}).status_code in (401, 403)
+    assert client.post("/api/v1/settings/email-reports/test").status_code in (401, 403)
+
+
 # --- GET/PUT /settings/profile ------------------------------------------------------------
 
 

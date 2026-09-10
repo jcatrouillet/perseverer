@@ -25,6 +25,7 @@ import { isoDate } from "../dateUtils";
 import { formatDurationHM, formatMinPerKm } from "../runningStats";
 import { BulkImportCard } from "../components/BulkImportCard";
 import { CalendarFeedCard } from "../components/CalendarFeedCard";
+import { EmailReportsCard } from "../components/EmailReportsCard";
 import { EufyCard } from "../components/EufyCard";
 import { GarminConnectCard } from "../components/GarminConnectCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -317,7 +318,8 @@ export function SettingsPage() {
               Birthdate/height/sex are optional -- only used to fill in max HR and BMR (calorie)
               estimates with a formula when there isn't enough of your own real data yet; your own
               observed max HR and any Eufy-scale readings always take priority once they exist.
-              Email isn't used yet -- reserved for a future feature.
+              Email is where the weekly/monthly summaries go, if you enable them under External
+              tools.
             </p>
             <form
               className="settings-form"
@@ -457,6 +459,7 @@ export function SettingsPage() {
           <GarminConnectCard />
           <EufyCard />
           <CalendarFeedCard />
+          <EmailReportsCard />
         </>
       ),
     },

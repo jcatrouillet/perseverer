@@ -18,6 +18,7 @@ credentials are resolved per-athlete rather than from one shared global.
 
 import logging
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -35,6 +36,7 @@ from perseverer.db.engine import make_engine
 from perseverer.db.schema import athlete as athlete_table
 from perseverer.db.schema import planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.email_reports import ReportKind, athletes_opted_in, send_report_email
 from perseverer.planned_workouts import push_planned_workout
 from perseverer.staleness import check_staleness, notify_webhook
 
@@ -242,6 +244,41 @@ def run_daily_workout_push() -> None:
         logger.info("scheduled workout push finished: pushed=%d of %d due", pushed, len(due))
 
 
+def _run_email_reports(kind: ReportKind) -> None:
+    """Shared body for the weekly/monthly email jobs. `today` is derived from
+    `datetime.now(schedule_timezone)` -- the same wall clock the CronTrigger fires against -- so
+    the "previous week"/"previous month" window matches the day the job actually runs on. One
+    send per opted-in athlete that also has an `athlete.email`; per-athlete try/except so one
+    failure doesn't stop the rest (same shape as run_daily_sync)."""
+    settings = get_settings()
+    if not settings.smtp_configured:
+        logger.info("%s email reports skipped: SMTP not configured", kind)
+        return
+
+    today = datetime.now(ZoneInfo(settings.schedule_timezone)).date()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        athlete_ids = athletes_opted_in(conn, kind=kind)
+        logger.info("%s email reports: %d athlete(s) opted in", kind, len(athlete_ids))
+        for athlete_id in athlete_ids:
+            try:
+                send_report_email(
+                    settings, conn, athlete_id=athlete_id, kind=kind, today=today
+                )
+            except ValueError as e:
+                logger.warning("%s email report skipped for %s: %s", kind, athlete_id, e)
+            except Exception:
+                logger.exception("%s email report failed for athlete %s", kind, athlete_id)
+
+
+def run_weekly_email_report() -> None:
+    _run_email_reports("weekly")
+
+
+def run_monthly_email_report() -> None:
+    _run_email_reports("monthly")
+
+
 def main() -> None:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
@@ -295,6 +332,35 @@ def main() -> None:
         settings.workout_push_schedule_minute,
         settings.schedule_timezone,
         settings.planned_workout_push_window_days,
+    )
+    scheduler.add_job(
+        run_weekly_email_report,
+        trigger=CronTrigger(
+            day_of_week=settings.email_report_weekly_day_of_week,
+            hour=settings.email_report_hour,
+            minute=settings.email_report_minute,
+            timezone=settings.schedule_timezone,
+        ),
+        id="weekly_email_report",
+    )
+    scheduler.add_job(
+        run_monthly_email_report,
+        trigger=CronTrigger(
+            day="last",
+            hour=settings.email_report_hour,
+            minute=settings.email_report_minute,
+            timezone=settings.schedule_timezone,
+        ),
+        id="monthly_email_report",
+    )
+    logger.info(
+        "scheduled weekly email report on %s and monthly on the month's last day, both at "
+        "%02d:%02d %s (SMTP configured: %s)",
+        settings.email_report_weekly_day_of_week,
+        settings.email_report_hour,
+        settings.email_report_minute,
+        settings.schedule_timezone,
+        settings.smtp_configured,
     )
     scheduler.start()
 

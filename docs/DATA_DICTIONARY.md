@@ -1107,3 +1107,36 @@ status, revealing the fresh URL inline (via the same `share-button__url-row` mar
 `ShareButton.tsx` already uses for activity/period shares) only immediately after a publish/
 rotate, matching this codebase's "raw secret shown once, never re-shown" posture for every other
 hashed token.
+
+## Weekly / monthly email reports (email_reports.py)
+
+Opt-in training digests emailed to an athlete's own `athlete.email`: **weekly** (Sunday 18:00
+local — the Mon–Sun week that just ended, activity totals + a per-sport breakdown, plus the
+coming Mon–Sun week's planned workouts) and **monthly** (month's last day 18:00 — that calendar
+month's totals, no planned-workout section). Two `APScheduler` jobs in `worker/main.py`
+(`run_weekly_email_report` / `run_monthly_email_report`), resolved against
+`PERSEVERER_SCHEDULE_TIMEZONE` like the sync/backup/push jobs.
+
+- **`athlete_email_report_config`** — one row per athlete (upsert, mirrors
+  `athlete_hr_zone_config`'s shape/contract exactly): `weekly_enabled` / `monthly_enabled`
+  Booleans, both default `False`. No row, or a row with both `False`, means "no emails" — the
+  default. This table holds *only* the two switches: the SMTP relay is deployment-global
+  (`PERSEVERER_SMTP_*`, `config.py`), and the recipient is the athlete's own `athlete.email`
+  (Settings → Profile).
+- **Totals** come straight from `period_rollup` (the sanctioned aggregate — already consistent
+  with the calendar grid). The **per-sport split** is one extra bounded `activity` query over
+  the period's date range (`period_rollup` doesn't store it). **Coming-week running workouts**
+  are enriched with the same distance/duration/load estimate the calendar UI shows
+  (`planned_workout_stats.estimate_workout` over a fresh `workout_syntax.parse_workout_syntax`
+  of `source_text`).
+- **Delivery** (`email_delivery.py`): stdlib `smtplib` + `EmailMessage`, `multipart/alternative`
+  (email-safe inline-styled HTML + a plaintext part). `PERSEVERER_SMTP_SECURITY` picks the wire
+  mode — `starttls` (port 587, mail submission), `ssl` (port 465, implicit TLS), or `none` (a
+  local unauthenticated relay). All of host/username/password/from must be set or the jobs and
+  the "send test email" button log-and-skip (same graceful-degradation contract as Eufy/backup).
+- **A send reads the local DB**, whose newest Garmin data is from that morning's 04:15 sync — so
+  the send day's own activities may not be counted yet; the email footer says as much.
+- **Routes** (`api/routers/settings.py`): `GET/PUT /settings/email-reports` (the two switches +
+  read-only context: `smtp_configured`, `recipient_email`), `POST /settings/email-reports/test`
+  (sends the current weekly report immediately — 400 if SMTP or the Profile email isn't set, 502
+  on send failure). Frontend: `EmailReportsCard.tsx` (Settings → External tools).

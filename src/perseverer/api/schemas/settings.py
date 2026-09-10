@@ -97,8 +97,8 @@ class RunningLoadConfigOut(BaseModel):
 # GET/PUT /settings/profile -- optional athlete profile facts. birthdate/height_cm/sex are used
 # only as inputs to formula-based FALLBACKS elsewhere (max HR: performance_rollup.py; BMR:
 # api/routers/health.py::get_health_dashboard) when there isn't enough empirical/device data yet.
-# email is currently inert -- stored for a future feature, no consumer reads it yet. See
-# db/schema.py::athlete's own birthdate/height_cm/sex/email columns.
+# email is the recipient for the opt-in weekly/monthly training-report emails (email_reports.py),
+# nothing else. See db/schema.py::athlete's own birthdate/height_cm/sex/email columns.
 class AthleteProfileIn(BaseModel):
     birthdate: str | None = None
     height_cm: float | None = None
@@ -224,3 +224,19 @@ class CalendarFeedStatusOut(BaseModel):
 
 class CalendarFeedUrlOut(BaseModel):
     url: str
+
+
+# GET/PUT /settings/email-reports + POST /settings/email-reports/test -- the two opt-in switches
+# (db/schema.py::athlete_email_report_config), plus read-only context the card needs: whether
+# the deployment has an SMTP relay configured (PERSEVERER_SMTP_*) and where reports would go
+# (athlete.email, set on the Profile card). See email_reports.py's own module docstring.
+class EmailReportConfigIn(BaseModel):
+    weekly_enabled: bool
+    monthly_enabled: bool
+
+
+class EmailReportConfigOut(BaseModel):
+    weekly_enabled: bool
+    monthly_enabled: bool
+    smtp_configured: bool
+    recipient_email: str | None

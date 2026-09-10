@@ -379,3 +379,37 @@ correctly structured and scheduled on the right date. See
 `docs/adr/0015-scheduled-workouts.md`'s own Verification section for the one thing that can't be
 checked any other way — whether a cadence target riding alongside a pace target on the same step
 actually reaches and functions on a real device.
+
+## Weekly / monthly email reports (email_reports.py)
+
+Opt-in, off by default. Two `APScheduler` jobs in the worker (`run_weekly_email_report`,
+`run_monthly_email_report`) send an athlete a training digest: **weekly** on Sunday 18:00 (the
+week that just ended, plus the coming week's planned workouts), **monthly** on the month's last
+day 18:00 (that month's totals). Schedule times resolve against `PERSEVERER_SCHEDULE_TIMEZONE`
+like every other worker job; adjust with `PERSEVERER_EMAIL_REPORT_HOUR`/`_MINUTE` /
+`_WEEKLY_DAY_OF_WEEK`.
+
+**Configuration** (`quadlet/perseverer.env.example`): one shared SMTP relay for the whole
+deployment, read by both the `worker` (scheduled sends) and `api` (the "send test email"
+button) containers from the same env file:
+
+```
+PERSEVERER_SMTP_HOST=ssl0.ovh.net
+PERSEVERER_SMTP_PORT=587
+PERSEVERER_SMTP_USERNAME=<OVH mailbox login>
+PERSEVERER_SMTP_PASSWORD=<its password>
+PERSEVERER_SMTP_FROM=<From: address, normally the same mailbox>
+PERSEVERER_SMTP_SECURITY=starttls
+```
+
+All six optional together — the jobs and the test button log-and-skip when any of
+host/username/password/from is unset, same graceful-degradation contract as the Eufy/backup
+blocks. **Port 587** is the mail-submission port and uses **STARTTLS** (`security=starttls`);
+implicit SSL/TLS is **port 465** (`security=ssl`). OVH's `ssl0.ovh.net` serves both — if
+STARTTLS on 587 misbehaves, switch to `PERSEVERER_SMTP_PORT=465` +
+`PERSEVERER_SMTP_SECURITY=ssl`, no code change.
+
+**Per athlete**: each athlete then (1) sets their address on Settings → Profile → Email, and
+(2) ticks "Weekly summary" and/or "Monthly summary" on Settings → External tools → Email
+reports. "Send test email" there sends the current weekly report immediately — the way to
+confirm SMTP + the Profile email are right without waiting for Sunday.

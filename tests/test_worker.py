@@ -17,9 +17,13 @@ from sqlalchemy import Engine, select
 from perseverer.adapters.fit_folder import IngestRunSummary
 from perseverer.config import Settings
 from perseverer.db.engine import make_engine
-from perseverer.db.schema import athlete, metadata, planned_workout
+from perseverer.db.schema import athlete, athlete_email_report_config, metadata, planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
-from perseverer.worker.main import run_daily_sync, run_daily_workout_push
+from perseverer.worker.main import (
+    run_daily_sync,
+    run_daily_workout_push,
+    run_weekly_email_report,
+)
 
 SECOND_ATHLETE_ID = "01SECONDATHLETE0000000000"
 
@@ -96,6 +100,97 @@ def test_only_pushes_workouts_due_within_the_window_and_not_already_pushed(
     assert already_pushed not in calls
     assert too_far_out not in calls
     assert in_the_past not in calls
+
+
+# --- run_weekly_email_report -------------------------------------------------------------------
+
+
+def _opt_in(engine: Engine, athlete_id: str, *, weekly: bool) -> None:
+    with engine.connect() as conn:
+        conn.execute(
+            athlete_email_report_config.insert().values(
+                athlete_id=athlete_id,
+                weekly_enabled=weekly,
+                monthly_enabled=False,
+                updated_at=dt.datetime.now(dt.UTC).replace(tzinfo=None),
+            )
+        )
+        conn.commit()
+
+
+def test_weekly_email_report_only_sends_for_opted_in_athletes(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.insert().values(
+                id=SECOND_ATHLETE_ID,
+                display_name="Two",
+                timezone="UTC",
+                unit_preference="metric",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+    _opt_in(engine, DEFAULT_ATHLETE_ID, weekly=True)  # second athlete does NOT opt in
+
+    sent: list[str] = []
+    settings = Settings(
+        data_dir=tmp_path,
+        smtp_host="ssl0.ovh.net",
+        smtp_username="u",
+        smtp_password="p",
+        smtp_from="f@example.com",
+    )
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch(
+            "perseverer.worker.main.send_report_email",
+            side_effect=lambda *a, **kw: sent.append(kw["athlete_id"]),
+        ),
+    ):
+        run_weekly_email_report()
+
+    assert sent == [DEFAULT_ATHLETE_ID]
+
+
+def test_weekly_email_report_is_a_noop_when_smtp_unconfigured(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _opt_in(engine, DEFAULT_ATHLETE_ID, weekly=True)
+
+    settings = Settings(data_dir=tmp_path)  # no PERSEVERER_SMTP_*
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.send_report_email") as mock_send,
+    ):
+        run_weekly_email_report()
+
+    mock_send.assert_not_called()
+
+
+def test_weekly_email_report_skips_an_athlete_with_no_email_without_crashing(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _opt_in(engine, DEFAULT_ATHLETE_ID, weekly=True)
+
+    settings = Settings(
+        data_dir=tmp_path,
+        smtp_host="ssl0.ovh.net",
+        smtp_username="u",
+        smtp_password="p",
+        smtp_from="f@example.com",
+    )
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch(
+            "perseverer.worker.main.send_report_email",
+            side_effect=ValueError("athlete X has no email address set"),
+        ),
+    ):
+        run_weekly_email_report()  # must not raise
 
 
 def test_rate_limit_abort_stops_the_loop_without_marking_remaining_failed(tmp_path: Path) -> None:

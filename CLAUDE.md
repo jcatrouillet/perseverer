@@ -718,6 +718,28 @@ because you don't recognize it — stop, that's the bug.
   `share-button__url-row` markup `ShareButton.tsx` already uses) only once per publish/rotate,
   never re-shown afterward — same "raw token never recoverable again" posture as every other
   hashed secret in this codebase.
+- **Weekly / monthly email reports (`email_reports.py`, `email_delivery.py`)**: opt-in training
+  digests emailed to the athlete's own `athlete.email` — **weekly** (Sunday 18:00 local: the
+  Mon–Sun week just ended, totals + per-sport split, plus the coming week's planned workouts) and
+  **monthly** (month's last day 18:00: that month's totals only). Two `APScheduler` jobs in
+  `worker/main.py` (`run_weekly_email_report`/`run_monthly_email_report`), resolved against
+  `schedule_timezone` like the sync/backup/push jobs. Opt-in is per-athlete via
+  `athlete_email_report_config` (one row, `weekly_enabled`/`monthly_enabled`, both default False —
+  same one-row-upsert shape as `athlete_hr_zone_config`); no row means no emails. The SMTP relay
+  is deployment-global (`PERSEVERER_SMTP_*`, `config.py::smtp_configured`), read by both the
+  `worker` (scheduled sends) and `api` (the "send test email" button) containers — all-or-nothing
+  optional, same log-and-skip contract as the Eufy/backup credentials. `smtp_security` picks the
+  wire mode: `starttls` (port 587), `ssl` (port 465), or `none`; port 587 is mail-submission and
+  is STARTTLS, not implicit TLS. Totals come from `period_rollup` (the sanctioned aggregate); the
+  per-sport split is one extra bounded `activity` query; coming-week running workouts reuse
+  `planned_workout_stats.estimate_workout` for the same distance/duration/load line the calendar
+  shows. HTML is deliberately email-client-safe — one inline-styled table, light palette, no
+  `<style>`, no external resources — with a plaintext alternative. A send reads the local DB
+  (newest data = that morning's 04:15 sync), so the send day's own activities may lag; the footer
+  says so. `GET/PUT /settings/email-reports` (+ read-only `smtp_configured`/`recipient_email`
+  context) and `POST /settings/email-reports/test` (sends the current weekly report now — 400 if
+  unconfigured, 502 on send failure); frontend `EmailReportsCard.tsx` under Settings → External
+  tools.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

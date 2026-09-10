@@ -1181,6 +1181,31 @@ Unpublishes the feed (the existing link stops working immediately).
 
 **Response `200`:** `CalendarFeedStatusOut` — `{"enabled": false, "created_at": null}`.
 
+### `GET /settings/email-reports`
+
+The athlete's opt-in for the weekly / monthly training-report emails.
+
+**Response `200`:** `EmailReportConfigOut` — `{"weekly_enabled": bool, "monthly_enabled": bool,
+"smtp_configured": bool, "recipient_email": string | null}`. `smtp_configured` is whether the
+deployment has an SMTP relay set up (`PERSEVERER_SMTP_*`); `recipient_email` echoes
+`athlete.email` (set via `PUT /settings/profile`) — reports go there. Both are read-only context
+for the UI.
+
+### `PUT /settings/email-reports`
+
+Sets the two opt-in switches (upsert). Both default `false`; no configuration means no emails.
+
+**Body:** `EmailReportConfigIn` — `{"weekly_enabled": bool, "monthly_enabled": bool}`.
+**Response `200`:** `EmailReportConfigOut`.
+
+### `POST /settings/email-reports/test`
+
+Sends the *current* weekly report to the athlete's own `athlete.email` immediately — the way to
+verify SMTP and the Profile email without waiting for the scheduled send.
+
+**Response `200`:** `{"triggered": true}`. **`400`** if SMTP or the Profile email isn't
+configured; **`502`** if the SMTP send itself fails.
+
 ### `GET /share/calendar/{token}.ics`
 
 **No authentication.** Same "public by omission" posture as `GET /share/{token}` above, and

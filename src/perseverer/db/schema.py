@@ -75,8 +75,9 @@ athlete = Table(
     Column("birthdate", String, nullable=True),
     Column("height_cm", Float, nullable=True),
     Column("sex", String, nullable=True),
-    # Inert for now -- stored for a future feature, no consumer reads it yet. Validated at the API
-    # layer (a light regex, not a full RFC 5322 parse) since it isn't used for anything yet.
+    # The recipient for the opt-in weekly/monthly training-report emails (email_reports.py) --
+    # nothing else reads it. Validated at the API layer with a light regex, not a full RFC 5322
+    # parse. NULL means the athlete hasn't set one; the email jobs skip that athlete with a warn.
     Column("email", String, nullable=True),
 )
 
@@ -130,6 +131,20 @@ athlete_eufy_config = Table(
     Column("password", String, nullable=True),
     Column("device_id", String, nullable=True),
     Column("customer_id", String, nullable=True),
+    Column("updated_at", DateTime(), nullable=False),
+)
+
+# Per-athlete opt-in for the weekly/monthly training-report emails (email_reports.py). One row
+# per athlete (upsert, same shape as athlete_hr_zone_config above); no row, or a row with both
+# flags False, means "no emails" -- the default. The SMTP relay itself is deployment-global
+# (PERSEVERER_SMTP_*, config.py), and the recipient is the athlete's own `athlete.email`
+# (Settings > Profile) -- this table holds only the two opt-in switches.
+athlete_email_report_config = Table(
+    "athlete_email_report_config",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("weekly_enabled", Boolean, nullable=False, default=False),
+    Column("monthly_enabled", Boolean, nullable=False, default=False),
     Column("updated_at", DateTime(), nullable=False),
 )
 
