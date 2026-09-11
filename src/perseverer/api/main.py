@@ -36,6 +36,7 @@ from perseverer.api.routers import (
     insights,
     notes,
     performance,
+    planned_races,
     planned_workouts,
     share,
     sleep,
@@ -77,6 +78,7 @@ app.include_router(insights.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")
 app.include_router(goals.router, prefix="/api/v1")
 app.include_router(planned_workouts.router, prefix="/api/v1")
+app.include_router(planned_races.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(share.management_router, prefix="/api/v1")
 # No prefix, no auth -- the one deliberately public surface in this app besides

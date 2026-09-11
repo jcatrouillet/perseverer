@@ -58,6 +58,8 @@ import type {
   Page,
   PeriodCalendarResponse,
   PerformanceDailyRollupOut,
+  PlannedRaceIn,
+  PlannedRaceOut,
   PlannedWorkoutListItemOut,
   PlannedWorkoutOut,
   PlannedWorkoutStepIn,
@@ -1111,6 +1113,59 @@ export function useCreateRecurringPlannedWorkouts() {
       apiPost<RecurringWorkoutOut>("/api/v1/planned-workouts/recurring", body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["planned-workouts"] });
+    },
+  });
+}
+
+// --- Races on the calendar (planned_race) -- see api/routers/planned_races.py. Own small
+// table/route set, not a planned_workout sport tier: a race has no step model or Garmin push.
+// Same range-vs-by-date split as the planned-workout hooks above, for the same reason (the
+// Month grid's compact indicator vs. the day panel's full detail).
+
+export function usePlannedRacesForRange(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["planned-races", startDate, endDate],
+    queryFn: () =>
+      apiGet<PlannedRaceOut[]>(
+        `/api/v1/planned-races${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+export function usePlannedRacesForDate(localDate: string) {
+  return useQuery({
+    queryKey: ["planned-races", "by-date", localDate],
+    queryFn: () => apiGet<PlannedRaceOut[]>(`/api/v1/planned-races/by-date/${localDate}`),
+  });
+}
+
+export function useCreatePlannedRace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PlannedRaceIn) => apiPost<PlannedRaceOut>("/api/v1/planned-races", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-races"] });
+    },
+  });
+}
+
+export function useUpdatePlannedRace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ raceId, ...body }: PlannedRaceIn & { raceId: number }) =>
+      apiPut<PlannedRaceOut>(`/api/v1/planned-races/${raceId}`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-races"] });
+    },
+  });
+}
+
+export function useDeletePlannedRace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (raceId: number) => apiDelete<void>(`/api/v1/planned-races/${raceId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-races"] });
     },
   });
 }

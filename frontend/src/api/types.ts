@@ -589,6 +589,33 @@ export interface RecurringWorkoutOut {
   created_dates: string[];
 }
 
+// GET/POST/PUT/DELETE /planned-races -- a single upcoming race on the calendar. See
+// db/schema.py::planned_race and planned_races.py for the prediction lookup.
+export interface PlannedRaceOut {
+  id: number;
+  local_date: string;
+  name: string;
+  sport: string;
+  distance_m: number;
+  scheduled_time: string | null; // "HH:MM", 24h -- optional, display-only
+  target_duration_s: number | null; // the athlete's own goal finish time; null = no target
+  // Read-only, computed server-side at request time -- never stored.
+  days_until: number;
+  // The athlete's most recent predicted finish time for this distance (from the Insights
+  // performance model) -- only ever set for the four standard race distances
+  // (5k/10k/half/marathon); null for a custom distance or before any performance rollup exists.
+  predicted_duration_s: number | null;
+}
+
+export interface PlannedRaceIn {
+  local_date: string;
+  name: string;
+  sport: string;
+  distance_m: number;
+  scheduled_time: string | null;
+  target_duration_s: number | null;
+}
+
 export interface ActivityWorkoutOut {
   name: string | null;
   description: string | null;

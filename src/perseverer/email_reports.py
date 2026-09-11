@@ -3,9 +3,10 @@
 (`email_delivery.send_email`, `PERSEVERER_SMTP_*`), scheduled from `worker/main.py`.
 
 - **Weekly** (Sunday 18:00 local): the Mon--Sun week that just ended (activity totals + a
-  per-sport breakdown) plus the coming Mon--Sun week's planned workouts.
+  per-sport breakdown) plus the coming Mon--Sun week's planned workouts and any races
+  (`planned_race`, planned_races.py) scheduled in it, target vs. predicted finish time included.
 - **Monthly** (month's last day, 18:00): the calendar month that just ended -- totals only, no
-  planned-workout section.
+  planned-workout/race section.
 
 Headline totals come straight from `period_rollup` (the platform's sanctioned aggregate --
 already consistent with the calendar grid); the per-sport split is one extra bounded `activity`
@@ -38,9 +39,11 @@ from perseverer.db.schema import (
     athlete_hr_zone_config,
     athlete_running_load_config,
     period_rollup,
+    planned_race,
     planned_workout,
 )
 from perseverer.email_delivery import send_email
+from perseverer.planned_races import predicted_duration_s_for_distance
 from perseverer.planned_workout_stats import estimate_workout
 from perseverer.workout_syntax import parse_workout_syntax
 
@@ -105,6 +108,15 @@ class PlannedWorkoutLine:
 
 
 @dataclass(frozen=True)
+class PlannedRaceLine:
+    local_date: str
+    name: str
+    distance_m: float
+    target_duration_s: float | None
+    predicted_duration_s: float | None  # standard distances only, see planned_races.py
+
+
+@dataclass(frozen=True)
 class WeeklyReport:
     athlete_name: str
     prev_start: date
@@ -114,6 +126,7 @@ class WeeklyReport:
     totals: PeriodTotals
     sports: list[SportTotals]
     coming_workouts: list[PlannedWorkoutLine]
+    coming_races: list[PlannedRaceLine]
 
 
 @dataclass(frozen=True)
@@ -269,6 +282,32 @@ def _coming_workouts(
     return lines
 
 
+def _coming_races(conn: Connection, athlete_id: str, start: str, end: str) -> list[PlannedRaceLine]:
+    rows = conn.execute(
+        select(planned_race)
+        .where(
+            and_(
+                planned_race.c.athlete_id == athlete_id,
+                planned_race.c.local_date >= start,
+                planned_race.c.local_date <= end,
+            )
+        )
+        .order_by(planned_race.c.local_date, planned_race.c.id)
+    ).fetchall()
+    return [
+        PlannedRaceLine(
+            local_date=r.local_date,
+            name=r.name,
+            distance_m=r.distance_m,
+            target_duration_s=r.target_duration_s,
+            predicted_duration_s=predicted_duration_s_for_distance(
+                conn, athlete_id=athlete_id, distance_m=r.distance_m
+            ),
+        )
+        for r in rows
+    ]
+
+
 def _athlete_name(conn: Connection, athlete_id: str) -> str:
     name = conn.execute(
         select(athlete.c.display_name).where(athlete.c.id == athlete_id)
@@ -297,6 +336,9 @@ def build_weekly_report(conn: Connection, *, athlete_id: str, today: date) -> We
             conn, athlete_id, prev_start.isoformat(), prev_end.isoformat()
         ),
         coming_workouts=_coming_workouts(
+            conn, athlete_id, coming_start.isoformat(), coming_end.isoformat()
+        ),
+        coming_races=_coming_races(
             conn, athlete_id, coming_start.isoformat(), coming_end.isoformat()
         ),
     )
@@ -336,6 +378,13 @@ def _hm(s: float | None) -> str:
 
 def _meters(m: float | None) -> str:
     return "—" if not m else f"{round(m):,} m"
+
+
+def _clock(seconds: float) -> str:
+    total = int(seconds)
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
 def _count(n: int | None) -> str:
@@ -439,6 +488,38 @@ def _workout_rows(workouts: list[PlannedWorkoutLine]) -> str:
     return rows
 
 
+def _race_rows(races: list[PlannedRaceLine]) -> str:
+    rows = ""
+    for r in races:
+        d = date.fromisoformat(r.local_date)
+        day = f"{_WEEKDAYS[d.weekday()]} {d.day}"
+        bits = [_km(r.distance_m)]
+        if r.target_duration_s:
+            bits.append(f"target {_clock(r.target_duration_s)}")
+        detail = " · ".join(bits)
+        compare = ""
+        if r.predicted_duration_s is not None and r.target_duration_s is not None:
+            diff = r.target_duration_s - r.predicted_duration_s
+            note = (
+                f"predicted {_clock(r.predicted_duration_s)} — on track"
+                if diff >= 0
+                else f"predicted {_clock(r.predicted_duration_s)} — {_clock(-diff)} over target"
+            )
+            compare = f'<div style="font-size:13px;color:{_MUTED}">{html.escape(note)}</div>'
+        elif r.predicted_duration_s is not None:
+            compare = (
+                f'<div style="font-size:13px;color:{_MUTED}">'
+                f"predicted {html.escape(_clock(r.predicted_duration_s))}</div>"
+            )
+        rows += (
+            f'<tr><td style="padding:8px 14px;border:1px solid {_BORDER}">'
+            f'<div style="color:{_TEXT}"><b>{html.escape(day)}</b> — 🏁 {html.escape(r.name)} '
+            f'<span style="color:{_MUTED}">({html.escape(detail)})</span></div>'
+            f"{compare}</td></tr>"
+        )
+    return rows
+
+
 def _shell(title: str, subtitle: str, inner: str) -> str:
     return (
         f'<div style="background:{_BG};padding:24px 0;font-family:-apple-system,'
@@ -474,9 +555,13 @@ def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
         f"Perseverer — your week: {_km(t.distance_m)} across "
         f"{t.activity_count} activit{'y' if t.activity_count == 1 else 'ies'}"
     )
+    races_section = (
+        _section("Races this week", _race_rows(report.coming_races)) if report.coming_races else ""
+    )
     inner = (
         _section("Last week", _stat_cells(t))
         + _section("By sport", _sport_rows(report.sports))
+        + races_section
         + _section(
             f"Coming week ({_date_range_label(report.coming_start, report.coming_end)})",
             _workout_rows(report.coming_workouts),
@@ -538,8 +623,19 @@ def _weekly_text(report: WeeklyReport) -> str:
         _totals_text(report.totals),
         "By sport",
         _sports_text(report.sports),
-        f"Coming week ({_date_range_label(report.coming_start, report.coming_end)})",
     ]
+    if report.coming_races:
+        lines.append("Races this week")
+        for r in report.coming_races:
+            d = date.fromisoformat(r.local_date)
+            bits = [_km(r.distance_m)]
+            if r.target_duration_s:
+                bits.append(f"target {_clock(r.target_duration_s)}")
+            lines.append(f"  {_WEEKDAYS[d.weekday()]} {d.day} - {r.name} ({' - '.join(bits)})")
+            if r.predicted_duration_s is not None:
+                lines.append(f"      predicted {_clock(r.predicted_duration_s)}")
+        lines.append("")
+    lines.append(f"Coming week ({_date_range_label(report.coming_start, report.coming_end)})")
     if report.coming_workouts:
         for w in report.coming_workouts:
             d = date.fromisoformat(w.local_date)

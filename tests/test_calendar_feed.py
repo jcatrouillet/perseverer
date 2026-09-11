@@ -19,7 +19,7 @@ from perseverer.calendar_feed import (
     resolve_feed_token,
 )
 from perseverer.db.engine import make_engine
-from perseverer.db.schema import athlete, metadata
+from perseverer.db.schema import athlete, metadata, planned_race
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.planned_workouts import PlannedStepLike, save_planned_workout
 
@@ -336,3 +336,84 @@ class TestBuildIcsFeed:
         cal = Calendar.from_ical(ics_bytes)
         uids = {str(e["uid"]) for e in cal.walk("VEVENT")}
         assert len(uids) == 2
+
+
+def _insert_race(engine: Engine, **kw: Any) -> None:
+    now = dt.datetime(2026, 1, 1)
+    with engine.connect() as conn:
+        conn.execute(
+            planned_race.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                sport="running",
+                created_at=now,
+                updated_at=now,
+                **kw,
+            )
+        )
+        conn.commit()
+
+
+class TestBuildIcsFeedRaces:
+    def test_timed_race_uses_athlete_timezone_and_target_duration(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path, timezone="America/Los_Angeles")
+        _insert_race(
+            engine,
+            local_date="2026-04-12",
+            name="Paris Marathon",
+            distance_m=42195.0,
+            scheduled_time="09:00",
+            target_duration_s=14400.0,
+        )
+        with engine.connect() as conn:
+            ics_bytes = build_ics_feed(
+                conn, athlete_id=DEFAULT_ATHLETE_ID, timezone_name="America/Los_Angeles"
+            )
+        cal = Calendar.from_ical(ics_bytes)
+        events = cal.walk("VEVENT")
+        assert len(events) == 1
+        event = events[0]
+        assert "Paris Marathon" in str(event["summary"])
+        start = cast(dt.datetime, _prop_dt(event, "dtstart"))
+        assert (start.year, start.month, start.day, start.hour, start.minute) == (
+            2026, 4, 12, 9, 0,
+        )
+        end = cast(dt.datetime, _prop_dt(event, "dtend"))
+        assert (end - start) == dt.timedelta(hours=4)
+        description = str(event["description"])
+        assert "42.2 km" in description
+        assert "target 4:00:00" in description
+
+    def test_all_day_race_has_no_time_and_a_default_duration(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        _insert_race(
+            engine,
+            local_date="2026-09-20",
+            name="Local 10K",
+            distance_m=10000.0,
+        )
+        with engine.connect() as conn:
+            ics_bytes = build_ics_feed(conn, athlete_id=DEFAULT_ATHLETE_ID, timezone_name="UTC")
+        cal = Calendar.from_ical(ics_bytes)
+        event = cal.walk("VEVENT")[0]
+        start = _prop_dt(event, "dtstart")
+        assert isinstance(start, dt.date) and not isinstance(start, dt.datetime)
+        description = str(event["description"])
+        assert description == "10.0 km"
+
+    def test_races_and_workouts_coexist_in_the_same_feed(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        _insert_race(engine, local_date="2026-09-20", name="Local 10K", distance_m=10000.0)
+        with engine.connect() as conn:
+            save_planned_workout(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-09-10",
+                sport="running",
+                name="Taper run",
+                source_text="20m easy",
+            )
+            conn.commit()
+            ics_bytes = build_ics_feed(conn, athlete_id=DEFAULT_ATHLETE_ID, timezone_name="UTC")
+        cal = Calendar.from_ical(ics_bytes)
+        summaries = {str(e["summary"]) for e in cal.walk("VEVENT")}
+        assert summaries == {"🏁 Local 10K", "Running: Taper run"}

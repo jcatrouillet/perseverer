@@ -580,6 +580,7 @@ const EX = {
   GOAL: 14,
   PLANNED_DATE: "2026-09-01",
   PLANNED_WORKOUT_ID: 42,
+  PLANNED_RACE_ID: 7,
 };
 
 // ---------------------------------------------------------------------------
@@ -1137,6 +1138,25 @@ const SCHEMAS = [
   { name: "RecurringWorkoutOut", note: "Returned by POST /planned-workouts/recurring.", fields: [
       ["created_dates","array<string(date)>","Every occurrence date got its own new row, even one that already had a workout scheduled."],
     ] },
+  { name: "PlannedRaceIn", note: "Body of POST/PUT /planned-races.", fields: [
+      ["local_date","string(date)","required"],
+      ["name","string","required — non-blank."],
+      ["sport","string","Default \"running\" — open string, not an enum.","opt"],
+      ["distance_m","number","required — must be positive."],
+      ["scheduled_time","string|null","\"HH:MM\" (24h). Display-only — races are never pushed to Garmin.","opt"],
+      ["target_duration_s","number|null","The athlete's own goal finish time, e.g. \"run in less than 4 hours\" -> 14400. Must be positive when set. null means no target.","opt"],
+    ] },
+  { name: "PlannedRaceOut", note: "Returned by POST/GET/PUT /planned-races and GET .../by-date/{local_date}. Adds three fields beyond PlannedRaceIn, computed fresh on every read (never stored).", fields: [
+      ["id","integer",""],
+      ["local_date","string(date)",""],
+      ["name","string",""],
+      ["sport","string",""],
+      ["distance_m","number",""],
+      ["scheduled_time","string|null","\"HH:MM\" (24h)."],
+      ["target_duration_s","number|null",""],
+      ["days_until","integer","local_date minus today, in days. Negative for a past race."],
+      ["predicted_duration_s","number|null","The most recent performance_daily_rollup prediction for a standard distance matching distance_m (5K/10K/half marathon/marathon, small float tolerance). null for a custom distance or before any qualifying rollup exists."],
+    ] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1683,6 +1703,70 @@ const GROUPS = [
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/recurring \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"local_date": "2026-09-01", "sport": "running", "source_text": "Warmup 10m", "frequency": "weekly", "count": 8}'` }
+    },
+  ]},
+
+  { id: "planned-races", title: "Races on the calendar", endpoints: [
+    { method: "GET", path: "/api/v1/planned-races", summary: "List races scheduled in a date range.",
+      description: "The calendar grid's own per-day indicator. A race is deliberately its own table, not a planned_workout sport tier — it has no step model and is never pushed to Garmin.",
+      params: [
+        ["start_date","query","req","string","—","Inclusive."],
+        ["end_date","query","req","string","—","Inclusive."],
+      ],
+      responses: [ { code: 200, ref: "array&lt;PlannedRaceOut&gt;" } ],
+      example: { qs: "?start_date=2026-09-01&end_date=2026-09-30" }
+    },
+    { method: "GET", path: "/api/v1/planned-races/by-date/{local_date}", summary: "Get every race scheduled on one date.",
+      description: "An empty array, one, or many — any number of races can share a date.",
+      params: [ ["local_date","path","req","string","—","ISO date."] ],
+      responses: [ { code: 200, ref: "array&lt;PlannedRaceOut&gt;" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/planned-races/by-date/${EX.PLANNED_DATE} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/api/v1/planned-races/{race_id}", summary: "Get one race.",
+      params: [ ["race_id","path","req","integer","—","From PlannedRaceOut.id."] ],
+      responses: [ { code: 200, ref: "PlannedRaceOut" }, { code: 404, note: 'detail: "planned race not found"' } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/planned-races/${EX.PLANNED_RACE_ID} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/planned-races", summary: "Create a new race.",
+      body: { schema: "PlannedRaceIn", fields: [
+        ["local_date","string","req","","ISO date."],
+        ["name","string","req","","Non-blank."],
+        ["sport","string","opt","","Default \"running\" — open string, not an enum (a cycling sportive or a swim event can be logged too)."],
+        ["distance_m","number","req","","Must be positive."],
+        ["scheduled_time","string|null","opt","","\"HH:MM\" (24h). Display-only — races are never pushed to Garmin, so there's no vendor time-of-day constraint."],
+        ["target_duration_s","number|null","opt","","The athlete's own goal finish time, e.g. \"run in less than 4 hours\" -> 14400. Must be positive when set. null means no target — the race still shows with just its distance/countdown."],
+      ]},
+      responses: [
+        { code: 200, ref: "PlannedRaceOut" },
+        { code: 422, note: "Blank name, non-positive distance_m/target_duration_s, or a malformed scheduled_time/local_date." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-races \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"local_date": "${EX.PLANNED_DATE}", "name": "Fall 10K", "sport": "running", "distance_m": 10000, "scheduled_time": "08:00", "target_duration_s": 2700}'` }
+    },
+    { method: "PUT", path: "/api/v1/planned-races/{race_id}", summary: "Update a race in place.",
+      description: "A full replacement — same request body as POST.",
+      params: [ ["race_id","path","req","integer","—","From PlannedRaceOut.id."] ],
+      body: { schema: "PlannedRaceIn", fields: [
+        ["local_date","string","req","","ISO date."],
+        ["name","string","req","","Non-blank."],
+        ["sport","string","opt","","Default \"running\"."],
+        ["distance_m","number","req","","Must be positive."],
+        ["scheduled_time","string|null","opt","","\"HH:MM\" (24h)."],
+        ["target_duration_s","number|null","opt","","Must be positive when set."],
+      ]},
+      responses: [ { code: 200, ref: "PlannedRaceOut" }, { code: 404, note: 'detail: "planned race not found"' } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/planned-races/${EX.PLANNED_RACE_ID} \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"local_date": "${EX.PLANNED_DATE}", "name": "Fall 10K", "sport": "running", "distance_m": 10000, "scheduled_time": "08:00", "target_duration_s": 2700}'` }
+    },
+    { method: "DELETE", path: "/api/v1/planned-races/{race_id}", summary: "Delete a race.",
+      params: [ ["race_id","path","req","integer","—","From PlannedRaceOut.id."] ],
+      responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "planned race not found"' } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/planned-races/${EX.PLANNED_RACE_ID} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
     },
   ]},
 

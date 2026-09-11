@@ -19,7 +19,9 @@ from perseverer.db.schema import (
     athlete_email_report_config,
     athlete_running_load_config,
     metadata,
+    performance_daily_rollup,
     period_rollup,
+    planned_race,
     planned_workout,
 )
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
@@ -110,6 +112,18 @@ def _plan(conn: Connection, **kw: object) -> None:
         planned_workout.insert().values(
             athlete_id=DEFAULT_ATHLETE_ID,
             push_status="draft",
+            created_at=dt.datetime(2026, 9, 1),
+            updated_at=dt.datetime(2026, 9, 1),
+            **kw,
+        )
+    )
+
+
+def _race(conn: Connection, **kw: object) -> None:
+    conn.execute(
+        planned_race.insert().values(
+            athlete_id=DEFAULT_ATHLETE_ID,
+            sport="running",
             created_at=dt.datetime(2026, 9, 1),
             updated_at=dt.datetime(2026, 9, 1),
             **kw,
@@ -219,6 +233,49 @@ def test_coming_workout_comment_shown_in_both_html_and_text(conn: Connection) ->
     rendered = render_weekly_email(report)
     assert "Base-building phase -- keep it aerobic." in rendered.html
     assert "Base-building phase -- keep it aerobic." in rendered.text
+
+
+def test_coming_week_race_appears_with_target_and_prediction(conn: Connection) -> None:
+    conn.execute(
+        performance_daily_rollup.insert().values(
+            athlete_id=DEFAULT_ATHLETE_ID,
+            local_date="2026-09-01",
+            predicted_10k_s=2350.0,
+            refreshed_at=dt.datetime(2026, 9, 1),
+        )
+    )
+    _race(
+        conn,
+        local_date="2026-09-16",
+        name="Fall 10K",
+        distance_m=10000.0,
+        target_duration_s=2400.0,
+    )
+    # Outside the coming week -- must not appear.
+    _race(conn, local_date="2026-10-01", name="Way later", distance_m=5000.0)
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert len(report.coming_races) == 1
+    race = report.coming_races[0]
+    assert race.name == "Fall 10K"
+    assert race.target_duration_s == 2400.0
+    assert race.predicted_duration_s == 2350.0
+
+    rendered = render_weekly_email(report)
+    assert "Fall 10K" in rendered.html and "Fall 10K" in rendered.text
+    assert "Races this week" in rendered.html and "Races this week" in rendered.text
+    # Predicted (39:10) is faster than the 40:00 target -- reads as on track.
+    assert "on track" in rendered.html
+
+
+def test_no_coming_races_omits_the_races_section(conn: Connection) -> None:
+    _seed_week_rollup(conn)
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert report.coming_races == []
+    rendered = render_weekly_email(report)
+    assert "Races this week" not in rendered.html
+    assert "Races this week" not in rendered.text
 
 
 def test_render_monthly_email_has_no_planned_section(conn: Connection) -> None:

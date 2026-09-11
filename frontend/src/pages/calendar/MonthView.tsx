@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link } from "wouter";
 
 import {
@@ -10,10 +10,11 @@ import {
   useClimbingSummary,
   useFitness,
   useHealthDashboard,
+  usePlannedRacesForRange,
   usePlannedWorkoutsList,
   useSleep,
 } from "../../api/queries";
-import type { PlannedWorkoutListItemOut } from "../../api/types";
+import type { PlannedRaceOut, PlannedWorkoutListItemOut } from "../../api/types";
 import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
@@ -39,6 +40,13 @@ import { busiestWeekStart } from "../../yearStats";
 import "../../styles/calendar.css";
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+// Code-split, not a static import -- see DayViewPage.tsx's own identical comment (the app-shell
+// bundle is already right at vite-plugin-pwa's 2MB single-file precache limit, and this card
+// only ever renders inside the expanded-day card below, not on first paint).
+const PlannedRaceForm = lazy(() =>
+  import("../../components/PlannedRaceForm").then((m) => ({ default: m.PlannedRaceForm })),
+);
 
 function formatMonthDayTick(iso: string): string {
   return String(parseIsoDate(iso).getUTCDate());
@@ -88,6 +96,10 @@ export function MonthView({ year, month }: { year: number; month: number }) {
     weekRows[0]![0]!,
     weekRows[weekRows.length - 1]![6]!,
   );
+  const plannedRaces = usePlannedRacesForRange(
+    weekRows[0]![0]!,
+    weekRows[weekRows.length - 1]![6]!,
+  );
 
   const dayByDate = new Map(calendar.data?.days.map((d) => [d.local_date, d]));
   const weekByStart = new Map(weeks.data?.periods.map((p) => [p.period_start, p]));
@@ -112,6 +124,18 @@ export function MonthView({ year, month }: { year: number; month: number }) {
       }
       return a.id - b.id;
     });
+  }
+  // Same "own row per date" grouping as plannedByDate above -- races are a separate small table
+  // (planned_race), not another planned_workout sport tier, so this is its own map rather than
+  // merged into plannedByDate.
+  const racesByDate = new Map<string, PlannedRaceOut[]>();
+  for (const r of plannedRaces.data ?? []) {
+    const forDate = racesByDate.get(r.local_date);
+    if (forDate) {
+      forDate.push(r);
+    } else {
+      racesByDate.set(r.local_date, [r]);
+    }
   }
 
   const all = allActivities.data?.items ?? [];
@@ -254,6 +278,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                   const inMonth = date >= start && date <= end;
                   const day = dayByDate.get(date);
                   const planned = plannedByDate.get(date);
+                  const races = racesByDate.get(date);
                   if (!inMonth) return <td key={date} />;
                   return (
                     <td key={date}>
@@ -280,6 +305,12 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                           {p.name || p.sport}
                         </div>
                       ))}
+                      {races?.map((r) => (
+                        <div key={r.id} className="month-grid__race">
+                          <Icon name="trophy" />
+                          {r.name}
+                        </div>
+                      ))}
                     </td>
                   );
                 })}
@@ -302,6 +333,10 @@ export function MonthView({ year, month }: { year: number; month: number }) {
           <h2>{expandedDate}</h2>
           <h3>Planned workout</h3>
           <ScheduleWorkoutForm localDate={expandedDate} />
+          <h3>Race</h3>
+          <Suspense fallback={<LoadingSpinner size="sm" />}>
+            <PlannedRaceForm localDate={expandedDate} />
+          </Suspense>
           <NotesPanel entityType="day" entityId={expandedDate} />
         </section>
       )}

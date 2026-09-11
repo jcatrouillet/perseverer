@@ -8,6 +8,7 @@ import {
   useClimbingSummary,
   useFitness,
   useHealthDashboard,
+  usePlannedRacesForDate,
   usePlannedWorkoutsForDate,
   useSleep,
 } from "../../api/queries";
@@ -58,6 +59,25 @@ function WeekDayPlannedWorkouts({ date }: { date: string }) {
             {w.name || w.sport}
           </div>
           <WorkoutLoadBar workout={w} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Same "one hook call per day, own component instance" pattern as WeekDayPlannedWorkouts above,
+// for the same Rules-of-Hooks reason -- races are a separate small table, not a planned_workout
+// sport tier. Read-only here too (Edit/Delete live on Day/Month view).
+function WeekDayRaces({ date }: { date: string }) {
+  const races = usePlannedRacesForDate(date);
+  if (!races.data || races.data.length === 0) return null;
+  return (
+    <div className="activity-day-group__planned">
+      {races.data.map((r) => (
+        <div key={r.id} className="month-grid__race">
+          <Icon name="trophy" />
+          {r.scheduled_time && `${r.scheduled_time} `}
+          {r.name}
         </div>
       ))}
     </div>
@@ -276,6 +296,7 @@ export function WeekView({ date }: { date: string }) {
               </div>
             </div>
             <WeekDayPlannedWorkouts date={d} />
+            <WeekDayRaces date={d} />
             {dayActivities.length > 0 && (
               <div className="activity-day-group__list">
                 {dayActivities.map((activity) => (

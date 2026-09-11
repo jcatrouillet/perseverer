@@ -751,6 +751,24 @@ because you don't recognize it — stop, that's the bug.
   context) and `POST /settings/email-reports/test` (sends the current weekly report now — 400 if
   unconfigured, 502 on send failure); frontend `EmailReportsCard.tsx` under Settings → External
   tools.
+- **Races on the calendar (`planned_race`, `planned_races.py`)**: a dated event with a distance
+  and an optional target finish time — deliberately its own table, not a `planned_workout` sport
+  tier, since a race has no step model and is never pushed to Garmin. Own id-keyed table (any
+  number per athlete per date), mirroring `/planned-workouts`'s post-multi-per-day route shape:
+  `GET /planned-races?start_date=&end_date=` (range), `GET /planned-races/by-date/{local_date}`,
+  `POST /planned-races`, `GET/PUT/DELETE /planned-races/{race_id}`. Target-vs-predicted finish
+  time reuses `performance_daily_rollup`'s own race predictions
+  (`predicted_duration_s_for_distance` matches `distance_m` against `vdot.RACE_DISTANCES_M`,
+  small float tolerance) rather than a second prediction path — a custom distance simply gets no
+  prediction, honest rather than extrapolated. `days_until`/`predicted_duration_s` are computed
+  fresh on every read, never stored, since both go stale immediately (the countdown daily, the
+  prediction the moment a new performance rollup runs). Frontend: `PlannedRaceForm.tsx` (Day
+  view's "Race" card, Month view's expanded-day card), code-split via `React.lazy` for the same
+  2MB-precache-limit reason `ExerciseStepEditor.tsx::preloadExerciseCatalog` already documents; a
+  trophy-iconed chip in the Month grid and Week view (read-only there). Also surfaces in the iCal
+  feed (`calendar_feed.py::_build_race_event`) and the weekly email's "Races this week" section
+  (`email_reports.py`) — both read the same `planned_race` row the calendar already fetches, no
+  new query shape.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

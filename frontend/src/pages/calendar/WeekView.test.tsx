@@ -25,6 +25,10 @@ beforeAll(() => {
 });
 
 const mockUsePlannedWorkoutsForDate = vi.fn();
+// A default (see MonthView.test.tsx's own identical comment) -- mockReturnValueOnce overrides
+// it for exactly one call without leaking into every other test in this file.
+const mockUsePlannedRacesForDate = vi.fn();
+mockUsePlannedRacesForDate.mockReturnValue({ data: [], isLoading: false, isError: false });
 const EMPTY_QUERY = { data: undefined, isLoading: false, isError: false };
 const EMPTY_DAYS_QUERY = { data: { days: [] }, isLoading: false, isError: false };
 const EMPTY_PERIODS_QUERY = { data: { periods: [] }, isLoading: false, isError: false };
@@ -41,6 +45,7 @@ vi.mock("../../api/queries", () => ({
   useActivityYears: () => EMPTY_QUERY,
   useActivityLocation: () => ({ data: undefined }),
   usePlannedWorkoutsForDate: (...args: unknown[]) => mockUsePlannedWorkoutsForDate(...args),
+  usePlannedRacesForDate: (...args: unknown[]) => mockUsePlannedRacesForDate(...args),
 }));
 
 const RUNNING_WORKOUT: PlannedWorkoutOut = {
@@ -100,5 +105,34 @@ describe("WeekView planned-workout indicator", () => {
     expect(screen.getByText(/06:00 Tempo run/)).toBeInTheDocument();
     expect(screen.getByText("Load 30")).toBeInTheDocument();
     expect(document.querySelector(".workout-load-bar__segment")).toBeInTheDocument();
+  });
+});
+
+describe("WeekView race indicator", () => {
+  it("shows a race chip on its own scheduled day", () => {
+    mockUsePlannedRacesForDate.mockImplementation((date: string) =>
+      date === "2026-09-03"
+        ? {
+            data: [
+              {
+                id: 1,
+                local_date: "2026-09-03",
+                name: "Fall 10K",
+                sport: "running",
+                distance_m: 10000,
+                scheduled_time: "08:00",
+                target_duration_s: null,
+                days_until: 2,
+                predicted_duration_s: null,
+              },
+            ],
+            isLoading: false,
+            isError: false,
+          }
+        : { data: [], isLoading: false, isError: false },
+    );
+    render(<WeekView date="2026-09-01" />);
+    expect(screen.getByText(/08:00 Fall 10K/)).toBeInTheDocument();
+    expect(document.querySelector(".month-grid__race .icon")).toBeInTheDocument();
   });
 });

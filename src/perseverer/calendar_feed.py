@@ -19,6 +19,10 @@ notes respectively -- used verbatim as the event DESCRIPTION); hiit/strength_tra
 `_render_exercise_description` is a purpose-built renderer for that one case rather than reusing
 `workout_syntax.py::steps_to_source_text` (shaped for *recorded*, pace-only steps -- a different
 domain from `planned_workout_step`'s reps/exercise/weight fields).
+
+Also includes `planned_race` rows (planned_races.py) -- a race is a calendar event too, just a
+different table (no step model, no Garmin push), so it gets its own small `_build_race_event`
+alongside `_build_event` rather than a third sport tier grafted onto the workout renderer.
 """
 
 from __future__ import annotations
@@ -31,13 +35,16 @@ from zoneinfo import ZoneInfo
 from icalendar import Calendar, Event
 from sqlalchemy import Connection, Row, select
 
-from perseverer.db.schema import athlete, planned_workout, planned_workout_step
+from perseverer.db.schema import athlete, planned_race, planned_workout, planned_workout_step
 from perseverer.planned_workouts import EXERCISE_SPORTS
 
 _FEED_TOKEN_BYTES = 32
 # Only used when scheduled_time is set but estimated_duration_s isn't -- a labeled judgment call,
 # not derived from anywhere.
 _DEFAULT_EVENT_DURATION_S = 3600.0
+# A race with a known start time but no known finish -- long enough to cover the vast majority
+# of amateur race durations across every distance this app lets an athlete log.
+_DEFAULT_RACE_EVENT_DURATION_S = 4.0 * 3600.0
 
 _SPORT_LABELS: dict[str, str] = {
     "running": "Running",
@@ -187,10 +194,44 @@ def _build_event(row: Row, steps: list[Row], timezone_name: str) -> Event:  # ty
     return ev
 
 
+def _clock_duration(seconds: float) -> str:
+    total = int(seconds)
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def _build_race_event(row: Row, timezone_name: str) -> Event:  # type: ignore[type-arg]
+    ev = Event()
+    ev.add("uid", f"planned-race-{row.id}@perseverer")
+    ev.add("summary", f"🏁 {row.name}")
+    ev.add("dtstamp", datetime.now(UTC))
+
+    local_date = date.fromisoformat(row.local_date)
+    if row.scheduled_time:
+        hour, minute = (int(p) for p in row.scheduled_time.split(":"))
+        start = datetime(
+            local_date.year, local_date.month, local_date.day, hour, minute,
+            tzinfo=ZoneInfo(timezone_name),
+        )
+        duration_s = row.target_duration_s or _DEFAULT_RACE_EVENT_DURATION_S
+        ev.add("dtstart", start)
+        ev.add("dtend", start + timedelta(seconds=duration_s))
+    else:
+        ev.add("dtstart", local_date)
+        ev.add("dtend", local_date + timedelta(days=1))
+
+    description = f"{row.distance_m / 1000:.1f} km"
+    if row.target_duration_s:
+        description += f" · target {_clock_duration(row.target_duration_s)}"
+    ev.add("description", description)
+    return ev
+
+
 def build_ics_feed(conn: Connection, *, athlete_id: str, timezone_name: str) -> bytes:
-    """Every planned_workout row for this athlete, all dates, one VEVENT each, as a full
-    VCALENDAR. Two bulk queries + Python grouping (same pattern performance_rollup.py already
-    uses) rather than one query per workout."""
+    """Every planned_workout AND planned_race row for this athlete, all dates, one VEVENT each,
+    as a full VCALENDAR. Two bulk queries + Python grouping (same pattern performance_rollup.py
+    already uses) rather than one query per workout."""
     workouts = conn.execute(
         select(planned_workout).where(planned_workout.c.athlete_id == athlete_id)
     ).fetchall()
@@ -205,6 +246,10 @@ def build_ics_feed(conn: Connection, *, athlete_id: str, timezone_name: str) -> 
         for s in step_rows:
             steps_by_workout.setdefault(s.planned_workout_id, []).append(s)
 
+    races = conn.execute(
+        select(planned_race).where(planned_race.c.athlete_id == athlete_id)
+    ).fetchall()
+
     cal = Calendar()
     cal.add("prodid", "-//Perseverer//Planned Workouts//EN")
     cal.add("version", "2.0")
@@ -212,6 +257,8 @@ def build_ics_feed(conn: Connection, *, athlete_id: str, timezone_name: str) -> 
     cal.add("method", "PUBLISH")
     for row in workouts:
         cal.add_component(_build_event(row, steps_by_workout.get(row.id, []), timezone_name))
+    for race_row in races:
+        cal.add_component(_build_race_event(race_row, timezone_name))
     # Emits a real VTIMEZONE block (DST rules included) for any TZID actually used above --
     # verified empirically against the installed icalendar version (7.3.0): without this call,
     # DTSTART/DTEND carry a bare TZID= parameter with no accompanying VTIMEZONE definition, which

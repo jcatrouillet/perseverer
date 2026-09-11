@@ -15,6 +15,7 @@
 // named checkpoints, not a real curve). Only covers days from whenever this feature's own live
 // fetch first ran onward -- a day before that simply shows no chart, same as any other absent
 // metric.
+import { lazy, Suspense } from "react";
 import { Link } from "wouter";
 
 import {
@@ -48,6 +49,14 @@ import "../styles/running-stats.css";
 const TRAINING_STATUS_KEY = "garmin.export.TrainingHistory.trainingStatus";
 const OBSERVATION_KEYS = [TRAINING_STATUS_KEY];
 const BODY_BATTERY_STREAM_KEY = "garmin.daily_body_battery.level";
+
+// Code-split, not a static import -- the app-shell bundle is already right at
+// vite-plugin-pwa's 2MB single-file precache limit (see ExerciseStepEditor.tsx's own
+// preloadExerciseCatalog docstring for the exact same constraint biting once before), and this
+// card is well below the fold, not needed for the page's first paint.
+const PlannedRaceForm = lazy(() =>
+  import("../components/PlannedRaceForm").then((m) => ({ default: m.PlannedRaceForm })),
+);
 
 export function DayViewPage({ date }: { date: string }) {
   const calendar = useCalendar(date, date);
@@ -315,6 +324,13 @@ export function DayViewPage({ date }: { date: string }) {
       <section className="card">
         <h2>Planned workout</h2>
         <ScheduleWorkoutForm localDate={date} />
+      </section>
+
+      <section className="card">
+        <h2>Race</h2>
+        <Suspense fallback={<LoadingSpinner size="sm" />}>
+          <PlannedRaceForm localDate={date} />
+        </Suspense>
       </section>
 
       <section className="card">

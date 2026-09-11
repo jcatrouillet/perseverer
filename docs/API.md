@@ -920,6 +920,99 @@ string.
 
 ---
 
+## Races on the calendar
+
+A dated event with a distance and an optional target finish time — deliberately its own table,
+not a `planned_workout` sport tier: a race has no step model and is never pushed to Garmin. Own
+id-keyed rows, any number per athlete per date, same route shape as `/planned-workouts`.
+
+### `GET /planned-races`
+
+Date-range list for the calendar grid's own per-day indicator.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `start_date` | query | **required** | string (date) | Inclusive. |
+| `end_date` | query | **required** | string (date) | Inclusive. |
+
+**Response `200`:** array\<`PlannedRaceOut`\>.
+
+### `GET /planned-races/by-date/{local_date}`
+
+Every race scheduled on one date — an empty array, one, or many.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `local_date` | path | **required** | string (date) | |
+
+**Response `200`:** array\<`PlannedRaceOut`\>.
+
+### `POST /planned-races`
+
+Creates a new race.
+
+**Request body** (`PlannedRaceIn`):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `local_date` | string (date) | required | |
+| `name` | string | required | Non-blank. |
+| `sport` | string | optional | Default `"running"` — open string, not an enum (a cycling sportive or a swim event can be logged too). |
+| `distance_m` | number | required | Must be positive. |
+| `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h). Display-only — races are never pushed to Garmin, so there's no vendor time-of-day constraint to work around. |
+| `target_duration_s` | number, nullable | optional | The athlete's own goal finish time, e.g. "run in less than 4 hours" → `14400`. Must be positive when set. `null` means no target — the race still shows with just its distance/countdown. |
+
+**Response `200`:** `PlannedRaceOut`. `422` → blank name, non-positive `distance_m`/
+`target_duration_s`, or a malformed `scheduled_time`/`local_date`.
+
+### `GET /planned-races/{race_id}`
+
+One race.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `race_id` | path | **required** | integer | From `PlannedRaceOut.id`. |
+
+**Responses:** `200` → `PlannedRaceOut`. `404` → `detail: "planned race not found"`.
+
+### `PUT /planned-races/{race_id}`
+
+Updates that race in place (a full replacement, same request body as `POST`).
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `race_id` | path | **required** | integer | From `PlannedRaceOut.id`. |
+
+**Request body:** `PlannedRaceIn` (see `POST /planned-races` above).
+
+**Responses:** `200` → `PlannedRaceOut`. `404` → `detail: "planned race not found"`.
+
+### `DELETE /planned-races/{race_id}`
+
+Deletes that race.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `race_id` | path | **required** | integer | From `PlannedRaceOut.id`. |
+
+**Responses:** `200` (no response body). `404` → `detail: "planned race not found"`.
+
+`PlannedRaceOut` adds three fields beyond `PlannedRaceIn`, computed fresh on every read (never
+stored — both go stale immediately, the countdown daily and the prediction the moment a new
+performance rollup runs):
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | integer | |
+| `days_until` | integer | `local_date` minus today, in days. Negative for a past race. |
+| `predicted_duration_s` | number, nullable | The most recent `performance_daily_rollup` prediction for a standard distance matching `distance_m` (5K/10K/half marathon/marathon, small float tolerance) — `null` for a custom distance or before any qualifying rollup exists. Compared against `target_duration_s` by the frontend ("Predicted 3:52:10 — on track" or "— N over target"). |
+
+Also surfaces in the iCal feed (a `🏁`-prefixed all-day or timed `VEVENT`, `docs/DEPLOY.md`'s own
+calendar-feed docs) and the weekly email's "Races this week" section — both read the same
+`planned_race` row the calendar already fetches.
+
+---
+
 ## Settings
 
 ### `GET /settings/hr-zones`
@@ -1734,3 +1827,17 @@ always addressed by id rather than by date:
 
 `created_dates` (array\<string\>, dates) — every occurrence date got its own new row, even one
 that already had a workout scheduled.
+
+### PlannedRaceOut
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | integer | |
+| `local_date` | string (date) | |
+| `name` | string | |
+| `sport` | string | Open string, default `"running"`. |
+| `distance_m` | number | |
+| `scheduled_time` | string, nullable | `"HH:MM"` (24h) — display-only. |
+| `target_duration_s` | number, nullable | The athlete's own goal finish time. `null` means no target was set. |
+| `days_until` | integer | `local_date` minus today, in days. Computed fresh on every read, never stored. |
+| `predicted_duration_s` | number, nullable | The most recent `performance_daily_rollup` prediction for a standard distance matching `distance_m`. `null` for a custom distance or before any qualifying rollup exists. Computed fresh on every read, never stored. |

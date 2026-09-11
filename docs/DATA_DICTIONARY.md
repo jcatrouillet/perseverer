@@ -1153,3 +1153,46 @@ month's totals, no planned-workout section). Two `APScheduler` jobs in `worker/m
   read-only context: `smtp_configured`, `recipient_email`), `POST /settings/email-reports/test`
   (sends the current weekly report immediately — 400 if SMTP or the Profile email isn't set, 502
   on send failure). Frontend: `EmailReportsCard.tsx` (Settings → External tools).
+
+## Races on the calendar (planned_races.py)
+
+A single upcoming race — name, date, optional time of day, distance, and an optional target
+finish time — deliberately its own table, not a `planned_workout` sport tier: a race has no
+step model to push to Garmin, it's just an event to look forward to and pace a goal against.
+
+- **`planned_race`** — one row per race, own `id` (any number per athlete per date, same
+  "addressed by id, not by date" convention `planned_workout` adopted after its own
+  multi-per-day revision): `local_date`, `scheduled_time` ("HH:MM", nullable, display-only —
+  never any Garmin push here at all, so there's no vendor time-of-day API constraint to work
+  around, it's simply optional because not every race's start time is known when first added),
+  `name`, `sport` (open string, default `"running"` — a cycling sportive or a swim event can be
+  logged too, not just runs), `distance_m`, `target_duration_s` (the athlete's own goal finish
+  time — "run in less than 4 hours" → `14400.0`; null means no target was set, the race still
+  shows with just its distance/countdown).
+- **Target vs. predicted finish time** (`planned_races.py::predicted_duration_s_for_distance`):
+  reuses `performance_daily_rollup`'s own independently-computed race predictions
+  (`performance_rollup.py`) rather than a second prediction path — the most recent
+  `predicted_{5k,10k,half_marathon,marathon}_s` value for a `distance_m` that matches one of
+  `vdot.RACE_DISTANCES_M` (small float tolerance for km↔m round-tripping). A custom distance (a
+  15K, a 50-miler) gets no prediction at all — honest rather than extrapolated past
+  `predict_race_time_s`'s own real search-bound limitation. The frontend shows this as
+  "Predicted 3:52:10 — on track" (predicted faster than or equal to target) or "— N over target"
+  otherwise.
+- **`days_until`** and `predicted_duration_s` are computed fresh on every read (`api/routers/
+  planned_races.py::_to_out`), never stored — a race's countdown obviously changes daily, and a
+  stored prediction would go stale the moment a new performance rollup runs.
+- **Routes**: `GET /planned-races?start_date=&end_date=` (range, for the Month grid), `GET
+  /planned-races/by-date/{local_date}`, `POST /planned-races`, `GET/PUT/DELETE
+  /planned-races/{race_id}` — the exact same id-keyed/by-date/range route shape
+  `/planned-workouts` uses, for the same reason (any number of rows per date). Frontend:
+  `PlannedRaceForm.tsx` (Day view's own "Race" card, and Month view's expanded-day card),
+  code-split via `React.lazy` (not a static import — the app-shell bundle is already right at
+  vite-plugin-pwa's 2MB single-file precache limit, the same constraint
+  `ExerciseStepEditor.tsx::preloadExerciseCatalog`'s own docstring already documents once); a
+  `trophy`-iconed chip in the Month grid cell and Week view (read-only there, same as a planned
+  workout's own chip — Edit/Delete live on Day/Month view only).
+- **Also surfaces in**: the iCal feed (`calendar_feed.py::_build_race_event` — timed vs. all-day
+  exactly like a planned workout's own VEVENT, `target_duration_s` sized if set else a 4h
+  default; description is `"{distance} km"` plus `" · target {clock}"` when set) and the weekly
+  summary email's "Races this week" section (`email_reports.py`, target/predicted comparison
+  included) — never the monthly email, which is stats-only.

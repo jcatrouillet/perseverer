@@ -46,6 +46,10 @@ vi.mock("../api/queries", () => ({
   useDeletePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   usePushPlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateRecurringPlannedWorkouts: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
+  usePlannedRacesForDate: () => ({ data: [], isLoading: false, isError: false }),
+  useCreatePlannedRace: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdatePlannedRace: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeletePlannedRace: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 describe("DayViewPage", () => {

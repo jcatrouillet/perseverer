@@ -171,6 +171,34 @@ goal = Table(
     UniqueConstraint("athlete_id", "period_type", "period_start", name="uq_goal_identity"),
 )
 
+# A single upcoming race on the calendar -- a dated *event* with a distance and an optional time
+# target, deliberately not a planned_workout sport tier: a race has no step model to push to
+# Garmin, it's just something to look forward to and pace a goal against (see planned_races.py).
+# Any number per athlete per date (no uniqueness constraint), same "own id, not date-keyed"
+# addressing as planned_workout after its own multi-per-day revision.
+planned_race = Table(
+    "planned_race",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("local_date", String, nullable=False),
+    # "HH:MM", 24h, local time -- display-only, same convention as planned_workout.scheduled_time
+    # (there's no vendor push here at all, so this never had a "Garmin has no time-of-day API"
+    # constraint to begin with -- it's just optional because not every race start time is known
+    # when the athlete first adds it to the calendar).
+    Column("scheduled_time", String, nullable=True),
+    Column("name", String, nullable=False),
+    # Open string, default "running" -- same convention as planned_workout.sport, so a cycling
+    # sportive or a swim event can be logged too, not just runs.
+    Column("sport", String, nullable=False, default="running"),
+    Column("distance_m", Float, nullable=False),
+    # The athlete's own goal finish time ("run in less than 4 hours" -> 14400.0). Null means no
+    # target was set -- the race still shows on the calendar with just its distance/countdown.
+    Column("target_duration_s", Float, nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+)
+
 # --- Bronze: immutable raw archive --------------------------------------------
 
 raw_object = Table(

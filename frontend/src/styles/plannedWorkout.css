@@ -190,3 +190,56 @@
 .month-grid__planned .icon {
   flex-shrink: 0;
 }
+
+/* PlannedRaceForm -- the "Race" section of the Day/Month expanded-day card. */
+
+.planned-race__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.planned-race__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* .chart-note (layout.css) sets its own muted text color at equal specificity -- the compound
+   selector here (two classes, not one) is what actually wins the cascade regardless of import
+   order, confirmed live via getComputedStyle after a plain `.planned-race__comparison--warn`
+   rule silently lost to .chart-note's own color. */
+.chart-note.planned-race__comparison--good {
+  color: var(--color-success);
+}
+
+.chart-note.planned-race__comparison--warn {
+  color: var(--color-warning);
+}
+
+.planned-race__target-inputs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.planned-race__target-inputs input {
+  width: 3.5rem;
+  text-align: center;
+}
+
+/* month-grid__planned's own trophy-accented sibling -- a distinct accent (warning/gold, not the
+   generic accent color) so a race chip reads as a highlighted event, not just another planned
+   session, in the Month grid cell and Week view. */
+.month-grid__race {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-warning, var(--color-text-muted));
+}
+
+.month-grid__race .icon {
+  flex-shrink: 0;
+}

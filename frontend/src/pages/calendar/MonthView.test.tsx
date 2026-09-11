@@ -29,6 +29,12 @@ beforeAll(() => {
 });
 
 const mockUsePlannedWorkoutsList = vi.fn();
+// A default (not per-test, unlike mockUsePlannedWorkoutsList above) since most tests in this
+// file don't care about races at all -- mockReturnValueOnce below overrides it for exactly one
+// call without permanently clobbering this default for every test after it (mocks aren't
+// auto-reset between tests in this file).
+const mockUsePlannedRacesForRange = vi.fn();
+mockUsePlannedRacesForRange.mockReturnValue({ data: [], isLoading: false, isError: false });
 
 const EMPTY_QUERY = { data: undefined, isLoading: false, isError: false };
 const EMPTY_PERIODS_QUERY = { data: { periods: [] }, isLoading: false, isError: false };
@@ -48,6 +54,7 @@ vi.mock("../../api/queries", () => ({
   useHealthDashboard: () => EMPTY_QUERY,
   useSleep: () => EMPTY_QUERY,
   usePlannedWorkoutsList: (...args: unknown[]) => mockUsePlannedWorkoutsList(...args),
+  usePlannedRacesForRange: (...args: unknown[]) => mockUsePlannedRacesForRange(...args),
   useGoalProgress: () => ({
     data: {
       available: false,
@@ -76,6 +83,10 @@ vi.mock("../../api/queries", () => ({
   useDeletePlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   usePushPlannedWorkout: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateRecurringPlannedWorkouts: () => ({ mutate: vi.fn(), isPending: false, data: undefined }),
+  usePlannedRacesForDate: () => ({ data: [], isLoading: false, isError: false }),
+  useCreatePlannedRace: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdatePlannedRace: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeletePlannedRace: () => ({ mutate: vi.fn(), isPending: false }),
   useNotes: () => ({ data: [], isLoading: false, isError: false }),
   useCreateNote: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -134,6 +145,36 @@ describe("MonthView day-cell planned-workout indicator", () => {
     });
     render(<MonthView year={2026} month={9} />);
     expect(document.querySelector(".month-grid__planned .icon")).toBeInTheDocument();
+  });
+});
+
+describe("MonthView day-cell race indicator", () => {
+  it("shows a race chip on the day it's scheduled, alongside any planned workout", () => {
+    mockUsePlannedWorkoutsList.mockReturnValue({
+      data: [PLANNED],
+      isLoading: false,
+      isError: false,
+    });
+    mockUsePlannedRacesForRange.mockReturnValueOnce({
+      data: [
+        {
+          id: 1,
+          local_date: "2026-09-10",
+          name: "Fall 10K",
+          sport: "running",
+          distance_m: 10000,
+          scheduled_time: null,
+          target_duration_s: null,
+          days_until: 5,
+          predicted_duration_s: null,
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    render(<MonthView year={2026} month={9} />);
+    expect(screen.getByText("Fall 10K")).toBeInTheDocument();
+    expect(document.querySelector(".month-grid__race .icon")).toBeInTheDocument();
   });
 });
 
