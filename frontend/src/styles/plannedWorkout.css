@@ -57,6 +57,14 @@
   white-space: pre-wrap;
 }
 
+/* WorkoutSummary's own general-guidance comment -- shown first, above the load bar/step list,
+   italicized so it reads as guidance rather than a stat line (same "freeform note" idiom as
+   .planned-workout__notes above, for yoga/bouldering's own freeform text). */
+.planned-workout__comment {
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
 .planned-workout__actions {
   display: flex;
   gap: var(--space-2);
@@ -122,6 +130,13 @@
   resize: vertical;
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-sm);
+}
+
+/* The workout-level "general guidance" comment -- plain prose, not workout syntax, so it gets
+   the app's own body font (not the syntax editor's monospace) and a shorter default height. */
+.planned-workout-form__comment-textarea {
+  min-height: 3rem;
+  resize: vertical;
 }
 
 .planned-workout-form__errors {

@@ -844,6 +844,7 @@ the next push.
 | `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h). Perseverer's own calendar display metadata only — Garmin's own scheduling has no time-of-day API. |
 | `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — sets the workout's duration directly (there's no syntax to derive one from). Ignored for `running`/`hiit`/`strength_training`, where duration is derived instead. |
 | `steps` | array\<`PlannedWorkoutStepIn`\>, nullable | optional | `hiit`/`strength_training` only — the exercise-picker steps, arriving already-structured (never parsed from text). Ignored for every other sport. |
+| `comment` | string, nullable | optional | A general note for the *whole* workout, read before any step — `running`/`hiit`/`strength_training` only (distinct from a step's own `comment`; `yoga`/`bouldering` already use `source_text` as freeform notes). Never parsed. Pushed to Garmin as the workout's own `description` field. |
 
 **Responses:** `200` → `PlannedWorkoutOut`. `404` → `detail: "planned workout not found"`.
 
@@ -907,6 +908,7 @@ can hold more than one, so there's nothing to skip.
 | `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h) — see `PlannedWorkoutIn` above. |
 | `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — see `PlannedWorkoutIn` above. |
 | `steps` | array\<`PlannedWorkoutStepIn`\>, nullable | optional | `hiit`/`strength_training` only — see `PlannedWorkoutIn` above. |
+| `comment` | string, nullable | optional | See `PlannedWorkoutIn` above — applied to every created occurrence. |
 | `frequency` | string | required | `weekly` / `every_n_days` / `monthly`. |
 | `interval_days` | integer | required for `every_n_days` | `>= 1`. |
 | `count` | integer | exactly one of `count`/`until` | Total occurrences, including the first. |
@@ -1696,6 +1698,7 @@ always addressed by id rather than by date:
 | `name` | string, nullable | |
 | `source_text` | string, nullable | `running`: the athlete's own typed workout-syntax text, verbatim (inline `#` comments included). `yoga`/`bouldering`: freeform notes only, never parsed. `hiit`/`strength_training`: always `null` — see `steps`. |
 | `scheduled_time` | string, nullable | `"HH:MM"` (24h) — display-only, not sent to Garmin. |
+| `comment` | string, nullable | A general note for the whole workout, read before any step — `running`/`hiit`/`strength_training` only. Pushed to Garmin as the workout's own `description` field. |
 | `estimated_duration_s` | number, nullable | `running`: an estimate — a distance-based step's real duration depends on the athlete's actual pace. `yoga`/`bouldering`: exactly the `duration_minutes` given at save time, in seconds. `hiit`/`strength_training`: an estimate computed from `steps` (a rough assumed seconds/rep for a reps-based step, real seconds otherwise). |
 | `steps` | array\<`PlannedWorkoutStepOut`\> | Defaults to `[]`. Raw, unexpanded (repeat-block markers included). Always `[]` for `yoga`/`bouldering` — no structured syntax for those sports. |
 | `parse_errors` | array\<`ParseErrorOut`\> | Defaults to `[]`. From re-parsing the currently-stored `source_text` — `running` only; always `[]` for `yoga`/`bouldering`. |

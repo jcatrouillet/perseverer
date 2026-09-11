@@ -12,6 +12,7 @@ const BASE: PlannedWorkoutOut = {
   name: "Tempo run",
   source_text: "Warmup 10m",
   scheduled_time: null,
+  comment: null,
   estimated_duration_s: 900,
   steps: [],
   parse_errors: [],

@@ -171,6 +171,7 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
           ? Math.round(workout.estimated_duration_s / 60)
           : null,
       steps: workout.steps,
+      comment: workout.comment,
     });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
@@ -194,6 +195,9 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
           {workout.scheduled_time && duration && " · "}
           {duration}
         </p>
+      )}
+      {workout.comment && (
+        <p className="chart-note planned-workout__comment">{workout.comment}</p>
       )}
       <WorkoutLoadBar workout={workout} />
       <WorkoutDetails workout={workout} />
@@ -270,6 +274,7 @@ function WorkoutEditForm({
       : "",
   );
   const [scheduledTime, setScheduledTime] = useState(initial?.scheduled_time ?? "");
+  const [comment, setComment] = useState(initial?.comment ?? "");
   const [stepBuilderOpen, setStepBuilderOpen] = useState(false);
   const [exerciseItems, setExerciseItems] = useState<ExerciseItem[]>(
     initial != null && EXERCISE_SPORTS.has(initial.sport ?? "")
@@ -298,6 +303,7 @@ function WorkoutEditForm({
     setSourceText(item.source_text ?? "");
     setScheduledTime(item.scheduled_time ?? "");
     setDurationMinutes(item.duration_minutes != null ? String(item.duration_minutes) : "");
+    setComment(item.comment ?? "");
     if (EXERCISE_SPORTS.has(item.sport) && item.steps && item.steps.length > 0) {
       setExerciseItems(apiStepsToItems(item.steps));
     } else {
@@ -348,6 +354,7 @@ function WorkoutEditForm({
       scheduled_time: scheduledTime || null,
       duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
       steps: isExerciseSport ? itemsToApiSteps(exerciseItems) : null,
+      comment: isPlaceholderSport ? null : comment.trim() || null,
     };
     if (workoutId == null) {
       create.mutate({ localDate, ...fields }, { onSuccess: onDone });
@@ -366,6 +373,7 @@ function WorkoutEditForm({
         scheduled_time: scheduledTime || null,
         duration_minutes: isPlaceholderSport ? Number(durationMinutes) || null : null,
         steps: isExerciseSport ? itemsToApiSteps(exerciseItems) : null,
+        comment: isPlaceholderSport ? null : comment.trim() || null,
         frequency: recurFrequency,
         interval_days:
           recurFrequency === "every_n_days" ? Number(recurIntervalDays) || undefined : undefined,
@@ -406,6 +414,18 @@ function WorkoutEditForm({
         <button type="button" className="button" onClick={handlePaste}>
           Paste copied workout
         </button>
+      )}
+
+      {!isPlaceholderSport && (
+        <label className="field">
+          General guidance (optional)
+          <textarea
+            className="input planned-workout-form__comment-textarea"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Read before the workout starts -- e.g. easy effort, focus on cadence"
+          />
+        </label>
       )}
 
       {isPlaceholderSport ? (

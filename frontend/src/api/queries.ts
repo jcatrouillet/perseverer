@@ -997,6 +997,8 @@ export interface PlannedWorkoutFields {
   duration_minutes?: number | null;
   // hiit/strength_training only, see PlannedWorkoutStepIn
   steps?: PlannedWorkoutStepIn[] | null;
+  // running/hiit/strength_training only, see PlannedWorkoutOut.comment
+  comment?: string | null;
 }
 
 function plannedWorkoutBody(body: PlannedWorkoutFields) {
@@ -1007,6 +1009,7 @@ function plannedWorkoutBody(body: PlannedWorkoutFields) {
     scheduled_time: body.scheduled_time ?? null,
     duration_minutes: body.duration_minutes ?? null,
     steps: body.steps ?? null,
+    comment: body.comment ?? null,
   };
 }
 
@@ -1092,6 +1095,9 @@ export interface RecurringPlannedWorkoutInput {
   duration_minutes?: number | null;
   // hiit/strength_training only, see PlannedWorkoutStepIn
   steps?: PlannedWorkoutStepIn[] | null;
+  // running/hiit/strength_training only, see PlannedWorkoutOut.comment -- applied to every
+  // created occurrence.
+  comment?: string | null;
   frequency: "weekly" | "every_n_days" | "monthly";
   interval_days?: number;
   count?: number;

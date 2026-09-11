@@ -43,6 +43,7 @@ const SCHEDULED: PlannedWorkoutOut = {
   name: "Tempo run",
   source_text: "Warmup 10m",
   scheduled_time: null,
+  comment: null,
   estimated_duration_s: 600,
   steps: [
     {
@@ -142,6 +143,7 @@ describe("ScheduleWorkoutForm", () => {
         scheduled_time: null,
         duration_minutes: null,
         steps: null,
+        comment: null,
       },
       expect.anything(),
     );
@@ -157,6 +159,36 @@ describe("ScheduleWorkoutForm", () => {
     expect(screen.getByText("Duration (minutes)")).toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Warmup 10m/)).not.toBeInTheDocument();
     expect(screen.queryByText("+ Add step")).not.toBeInTheDocument();
+  });
+
+  it("offers a general-guidance comment field for running but not for yoga/bouldering", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Schedule a workout"));
+
+    expect(screen.getByText("General guidance (optional)")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "yoga" } });
+    expect(screen.queryByText("General guidance (optional)")).not.toBeInTheDocument();
+  });
+
+  it("saving includes the general guidance comment", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Schedule a workout"));
+
+    fireEvent.change(screen.getByPlaceholderText(/Warmup 10m/), {
+      target: { value: "Warmup 10m" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/easy effort, focus on cadence/), {
+      target: { value: "Legs still sore -- cut it short if needed." },
+    });
+    fireEvent.click(screen.getByText("Save"));
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: "Legs still sore -- cut it short if needed." }),
+      expect.anything(),
+    );
   });
 
   it("shows a hint about the inline comment syntax for running", () => {
@@ -203,6 +235,7 @@ describe("ScheduleWorkoutForm", () => {
         scheduled_time: "18:30",
         duration_minutes: 45,
         steps: null,
+        comment: null,
       },
       expect.anything(),
     );
@@ -357,6 +390,32 @@ describe("ScheduleWorkoutForm", () => {
         duration_minutes: 45,
       }),
     );
+  });
+
+  it("shows a saved workout's general-guidance comment above the load bar and step list", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(
+      withOne({ ...SCHEDULED, comment: "Easy effort today, focus on cadence." }),
+    );
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.getByText("Easy effort today, focus on cadence.")).toBeInTheDocument();
+  });
+
+  it("Copy carries the general-guidance comment through to Paste", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(
+      withOne({ ...SCHEDULED, comment: "Legs still sore -- cut it short if needed." }),
+    );
+    const { unmount } = render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    fireEvent.click(screen.getByText("Copy"));
+    unmount();
+
+    mockUsePlannedWorkoutsForDate.mockReturnValue(NONE);
+    render(<ScheduleWorkoutForm localDate="2026-09-02" />);
+    fireEvent.click(screen.getByText("Paste copied workout"));
+
+    expect(
+      screen.getByPlaceholderText(/easy effort, focus on cadence/),
+    ).toHaveValue("Legs still sore -- cut it short if needed.");
   });
 
   it("hides Push to Garmin for a sport with no push builder (e.g. legacy 'fitness' data)", () => {

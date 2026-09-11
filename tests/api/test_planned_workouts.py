@@ -101,6 +101,66 @@ def test_put_parses_an_inline_comment_onto_that_steps_own_row(
     assert put2.json()["steps"][0]["comment"] is None
 
 
+def test_post_stores_and_returns_the_workout_level_comment(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    body = _create(
+        client,
+        auth_headers,
+        "2026-09-01",
+        sport="running",
+        source_text="Warmup 10m",
+        comment="Easy effort today, focus on cadence.",
+    )
+    assert body["comment"] == "Easy effort today, focus on cadence."
+
+    get = client.get(f"/api/v1/planned-workouts/{body['id']}", headers=auth_headers)
+    assert get.json()["comment"] == "Easy effort today, focus on cadence."
+
+
+def test_put_updates_and_can_clear_the_workout_level_comment(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    created = _create(
+        client,
+        auth_headers,
+        "2026-09-01",
+        sport="hiit",
+        comment="Take it easy, shoulder is tight.",
+        steps=[
+            {
+                "step_index": 0,
+                "duration_type": "reps",
+                "duration_reps": 10,
+                "intensity": "active",
+                "exercise_category": "PUSH_UP",
+                "exercise_name": "",
+            }
+        ],
+    )
+    assert created["comment"] == "Take it easy, shoulder is tight."
+
+    put1 = client.put(
+        f"/api/v1/planned-workouts/{created['id']}",
+        json={
+            "sport": "hiit",
+            "comment": "Actually feeling good, go hard.",
+            "steps": created["steps"],
+        },
+        headers=auth_headers,
+    )
+    assert put1.json()["comment"] == "Actually feeling good, go hard."
+
+    # Same field precedent as a step's own comment (test_put_parses_an_inline_comment_onto_that_
+    # steps_own_row above): a save with no comment clears whatever was there before.
+    put2 = client.put(
+        f"/api/v1/planned-workouts/{created['id']}",
+        json={"sport": "hiit", "steps": created["steps"]},
+        headers=auth_headers,
+    )
+    assert put2.json()["comment"] is None
+
+
 def test_put_stores_a_hiit_steps_own_comment(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
@@ -613,6 +673,26 @@ class TestRecurring:
         for d in r.json()["created_dates"]:
             got = client.get(f"/api/v1/planned-workouts/by-date/{d}", headers=auth_headers)
             assert got.json()[0]["steps"][0]["comment"] == "marathon block, week 3"
+
+    def test_carries_the_workout_level_comment_onto_every_created_occurrence(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        r = client.post(
+            "/api/v1/planned-workouts/recurring",
+            json={
+                "local_date": "2026-09-01",
+                "sport": "running",
+                "source_text": "Warmup 10m",
+                "comment": "Base-building phase -- keep it aerobic.",
+                "frequency": "weekly",
+                "count": 2,
+            },
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        for d in r.json()["created_dates"]:
+            got = client.get(f"/api/v1/planned-workouts/by-date/{d}", headers=auth_headers)
+            assert got.json()[0]["comment"] == "Base-building phase -- keep it aerobic."
 
     def test_monthly_clamps_short_months(
         self, client: TestClient, auth_headers: dict[str, str]

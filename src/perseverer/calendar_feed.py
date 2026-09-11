@@ -150,6 +150,11 @@ def _event_description(row: Row, steps: list[Row]) -> str | None:  # type: ignor
         # athlete added to a line is already part of this raw text verbatim -- no extra handling
         # needed here.
         structured = row.source_text or None
+    # The workout's own general-guidance comment (running/hiit/strength_training only, distinct
+    # from a step's own comment already folded into `structured` above) -- read before any step,
+    # so it goes first here too.
+    if row.comment:
+        return f"{row.comment}\n\n{structured}" if structured else row.comment
     return structured
 
 

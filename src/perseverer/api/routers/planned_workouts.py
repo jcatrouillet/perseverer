@@ -183,6 +183,7 @@ def _to_out(
         name=row.name,
         source_text=row.source_text,
         scheduled_time=row.scheduled_time,
+        comment=row.comment,
         estimated_duration_s=row.estimated_duration_s,
         steps=[
             PlannedWorkoutStepOut(
@@ -277,6 +278,7 @@ def post_planned_workout(
         scheduled_time=payload.scheduled_time,
         duration_minutes=payload.duration_minutes,
         steps=_steps_in_to_planned_step_like(payload.steps) if payload.steps else None,
+        comment=payload.comment,
     )
     conn.commit()
     return _fetch_full_out(conn, athlete_id, saved.id)
@@ -356,6 +358,7 @@ def put_planned_workout(
         duration_minutes=payload.duration_minutes,
         steps=_steps_in_to_planned_step_like(payload.steps) if payload.steps else None,
         workout_id=workout_id,
+        comment=payload.comment,
     )
     conn.commit()
     return _fetch_full_out(conn, athlete_id, workout_id)
@@ -522,6 +525,7 @@ def post_recurring_planned_workout(
             scheduled_time=payload.scheduled_time,
             duration_minutes=payload.duration_minutes,
             steps=_steps_in_to_planned_step_like(payload.steps) if payload.steps else None,
+            comment=payload.comment,
         )
         created.append(iso)
     conn.commit()

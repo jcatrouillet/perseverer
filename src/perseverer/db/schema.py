@@ -651,6 +651,14 @@ planned_workout = Table(
     # already carries. No link to any `activity` row -- this app has no automatic planned-vs-
     # recorded matching, so completion is deliberately a separate, athlete-asserted fact.
     Column("completed_at", DateTime(), nullable=True),
+    # A general note for the *whole* workout, read before any step -- "easy effort, focus on
+    # cadence", "cut the last block if legs are sore". Distinct from planned_workout_step.comment
+    # (one specific step); running/hiit/strength_training only -- yoga/bouldering already use
+    # source_text as freeform notes, so a second field there would be redundant. Stored verbatim,
+    # never parsed (unlike a step's own inline "# comment" token). Pushed to Garmin as the
+    # workout's own `description` field (garminconnect.workout.BaseWorkout), which every workout
+    # class subclasses -- see planned_workouts.py::push_planned_workout.
+    Column("comment", Text, nullable=True),
     Column("created_at", DateTime(), nullable=False),
     Column("updated_at", DateTime(), nullable=False),
 )

@@ -202,6 +202,25 @@ def test_render_weekly_email_is_email_safe_and_has_the_figures(conn: Connection)
     assert "Coming week" in rendered.html
 
 
+def test_coming_workout_comment_shown_in_both_html_and_text(conn: Connection) -> None:
+    _plan(
+        conn,
+        local_date="2026-09-15",
+        sport="running",
+        name="Intervals",
+        source_text="Warmup 10m",
+        comment="Base-building phase -- keep it aerobic.",
+        estimated_duration_s=600.0,
+    )
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert report.coming_workouts[0].comment == "Base-building phase -- keep it aerobic."
+
+    rendered = render_weekly_email(report)
+    assert "Base-building phase -- keep it aerobic." in rendered.html
+    assert "Base-building phase -- keep it aerobic." in rendered.text
+
+
 def test_render_monthly_email_has_no_planned_section(conn: Connection) -> None:
     conn.execute(
         period_rollup.insert().values(

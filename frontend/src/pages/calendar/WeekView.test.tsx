@@ -51,6 +51,7 @@ const RUNNING_WORKOUT: PlannedWorkoutOut = {
   name: "Tempo run",
   source_text: "Warmup 10m",
   scheduled_time: "06:00",
+  comment: null,
   estimated_duration_s: 600,
   steps: [],
   parse_errors: [],

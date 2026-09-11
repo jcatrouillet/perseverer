@@ -101,6 +101,7 @@ class PlannedWorkoutLine:
     name: str | None
     scheduled_time: str | None
     estimate_line: str | None  # running only, e.g. "5.8 km · 34 min · Load 36"
+    comment: str | None  # the workout's own general-guidance note, read before any step
 
 
 @dataclass(frozen=True)
@@ -262,6 +263,7 @@ def _coming_workouts(
                 name=row.name,
                 scheduled_time=row.scheduled_time,
                 estimate_line=estimate_line,
+                comment=row.comment,
             )
         )
     return lines
@@ -417,6 +419,12 @@ def _workout_rows(workouts: list[PlannedWorkoutLine]) -> str:
         day = f"{_WEEKDAYS[d.weekday()]} {d.day}"
         time = f" {html.escape(w.scheduled_time)}" if w.scheduled_time else ""
         title = html.escape(w.name or _sport_label(w.sport))
+        comment = (
+            f'<div style="font-size:13px;color:{_MUTED};font-style:italic">'
+            f"{html.escape(w.comment)}</div>"
+            if w.comment
+            else ""
+        )
         detail = (
             f'<div style="font-size:13px;color:{_MUTED}">{html.escape(w.estimate_line)}</div>'
             if w.estimate_line
@@ -426,7 +434,7 @@ def _workout_rows(workouts: list[PlannedWorkoutLine]) -> str:
             f'<tr><td style="padding:8px 14px;border:1px solid {_BORDER}">'
             f'<div style="color:{_TEXT}"><b>{html.escape(day)}</b>{time} — {title} '
             f'<span style="color:{_MUTED}">({html.escape(_sport_label(w.sport))})</span></div>'
-            f"{detail}</td></tr>"
+            f"{comment}{detail}</td></tr>"
         )
     return rows
 
@@ -540,6 +548,8 @@ def _weekly_text(report: WeeklyReport) -> str:
             lines.append(
                 f"  {_WEEKDAYS[d.weekday()]} {d.day}{time} - {title} ({_sport_label(w.sport)})"
             )
+            if w.comment:
+                lines.append(f"      {w.comment}")
             if w.estimate_line:
                 lines.append(f"      {w.estimate_line}")
     else:

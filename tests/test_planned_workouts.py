@@ -378,6 +378,48 @@ def test_push_success_writes_pushed_status_and_workout_id(tmp_path: Path) -> Non
     assert client.deleted == []  # never pushed before -- no stale copy to delete
 
 
+def test_push_sets_garmin_description_from_the_workout_level_comment(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    workout_id = _insert_planned_workout(engine)
+    with engine.connect() as conn:
+        conn.execute(
+            planned_workout.update()
+            .where(planned_workout.c.id == workout_id)
+            .values(comment="Easy effort today, focus on cadence.")
+        )
+        conn.commit()
+    client = FakePushGarminClient()
+
+    with engine.connect() as conn:
+        push_planned_workout(
+            conn,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            planned_workout_id=workout_id,
+            tokenstore_dir=tmp_path / "tokens",
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=lambda: client,
+        )
+    assert client.uploaded[0]["description"] == "Easy effort today, focus on cadence."
+
+
+def test_push_without_a_comment_omits_the_garmin_description_field(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    workout_id = _insert_planned_workout(engine)  # no comment set
+    client = FakePushGarminClient()
+
+    with engine.connect() as conn:
+        push_planned_workout(
+            conn,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            planned_workout_id=workout_id,
+            tokenstore_dir=tmp_path / "tokens",
+            rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+            client_factory=lambda: client,
+        )
+    # BaseWorkout.to_dict() excludes None fields -- description simply isn't in the payload.
+    assert "description" not in client.uploaded[0]
+
+
 def test_editing_a_pushed_workout_deletes_the_stale_garmin_copy(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     workout_id = _insert_planned_workout(engine)

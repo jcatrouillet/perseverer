@@ -97,6 +97,11 @@ class PlannedWorkoutIn(BaseModel):
     # hiit/strength_training only (EXERCISE_SPORTS) -- the exercise-picker steps. Ignored for
     # every other sport.
     steps: list[PlannedWorkoutStepIn] | None = None
+    # A general note for the whole workout, read before any step -- running/hiit/
+    # strength_training only (yoga/bouldering already use source_text as freeform notes).
+    # Distinct from a step's own PlannedWorkoutStepIn.comment. See planned_workouts.py::
+    # save_planned_workout's own docstring.
+    comment: str | None = None
 
     _validate_scheduled_time = field_validator("scheduled_time")(_validate_scheduled_time)
 
@@ -133,6 +138,8 @@ class PlannedWorkoutOut(BaseModel):
     name: str | None = None
     source_text: str | None = None
     scheduled_time: str | None = None
+    # A general note for the whole workout, read before any step -- see PlannedWorkoutIn.comment.
+    comment: str | None = None
     estimated_duration_s: float | None = None
     steps: list[PlannedWorkoutStepOut] = []
     # Parse errors from the *currently stored* source_text -- surfaced so the schedule form can
@@ -176,6 +183,7 @@ class RecurringWorkoutIn(BaseModel):
     duration_minutes: float | None = None  # yoga/bouldering only, see PlannedWorkoutIn
     # hiit/strength_training only, see PlannedWorkoutIn
     steps: list[PlannedWorkoutStepIn] | None = None
+    comment: str | None = None  # see PlannedWorkoutIn.comment -- applied to every occurrence
     frequency: str  # "weekly" | "every_n_days" | "monthly"
     interval_days: int | None = None  # required (>=1) when frequency == "every_n_days"
     # Exactly one of count/until -- an unambiguous stop condition, not a guess. `count` includes

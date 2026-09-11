@@ -117,6 +117,41 @@ class TestBuildIcsFeed:
         assert (end - start) == dt.timedelta(minutes=30)
         assert "UID" in event
 
+    def test_workout_level_comment_is_prepended_to_the_description(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            save_planned_workout(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-09-10",
+                sport="running",
+                name="Easy run",
+                source_text="30m easy",
+                comment="Legs still sore -- cut it short if needed.",
+            )
+            conn.commit()
+            ics_bytes = build_ics_feed(conn, athlete_id=DEFAULT_ATHLETE_ID, timezone_name="UTC")
+        cal = Calendar.from_ical(ics_bytes)
+        description = str(cal.walk("VEVENT")[0]["description"])
+        assert description.startswith("Legs still sore -- cut it short if needed.")
+        assert "30m easy" in description
+
+    def test_no_comment_leaves_the_description_unchanged(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            save_planned_workout(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-09-10",
+                sport="running",
+                name="Easy run",
+                source_text="30m easy",
+            )
+            conn.commit()
+            ics_bytes = build_ics_feed(conn, athlete_id=DEFAULT_ATHLETE_ID, timezone_name="UTC")
+        cal = Calendar.from_ical(ics_bytes)
+        assert str(cal.walk("VEVENT")[0]["description"]) == "30m easy"
+
     def test_all_day_yoga_workout_has_no_time(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
         with engine.connect() as conn:

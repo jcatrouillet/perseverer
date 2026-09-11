@@ -604,6 +604,13 @@ def push_planned_workout(
                 row.estimated_duration_s or 0.0,
             )
 
+        # The workout's own general-guidance comment, read before any step -- every workout
+        # class subclasses garminconnect.workout.BaseWorkout, which already has a real
+        # `description` field (confirmed by introspecting the installed package), so this needs
+        # no synthetic step. Not set for yoga/bouldering (no UI populates `row.comment` there).
+        if row.comment:
+            workout.description = row.comment
+
         rate_limiter = RateLimiter(
             rate_limits.request_interval_s, rate_limits.max_requests_per_hour
         )
@@ -694,6 +701,7 @@ def save_planned_workout(
     duration_minutes: float | None = None,
     steps: list[PlannedStepLike] | None = None,
     workout_id: int | None = None,
+    comment: str | None = None,
 ) -> SavedWorkout:
     """Inserts a new `planned_workout` row when `workout_id` is None, or updates that specific
     row in place when given. No longer an upsert-by-date: an athlete can schedule more than one
@@ -720,6 +728,11 @@ def save_planned_workout(
     inline trailing `# ...` token on that step's own source_text line, workout_syntax.py;
     hiit/strength_training: typed directly against that row in the exercise picker) -- stored
     verbatim per `planned_workout_step` row, never parsed further.
+
+    `comment` (this function's own parameter, distinct from a step's) is a general note for the
+    *whole* workout, read before any step -- running/hiit/strength_training only (yoga/bouldering
+    already treat `source_text` as freeform notes). Stored verbatim on `planned_workout` itself,
+    never parsed; `push_planned_workout` sets it as the pushed Garmin workout's own `description`.
 
     Resets `push_status` back to "draft" whenever an already-`"pushed"` workout is edited: the
     old Garmin copy is now stale, and `push_planned_workout` re-pushes fresh (delete + re-upload)
@@ -751,6 +764,7 @@ def save_planned_workout(
                 source_text=source_text,
                 estimated_duration_s=estimated_duration_s,
                 scheduled_time=scheduled_time,
+                comment=comment,
                 push_status="draft",
                 created_at=now,
                 updated_at=now,
@@ -777,6 +791,7 @@ def save_planned_workout(
                 source_text=source_text,
                 estimated_duration_s=estimated_duration_s,
                 scheduled_time=scheduled_time,
+                comment=comment,
                 push_status=new_status,
                 updated_at=now,
             )

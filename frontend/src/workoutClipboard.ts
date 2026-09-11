@@ -33,6 +33,9 @@ export interface WorkoutClipboardItem {
   // each step's own `comment` field, no separate clipboard handling needed (running's own
   // per-step comments are embedded inline in `source_text` above instead).
   steps?: PlannedWorkoutStepOut[] | null;
+  // The workout's own general-guidance comment (running/hiit/strength_training only) -- absent
+  // from a copy off a completed activity, which has no such concept.
+  comment?: string | null;
 }
 
 export function copyWorkoutToClipboard(item: WorkoutClipboardItem): void {

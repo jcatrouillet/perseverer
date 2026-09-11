@@ -551,6 +551,10 @@ export interface PlannedWorkoutOut {
   name: string | null;
   source_text: string | null;
   scheduled_time: string | null; // "HH:MM", 24h -- display-only, see db/schema.py's own docstring
+  // A general note for the whole workout, read before any step -- running/hiit/
+  // strength_training only (yoga/bouldering already use source_text as freeform notes).
+  // Distinct from a step's own PlannedWorkoutStepOut.comment.
+  comment: string | null;
   estimated_duration_s: number | null;
   steps: PlannedWorkoutStepOut[];
   parse_errors: ParseErrorOut[];

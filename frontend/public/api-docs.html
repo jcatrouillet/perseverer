@@ -1088,6 +1088,7 @@ const SCHEMAS = [
       ["name","string|null","optional","opt"],
       ["source_text","string|null","running: the athlete's own typed workout-syntax text, verbatim (inline \"#\" comments included). yoga/bouldering: freeform notes only, never parsed. hiit/strength_training: always null — see steps.","opt"],
       ["scheduled_time","string|null","\"HH:MM\" (24h) — display-only, not sent to Garmin.","opt"],
+      ["comment","string|null","A general note for the whole workout, read before any step — running/hiit/strength_training only. Pushed to Garmin as the workout's own description field.","opt"],
       ["estimated_duration_s","number|null","running: an estimate — a distance-based step's real duration depends on the athlete's actual pace. yoga/bouldering: exactly the duration_minutes given at save time, in seconds. hiit/strength_training: an estimate computed from steps.","opt"],
       ["steps","array<PlannedWorkoutStepOut>","Defaults to []. Raw, unexpanded (repeat-block markers included). Always [] for yoga/bouldering.","opt"],
       ["parse_errors","array<ParseErrorOut>","Defaults to []. From re-parsing the currently-stored source_text — running only.","opt"],
@@ -1621,6 +1622,7 @@ const GROUPS = [
         ["scheduled_time","string|null","opt","","\"HH:MM\" (24h). Display-only — Garmin's own scheduling has no time-of-day API."],
         ["duration_minutes","number|null","opt","","yoga/bouldering only — sets the workout's duration directly. Ignored for running/hiit/strength_training."],
         ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — the exercise-picker steps, already-structured. Ignored for every other sport."],
+        ["comment","string|null","opt","","A general note for the whole workout, read before any step — running/hiit/strength_training only. Pushed to Garmin as the workout's own description field."],
       ]},
       responses: [ { code: 200, ref: "PlannedWorkoutOut" } ],
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts \\
@@ -1637,6 +1639,7 @@ const GROUPS = [
         ["scheduled_time","string|null","opt","","\"HH:MM\" (24h). Display-only — Garmin's own scheduling has no time-of-day API."],
         ["duration_minutes","number|null","opt","","yoga/bouldering only — sets the workout's duration directly. Ignored for running/hiit/strength_training."],
         ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — the exercise-picker steps, already-structured. Ignored for every other sport."],
+        ["comment","string|null","opt","","A general note for the whole workout, read before any step — running/hiit/strength_training only. Pushed to Garmin as the workout's own description field."],
       ]},
       responses: [ { code: 200, ref: "PlannedWorkoutOut" }, { code: 404, note: 'detail: "planned workout not found"' } ],
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID} \\
@@ -1667,6 +1670,7 @@ const GROUPS = [
         ["scheduled_time","string|null","opt","","\"HH:MM\" (24h) — see PlannedWorkoutIn."],
         ["duration_minutes","number|null","opt","","yoga/bouldering only — see PlannedWorkoutIn."],
         ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — see PlannedWorkoutIn."],
+        ["comment","string|null","opt","","See PlannedWorkoutIn — applied to every created occurrence."],
         ["frequency","string","req","","weekly | every_n_days | monthly."],
         ["interval_days","integer","req for every_n_days","",">= 1."],
         ["count","integer","exactly one of count/until","","Total occurrences, including the first."],

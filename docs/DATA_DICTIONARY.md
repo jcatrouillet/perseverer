@@ -1033,6 +1033,19 @@ there already uses), so both `workout_syntax.ParsedStep` (running) and `planned_
 PlannedStepLike` (hiit/strength) feed it identically; `POST /planned-workouts/recurring` applies
 whatever `source_text`/`steps` already carry to every created occurrence, comments included.
 
+**`planned_workout.comment` column** (added later still): a second, separate general note for
+the *whole* workout, read before any step -- distinct from the per-step column above. Running/
+hiit/strength_training only (yoga/bouldering excluded, same "already has `source_text` as
+freeform notes" reasoning). Stored verbatim, never parsed, but it *is* pushed: `push_planned_
+workout` sets it as the built `BaseWorkout`'s own `description` field -- every workout class
+(`RunningWorkout`, `StrengthWorkout`, etc.) subclasses `garminconnect.workout.BaseWorkout`, which
+already has a real `description: str | None` field (confirmed by introspecting the installed
+package), so this needs no synthetic step. `save_planned_workout(..., comment=...)` is a plain
+parameter alongside `scheduled_time`, threaded through `PlannedWorkoutIn`/`Out`/
+`RecurringWorkoutIn` the same way. Also surfaces in the iCal feed (`calendar_feed.py`, prepended
+ahead of the existing per-sport description) and the weekly summary email's coming-workouts
+section (`email_reports.py`).
+
 ## Calendar feed: publishing planned_workout to Google Calendar
 
 `calendar_feed.py` builds a public iCalendar (RFC 5545) feed of the athlete's own `planned_workout`

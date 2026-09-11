@@ -501,6 +501,17 @@ because you don't recognize it — stop, that's the bug.
   itself, mapping to its own repeat-marker row — lost if the set's repeat count stays at 1, since
   no marker row is ever emitted then). Yoga/bouldering get neither — they already have an
   equivalent via their own freeform `source_text`. Never parsed further, never pushed to Garmin.
+  A second, separate `planned_workout.comment` column (added later still) is a general note for
+  the *whole* workout, read before any step — running/hiit/strength_training only (yoga/
+  bouldering again excluded, `source_text` already being freeform notes there). Also stored
+  verbatim/never parsed, but pushed: it maps directly onto Garmin's own `description` field on
+  every workout class (`garminconnect.workout.BaseWorkout`, confirmed by introspecting the
+  installed package — every sport-specific workout subclasses it), so it needs no synthetic
+  step. Threaded through the same fields `scheduled_time` already flows through end to end
+  (`save_planned_workout` → `PlannedWorkoutIn`/`Out`/`RecurringWorkoutIn` → the frontend's
+  `PlannedWorkoutFields`/`RecurringPlannedWorkoutInput` → the one `WorkoutEditForm`), and
+  included (ahead of the existing per-sport text) in both the iCal feed's event description
+  (`calendar_feed.py`) and the weekly email's coming-workouts section (`email_reports.py`).
   **Revision**: a day originally held at most one `planned_workout` row (`UniqueConstraint` on
   `(athlete_id, local_date)`) -- lifted once the athlete asked to schedule more than one workout
   on the same day (e.g. a morning run plus an evening strength session). Every workout is now
