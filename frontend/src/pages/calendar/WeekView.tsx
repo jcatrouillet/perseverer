@@ -19,6 +19,7 @@ import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { Icon } from "../../components/Icon";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
+import { NotesPanel } from "../../components/NotesPanel";
 import { MetricChip, StatTile } from "../../components/StatTile";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
 import { WeekWellnessCharts } from "../../components/WeekWellnessCharts";
@@ -218,6 +219,11 @@ export function WeekView({ date }: { date: string }) {
       <h1>
         Week of {start} – {end}
       </h1>
+
+      <section className="card">
+        <h2>Notes</h2>
+        <NotesPanel entityType="week" entityId={start} showHeading={false} />
+      </section>
 
       {calendar.isLoading && <LoadingSpinner />}
       {calendar.isError && <p role="alert">Could not load the week.</p>}

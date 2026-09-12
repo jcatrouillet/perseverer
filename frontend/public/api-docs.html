@@ -972,8 +972,8 @@ const SCHEMAS = [
     ] },
   { name: "NoteOut", note: "Returned by POST /notes (201) and GET /notes.", fields: [
       ["id","integer",""],
-      ["entity_type","string","activity or day."],
-      ["entity_id","string","An activity id, or a local_date string when entity_type is day."],
+      ["entity_type","string","activity, day, or week."],
+      ["entity_id","string","An activity id when entity_type is activity; a local_date string when entity_type is day; that week's own Monday local_date when entity_type is week."],
       ["body","string",""],
       ["author","string|null",""],
       ["created_at","string(date-time)",""],
@@ -1546,17 +1546,17 @@ const GROUPS = [
   ]},
 
   { id: "notes", title: "Notes", endpoints: [
-    { method: "POST", path: "/api/v1/notes", summary: "Attach a note to an activity or a calendar day.",
+    { method: "POST", path: "/api/v1/notes", summary: "Attach a note to an activity, a calendar day, or a calendar week.",
       description: "The write path an AI agent (or the UI) uses to record observations — this is the one write endpoint most of this API is deliberately read-only around.",
       body: { schema: "NoteCreate", fields: [
-        ["entity_type","\"activity\"|\"day\"","req","",""],
-        ["entity_id","string","req","","An activity id when entity_type is activity; a local_date (YYYY-MM-DD) string when entity_type is day."],
+        ["entity_type","\"activity\"|\"day\"|\"week\"","req","",""],
+        ["entity_id","string","req","","An activity id when entity_type is activity; a local_date (YYYY-MM-DD) string when entity_type is day; that week's own Monday local_date when entity_type is week."],
         ["body","string","req","",""],
         ["author","string|null","opt","",""],
       ]},
       responses: [
         { code: 201, ref: "NoteOut" },
-        { code: 404, note: 'detail: "activity not found" — only checked when entity_type is activity; a day entity_id is never validated against anything, since a day is just a date, not a row that can be missing.' },
+        { code: 404, note: 'detail: "activity not found" — only checked when entity_type is activity; a day/week entity_id is never validated against anything, since both are just a date, not a row that can be missing.' },
       ],
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/notes \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
@@ -1565,7 +1565,7 @@ const GROUPS = [
     { method: "GET", path: "/api/v1/notes", summary: "List notes attached to one entity.",
       description: "",
       params: [
-        ["entity_type","query","req","string","—","activity or day."],
+        ["entity_type","query","req","string","—","activity, day, or week."],
         ["entity_id","query","req","string","—",""],
       ],
       responses: [ { code: 200, ref: "array&lt;NoteOut&gt;" } ],
@@ -1638,7 +1638,7 @@ const GROUPS = [
         ["local_date","string","req","","Which date to create the workout on, ISO date."],
         ["sport","string","req","","running | yoga | bouldering | fitness | hiit | strength_training — open string, not an enum."],
         ["name","string|null","opt","",""],
-        ["source_text","string|null","opt","","running: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting parse_errors come back in the response. A trailing \"# comment\" on any line attaches a freeform note to that step (see PlannedWorkoutStepOut.comment); a comment-only line errors as a missing duration. yoga/bouldering: freeform notes only, never parsed. Ignored for hiit/strength_training."],
+        ["source_text","string|null","opt","","running: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting parse_errors come back in the response. A standalone \"&lt;N&gt;x\" line starts a repeat block: every non-blank line that follows, up to the next blank line (or end of text), becomes one of its children — the boundary is the blank line, not indentation, so a step meant to follow the repeat needs its own blank line before it even if the repeat's own steps were typed indented. A trailing \"# comment\" on any line attaches a freeform note to that step (see PlannedWorkoutStepOut.comment); a comment-only line errors as a missing duration. yoga/bouldering: freeform notes only, never parsed. Ignored for hiit/strength_training."],
         ["scheduled_time","string|null","opt","","\"HH:MM\" (24h). Display-only — Garmin's own scheduling has no time-of-day API."],
         ["duration_minutes","number|null","opt","","yoga/bouldering only — sets the workout's duration directly. Ignored for running/hiit/strength_training."],
         ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — the exercise-picker steps, already-structured. Ignored for every other sport."],
@@ -1655,7 +1655,7 @@ const GROUPS = [
       body: { schema: "PlannedWorkoutIn", fields: [
         ["sport","string","req","","running | yoga | bouldering | fitness | hiit | strength_training — open string, not an enum."],
         ["name","string|null","opt","",""],
-        ["source_text","string|null","opt","","running: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting parse_errors come back in the response. A trailing \"# comment\" on any line attaches a freeform note to that step (see PlannedWorkoutStepOut.comment); a comment-only line errors as a missing duration. yoga/bouldering: freeform notes only, never parsed. Ignored for hiit/strength_training."],
+        ["source_text","string|null","opt","","running: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting parse_errors come back in the response. A standalone \"&lt;N&gt;x\" line starts a repeat block: every non-blank line that follows, up to the next blank line (or end of text), becomes one of its children — the boundary is the blank line, not indentation, so a step meant to follow the repeat needs its own blank line before it even if the repeat's own steps were typed indented. A trailing \"# comment\" on any line attaches a freeform note to that step (see PlannedWorkoutStepOut.comment); a comment-only line errors as a missing duration. yoga/bouldering: freeform notes only, never parsed. Ignored for hiit/strength_training."],
         ["scheduled_time","string|null","opt","","\"HH:MM\" (24h). Display-only — Garmin's own scheduling has no time-of-day API."],
         ["duration_minutes","number|null","opt","","yoga/bouldering only — sets the workout's duration directly. Ignored for running/hiit/strength_training."],
         ["steps","array<PlannedWorkoutStepIn>|null","opt","","hiit/strength_training only — the exercise-picker steps, already-structured. Ignored for every other sport."],

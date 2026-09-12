@@ -137,8 +137,9 @@ async def get_calendar(
 async def create_note(
     entity_type: str, entity_id: str, body: str, author: str | None = None
 ) -> dict[str, Any]:
-    """Attach a note. entity_type is "activity" (entity_id = the activity's id) or "day"
-    (entity_id = an ISO date like "2025-06-01")."""
+    """Attach a note. entity_type is "activity" (entity_id = the activity's id), "day"
+    (entity_id = an ISO date like "2025-06-01"), or "week" (entity_id = that week's Monday, same
+    ISO date format)."""
     response = await _call_api(
         "POST",
         "/api/v1/notes",
@@ -154,8 +155,8 @@ async def create_note(
 
 @mcp.tool()
 async def list_notes(entity_type: str, entity_id: str) -> list[dict[str, Any]]:
-    """List notes attached to one activity or day (see create_note for entity_type/entity_id
-    semantics)."""
+    """List notes attached to one activity, day, or week (see create_note for entity_type/
+    entity_id semantics)."""
     response = await _call_api(
         "GET", "/api/v1/notes", params={"entity_type": entity_type, "entity_id": entity_id}
     )

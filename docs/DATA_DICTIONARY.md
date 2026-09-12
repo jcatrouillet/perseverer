@@ -306,8 +306,13 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
 
 - **`note`** — the write path CLAUDE.md's mission statement calls for ("a REST/JSON API an AI
   agent can write notes through"). One polymorphic table: `entity_type` (`"activity"` |
-  `"day"`), `entity_id` (an activity ULID or an ISO `local_date`). A new `entity_type` is a
-  data-only addition, not a schema change. See ADR 0006 decision 7.
+  `"day"` | `"week"`), `entity_id` (an activity ULID, an ISO `local_date`, or — for `"week"` —
+  that week's own Monday `local_date`, matching `rollups.py`'s Monday-start week convention).
+  A new `entity_type` is a data-only addition, not a schema change. See ADR 0006 decision 7.
+  Surfaced in the frontend as a "Notes" card on `DayViewPage.tsx` (`entity_type="day"`) and,
+  positioned above the day-by-day column strip so it's visible regardless of whether the week
+  has happened yet, on `WeekView.tsx` (`entity_type="week"`) — a week-level note deliberately
+  isn't gated behind that week having any recorded activities.
 
 ### Registries (exempt from athlete-scoping — shared catalogs, not personal data)
 

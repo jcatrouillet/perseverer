@@ -19,12 +19,29 @@ every save, feeding both `planned_workout_step` storage and the Garmin workout J
 `adapters/garmin_connect.py`); the TS copy is a preview only.
 
 One line is one step. A standalone `<N>x` line starts a repeat block: every non-blank line that
-follows, up to the next blank line, is one of the block's `repeat_count` children -- the exact
-same "children rows precede the block's own summarizing row, addressed by
+follows, up to the next blank line (or end of text), is one of the block's `repeat_count`
+children -- the exact same "children rows precede the block's own summarizing row, addressed by
 [repeat_from_step, step_index)" convention `activity_workout_step` already uses (see
 `fit/parser.py`'s own docstring), reused deliberately so the frontend's existing
 `expandWorkoutSteps`/`groupWorkoutStepsForDisplay` (`workoutSteps.ts`) render either table's rows
 unmodified.
+
+**The block boundary is a blank line -- not indentation.** A child line's own leading whitespace
+is stripped and otherwise ignored, so indenting children for readability (a natural habit, and
+harmless on its own) does NOT by itself keep a following line out of the block. A step meant to
+come *after* the repeat needs its own blank line before it:
+
+    6x
+      20s 4:00-4:20/km Pace
+      60s 6:30-7:00/km Pace
+
+    Cooldown 8m 6:25-6:50/km Pace
+
+Without that blank line, "Cooldown" above parses as the block's third child, not a step of its
+own -- a real point of confusion (an athlete typed exactly this, indented, with no trailing blank
+line, and got a workout with no cooldown step at all). The athlete-facing schedule form's own
+placeholder text (`ScheduleWorkoutForm.tsx`) and its "Leave a blank line..." hint right below the
+textarea both exist specifically to head this off; if that hint ever gets edited, keep it.
 
 Grammar for a single (non-repeat-marker) line, space-separated tokens, all keywords
 case-insensitive:

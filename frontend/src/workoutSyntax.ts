@@ -9,8 +9,11 @@
 // Grammar for one non-repeat-marker line (space-separated tokens, keywords case-insensitive):
 //   [intensity] duration [target] [cadence]
 // A standalone "<N>x" line starts a repeat block: every following non-blank line up to the next
-// blank line is one of its children. See workout_syntax.py's docstring for full details -- this
-// file mirrors that parser's behavior token-for-token.
+// blank line (or end of text) is one of its children. The boundary is the blank line, NOT
+// indentation -- a child's own leading whitespace is stripped and otherwise ignored, so a step
+// meant to come after the repeat needs its own blank line before it, even if its children were
+// typed indented. See workout_syntax.py's docstring for the full grammar plus a worked example
+// of exactly this mistake -- this file mirrors that parser's behavior token-for-token.
 import type { PlannedWorkoutStepOut } from "./api/types";
 
 export const INTENSITY_WORDS = new Set(["warmup", "cooldown", "recovery", "rest", "active"]);

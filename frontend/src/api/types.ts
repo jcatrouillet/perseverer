@@ -802,7 +802,7 @@ export interface HealthStreamResponse {
   values: number[];
 }
 
-export type EntityType = "activity" | "day";
+export type EntityType = "activity" | "day" | "week";
 
 export interface NoteOut {
   id: number;

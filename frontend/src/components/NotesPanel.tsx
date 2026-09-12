@@ -1,5 +1,5 @@
-// Shared notes UI for both the calendar page (entity_type="day") and activity detail
-// (entity_type="activity") -- see api/schemas/notes.py.
+// Shared notes UI for the calendar day/week pages (entity_type="day"/"week") and activity
+// detail (entity_type="activity") -- see api/schemas/notes.py.
 import { useState } from "react";
 
 import { useCreateNote, useNotes } from "../api/queries";
@@ -13,10 +13,10 @@ export function NotesPanel({
 }: {
   entityType: EntityType;
   entityId: string;
-  // ActivityDetailPage/DayViewPage already wrap this in their own "Notes" <h2> card heading --
-  // rendering this component's own heading too would just duplicate the title. MonthView/
-  // WeekView have no such wrapper (MonthView's own heading is the expanded date, WeekView has
-  // none at all), so they rely on the default to still show a "Notes" label.
+  // ActivityDetailPage/DayViewPage/WeekView already wrap this in their own "Notes" <h2> card
+  // heading -- rendering this component's own heading too would just duplicate the title.
+  // MonthView's own expanded-day card heading is the date itself, not "Notes", so it relies on
+  // the default to still show a "Notes" label.
   showHeading?: boolean;
 }) {
   const notes = useNotes(entityType, entityId);

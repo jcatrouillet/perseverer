@@ -691,22 +691,22 @@ Still a plain bounded query over already-stored rows, never a live stream scan.
 
 ### `POST /notes`
 
-Attaches a free-text note to an activity or a calendar day — the write path an AI agent (or the
-UI) uses to record observations. The one write endpoint most of this API is deliberately
-read-only around.
+Attaches a free-text note to an activity, a calendar day, or a calendar week — the write path an
+AI agent (or the UI) uses to record observations. The one write endpoint most of this API is
+deliberately read-only around.
 
 **Request body** (`NoteCreate`):
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `entity_type` | `"activity"` \| `"day"` | required | |
-| `entity_id` | string | required | An activity id when `entity_type` is `activity`; a `local_date` (`YYYY-MM-DD`) string when `entity_type` is `day`. |
+| `entity_type` | `"activity"` \| `"day"` \| `"week"` | required | |
+| `entity_id` | string | required | An activity id when `entity_type` is `activity`; a `local_date` (`YYYY-MM-DD`) string when `entity_type` is `day`; that week's own Monday `local_date` when `entity_type` is `week` (matching `rollups.py`'s own Monday-start week convention). |
 | `body` | string | required | |
 | `author` | string, nullable | optional | |
 
 **Responses:** `201` → `NoteOut`. `404` → `detail: "activity not found"` — only checked when
-`entity_type` is `activity`; a `day` entity_id is never validated against anything, since a day
-is just a date, not a row that can be missing.
+`entity_type` is `activity`; a `day`/`week` entity_id is never validated against anything, since
+both are just a date, not a row that can be missing.
 
 ### `GET /notes`
 
@@ -714,7 +714,7 @@ Lists notes attached to one entity.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
-| `entity_type` | query | **required** | string | `activity` or `day`. |
+| `entity_type` | query | **required** | string | `activity`, `day`, or `week`. |
 | `entity_id` | query | **required** | string | |
 
 **Response `200`:** `array<NoteOut>`.
@@ -840,7 +840,7 @@ the next push.
 |---|---|---|---|
 | `sport` | string | required | `running` / `yoga` / `bouldering` / `fitness` / `hiit` / `strength_training` — open string, not an enum. |
 | `name` | string, nullable | optional | |
-| `source_text` | string, nullable | optional | For `running`: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting `parse_errors` come back in the response. A trailing `# comment` on any line attaches a freeform note to that step (see `PlannedWorkoutStepOut.comment` below); a line that's only a comment errors as a missing duration. For `yoga`/`bouldering`: freeform notes only, never parsed. Ignored for `hiit`/`strength_training` — use `steps` instead. |
+| `source_text` | string, nullable | optional | For `running`: the athlete's own workout-syntax text — a malformed line doesn't reject the save, it's still stored, and the resulting `parse_errors` come back in the response. A standalone `"<N>x"` line starts a repeat block: every non-blank line that follows, up to the next blank line (or end of text), becomes one of its children — the boundary is the blank line, not indentation, so a step meant to follow the repeat needs its own blank line before it even if the repeat's own steps were typed indented. A trailing `# comment` on any line attaches a freeform note to that step (see `PlannedWorkoutStepOut.comment` below); a line that's only a comment errors as a missing duration. For `yoga`/`bouldering`: freeform notes only, never parsed. Ignored for `hiit`/`strength_training` — use `steps` instead. |
 | `scheduled_time` | string, nullable | optional | `"HH:MM"` (24h). Perseverer's own calendar display metadata only — Garmin's own scheduling has no time-of-day API. |
 | `duration_minutes` | number, nullable | optional | `yoga`/`bouldering` only — sets the workout's duration directly (there's no syntax to derive one from). Ignored for `running`/`hiit`/`strength_training`, where duration is derived instead. |
 | `steps` | array\<`PlannedWorkoutStepIn`\>, nullable | optional | `hiit`/`strength_training` only — the exercise-picker steps, arriving already-structured (never parsed from text). Ignored for every other sport. |
@@ -1727,7 +1727,7 @@ with at least one non-zero band.
 
 ### NoteOut
 
-`id` (integer), `entity_type` (`activity`/`day`), `entity_id`, `body`, `author` (nullable),
+`id` (integer), `entity_type` (`activity`/`day`/`week`), `entity_id`, `body`, `author` (nullable),
 `created_at`/`updated_at` (string, date-time).
 
 ### GoalProgressOut / GoalOut / GoalProgressPoint

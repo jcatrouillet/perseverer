@@ -1,5 +1,5 @@
 """POST/GET /notes -- the agent-writable write path CLAUDE.md's mission statement calls for.
-Scoped to activities and days only. See docs/adr/0006-phase-3-read-api-and-rollups.md
+Scoped to activities, days, and weeks. See docs/adr/0006-phase-3-read-api-and-rollups.md
 decision 7.
 """
 
@@ -35,8 +35,8 @@ def create_note(
         ).scalar_one_or_none()
         if exists is None:
             raise HTTPException(status_code=404, detail="activity not found")
-    # entity_type == "day": no existence check -- a day is just a date, not a row that can be
-    # missing.
+    # entity_type == "day" or "week": no existence check -- both are just a date (a week's own
+    # entity_id being its Monday), not a row that can be missing.
 
     now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
     result = conn.execute(

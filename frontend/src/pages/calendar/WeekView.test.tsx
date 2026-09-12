@@ -69,6 +69,9 @@ const mockUsePlannedRacesForDate = vi.fn();
 mockUsePlannedRacesForDate.mockReturnValue({ data: [], isLoading: false, isError: false });
 const mockUseActivities = vi.fn();
 mockUseActivities.mockReturnValue({ data: { items: [] }, isLoading: false, isError: false });
+const mockUseNotes = vi.fn();
+mockUseNotes.mockReturnValue({ data: [], isLoading: false, isError: false });
+const mockUseCreateNote = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
 const EMPTY_QUERY = { data: undefined, isLoading: false, isError: false };
 const EMPTY_DAYS_QUERY = { data: { days: [] }, isLoading: false, isError: false };
 const EMPTY_PERIODS_QUERY = { data: { periods: [] }, isLoading: false, isError: false };
@@ -86,6 +89,8 @@ vi.mock("../../api/queries", () => ({
   useActivityLocation: () => ({ data: undefined }),
   usePlannedWorkoutsForDate: (...args: unknown[]) => mockUsePlannedWorkoutsForDate(...args),
   usePlannedRacesForDate: (...args: unknown[]) => mockUsePlannedRacesForDate(...args),
+  useNotes: (...args: unknown[]) => mockUseNotes(...args),
+  useCreateNote: () => mockUseCreateNote(),
 }));
 
 const RUNNING_WORKOUT: PlannedWorkoutOut = {
@@ -209,5 +214,29 @@ describe("WeekView day columns", () => {
     render(<WeekView date="2026-09-01" />);
     fireEvent.click(screen.getByRole("link", { name: /running/i }));
     expect(window.location.pathname).toBe("/activities/a1");
+  });
+});
+
+describe("WeekView notes", () => {
+  it("shows a week-level Notes section keyed on the week's Monday, before the day columns", () => {
+    render(<WeekView date="2026-09-01" />);
+    const calledWith = mockUseNotes.mock.calls.map((c) => c[0] + ":" + c[1]);
+    expect(calledWith).toContain("week:2026-08-31");
+
+    const heading = screen.getByRole("heading", { name: "Notes" });
+    const columns = document.querySelector(".week-columns");
+    expect(columns).not.toBeNull();
+    // Notes section precedes the day-column strip in document order.
+    expect(
+      heading.compareDocumentPosition(columns!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("still shows the Notes section for a week with no recorded activities at all", () => {
+    // Every mocked hook in this file already defaults to empty data -- this is really just
+    // confirming the section isn't gated behind weekTotal/activity data existing, unlike the
+    // "Week stats" card below it.
+    render(<WeekView date="2026-09-14" />);
+    expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument();
   });
 });

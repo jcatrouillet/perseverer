@@ -504,6 +504,11 @@ function WorkoutEditForm({
             />
           </label>
           <p className="chart-note">
+            Leave a blank line before and after a repeat block (the &quot;4x&quot; line and its
+            steps) -- everything up to that blank line becomes part of the repeat, whether or not
+            it&apos;s indented.
+          </p>
+          <p className="chart-note">
             Add &quot;# your note&quot; at the end of a line to comment on that step.
           </p>
 
