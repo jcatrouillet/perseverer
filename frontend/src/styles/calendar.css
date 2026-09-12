@@ -95,3 +95,114 @@
 .week-summary strong {
   color: var(--color-text);
 }
+
+/* WeekView's own day-by-day column strip -- one column per weekday, left-to-right like a real
+   week rather than the old top-to-bottom stack of day sections. A fixed 7-column grid, not
+   `grid-auto-flow` + a minimum column width -- the app's own `.app-main` content area caps out
+   at 1080px, so a "minimum" width above roughly 130px always forced a horizontal scrollbar in
+   practice, on every ordinary desktop width, not just narrow ones. Real columns this narrow only
+   work because `.week-columns__activities` below overrides ActivityCard's own header layout,
+   which was built for a full-width list, not a ~130px sliver. Falls back to the old
+   scrollable-strip behaviour only below 720px (same breakpoint MetricExplorer's own
+   desktop/mobile switch already uses), where even seven evenly-divided columns can't hold
+   anything readable at all. */
+.week-columns {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+@media (max-width: 720px) {
+  .week-columns {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(140px, 1fr);
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+  }
+}
+
+.week-columns__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+  cursor: pointer;
+}
+
+.week-columns__day:hover {
+  border-color: var(--color-accent);
+}
+
+/* A second, stronger cue than the hover border alone -- the current day is worth finding at a
+   glance even before the pointer lands on it. */
+.week-columns__day--today {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.week-columns__header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+
+.week-columns__weekday {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.02em;
+}
+
+.week-columns__date {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+/* Stops the day-level click-to-navigate (WeekDayColumn's own onClick) from also firing when the
+   click actually lands on one of these activity cards -- each already links to that specific
+   activity, the more useful destination. */
+.week-columns__activities {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  cursor: default;
+}
+
+/* ActivityCard was built for a full-width list (Activity list / Day view), where its icon +
+   sport name + time all comfortably share one row. A week column has roughly a fifth of that
+   width, and the fixed-size icon (22px) plus the fixed-size time text left almost nothing for
+   the sport name -- confirmed by measuring the rendered title box at under 8px wide, i.e. the
+   name wasn't just tight, it was functionally invisible. Forcing the time onto its own row (via
+   flex-wrap + a 100%-basis item, not by editing ActivityCard.tsx itself, since the same
+   component's full-width layout elsewhere is fine as-is) gives the sport name the icon's row to
+   itself and the time a full row below it. */
+.week-columns__activities .activity-card {
+  padding: var(--space-2);
+}
+
+.week-columns__activities .activity-card__header {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+.week-columns__activities .activity-card__time {
+  flex: 1 0 100%;
+  font-size: var(--font-size-sm);
+}
+
+.week-columns__activities .activity-card__stats {
+  gap: var(--space-1);
+}
+
+.week-columns__activities .chip {
+  font-size: var(--font-size-sm);
+  padding: 0.1rem var(--space-2) 0.1rem var(--space-1);
+}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLocation } from "wouter";
 
 import {
   useActivities,
@@ -12,13 +12,13 @@ import {
   usePlannedWorkoutsForDate,
   useSleep,
 } from "../../api/queries";
+import type { ActivitySummary, DayRollupOut } from "../../api/types";
 import { ActivityCard } from "../../components/ActivityCard";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { Icon } from "../../components/Icon";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
-import { NotesPanel } from "../../components/NotesPanel";
 import { MetricChip, StatTile } from "../../components/StatTile";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
 import { WeekWellnessCharts } from "../../components/WeekWellnessCharts";
@@ -84,12 +84,61 @@ function WeekDayRaces({ date }: { date: string }) {
   );
 }
 
-// This got left behind when Milestones B/D built ActivityCard-based day groups for the
-// activity list and day view -- WeekView only ever picked up the new DateNavigator (Milestone
-// A) and kept its original plain Phase-6 day list otherwise. Rebuilt on the same
-// `.activity-day-group` + ActivityCard pattern those two views already established, so a week
-// reads as seven real day groups (with rest days visibly empty) rather than one text summary
-// line per day.
+// One column per weekday -- past/current days show that day's recorded activities (ActivityCard,
+// same component the activity list and day view use), future days show the scheduled workout's
+// load bar instead; both simply render from whatever data exists for that date rather than
+// branching on past-vs-future, since a future date naturally has no activities yet and a fully
+// past date rarely still has an undone scheduled workout. The whole column navigates to that
+// day's own /day/:date view on click (setLocation, not a wrapping <Link> -- ActivityCard already
+// renders its own <a> per activity, and nesting an anchor inside another anchor is invalid HTML/
+// gets silently mangled by the browser's own parser); the activities list stops that click from
+// bubbling so tapping a specific activity opens *that activity*, not the day, which is the more
+// specific and therefore more useful destination.
+function WeekDayColumn({
+  date,
+  day,
+  activities,
+  isToday,
+  onNavigate,
+}: {
+  date: string;
+  day: DayRollupOut | undefined;
+  activities: ActivitySummary[];
+  isToday: boolean;
+  onNavigate: (date: string) => void;
+}) {
+  const { date: dateLabel, weekday } = formatDayHeading(date);
+  return (
+    <div
+      className={`week-columns__day${isToday ? " week-columns__day--today" : ""}`}
+      onClick={() => onNavigate(date)}
+    >
+      <div className="week-columns__header">
+        <span>
+          <span className="week-columns__weekday">{weekday.slice(0, 3)}</span>{" "}
+          <span className="week-columns__date">{dateLabel}</span>
+        </span>
+        {day?.sleep_total_s != null && (
+          <MetricChip
+            label={`${(day.sleep_total_s / 3600).toFixed(1)}h`}
+            icon="moon"
+            tone="cadence"
+          />
+        )}
+      </div>
+      <WeekDayPlannedWorkouts date={date} />
+      <WeekDayRaces date={date} />
+      {activities.length > 0 && (
+        <div className="week-columns__activities" onClick={(e) => e.stopPropagation()}>
+          {activities.map((activity) => (
+            <ActivityCard key={activity.id} activity={activity} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WeekView({ date }: { date: string }) {
   const { start, end } = weekRange(date);
   const priorWeekStartDate = parseIsoDate(start);
@@ -120,7 +169,14 @@ export function WeekView({ date }: { date: string }) {
   const health = useHealthDashboard(start, end);
   const sleep = useSleep(start, end);
   const climbing = useClimbingSummary(start, end);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
+  // Deliberately the browser's own local calendar date, not `isoDate(new Date())`'s UTC
+  // conversion (the pattern used elsewhere in this app for a coarse "today" default) -- that
+  // conversion already rolls over to the next day mid-evening for anyone west of UTC (e.g.
+  // 11pm Pacific is already the next UTC date), which would highlight tomorrow's column as
+  // "today" for the exact hours an athlete is most likely to be looking at their own week.
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const weekTotal = weeks.data?.periods.find((p) => p.period_start === start);
   const priorWeekTotal = weeks.data?.periods.find((p) => p.period_start === priorWeekStart);
   const monthOfWeekStart = start.slice(0, 7); // YYYY-MM
@@ -162,6 +218,22 @@ export function WeekView({ date }: { date: string }) {
       <h1>
         Week of {start} – {end}
       </h1>
+
+      {calendar.isLoading && <LoadingSpinner />}
+      {calendar.isError && <p role="alert">Could not load the week.</p>}
+
+      <div className="week-columns">
+        {eachDate(start, end).map((d) => (
+          <WeekDayColumn
+            key={d}
+            date={d}
+            day={calendar.data?.days.find((x) => x.local_date === d)}
+            activities={activitiesByDate.get(d) ?? []}
+            isToday={d === today}
+            onNavigate={(navDate) => setLocation(`/day/${navDate}`)}
+          />
+        ))}
+      </div>
 
       {weekTotal && weekTotal.activity_count > 0 && (
         <section className="card">
@@ -265,49 +337,6 @@ export function WeekView({ date }: { date: string }) {
           weekEnd={end}
         />
       )}
-
-      {calendar.isLoading && <LoadingSpinner />}
-      {calendar.isError && <p role="alert">Could not load the week.</p>}
-
-      {eachDate(start, end).map((d) => {
-        const day = calendar.data?.days.find((x) => x.local_date === d);
-        const { date: dateLabel, weekday } = formatDayHeading(d);
-        const dayActivities = activitiesByDate.get(d) ?? [];
-        return (
-          <section className="activity-day-group" key={d}>
-            <div className="activity-day-group__header">
-              <span className="activity-day-group__date">{dateLabel}</span>
-              <span className="activity-day-group__weekday">{weekday}</span>
-              <div className="activity-day-group__wellness">
-                {day?.sleep_total_s != null && (
-                  <MetricChip
-                    label={`${(day.sleep_total_s / 3600).toFixed(1)}h sleep`}
-                    icon="moon"
-                    tone="cadence"
-                  />
-                )}
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => setExpandedDate(expandedDate === d ? null : d)}
-                >
-                  Notes
-                </button>
-              </div>
-            </div>
-            <WeekDayPlannedWorkouts date={d} />
-            <WeekDayRaces date={d} />
-            {dayActivities.length > 0 && (
-              <div className="activity-day-group__list">
-                {dayActivities.map((activity) => (
-                  <ActivityCard key={activity.id} activity={activity} iconSize="large" />
-                ))}
-              </div>
-            )}
-            {expandedDate === d && <NotesPanel entityType="day" entityId={d} />}
-          </section>
-        );
-      })}
     </main>
   );
 }
