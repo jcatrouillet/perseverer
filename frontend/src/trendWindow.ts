@@ -25,8 +25,18 @@ import {
   yearRange,
 } from "./dateUtils";
 
-export type Resolution = "week" | "month" | "year" | "all";
+export type Resolution = "week" | "month" | "year" | "all" | "custom";
 export type BucketBy = "day" | "week" | "month";
+
+/** An explicit start/end the athlete picked directly, only meaningful when resolution="custom".
+ * Bucketed by day/week/month depending on the span, same three-tier threshold RunningStats.tsx
+ * already uses for its own three real display modes (spanDays <= 31 / > 366 / else) -- reused
+ * here rather than invented fresh, so a two-week custom range and a two-week "Week" navigation
+ * read the same way, and a three-year custom range reads like "All time" does. */
+export interface CustomRange {
+  start: string;
+  end: string;
+}
 
 /** One day's worth of values for however many series keys the caller cares about -- the shape
  * both `FitnessDailyRollupOut[]` (after a small adapter) and `mergeTrendSeries`'s own
@@ -173,17 +183,55 @@ export function earliestDateForKeys(points: DailyPoint[], keys: string[]): strin
   return earliestDate(points.filter((p) => keys.some((k) => typeof p[k] === "number")));
 }
 
+/** A sensible default range to seed resolution="custom" with the moment the athlete switches to
+ * it -- the last 30 days, clamped to not start before the athlete's own earliest data. */
+export function defaultCustomRange(dataStart: string, today: string): CustomRange {
+  const start = addDays(today, -29);
+  return { start: start > dataStart ? start : dataStart, end: today };
+}
+
+const MS_PER_DAY = 86_400_000;
+
 /** Builds the window for `resolution`, anchored on any date within it -- `anchor` need not be
  * the window's own start (e.g. "next month" just adds a month to the current anchor and this
  * function re-derives that month's own real start/end). `dataStart`/`today` bound how far
  * `canGoPrevious`/`canGoNext` allow navigating -- never past the athlete's own earliest data,
- * never into the future. */
+ * never into the future. `customRange` is only consulted for resolution="custom"; its bucket
+ * granularity (day/week/month) is picked from its own span using the exact same thresholds
+ * RunningStats.tsx already uses for its three real display modes. */
 export function computeWindow(
   resolution: Resolution,
   anchor: string,
   dataStart: string,
   today: string,
+  customRange?: CustomRange,
 ): TrendWindow {
+  if (resolution === "custom" && customRange) {
+    const { start, end } = customRange;
+    const spanDays =
+      Math.round((parseIsoDate(end).getTime() - parseIsoDate(start).getTime()) / MS_PER_DAY) + 1;
+    let bucketBy: BucketBy;
+    let buckets: { key: string; label: string }[];
+    if (spanDays <= 31) {
+      bucketBy = "day";
+      buckets = enumerateDailyBuckets(start, end);
+    } else if (spanDays > 366) {
+      bucketBy = "month";
+      buckets = enumerateMonthlyBuckets(start, end, monthYearLabel);
+    } else {
+      bucketBy = "week";
+      buckets = enumerateWeeklyBuckets(start, end);
+    }
+    return {
+      resolution, bucketBy, start, end,
+      bucketKeys: buckets.map((b) => b.key),
+      bucketLabels: buckets.map((b) => b.label),
+      label: formatDateRangeLabel(start, end),
+      // A custom range has no "previous"/"next" unit to step by -- same as "all time".
+      canGoPrevious: false,
+      canGoNext: false,
+    };
+  }
   if (resolution === "week") {
     const { start, end } = weekRange(anchor);
     const buckets = enumerateDailyBuckets(start, end);
@@ -254,6 +302,8 @@ export function shiftAnchor(window: TrendWindow, direction: 1 | -1): string {
     const year = Number(window.start.slice(0, 4)) + direction;
     return `${year}-01-01`;
   }
+  // "all" and "custom" -- nothing to step, no-op (custom has no unit of navigation, all is the
+  // entire available range already).
   return window.start;
 }
 

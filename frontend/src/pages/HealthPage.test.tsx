@@ -148,6 +148,35 @@ describe("HealthPage", () => {
     expect(screen.queryByText(String(new Date().getUTCFullYear()))).not.toBeInTheDocument();
   });
 
+  it("switching to Custom shows date pickers instead of prev/next, seeded with a default range", () => {
+    mockUseHealthDashboard.mockReturnValue({
+      ...EMPTY,
+      data: {
+        metrics: [
+          {
+            logical_metric: "weight_kg",
+            last_observed: TODAY,
+            daily: [dashboardDay(daysBeforeToday(800), 79.0), dashboardDay(TODAY, 79.5)],
+          },
+        ],
+      },
+    });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    render(<HealthPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+    expect(screen.queryByRole("button", { name: "Earlier" })).not.toBeInTheDocument();
+    const start = screen.getByLabelText("Custom range start") as HTMLInputElement;
+    const end = screen.getByLabelText("Custom range end") as HTMLInputElement;
+    expect(end.value).toBe(TODAY);
+    expect(start.value).not.toBe("");
+
+    fireEvent.change(end, { target: { value: daysBeforeToday(5) } });
+    expect((screen.getByLabelText("Custom range end") as HTMLInputElement).value).toBe(
+      daysBeforeToday(5),
+    );
+  });
+
   it("builds the Sleep chart from GET /sleep, not the health dashboard", () => {
     mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
     mockUseSleep.mockReturnValue({

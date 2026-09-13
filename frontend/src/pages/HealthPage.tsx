@@ -22,8 +22,10 @@ import { healthMetricStyle, toneColor } from "../metricStyle";
 import {
   bucketSeriesToWindow,
   computeWindow,
+  defaultCustomRange,
   earliestDateForKeys,
   shiftAnchor,
+  type CustomRange,
   type DailyPoint,
   type Resolution,
 } from "../trendWindow";
@@ -189,6 +191,7 @@ export function HealthPage() {
   const [resolution, setResolution] = useState<Resolution>("week");
   const [anchor, setAnchor] = useState(TODAY);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const [customRange, setCustomRange] = useState<CustomRange | null>(null);
 
   const dashboard = useHealthDashboard(EARLIEST_PLAUSIBLE_DATE, TODAY);
   const sleep = useSleep(EARLIEST_PLAUSIBLE_DATE, TODAY);
@@ -219,9 +222,13 @@ export function HealthPage() {
     () => (activeChart ? earliestDateForKeys(sourceForChart(activeChart), activeChart.keys) : TODAY),
     [activeChart, dashboardPoints, sleepPoints],
   );
+  // Seeded lazily (only once the athlete actually switches to Custom) rather than on every
+  // render, since it depends on `dataStart`, which itself depends on the active chart.
+  const effectiveCustomRange = customRange ?? defaultCustomRange(dataStart, TODAY);
+
   const window = useMemo(
-    () => computeWindow(resolution, anchor, dataStart, TODAY),
-    [resolution, anchor, dataStart],
+    () => computeWindow(resolution, anchor, dataStart, TODAY, effectiveCustomRange),
+    [resolution, anchor, dataStart, effectiveCustomRange],
   );
 
   const isLoading = dashboard.isLoading || sleep.isLoading;
@@ -233,6 +240,9 @@ export function HealthPage() {
     // computeWindow re-derives each resolution's own start/end from it -- so switching from a
     // week in August 2025 to Month lands on August 2025, not back to the current month.
     setResolution(next);
+    if (next === "custom" && customRange === null) {
+      setCustomRange(defaultCustomRange(dataStart, TODAY));
+    }
   }
 
   const metrics: ExplorerMetric[] = useMemo(
@@ -270,6 +280,10 @@ export function HealthPage() {
               onResolutionChange={changeResolution}
               onPrevious={() => setAnchor(shiftAnchor(window, -1))}
               onNext={() => setAnchor(shiftAnchor(window, 1))}
+              customRange={effectiveCustomRange}
+              onCustomRangeChange={setCustomRange}
+              dataStart={dataStart}
+              today={TODAY}
             />
           }
         />

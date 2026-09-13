@@ -777,6 +777,20 @@ tbody tr:last-child td {
   cursor: default;
 }
 
+.trend-controls__custom-range {
+  gap: var(--space-2);
+}
+
+.trend-controls__date {
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  width: auto;
+}
+
+.trend-controls__date-sep {
+  color: var(--color-text-muted);
+}
+
 /* MetricExplorer -- the metric list (left) + selected chart (right) split shared by the
    Fitness & Form and Health tabs (components/MetricExplorer.tsx). A phone-width viewport has no
    room for a real left column, so the list collapses into a horizontal scrolling pill row above

@@ -12,8 +12,10 @@ import { toneColor } from "../metricStyle";
 import {
   bucketSeriesToWindow,
   computeWindow,
+  defaultCustomRange,
   earliestDateForKeys,
   shiftAnchor,
+  type CustomRange,
   type DailyPoint,
   type Resolution,
 } from "../trendWindow";
@@ -96,6 +98,7 @@ export function ThresholdMaxHrChart() {
   const [resolution, setResolution] = useState<Resolution>("week");
   const [anchor, setAnchor] = useState(TODAY);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const [customRange, setCustomRange] = useState<CustomRange | null>(null);
 
   const performance = usePerformance(EARLIEST_PLAUSIBLE_DATE, TODAY);
 
@@ -116,13 +119,18 @@ export function ThresholdMaxHrChart() {
     [activeMetric, points],
   );
 
+  const effectiveCustomRange = customRange ?? defaultCustomRange(dataStart, TODAY);
+
   const window = useMemo(
-    () => computeWindow(resolution, anchor, dataStart, TODAY),
-    [resolution, anchor, dataStart],
+    () => computeWindow(resolution, anchor, dataStart, TODAY, effectiveCustomRange),
+    [resolution, anchor, dataStart, effectiveCustomRange],
   );
 
   function changeResolution(next: Resolution) {
     setResolution(next);
+    if (next === "custom" && customRange === null) {
+      setCustomRange(defaultCustomRange(dataStart, TODAY));
+    }
   }
 
   const metrics: ExplorerMetric[] = useMemo(
@@ -158,6 +166,10 @@ export function ThresholdMaxHrChart() {
               onResolutionChange={changeResolution}
               onPrevious={() => setAnchor(shiftAnchor(window, -1))}
               onNext={() => setAnchor(shiftAnchor(window, 1))}
+              customRange={effectiveCustomRange}
+              onCustomRangeChange={setCustomRange}
+              dataStart={dataStart}
+              today={TODAY}
             />
           }
         />

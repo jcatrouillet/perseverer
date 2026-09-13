@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   bucketSeriesToWindow,
   computeWindow,
+  defaultCustomRange,
   earliestDate,
   shiftAnchor,
   type DailyPoint,
@@ -63,6 +64,41 @@ describe("computeWindow", () => {
     expect(midHistory.canGoPrevious).toBe(true);
     expect(midHistory.canGoNext).toBe(true);
   });
+
+  it("custom: buckets by day for a span <= 31 days, matching RunningStats.tsx's own threshold", () => {
+    const w = computeWindow("custom", "x", "2020-01-01", "2026-09-05", {
+      start: "2026-08-01",
+      end: "2026-08-10",
+    });
+    expect(w.bucketBy).toBe("day");
+    expect(w.start).toBe("2026-08-01");
+    expect(w.end).toBe("2026-08-10");
+    expect(w.bucketKeys).toHaveLength(10);
+    expect(w.canGoPrevious).toBe(false);
+    expect(w.canGoNext).toBe(false);
+  });
+
+  it("custom: buckets by week for a span between 32 and 366 days", () => {
+    const w = computeWindow("custom", "x", "2020-01-01", "2026-09-05", {
+      start: "2026-07-01",
+      end: "2026-08-31",
+    });
+    expect(w.bucketBy).toBe("week");
+  });
+
+  it("custom: buckets by month for a span > 366 days", () => {
+    const w = computeWindow("custom", "x", "2020-01-01", "2026-09-05", {
+      start: "2024-01-01",
+      end: "2026-08-31",
+    });
+    expect(w.bucketBy).toBe("month");
+  });
+
+  it("custom: falls back to all-time behavior when no range is given", () => {
+    const w = computeWindow("custom", "x", "2024-11-15", "2025-02-10");
+    expect(w.start).toBe("2024-11-15");
+    expect(w.end).toBe("2025-02-10");
+  });
 });
 
 describe("shiftAnchor", () => {
@@ -87,6 +123,28 @@ describe("shiftAnchor", () => {
   it("is a no-op for all-time", () => {
     const w = computeWindow("all", "x", "2020-01-01", "2026-09-05");
     expect(shiftAnchor(w, 1)).toBe(w.start);
+  });
+
+  it("is a no-op for custom", () => {
+    const w = computeWindow("custom", "x", "2020-01-01", "2026-09-05", {
+      start: "2026-08-01",
+      end: "2026-08-10",
+    });
+    expect(shiftAnchor(w, 1)).toBe(w.start);
+  });
+});
+
+describe("defaultCustomRange", () => {
+  it("defaults to the last 30 days ending today", () => {
+    const r = defaultCustomRange("2020-01-01", "2026-09-05");
+    expect(r.end).toBe("2026-09-05");
+    expect(r.start).toBe("2026-08-07");
+  });
+
+  it("clamps the start to the athlete's own earliest data", () => {
+    const r = defaultCustomRange("2026-08-20", "2026-09-05");
+    expect(r.start).toBe("2026-08-20");
+    expect(r.end).toBe("2026-09-05");
   });
 });
 

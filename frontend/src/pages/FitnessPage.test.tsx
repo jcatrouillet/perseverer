@@ -142,4 +142,25 @@ describe("FitnessPage", () => {
     expect(screen.getByText(lastYear)).toBeInTheDocument();
     expect(screen.queryByText(String(new Date().getUTCFullYear()))).not.toBeInTheDocument();
   });
+
+  it("switching to Custom shows date pickers instead of prev/next, seeded with a default range", () => {
+    mockUseFitness.mockReturnValue({
+      ...EMPTY,
+      data: [fitnessRow(daysBeforeToday(800), 40, 35, 5), fitnessRow(TODAY, 40, 35, 5)],
+    });
+    mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
+    render(<FitnessPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+    expect(screen.queryByRole("button", { name: "Earlier" })).not.toBeInTheDocument();
+    const start = screen.getByLabelText("Custom range start") as HTMLInputElement;
+    const end = screen.getByLabelText("Custom range end") as HTMLInputElement;
+    expect(end.value).toBe(TODAY);
+    expect(start.value).not.toBe("");
+
+    fireEvent.change(start, { target: { value: daysBeforeToday(10) } });
+    expect((screen.getByLabelText("Custom range start") as HTMLInputElement).value).toBe(
+      daysBeforeToday(10),
+    );
+  });
 });
