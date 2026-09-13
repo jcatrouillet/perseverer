@@ -26,6 +26,9 @@ import type {
   ApiKeyStatusOut,
   AthleteProfileIn,
   AthleteProfileOut,
+  BloodTestBatchIn,
+  BloodTestResultIn,
+  BloodTestResultOut,
   CalendarFeedStatusOut,
   CalendarFeedUrlOut,
   CalendarResponse,
@@ -1253,6 +1256,62 @@ export function useDeletePlannedRace() {
     mutationFn: (raceId: number) => apiDelete<void>(`/api/v1/planned-races/${raceId}`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["planned-races"] });
+    },
+  });
+}
+
+// --- Blood test results (blood_test_result) -- see api/routers/blood_tests.py. Own small table,
+// not the health_observation EAV pipeline every vendor adapter feeds -- athlete-entered, not
+// vendor-parsed. Several results sharing one local_date form one logical panel.
+
+export function useBloodTests(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["blood-tests", startDate, endDate],
+    queryFn: () =>
+      apiGet<BloodTestResultOut[]>(
+        `/api/v1/blood-tests${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+export function useCreateBloodTestBatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BloodTestBatchIn) =>
+      apiPost<BloodTestResultOut[]>("/api/v1/blood-tests/batch", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["blood-tests"] });
+    },
+  });
+}
+
+export function useUpdateBloodTestResult() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ resultId, ...body }: BloodTestResultIn & { resultId: number }) =>
+      apiPut<BloodTestResultOut>(`/api/v1/blood-tests/${resultId}`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["blood-tests"] });
+    },
+  });
+}
+
+export function useDeleteBloodTestResult() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (resultId: number) => apiDelete<void>(`/api/v1/blood-tests/${resultId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["blood-tests"] });
+    },
+  });
+}
+
+export function useDeleteBloodTestPanel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (localDate: string) => apiDelete<void>(`/api/v1/blood-tests/by-date/${localDate}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["blood-tests"] });
     },
   });
 }

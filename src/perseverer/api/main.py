@@ -28,6 +28,7 @@ from perseverer.api.mcp_server import build_mcp_asgi_app, mcp_lifespan
 from perseverer.api.routers import (
     activities,
     auth,
+    blood_tests,
     calendar,
     calendar_feed,
     fitness,
@@ -70,6 +71,7 @@ if _settings.cors_origins_list:
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(activities.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(blood_tests.router, prefix="/api/v1")
 app.include_router(sleep.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(fitness.router, prefix="/api/v1")

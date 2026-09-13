@@ -1,14 +1,22 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HealthPage } from "./HealthPage";
 
 const mockUseHealthDashboard = vi.fn();
 const mockUseSleep = vi.fn();
+const mockUseBloodTests = vi.fn();
 
 vi.mock("../api/queries", () => ({
   useHealthDashboard: (...args: unknown[]) => mockUseHealthDashboard(...args),
   useSleep: (...args: unknown[]) => mockUseSleep(...args),
+  // BloodTestsPanel's own hooks -- this page renders it unconditionally alongside the metric
+  // explorer, so every test here needs it mocked too, even ones that don't care about it.
+  useBloodTests: (...args: unknown[]) => mockUseBloodTests(...args),
+  useCreateBloodTestBatch: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useUpdateBloodTestResult: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteBloodTestResult: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteBloodTestPanel: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 function dashboardDay(local_date: string, value: number) {
@@ -36,6 +44,12 @@ function daysBeforeToday(n: number): string {
 }
 
 describe("HealthPage", () => {
+  beforeEach(() => {
+    // BloodTestsPanel renders unconditionally below the metric explorer -- not this describe
+    // block's own concern (see BloodTestsPanel.test.tsx), so give it an inert empty default.
+    mockUseBloodTests.mockReturnValue({ data: [], isLoading: false, isError: false });
+  });
+
   it("shows nothing to select when there's no data at all", () => {
     mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
     mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });

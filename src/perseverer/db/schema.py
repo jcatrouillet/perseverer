@@ -199,6 +199,39 @@ planned_race = Table(
     Column("updated_at", DateTime(), nullable=False),
 )
 
+# One row per marker per blood draw -- deliberately its own plain table, not the
+# health_observation EAV pipeline every vendor adapter feeds: that machinery exists specifically
+# to catalog *auto-discovered* fields from a raw vendor payload (metric_definition's own "never
+# drop an unknown field" contract), but a blood panel is athlete-entered, not vendor-parsed --
+# there is no raw byte stream to archive or an unknown-field problem to solve, only a marker name
+# and a value the athlete is typing in directly. Reference ranges are entered by the athlete from
+# their own lab report (nullable) rather than a hardcoded "normal range" catalog: ranges
+# genuinely vary by lab, assay, sex, and age, and asserting a canonical one here would overstate
+# what a personal data archive should claim. Several rows share one `local_date` to form one
+# logical "panel" (a single blood draw with many markers) -- there's no separate panel table,
+# since grouping by (athlete_id, local_date) in the read path is sufficient and avoids a
+# redundant join for what's fundamentally still one fact per marker.
+blood_test_result = Table(
+    "blood_test_result",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("local_date", String, nullable=False),
+    Column("marker", String, nullable=False),  # e.g. "LDL Cholesterol" -- the athlete's own label
+    Column("value_num", Float, nullable=False),
+    Column("unit", String, nullable=True),  # e.g. "mg/dL"
+    # The athlete's own lab-reported reference interval for this marker -- informational only,
+    # never a claim of clinical validity; either or both may be null (e.g. a marker with only an
+    # upper bound, like hs-CRP).
+    Column("reference_low", Float, nullable=True),
+    Column("reference_high", Float, nullable=True),
+    Column("lab_name", String, nullable=True),
+    Column("notes", Text, nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    Index("ix_blood_test_result_athlete_date", "athlete_id", "local_date"),
+)
+
 # --- Bronze: immutable raw archive --------------------------------------------
 
 raw_object = Table(

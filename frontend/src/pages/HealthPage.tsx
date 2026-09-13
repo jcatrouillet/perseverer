@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 
 import { useHealthDashboard, useSleep } from "../api/queries";
 import type { SleepSessionOut } from "../api/types";
+import { BloodTestsPanel } from "../components/BloodTestsPanel";
 import { ChartFullscreen } from "../components/ChartFullscreen";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricExplorer, type ExplorerMetric } from "../components/MetricExplorer";
@@ -288,6 +289,8 @@ export function HealthPage() {
           }
         />
       )}
+
+      <BloodTestsPanel />
     </main>
   );
 }

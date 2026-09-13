@@ -626,6 +626,51 @@ export interface PlannedRaceIn {
   target_duration_s: number | null;
 }
 
+// GET/POST/PUT/DELETE /blood-tests -- athlete-entered blood test results, one row per marker per
+// draw. Several rows sharing one local_date form one logical panel. Reference ranges are the
+// athlete's own, from their lab report -- informational only, never a claim this app makes.
+export interface BloodTestResultOut {
+  id: number;
+  local_date: string;
+  marker: string;
+  value_num: number;
+  unit: string | null;
+  reference_low: number | null;
+  reference_high: number | null;
+  lab_name: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BloodTestResultIn {
+  local_date: string;
+  marker: string;
+  value_num: number;
+  unit?: string | null;
+  reference_low?: number | null;
+  reference_high?: number | null;
+  lab_name?: string | null;
+  notes?: string | null;
+}
+
+/** One marker within a `BloodTestBatchIn` -- the shared local_date/lab_name/notes live on the
+ * batch itself, not repeated per marker. */
+export interface BloodTestMarkerIn {
+  marker: string;
+  value_num: number;
+  unit?: string | null;
+  reference_low?: number | null;
+  reference_high?: number | null;
+}
+
+export interface BloodTestBatchIn {
+  local_date: string;
+  lab_name?: string | null;
+  notes?: string | null;
+  results: BloodTestMarkerIn[];
+}
+
 export interface ActivityWorkoutOut {
   name: string | null;
   description: string | null;
