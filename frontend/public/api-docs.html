@@ -451,7 +451,7 @@
 
     <section class="doc-section" id="overview">
       <h2>Overview</h2>
-      <p>The API is organized around eleven resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Planned Workouts</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
+      <p>The API is organized around twelve resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Performance</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Planned Workouts</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
       <p>There is exactly one athlete per deployment credential — every endpoint is implicitly scoped to the athlete resolved from your auth credential, so there is never an <code>athlete_id</code> parameter to pass yourself.</p>
       <div class="callout"><strong>Base URL is deployment-specific.</strong> This API has no public multi-tenant host — you run it yourself (Docker/Podman), and the origin depends on how you've exposed it (a reverse-proxy hostname, a local port, a Tailscale address). Substitute your own origin for <code>https://your-perseverer-host</code> in every example on this page.</div>
     </section>
@@ -948,6 +948,39 @@ const SCHEMAS = [
       ["ctl","number","Chronic Training Load — 42-day EWMA (\"fitness\")."],
       ["atl","number","Acute Training Load — 7-day EWMA (\"fatigue\")."],
       ["tsb","number","Training Stress Balance — ctl − atl (\"form\")."],
+    ] },
+  { name: "PerformanceDailyRollupOut", note: "Returned by GET /performance. Independently computed via the Daniels-Gilbert VDOT model, never Garmin's own precomputed equivalents.", fields: [
+      ["local_date","string(date)",""],
+      ["rolling_vdot","number|null","42-day trailing maximum VDOT — under this model, the VO2max estimate itself (ml/kg/min)."],
+      ["max_hr_bpm","number|null","365-day trailing maximum, empirical-first."],
+      ["max_hr_source","string|null","empirical or formula_fallback (Tanaka, only when there's no empirical value yet and the athlete has a configured birthdate)."],
+      ["threshold_pace_s_per_km","number|null",""],
+      ["threshold_hr_bpm","number|null",""],
+      ["threshold_hr_source","string|null","empirical or fallback."],
+      ["predicted_5k_s","number|null",""],
+      ["predicted_10k_s","number|null",""],
+      ["predicted_half_marathon_s","number|null",""],
+      ["predicted_marathon_s","number|null",""],
+    ] },
+  { name: "Vo2maxFactorAnalysisOut", note: "Returned by GET /performance/vo2max-analysis.", fields: [
+      ["as_of","string(date)",""],
+      ["window_start","string(date)","The trailing window rolling_vdot was computed over."],
+      ["window_end","string(date)",""],
+      ["rolling_vdot","number|null","Same value GET /performance would return for as_of."],
+      ["driving_activity","Vo2maxContributorOut|null","The one run whose own VDOT currently equals rolling_vdot. Null when no run in the window qualifies."],
+      ["other_contributors","array<Vo2maxContributorOut>","Every other qualifying run in the window, sorted by VDOT descending — these did NOT set the current value, but are what takes over if driving_activity ages out first."],
+      ["expires_on","string(date)|null","First date driving_activity no longer counts."],
+      ["days_since_last_qualifying_run","integer|null",""],
+      ["missing","array<string>","Human-readable gap/staleness diagnostics, if any."],
+    ] },
+  { name: "Vo2maxContributorOut", fields: [
+      ["activity_id","string",""],
+      ["local_date","string(date)",""],
+      ["name","string|null",""],
+      ["sport","string",""],
+      ["distance_m","number|null",""],
+      ["duration_s","number|null","Moving time."],
+      ["vdot","number",""],
     ] },
   { name: "InsightOut", note: "Returned by GET /insights and GET /activities/{id}/insights.", fields: [
       ["kind","string","effort, health, load, pb, or streak."],
@@ -1520,6 +1553,21 @@ const GROUPS = [
       params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
       responses: [ { code: 200, ref: "array&lt;FitnessDailyRollupOut&gt;" } ],
       example: { qs: "?start_date=2026-06-01&end_date=2026-08-19" }
+    },
+  ]},
+
+  { id: "performance", title: "Performance", endpoints: [
+    { method: "GET", path: "/api/v1/performance", summary: "Independently-computed VO2max, threshold pace/HR, max HR, and race-time predictions.",
+      description: "All derived from the athlete's own running data via the Daniels-Gilbert VDOT model, never Garmin's own precomputed daily_race_predictions/daily_lactate_threshold. rolling_vdot is a 42-day trailing maximum VDOT — under this model that figure already is the VO2max estimate, in ml/kg/min, not a separately-converted value.",
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      responses: [ { code: 200, ref: "array&lt;PerformanceDailyRollupOut&gt;" } ],
+      example: { qs: "?start_date=2026-06-01&end_date=2026-08-19" }
+    },
+    { method: "GET", path: "/api/v1/performance/vo2max-analysis", summary: "Factor analysis for the current VO2max value: which run set it, what else qualified, what's missing.",
+      description: "rolling_vdot is a rolling maximum, so exactly one run drives it, never an average — this returns that run, every other run that qualified in the same window (sorted by VDOT descending), when the driving run ages out of the window, and plain-text diagnostics for gaps (no qualifying run yet, the value about to change with nothing to replace it, a stale window with no recent effort). Deliberately request-time, not rollup-backed — a tiny, occasional lookup over the same bounded window every day, the same exception GET /activities/needs-trim already establishes to this API's usual rollup-only mandate.",
+      params: [ ["as_of","query","opt","string(date)","today",""] ],
+      responses: [ { code: 200, ref: "Vo2maxFactorAnalysisOut" } ],
+      example: {}
     },
   ]},
 

@@ -75,6 +75,7 @@ import type {
   SplitOut,
   StreamResponse,
   TrimCandidateOut,
+  Vo2maxFactorAnalysisOut,
 } from "./types";
 
 interface ActivityFilters {
@@ -140,6 +141,19 @@ export function usePerformance(startDate: string, endDate: string) {
     queryFn: () =>
       apiGet<PerformanceDailyRollupOut[]>(
         `/api/v1/performance${buildQuery({ start_date: startDate, end_date: endDate })}`,
+      ),
+  });
+}
+
+/** The Insights "VO2max" tab's factor-analysis panel (GET /performance/vo2max-analysis) --
+ * which run currently drives the rolling-max VO2max, what else qualified in the window, and
+ * what's missing. `asOf` defaults server-side to today when omitted. */
+export function useVo2maxFactorAnalysis(asOf?: string) {
+  return useQuery({
+    queryKey: ["vo2max-analysis", asOf ?? "today"],
+    queryFn: () =>
+      apiGet<Vo2maxFactorAnalysisOut>(
+        `/api/v1/performance/vo2max-analysis${buildQuery({ as_of: asOf })}`,
       ),
   });
 }

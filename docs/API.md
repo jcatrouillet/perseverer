@@ -649,6 +649,45 @@ any vendor's own training-status metric.
 
 ---
 
+## Performance
+
+Independently-computed race-time predictions, threshold pace/HR, max HR, and VO2max — all
+derived from the athlete's own running data via the Daniels-Gilbert VDOT model, never Garmin's
+own precomputed equivalents (`daily_race_predictions`, `daily_lactate_threshold`). See
+`performance_rollup.py`'s own docstring for the full model.
+
+### `GET /performance`
+
+Daily rollup of `rolling_vdot` (a 42-day trailing maximum VDOT — under the Daniels-Gilbert model
+this figure *is* the VO2max estimate, in ml/kg/min, not a separately-converted value), max HR
+(365-day trailing max, empirical-first with a Tanaka-formula fallback), threshold pace/HR
+(derived from `rolling_vdot`), and predicted 5k/10k/half-marathon/marathon times.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `start_date` | query | **required** | string (date) |
+| `end_date` | query | **required** | string (date) |
+
+**Response `200`:** `array<PerformanceDailyRollupOut>`.
+
+### `GET /performance/vo2max-analysis`
+
+Point-in-time factor analysis for the current `rolling_vdot`/VO2max value: which run set it
+(a rolling *maximum*, so exactly one run drives it, never an average), every other run that
+qualified in the same window, when the driving run ages out, and plain-text diagnostics for gaps
+(no qualifying run yet, the value about to change with nothing to replace it, a stale window with
+no recent effort). Deliberately request-time, not rollup-backed — see `vo2max_analysis.py`'s own
+docstring for why this tiny, occasional lookup doesn't fall under the rollup mandate the rest of
+this API follows, the same exception `GET /activities/needs-trim` already establishes.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `as_of` | query | optional | string (date) | Defaults to today. |
+
+**Response `200`:** `Vo2maxFactorAnalysisOut`.
+
+---
+
 ## Insights
 
 ### `GET /insights`
@@ -1698,6 +1737,32 @@ to `metric_keys` if passed). `HealthMetricRollupOut`: `metric_key`, `value_sum`/
 `local_date`, `training_load` (that day's own EWMA input, 0 on rest days), `ctl` (Chronic
 Training Load, 42-day EWMA — "fitness"), `atl` (Acute Training Load, 7-day EWMA — "fatigue"),
 `tsb` (Training Stress Balance, `ctl − atl` — "form").
+
+### PerformanceDailyRollupOut
+
+`local_date`, `rolling_vdot` (number, nullable — the VO2max estimate), `max_hr_bpm` (number,
+nullable), `max_hr_source` (`"empirical"` | `"formula_fallback"` | null), `threshold_pace_s_per_km`
+(number, nullable), `threshold_hr_bpm` (number, nullable), `threshold_hr_source` (`"empirical"` |
+`"fallback"` | null), `predicted_5k_s`/`predicted_10k_s`/`predicted_half_marathon_s`/
+`predicted_marathon_s` (number, nullable).
+
+### Vo2maxFactorAnalysisOut
+
+| Field | Type | Description |
+|---|---|---|
+| `as_of` | string (date) | |
+| `window_start`, `window_end` | string (date) | The trailing window `rolling_vdot` was computed over. |
+| `rolling_vdot` | number, nullable | Same value `GET /performance` would return for `as_of`. |
+| `driving_activity` | `Vo2maxContributorOut`, nullable | The one run whose own VDOT currently equals `rolling_vdot`. Null when no run in the window qualifies. |
+| `other_contributors` | `array<Vo2maxContributorOut>` | Every other qualifying run in the window, sorted by VDOT descending — these did NOT set the current value, but are what takes over if `driving_activity` ages out first. |
+| `expires_on` | string (date), nullable | First date `driving_activity` no longer counts. |
+| `days_since_last_qualifying_run` | integer, nullable | |
+| `missing` | `array<string>` | Human-readable gap/staleness diagnostics, if any. |
+
+### Vo2maxContributorOut
+
+`activity_id`, `local_date`, `name` (string, nullable), `sport`, `distance_m` (number, nullable),
+`duration_s` (number, nullable — moving time), `vdot` (number).
 
 ### InsightOut
 

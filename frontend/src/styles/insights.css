@@ -99,3 +99,40 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+/* VO2max factor-analysis panel (Vo2maxFactorAnalysis.tsx) -- reuses .insight-card for each
+   contributing run's own row, plus a small badge on the one actually driving the current value
+   and a separate list underneath for the plain-text staleness/gap diagnostics. */
+.vo2max-factors__list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.vo2max-factors__badge {
+  margin-left: var(--space-2);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.vo2max-factors__missing {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.vo2max-factors__missing-item {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-load) 6%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-load) 18%, transparent);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

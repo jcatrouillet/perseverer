@@ -781,6 +781,28 @@ export interface PerformanceDailyRollupOut {
   predicted_marathon_s: number | null;
 }
 
+export interface Vo2maxContributorOut {
+  activity_id: string;
+  local_date: string;
+  name: string | null;
+  sport: string;
+  distance_m: number | null;
+  duration_s: number | null;
+  vdot: number;
+}
+
+export interface Vo2maxFactorAnalysisOut {
+  as_of: string;
+  window_start: string;
+  window_end: string;
+  rolling_vdot: number | null;
+  driving_activity: Vo2maxContributorOut | null;
+  other_contributors: Vo2maxContributorOut[];
+  expires_on: string | null;
+  days_since_last_qualifying_run: number | null;
+  missing: string[];
+}
+
 export interface HealthDashboardDayOut {
   local_date: string;
   value_sum: number | null;

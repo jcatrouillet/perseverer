@@ -84,7 +84,7 @@ from perseverer.vdot import (
     predict_race_time_s,
 )
 
-_ROLLING_VDOT_WINDOW_DAYS = 42
+ROLLING_VDOT_WINDOW_DAYS = 42
 _MAX_HR_WINDOW_DAYS = 365
 _THRESHOLD_HR_WINDOW_DAYS = 365
 # How close (as a fraction of threshold pace) a run's own pace must be to count as a real
@@ -259,7 +259,7 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
         while vdot_i < len(vdot_by_date) and vdot_by_date[vdot_i][0] <= iso:
             vdot_window.append(vdot_by_date[vdot_i])
             vdot_i += 1
-        vdot_cutoff = (day - timedelta(days=_ROLLING_VDOT_WINDOW_DAYS - 1)).isoformat()
+        vdot_cutoff = (day - timedelta(days=ROLLING_VDOT_WINDOW_DAYS - 1)).isoformat()
         vdot_window = [(d, v) for d, v in vdot_window if d >= vdot_cutoff]
         rolling_vdot = max((v for _, v in vdot_window), default=None)
 

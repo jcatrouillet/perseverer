@@ -252,6 +252,39 @@ because you don't recognize it — stop, that's the bug.
   series `formatValue` too (previously only the tooltip and the "latest" note did) — a bare-number
   axis reading e.g. "1529" for a race-time-in-seconds series was confirmed confusing in practice,
   not just a cosmetic gap.
+  **VO2max, explicitly** (a third Insights tab, `Vo2maxChart.tsx`): `rolling_vdot` is not just an
+  intermediate input to threshold pace/race predictions above — under the Daniels-Gilbert model
+  it already *is* the VO2max estimate itself, in the same ml/kg/min units clinical VO2max is
+  measured in, so this tab surfaces that same rollup field directly rather than computing
+  anything new, labeled explicitly as this project's own estimate, never Garmin's. Only one
+  metric exists here (unlike the two siblings above), so `Vo2maxChart.tsx` skips
+  `MetricExplorer`'s list+detail shell entirely — a picker with nothing to pick between would
+  just be clutter — while still reusing the same `TrendControls`/`trendWindow.ts`
+  week/month/year/all-time/custom wiring. Paired on the same tab with `Vo2maxFactorAnalysis.tsx`
+  ("which activities contributed, what's missing"), backed by a new `GET
+  /performance/vo2max-analysis` (`vo2max_analysis.py::compute_vo2max_factor_analysis`) —
+  deliberately request-time, not rollup-backed, since `rolling_vdot`'s own window
+  (`ROLLING_VDOT_WINDOW_DAYS`, exported from `performance_rollup.py` for this reuse) is tiny (a
+  handful of the athlete's own runs), a world apart from the multi-year aggregates the rollup
+  mandate above targets — the same "bounded, occasional diagnostic lookup" exception
+  `/activities/needs-trim`/`/activities/possible-duplicates` already establish, not a new
+  precedent. Since `rolling_vdot` is a rolling *maximum*, not an average, exactly one run in the
+  window ever sets the value (`driving_activity`) — every other qualifying run
+  (`other_contributors`, sorted by VDOT descending) is careful to read as "ready to take over,"
+  never as jointly averaged in. `missing` is a small set of plain-language, concretely-grounded
+  diagnostics (never a guessed constant with no stated reasoning, same discipline as every
+  fraction/window above): no qualifying run yet at all; the driving run ages out within
+  `_EXPIRING_SOON_DAYS` (7) with or without a replacement already in the window; no qualifying
+  run in over half the rolling window (`_STALE_EFFORT_DAYS`); or only one qualifying run total.
+  A real bug this feature surfaced and fixed along the way: `activity_metric`'s existing indexes
+  both lead with either `athlete_id, activity_id, metric_key` (the uniqueness constraint) or
+  `activity_id, metric_key` — neither serves "every row for this athlete carrying one specific
+  metric_key across every activity," the exact shape both of `vo2max_analysis.py`'s own window
+  queries need. Confirmed live via `EXPLAIN QUERY PLAN` and direct timing (33s cold on real
+  ~1,400-day history, a full per-athlete scan across every metric ever recorded) before adding
+  `ix_activity_metric_athlete_key` (`athlete_id`, `metric_key`) dropped it to 0.002s — the same
+  "verify against real data, don't guess" methodology, and the same missing-index failure mode,
+  as `ix_sleep_stage_session` earlier this project.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash

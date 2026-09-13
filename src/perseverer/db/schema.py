@@ -494,6 +494,15 @@ activity_metric = Table(
     # activity_id first (e.g. the /activities list endpoint's per-row avg/max heart rate
     # correlated subqueries) without a full scan. This index serves that access pattern.
     Index("ix_activity_metric_activity_key", "activity_id", "metric_key"),
+    # The opposite access pattern -- "every row for this athlete carrying one specific
+    # metric_key, across every activity" (vo2max_analysis.py's own window queries;
+    # performance_rollup.py's own full-history VDOT read) -- has no covering index either: the
+    # uniqueness index's own (athlete_id, activity_id, metric_key, source) column order means
+    # metric_key only becomes useful for a single already-known activity_id, so SQLite falls
+    # back to a full per-athlete scan across every metric ever recorded. Confirmed live as the
+    # dominant cost in vo2max_analysis.py's own request-time query (33s cold on real ~1,400-day
+    # history, 0.002s with this index -- EXPLAIN QUERY PLAN before/after, not assumed).
+    Index("ix_activity_metric_athlete_key", "athlete_id", "metric_key"),
 )
 
 activity_stream = Table(
