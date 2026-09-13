@@ -1,0 +1,31 @@
+/* Insights' "Eddington Number" tab (EddingtonChart.tsx) -- a plain per-year data table, same
+   simple-table convention SettingsPage.tsx's own HR-zone preview table already established. */
+.eddington-table__scroll {
+  overflow-x: auto;
+}
+
+.eddington-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-size-sm);
+}
+
+.eddington-table th,
+.eddington-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-4) var(--space-2) 0;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.eddington-table th {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.eddington-table__number {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
+}
