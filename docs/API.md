@@ -584,6 +584,79 @@ own live-fetch start date).
 
 ---
 
+## Blood Tests
+
+Athlete-entered blood test results — one row per marker per draw, several rows sharing one
+`local_date` forming one logical panel (e.g. a full lipid panel drawn the same day). Deliberately
+a plain CRUD table, not the `health_observation` EAV pipeline every vendor adapter feeds — this
+data is typed in by the athlete, not parsed from a vendor payload. Reference ranges are the
+athlete's own, copied from their lab report; informational only, never a claim this API makes.
+
+### `GET /blood-tests`
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `start_date` | query | **required** | string (date) |
+| `end_date` | query | **required** | string (date) |
+
+**Response `200`:** `array<BloodTestResultOut>`, ordered by `local_date` descending then `marker`.
+
+### `GET /blood-tests/{result_id}`
+
+**Response `200`:** `BloodTestResultOut`. `404` if not found (or belongs to another athlete).
+
+### `POST /blood-tests`
+
+Creates one marker result. See `POST /blood-tests/batch` below for entering a whole panel at once
+— this route exists for adding a single marker to an existing draw, or for scripts that don't
+need the batch shape.
+
+**Request body** (`BloodTestResultIn`):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `local_date` | string (date) | **required** | The draw date. |
+| `marker` | string | **required** | e.g. `"LDL Cholesterol"` — freeform, not a fixed catalog. |
+| `value_num` | number | **required** | |
+| `unit` | string, nullable | optional | e.g. `"mg/dL"`. |
+| `reference_low`, `reference_high` | number, nullable | optional | The athlete's own lab-reported range; either or both may be omitted (e.g. a marker with only an upper bound). `reference_low` must not exceed `reference_high` when both are given. |
+| `lab_name` | string, nullable | optional | |
+| `notes` | string, nullable | optional | |
+
+**Response `200`:** `BloodTestResultOut`.
+
+### `POST /blood-tests/batch`
+
+The primary write path — a whole panel, many markers, one draw date, in one call.
+
+**Request body** (`BloodTestBatchIn`):
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `local_date` | string (date) | **required** | |
+| `lab_name` | string, nullable | optional | Shared across every marker in this call. |
+| `notes` | string, nullable | optional | Shared across every marker in this call. |
+| `results` | array\<object\> | **required** | At least one. Each entry: `marker`, `value_num`, `unit`, `reference_low`, `reference_high` — same shape/validation as the single-result fields above, minus `local_date`/`lab_name`/`notes`. |
+
+**Response `200`:** `array<BloodTestResultOut>`, one per created marker, in the order submitted.
+
+### `PUT /blood-tests/{result_id}`
+
+**Request body:** `BloodTestResultIn` (same shape as `POST`, full replacement).
+
+**Response `200`:** `BloodTestResultOut`. `404` if not found.
+
+### `DELETE /blood-tests/{result_id}`
+
+Deletes one marker result. `200` on success, `404` if not found.
+
+### `DELETE /blood-tests/by-date/{local_date}`
+
+Deletes every marker recorded on `local_date` — the whole panel at once, rather than removing
+each of a panel's markers one by one. `200` on success, `404` if nothing was recorded that date.
+
+---
+
 ## Sleep
 
 ### `GET /sleep`
@@ -777,6 +850,34 @@ Lists notes attached to one entity.
 | `entity_id` | query | **required** | string | |
 
 **Response `200`:** `array<NoteOut>`.
+
+### `PUT /notes/{note_id}`
+
+Edits a note's text. Only `body` is editable — `entity_type`/`entity_id` never move (delete and
+re-create elsewhere if that's really what's meant), and `author` is set once at creation.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `note_id` | path | **required** | integer |
+
+**Request body** (`NoteUpdate`):
+
+| Field | Type | Required |
+|---|---|---|
+| `body` | string | required |
+
+**Responses:** `200` → `NoteOut`. `404` → `detail: "note not found"` (missing, or belongs to
+another athlete).
+
+### `DELETE /notes/{note_id}`
+
+Deletes one note.
+
+| Param | In | Required | Type |
+|---|---|---|---|
+| `note_id` | path | **required** | integer |
+
+**Responses:** `200` (no response body of interest). `404` → `detail: "note not found"`.
 
 ---
 
@@ -1707,6 +1808,20 @@ sodium_mg}` respectively.
 | `value_num`, `value_text` | number/string, nullable | |
 | `unit` | string, nullable | |
 | `source` | string | Adapter this observation came from. |
+
+### BloodTestResultOut
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | integer | |
+| `local_date` | string (date) | The draw date. |
+| `marker` | string | e.g. `"LDL Cholesterol"` — the athlete's own label. |
+| `value_num` | number | |
+| `unit` | string, nullable | |
+| `reference_low`, `reference_high` | number, nullable | The athlete's own lab-reported range; informational only. |
+| `lab_name` | string, nullable | |
+| `notes` | string, nullable | |
+| `created_at`, `updated_at` | string (date-time) | |
 
 ### HealthDashboardOut / HealthDashboardMetricOut / HealthDashboardDayOut
 

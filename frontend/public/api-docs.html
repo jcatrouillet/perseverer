@@ -451,7 +451,7 @@
 
     <section class="doc-section" id="overview">
       <h2>Overview</h2>
-      <p>The API is organized around twelve resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Performance</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Planned Workouts</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
+      <p>The API is organized around thirteen resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Blood Tests</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Performance</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Planned Workouts</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
       <p>There is exactly one athlete per deployment credential — every endpoint is implicitly scoped to the athlete resolved from your auth credential, so there is never an <code>athlete_id</code> parameter to pass yourself.</p>
       <div class="callout"><strong>Base URL is deployment-specific.</strong> This API has no public multi-tenant host — you run it yourself (Docker/Podman), and the origin depends on how you've exposed it (a reverse-proxy hostname, a local port, a Tailscale address). Substitute your own origin for <code>https://your-perseverer-host</code> in every example on this page.</div>
     </section>
@@ -578,6 +578,7 @@ const EX = {
   ACT2: "01HZXK5M2R7Y8ZQF3N9C1WGTBH",
   LINK: 2,
   GOAL: 14,
+  NOTE: 5,
   PLANNED_DATE: "2026-09-01",
   PLANNED_WORKOUT_ID: 42,
   PLANNED_RACE_ID: 7,
@@ -864,6 +865,19 @@ const SCHEMAS = [
       ["source","string","Adapter this observation came from."],
     ] },
   { name: "Page&lt;HealthObservationOut&gt;", fields: page("HealthObservationOut") },
+  { name: "BloodTestResultOut", note: "Returned by GET/POST/PUT /blood-tests and POST /blood-tests/batch.", fields: [
+      ["id","integer",""],
+      ["local_date","string(date)","The draw date."],
+      ["marker","string","e.g. \"LDL Cholesterol\" -- the athlete's own label."],
+      ["value_num","number",""],
+      ["unit","string|null",""],
+      ["reference_low","number|null","The athlete's own lab-reported range; informational only."],
+      ["reference_high","number|null","The athlete's own lab-reported range; informational only."],
+      ["lab_name","string|null",""],
+      ["notes","string|null",""],
+      ["created_at","string(date-time)",""],
+      ["updated_at","string(date-time)",""],
+    ] },
   { name: "HealthDashboardOut", note: "Returned by GET /health/dashboard.", fields: [ ["metrics","array<HealthDashboardMetricOut>","One entry per curated logical metric (steps, resting_hr, weight_kg, sleep_score, …)."] ] },
   { name: "HealthDashboardMetricOut", fields: [
       ["logical_metric","string","The curated, source-independent name — e.g. steps, resting_hr_bpm, weight_kg."],
@@ -1553,6 +1567,76 @@ const GROUPS = [
     },
   ]},
 
+  { id: "blood-tests", title: "Blood Tests", endpoints: [
+    { method: "GET", path: "/api/v1/blood-tests", summary: "Athlete-entered blood test results in a date range.",
+      description: "One row per marker per draw, several rows sharing one local_date forming one logical panel. Ordered by local_date descending then marker.",
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      responses: [ { code: 200, ref: "array&lt;BloodTestResultOut&gt;" } ],
+      example: { qs: "?start_date=2026-01-01&end_date=2026-12-31" }
+    },
+    { method: "GET", path: "/api/v1/blood-tests/{result_id}", summary: "One blood test result by id.",
+      params: [ ["result_id","path","req","integer","—",""] ],
+      responses: [ { code: 200, ref: "BloodTestResultOut" }, { code: 404, note: "not found, or belongs to another athlete" } ],
+      example: {}
+    },
+    { method: "POST", path: "/api/v1/blood-tests", summary: "Creates one marker result.",
+      description: "For adding a single marker to an existing draw, or scripts that don't need the batch shape -- see POST /blood-tests/batch below for entering a whole panel at once.",
+      body: { schema: "BloodTestResultIn", fields: [
+        ["local_date","string","req","","ISO date -- the draw date."],
+        ["marker","string","req","","e.g. \"LDL Cholesterol\" -- freeform, not a fixed catalog. Non-blank."],
+        ["value_num","number","req","",""],
+        ["unit","string|null","opt","","e.g. \"mg/dL\"."],
+        ["reference_low","number|null","opt","","The athlete's own lab-reported range; either or both may be omitted."],
+        ["reference_high","number|null","opt","","Must not be below reference_low when both are given."],
+        ["lab_name","string|null","opt","",""],
+        ["notes","string|null","opt","",""],
+      ]},
+      responses: [ { code: 200, ref: "BloodTestResultOut" }, { code: 422, note: "blank marker, or reference_low above reference_high" } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/blood-tests \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"local_date": "2026-06-01", "marker": "LDL Cholesterol", "value_num": 110, "unit": "mg/dL", "reference_high": 130}'` }
+    },
+    { method: "POST", path: "/api/v1/blood-tests/batch", summary: "Creates a whole panel at once: one draw date, any number of markers.",
+      description: "The primary write path for entering a blood test -- a real panel typically has many markers drawn the same day.",
+      body: { schema: "BloodTestBatchIn", fields: [
+        ["local_date","string","req","","ISO date."],
+        ["lab_name","string|null","opt","","Shared across every marker in this call."],
+        ["notes","string|null","opt","","Shared across every marker in this call."],
+        ["results","array&lt;object&gt;","req","","At least one. Each entry: marker, value_num, unit, reference_low, reference_high -- same shape/validation as the single-result fields above, minus local_date/lab_name/notes."],
+      ]},
+      responses: [ { code: 200, ref: "array&lt;BloodTestResultOut&gt;", note: "one per created marker, in the order submitted" }, { code: 422, note: "empty results list, or an invalid marker" } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/blood-tests/batch \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"local_date": "2026-06-01", "lab_name": "LabCorp", "results": [{"marker": "Total Cholesterol", "value_num": 180, "unit": "mg/dL"}, {"marker": "HbA1c", "value_num": 5.4, "unit": "%", "reference_low": 4.0, "reference_high": 5.6}]}'` }
+    },
+    { method: "PUT", path: "/api/v1/blood-tests/{result_id}", summary: "Full replacement of one marker result.",
+      description: "Same request body as POST /blood-tests.",
+      params: [ ["result_id","path","req","integer","—",""] ],
+      body: { schema: "BloodTestResultIn", fields: [
+        ["local_date","string","req","","ISO date."],
+        ["marker","string","req","","Non-blank."],
+        ["value_num","number","req","",""],
+        ["unit","string|null","opt","",""],
+        ["reference_low","number|null","opt","",""],
+        ["reference_high","number|null","opt","","Must not be below reference_low when both are given."],
+        ["lab_name","string|null","opt","",""],
+        ["notes","string|null","opt","",""],
+      ]},
+      responses: [ { code: 200, ref: "BloodTestResultOut" }, { code: 404, note: "not found" } ],
+      example: {}
+    },
+    { method: "DELETE", path: "/api/v1/blood-tests/{result_id}", summary: "Deletes one marker result.",
+      params: [ ["result_id","path","req","integer","—",""] ],
+      responses: [ { code: 200, note: "" }, { code: 404, note: "not found" } ],
+      example: {}
+    },
+    { method: "DELETE", path: "/api/v1/blood-tests/by-date/{local_date}", summary: "Deletes every marker recorded on one date -- the whole panel at once.",
+      params: [ ["local_date","path","req","string(date)","—",""] ],
+      responses: [ { code: 200, note: "" }, { code: 404, note: "nothing recorded that date" } ],
+      example: {}
+    },
+  ]},
+
   { id: "sleep", title: "Sleep", endpoints: [
     { method: "GET", path: "/api/v1/sleep", summary: "Sleep sessions in a date range.",
       description: "Each session includes its stage breakdown (light/deep/rem/awake) when the source device reported one.",
@@ -1664,6 +1748,27 @@ const GROUPS = [
       ],
       responses: [ { code: 200, ref: "array&lt;NoteOut&gt;" } ],
       example: { qs: `?entity_type=activity&entity_id=${EX.ACT}` }
+    },
+    { method: "PUT", path: "/api/v1/notes/{note_id}", summary: "Edit a note's text.",
+      description: "Only body is editable -- entity_type/entity_id never move (delete and re-create elsewhere if that's really what's meant), and author is set once at creation and otherwise left alone.",
+      params: [ ["note_id","path","req","integer","—",""] ],
+      body: { schema: "NoteUpdate", fields: [
+        ["body","string","req","",""],
+      ]},
+      responses: [
+        { code: 200, ref: "NoteOut" },
+        { code: 404, note: 'detail: "note not found" — missing, or belongs to another athlete.' },
+      ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/notes/${EX.NOTE} \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"body": "Felt strong on the last 2k, negative split -- legs still sore two days later."}'` }
+    },
+    { method: "DELETE", path: "/api/v1/notes/{note_id}", summary: "Delete a note.",
+      description: "",
+      params: [ ["note_id","path","req","integer","—",""] ],
+      responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "note not found"' } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/notes/${EX.NOTE} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
     },
   ]},
 

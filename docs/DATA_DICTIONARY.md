@@ -1229,3 +1229,88 @@ step model to push to Garmin, it's just an event to look forward to and pace a g
   default; description is `"{distance} km"` plus `" · target {clock}"` when set) and the weekly
   summary email's "Races this week" section (`email_reports.py`, target/predicted comparison
   included) — never the monthly email, which is stats-only.
+
+## Blood test results (blood_tests.py)
+
+Athlete-entered lab results — one row per marker per draw, several rows sharing one `local_date`
+forming one logical panel (a full lipid panel drawn the same day, say). Deliberately a plain CRUD
+table, not the `health_observation` EAV pipeline every vendor adapter feeds into: that machinery
+exists specifically to catalog *auto-discovered* fields from a raw vendor payload
+(`metric_definition`'s own "never drop an unknown field" contract), but a blood panel is typed in
+by the athlete directly — there's no raw byte stream to archive and no unknown-field problem to
+solve, only a marker name and a value the athlete is entering themselves.
+
+- **`blood_test_result`** — `athlete_id`, `local_date` (the draw date), `marker` (e.g. `"LDL
+  Cholesterol"` — the athlete's own freeform label, not a fixed catalog this project maintains),
+  `value_num`, `unit` (nullable, e.g. `"mg/dL"`), `reference_low`/`reference_high` (nullable,
+  either or both — the athlete's own lab-reported range, copied from their report), `lab_name`
+  (nullable), `notes` (nullable).
+- **Reference ranges are informational only, never a clinical claim**: this project deliberately
+  does *not* maintain a "normal range" catalog (unlike, say, `pace_bands.py`'s own fixed pace
+  bands) — ranges genuinely vary by lab, assay, sex, and age, and asserting a canonical one here
+  would overstate what a personal data archive should claim. The one thing this app does with a
+  stored range is flag a value that falls outside the athlete's *own* stated range (a simple
+  `value < reference_low OR value > reference_high` check, `BloodTestsPanel.tsx`), never assess
+  or diagnose.
+- **Routes** (`api/routers/blood_tests.py`): `GET /blood-tests?start_date=&end_date=` (range,
+  ordered by `local_date` descending then `marker`), `GET/PUT/DELETE /blood-tests/{result_id}`
+  (single marker), `POST /blood-tests` (single marker — for adding one more to an existing draw),
+  `POST /blood-tests/batch` (the primary write path: one draw date, any number of markers, in one
+  call, sharing one `lab_name`/`notes`), `DELETE /blood-tests/by-date/{local_date}` (the whole
+  panel at once, rather than the athlete removing each of a panel's markers one by one).
+- **Frontend** (`BloodTestsPanel.tsx`, Health page): a plain sibling section rendered below the
+  metric-explorer trend charts, not woven into `MetricExplorer`'s own list+`TrendControls` shape
+  — a blood panel is an event carrying many named markers, not a single continuous metric to
+  chart over time. Panels grouped by draw date into collapsible `<details>` (most recent open by
+  default), each a table of marker/value/unit/reference-range with the out-of-range flag above;
+  per-row inline Edit (the same reveal-in-place editing `NotesPanel.tsx` already established) and
+  Delete; a collapsed-by-default "+ Add blood test" form (same reveal-on-click convention
+  `NotesPanel.tsx` established for its own new-note textarea) with dynamic marker rows
+  (add/remove) since a real panel typically has many markers entered at once, submitted via the
+  batch route in one call.
+- **A real bug this surfaced**: `formatDate` initially called `toLocaleDateString` on a
+  UTC-midnight `Date` (from `parseIsoDate`) with no `timeZone: "UTC"` option, which silently
+  rolls the *displayed* date back one day for any athlete west of UTC — confirmed live (entering
+  `"2026-09-13"` rendered back as `"Sep 12, 2026"`) and fixed the same way `RunningStats.tsx`'s
+  own `formatShortDate` already had to for the identical parse-then-format shape. Pinned down
+  with a regression test asserting the exact formatted string rather than just that *some* date
+  renders — this repo's own test environment defaults to `America/Los_Angeles`, so the test
+  genuinely exercises the bug rather than passing by accident of the runner's own timezone.
+
+## Running Eddington number, per year (eddington.ts)
+
+The largest integer E such that the athlete completed at least E runs of at least E km each in a
+given calendar year — a classic cycling-logging statistic (VeloViewer and others use it for
+rides), applied here to running. A new Insights tab (`EddingtonChart.tsx`), not a new backend
+endpoint or table: computed entirely client-side over the same full running-history fetch
+(`useAllActivities({ sport: "running" })`) this page's own Pace trends tab already performs — the
+same "fetch once, aggregate in the browser" precedent `runningStats.ts`'s own
+`bestVdot`/`personalRecords`/streak logic already established, extended to a statistic that page
+didn't have yet.
+
+- **The algorithm** (`eddington.ts::computeEddingtonNumber`) is mathematically identical to the
+  h-index: sort a year's distances (km) descending, and E is the largest N whose Nth-largest
+  value (1-indexed) is itself `>= N`. Raw `distance_m`, not GAP-adjusted — Eddington number is
+  traditionally a real-distance-covered statistic, not an effort-adjusted one. Exact
+  `sport === "running"` via the same API filter `useAllActivities` already applies for this page's
+  other tabs, matching this app's own established precedent (`RunningStats.tsx`, `CLAUDE.md`'s
+  own note on the Running section above) of exact-sport matching over `sport_family()` for
+  running-specific stats — trail_running/track_running are real, deliberate exclusions, not an
+  oversight.
+- **Progress to next** (`runsTowardNext`/`runsNeededForNext`): how many of a year's runs already
+  meet the *next* Eddington number's own distance threshold, and how many more such runs are
+  needed to actually reach it. A mathematical invariant of the h-index algorithm guarantees
+  `runsTowardNext` can never reach the next threshold on its own — if it did, that threshold would
+  already *be* the current Eddington number, not the next one — so `runsNeededForNext` is always
+  `>= 1`, never zero, regardless of how much distance the athlete has already banked at the
+  current level.
+- **The current-year bar chart** (`eddington.ts::computeEddingtonBars`,
+  `EddingtonBarChart.tsx`) — the classic VeloViewer-style visualization: one bar per integer km
+  from 1 to the current year's longest run (rounded up), height = how many of that year's runs
+  reached at least that far. A non-increasing step function by construction (every run counted at
+  km also counts at every smaller km), rendered as a Recharts `ComposedChart` — a `<Bar>` colored
+  green per-bar while `count >= km` (`km <= that year's Eddington number`) and red once it falls
+  short, plus a dotted `<Line>` tracing `y = x` (Recharts' `<ReferenceLine>` only draws
+  horizontal/vertical lines, not a diagonal) — the bar curve's crossing point with that diagonal
+  is the Eddington number itself, made visible rather than only tabulated. Only the current
+  calendar year gets this chart; every year still gets its own row in the table above.

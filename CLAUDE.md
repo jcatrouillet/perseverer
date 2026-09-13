@@ -198,6 +198,64 @@ because you don't recognize it — stop, that's the bug.
   tone everywhere else in the app (that's metricStyle.ts's whole point, one hue per metric), but
   reusing it for both lines on this one *combined* chart made them indistinguishable, so Resting
   gets `toneColor("pace")` instead, scoped to just this chart.
+- **Blood test results (`blood_test_result`, `blood_tests.py` API schemas/router,
+  `BloodTestsPanel.tsx`)**: athlete-entered lab results, one row per marker per draw, several
+  rows sharing one `local_date` forming one logical panel (a lipid panel drawn the same day, say).
+  Deliberately a plain CRUD table, not the `health_observation` EAV pipeline every vendor adapter
+  feeds — that machinery exists specifically to catalog *auto-discovered* fields from a raw
+  vendor payload (`metric_definition`'s own "never drop an unknown field" contract), but a blood
+  panel is typed in by the athlete directly, with no raw byte stream to archive and no
+  unknown-field problem to solve. Reference ranges (`reference_low`/`reference_high`) are the
+  athlete's own, copied from their lab report — nullable, and deliberately never a hardcoded
+  "normal range" catalog this project asserts, since ranges genuinely vary by lab, assay, sex, and
+  age; the one thing this app does with them is flag a value outside the athlete's *own* stated
+  range, never claim clinical validity. `POST /blood-tests/batch` is the primary write path (one
+  draw date, any number of markers, in one call, sharing one `lab_name`/`notes`); single-marker
+  `POST`/`PUT`/`DELETE` routes exist for adding one more marker afterward or correcting a value;
+  `DELETE /blood-tests/by-date/{local_date}` removes a whole panel at once rather than the athlete
+  deleting each of a panel's markers one by one. Frontend: `BloodTestsPanel.tsx` on the Health
+  page (a plain sibling section below the metric-explorer trend charts, not woven into
+  `MetricExplorer`'s own list+`TrendControls` shape, since a blood panel is an event with many
+  named markers, not a single continuous metric to chart over time) — panels grouped by draw date
+  into collapsible `<details>` (most recent open by default), each a table of marker/value/
+  unit/reference-range with an out-of-range flag computed against the athlete's own stored range,
+  per-row inline Edit (mirroring `NotesPanel.tsx`'s own reveal-in-place editing) and Delete, plus
+  a collapsed-by-default "+ Add blood test" form (same reveal-on-click convention `NotesPanel.tsx`
+  established) with dynamic marker rows (add/remove) since a real panel typically has many markers
+  entered at once. A real bug this surfaced: `formatDate` initially called `toLocaleDateString`
+  on a UTC-midnight `Date` (from `parseIsoDate`) with no `timeZone: "UTC"` option, which silently
+  rolls the displayed date back a day for any athlete west of UTC — confirmed live (entering
+  "2026-09-13" rendered back as "Sep 12, 2026") and fixed the same way `RunningStats.tsx`'s own
+  `formatShortDate` already had to for the identical parse-then-format shape; pinned down with a
+  regression test asserting the exact formatted string (this repo's own test environment defaults
+  to `America/Los_Angeles`, so the test genuinely exercises the bug, not just *a* rendered date).
+- **Running Eddington number, per year (`eddington.ts`, `EddingtonChart.tsx`, an Insights tab)**:
+  the largest integer E such that the athlete completed at least E runs of at least E km each in
+  a given calendar year — a classic cycling-logging statistic (VeloViewer and others use it for
+  rides) applied here to running, mathematically identical to the h-index (sort distances
+  descending; E is the largest N whose Nth-largest value, 1-indexed, is itself >= N). Computed
+  entirely client-side over the same full running-history fetch
+  (`useAllActivities({ sport: "running" })`) this page's own Pace trends tab already performs —
+  no new backend endpoint, the same "fetch once, aggregate in the browser" precedent
+  `runningStats.ts`'s own `bestVdot`/`personalRecords`/streak logic already established. Raw
+  `distance_m`, not GAP-adjusted (Eddington number is traditionally a real-distance-covered
+  statistic, not an effort-adjusted one); exact `sport === "running"` via the same API filter
+  `useAllActivities` already applies, matching this app's own established precedent of exact-sport
+  matching over `sport_family()` for running-specific stats. Each year also gets a "progress to
+  next" figure (`runsTowardNext`/`runsNeededForNext`) — how many of that year's runs already meet
+  the *next* Eddington number's own distance threshold, and how many more such runs are needed;
+  a mathematical invariant of the h-index algorithm guarantees `runsTowardNext` never reaches the
+  next threshold on its own (otherwise that would already be the current Eddington number), so
+  `runsNeededForNext` is always >= 1. The current calendar year additionally gets the classic
+  VeloViewer-style bar chart (`computeEddingtonBars`, `EddingtonBarChart.tsx`): one bar per
+  integer km from 1 to the longest run that year (rounded up), height = how many of that year's
+  runs reached at least that far — a non-increasing step function by construction, since every
+  run counted at km also counts at every smaller km. Green while the bar still clears its own
+  threshold (`count >= km`, i.e. `km <= that year's Eddington number`), red once it falls short,
+  with a dotted y=x reference line overlaid — the visual crossing point is the Eddington number
+  itself. A Recharts `ComposedChart` (`<Bar>` with per-row `<Cell>` coloring, same pattern
+  `TrainingBandsChart.tsx`'s own aggregate chart already uses, plus a dashed `<Line>` for the
+  diagonal — `<ReferenceLine>` only supports horizontal/vertical lines, not y=x).
 - **Insights: independently-computed race predictions + threshold/max-HR**:
   `performance_daily_rollup` (`performance_rollup.py::refresh_performance_rollup`) is a second,
   separate rollup alongside `fitness_daily_rollup` — same full-history-recompute-on-every-ingest
