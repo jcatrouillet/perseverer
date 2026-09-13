@@ -272,31 +272,34 @@ under single-origin routing too — its whole reason for existing was the api/fr
 mismatch, and an unset value already falls back to the incoming request's own base URL, which is
 now correct either way.
 
-**Migrating bercy's own DSM reverse proxy to single-origin** (a manual step on the Synology NAS,
-not something a code change can do):
+**Migrated (confirmed live)** — bercy runs single-origin routing as of this writing. What that
+migration was, for reference (a manual Synology NAS step, not something a code change can do):
 1. Deploy the new frontend image (it needs no other changes than the `nginx.conf` update above).
 2. Set `PERSEVERER_API_BASE_URL=https://perseverer.catrouillet.net` (the frontend's own existing
    origin, not `:444`) in `~/.config/containers/systemd/perseverer.env` on bercy, then
    `systemctl --user restart perseverer-frontend` to regenerate `config.js`.
-3. Confirm the app still works end to end (calendar loads, an activity opens, `/share/{token}`
-   links still resolve) while the old `:444`/`:81` DSM rule is still in place — the new
-   same-origin path works alongside the old dedicated port with no conflict, so this step is
-   safe to verify before removing anything.
-4. Once confirmed, delete the `api` rule in DSM's Reverse Proxy (Control Panel → Login Portal →
-   Advanced, or Application Portal depending on DSM version) and drop `81,444` from the UniFi
-   port-forward rule below — only `80,443` are needed from here on.
+3. Confirm the app works end to end (calendar loads, an activity opens, `/share/{token}` links
+   still resolve) while the old `:444`/`:81` DSM rule is still in place — the new same-origin
+   path works alongside the old dedicated port with no conflict, so this step is safe to verify
+   before removing anything.
+4. Delete the `api` rule in DSM's Reverse Proxy (Control Panel → Login Portal → Advanced, or
+   Application Portal depending on DSM version) and drop `81,444` from the UniFi port-forward
+   rule below.
 
 ### The actual reverse-proxy configuration (confirmed live, not guessed)
 
 DSM's Reverse Proxy (Control Panel → Login Portal → Advanced, or Application Portal depending on
 DSM version) runs on `nas.catrouillet.net` (`192.168.1.98`), aliased as `perseverer.catrouillet.net`.
-As of this writing, still two rules, both HTTPS source → plain HTTP destination (bercy never
-terminates TLS itself) — see "Single-origin routing" above for collapsing this to just the first:
+One rule now (the `api` rule above was removed once single-origin routing was verified working),
+HTTPS source → plain HTTP destination (bercy never terminates TLS itself):
 
 | Rule | Source | Destination |
 |---|---|---|
-| frontend | `https://perseverer.catrouillet.net:443` (+ `:80`) | `http://bercy.catrouillet.net:8080` |
-| api | `https://perseverer.catrouillet.net:444` (+ `:81`) | `http://bercy.catrouillet.net:8000` |
+| frontend (+ api, via `docker/nginx.conf`'s `/api/`/`/mcp` proxy) | `https://perseverer.catrouillet.net:443` (+ `:80`) | `http://bercy.catrouillet.net:8080` |
+
+Verified live: `https://perseverer.catrouillet.net/api/v1/healthz` and `https://perseverer.
+catrouillet.net:444/api/v1/healthz` — the former returns `{"status":"ok"}`, the latter now
+fails to connect at all (the DSM rule and its cert binding are gone).
 
 **Gotcha that cost real debugging time:** each HTTPS reverse-proxy rule needs its own explicit
 certificate assignment in **Control Panel → Security → Certificate → Settings** (a separate tab
@@ -306,12 +309,11 @@ network-level timeout/routing failure from the client side. If a new reverse-pro
 from outside the LAN with the port-forwarding and firewall both already confirmed fine, check
 this first.
 
-**Router (UniFi):** a single port-forward rule, WAN ports `80,443,81,444` (TCP) → `192.168.1.98`
-(the reverse-proxy device — not bercy directly; drop `81,444` once the single-origin migration
-above removes the `api` DSM rule). The WAN IP Address field showing a private (`192.168.0.x`)
-address with a warning icon looked like a second NAT layer needing its own separate forwarding
-rule, but isn't in this case — confirmed live that all fiber traffic already reaches this
-gateway directly.
+**Router (UniFi):** a single port-forward rule, WAN ports `80,443` (TCP) → `192.168.1.98` (the
+reverse-proxy device — not bercy directly). `81,444` were dropped once the api DSM rule was
+removed. The WAN IP Address field showing a private (`192.168.0.x`) address with a warning icon
+looked like a second NAT layer needing its own separate forwarding rule, but isn't in this case
+— confirmed live that all fiber traffic already reaches this gateway directly.
 
 **Split-horizon DNS** (the actual fix for "works on my phone, not on my LAN"): a UniFi Local DNS
 Record (Settings → Networks → Advanced → Local DNS Record) maps `perseverer.catrouillet.net` →
