@@ -13,6 +13,14 @@ import { MonthView } from "./pages/calendar/MonthView";
 // chunk regardless -- lazy-wrapping it would only add a pointless Suspense flash with zero
 // bundle-size benefit (confirmed via vite's own "ineffective dynamic import" build warning).
 import { HealthPage } from "./pages/HealthPage";
+// Also statically imported: this is what the default "/" route (CurrentWeek() below) renders, so
+// lazy-wrapping it would mean a loading-spinner flash on literally every login/app-open -- unlike
+// the routes below, it genuinely IS needed for the default route's first paint. Pulls its own
+// dependencies (ActivityCard, WeekRunningStats, WeekWellnessCharts, etc.) into the main chunk too
+// -- confirmed via a real build this brings it to ~520kB, still well inside the ~2MB headroom the
+// lazy-loading pass below bought back under vite-plugin-pwa's precache limit, not a razor's edge
+// like the PlannedRaceForm/main-bundle situation that pass was originally fixing.
+import { WeekView } from "./pages/calendar/WeekView";
 
 // Lazily loaded: not needed for the default "/" route's first paint, and some (Map, Insights,
 // Exercises) pull in heavy dependencies (maplibre-gl, recharts) that would otherwise bloat the
@@ -26,9 +34,6 @@ const ActivityListPage = lazy(() =>
 );
 const AllTimeView = lazy(() =>
   import("./pages/calendar/AllTimeView").then((m) => ({ default: m.AllTimeView })),
-);
-const WeekView = lazy(() =>
-  import("./pages/calendar/WeekView").then((m) => ({ default: m.WeekView })),
 );
 const YearView = lazy(() =>
   import("./pages/calendar/YearView").then((m) => ({ default: m.YearView })),
@@ -52,9 +57,11 @@ const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
 
-function Today() {
-  const today = new Date();
-  return <MonthView year={today.getFullYear()} month={today.getMonth() + 1} />;
+// The default "/" landing route -- the current week, not the current month: a week is the
+// granularity an athlete actually plans and reviews training at day-to-day, and it's what most
+// benefits from being one click away on login rather than requiring a nav click every time.
+function CurrentWeek() {
+  return <WeekView date={isoDate(new Date())} />;
 }
 
 function NavLink({
@@ -142,7 +149,7 @@ export function App() {
             <Route path="/calendar/:year">
               {(params) => <YearView year={Number(params.year)} />}
             </Route>
-            <Route path="/" component={Today} />
+            <Route path="/" component={CurrentWeek} />
             <Route>
               <p>Not found.</p>
             </Route>
