@@ -114,6 +114,17 @@ export function hrZoneRangeLabel(zone: HrZone): string {
  * anything wider is a recording gap, not normal sampling) excludes any interval that wide
  * entirely, rather than attributing even a capped few seconds of it to what's almost certainly
  * the wrong zone.
+ *
+ * `_MAX_SAMPLE_GAP_S`'s own "real device data is close to 1 Hz" assumption is a contract on the
+ * *caller*, not just this function -- a confirmed real bug: `ActivityDetailPage.tsx` originally
+ * passed this the "medium" tier stream (1000 points, shared with the multi-panel charts above),
+ * whose bucket width exceeds 10s for any activity past ~2.8 hours. Every interval then read as
+ * "a recording gap" and got excluded, leaving only a stray downsampling-jitter interval or two to
+ * render as a nonsensical "100% in Z1, 0m" result (reported live against a real 3h19m run: 997 of
+ * 998 intervals excluded, the one survivor 7s long, entirely in Z1). Fixed by pointing the caller
+ * at the "high" tier stream (20000 points, already fetched there for the route map/splits) --
+ * true per-second data for anything short of a multi-day activity, so this function's own gap
+ * filter works as designed rather than mistaking downsampling for a device gap.
  */
 const _MAX_SAMPLE_GAP_S = 10;
 

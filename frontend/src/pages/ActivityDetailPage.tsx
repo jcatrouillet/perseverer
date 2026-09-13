@@ -188,7 +188,16 @@ export function ActivityDetailPage({ id }: { id: string }) {
           hrZoneConfig.data.zone4_high_bpm,
         ]
       : null;
-  const heartRateStream = stream.data?.series.heart_rate ?? null;
+  // The high-tier stream, not the "medium" one `stream` above uses for the multi-panel charts:
+  // computeHrZonesFromStream's own gap-exclusion threshold (_MAX_SAMPLE_GAP_S = 10s) assumes
+  // near-1Hz raw samples, but "medium" is only 1000 points -- for any activity over ~2.8 hours
+  // that means an average bucket width past 10s, so *every* interval reads as "a recording gap"
+  // and gets excluded, leaving only a stray downsampling-jitter interval or two to render as a
+  // nonsensical "100% in Z1, 0m" result. Confirmed live against a real 3h19m run (medium tier:
+  // ~12s/point, all but one interval excluded; the one survivor was 7s, entirely in Z1). "high"
+  // (20000 points, already fetched above for the route map/splits) keeps bucket width under 10s
+  // for anything short of a multi-day activity, so the real gap filter works as intended.
+  const heartRateStream = routeStream.data?.series.heart_rate ?? null;
   const hasComputableStreamZones =
     configuredZoneBoundaries != null &&
     heartRateStream != null &&
@@ -404,9 +413,9 @@ export function ActivityDetailPage({ id }: { id: string }) {
           <TimeInZoneChart
             metrics={a.metrics}
             heartRateStream={heartRateStream}
-            timestamps={stream.data?.timestamps}
+            timestamps={routeStream.data?.timestamps}
             configuredZoneBoundaries={configuredZoneBoundaries}
-            speedMpsStream={stream.data?.series.speed_mps}
+            speedMpsStream={routeStream.data?.series.speed_mps}
           />
         </section>
       )}
