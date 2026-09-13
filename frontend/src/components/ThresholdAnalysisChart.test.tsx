@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PerformanceDailyRollupOut } from "../api/types";
@@ -54,14 +54,13 @@ describe("ThresholdAnalysisChart", () => {
     render(<ThresholdAnalysisChart />);
 
     const list = screen.getByRole("navigation", { name: "Metrics" });
-    expect(list).toHaveTextContent("Anaerobic threshold pace");
-    expect(list).not.toHaveTextContent("Aerobic threshold pace");
-    expect(list).not.toHaveTextContent("Anaerobic threshold & max HR");
+    expect(list).toHaveTextContent("Threshold pace");
+    expect(list).not.toHaveTextContent("Threshold & max HR");
 
-    expect(screen.getByRole("heading", { name: "Anaerobic threshold pace" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Threshold pace" })).toBeInTheDocument();
   });
 
-  it("shows the aerobic threshold pace as its own metric, independent of the anaerobic one", () => {
+  it("plots both anaerobic and aerobic threshold pace on the same combined chart", () => {
     mockUsePerformance.mockReturnValue({
       ...EMPTY,
       data: [
@@ -73,18 +72,16 @@ describe("ThresholdAnalysisChart", () => {
     });
     render(<ThresholdAnalysisChart />);
 
+    // One metric in the list (not two), and both series' own legend labels render on that one
+    // chart.
     const list = screen.getByRole("navigation", { name: "Metrics" });
-    expect(list).toHaveTextContent("Anaerobic threshold pace");
-    expect(list).toHaveTextContent("Aerobic threshold pace");
-
-    fireEvent.click(screen.getByRole("button", { name: "Aerobic threshold pace" }));
-    expect(screen.getByRole("heading", { name: "Aerobic threshold pace" })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Anaerobic threshold pace" }),
-    ).not.toBeInTheDocument();
+    expect(list).toHaveTextContent("Threshold pace");
+    expect(screen.getByRole("heading", { name: "Threshold pace" })).toBeInTheDocument();
+    expect(screen.getByText("Anaerobic threshold pace")).toBeInTheDocument();
+    expect(screen.getByText("Aerobic threshold pace")).toBeInTheDocument();
   });
 
-  it("shows anaerobic and aerobic threshold & max HR as two independent combined metrics", () => {
+  it("combines max HR, anaerobic threshold HR, and aerobic threshold HR on one chart", () => {
     mockUsePerformance.mockReturnValue({
       ...EMPTY,
       data: [
@@ -100,13 +97,13 @@ describe("ThresholdAnalysisChart", () => {
     render(<ThresholdAnalysisChart />);
 
     const list = screen.getByRole("navigation", { name: "Metrics" });
-    expect(list).toHaveTextContent("Anaerobic threshold & max HR");
-    expect(list).toHaveTextContent("Aerobic threshold & max HR");
+    expect(list).toHaveTextContent("Threshold & max HR");
     expect(list).not.toHaveTextContent("Threshold pace");
 
-    fireEvent.click(screen.getByRole("button", { name: "Aerobic threshold & max HR" }));
-    expect(
-      screen.getByRole("heading", { name: "Aerobic threshold & max HR" }),
-    ).toBeInTheDocument();
+    // The only available metric, so it's already selected -- no click needed.
+    expect(screen.getByRole("heading", { name: "Threshold & max HR" })).toBeInTheDocument();
+    expect(screen.getByText("Max heart rate")).toBeInTheDocument();
+    expect(screen.getByText("Anaerobic threshold HR")).toBeInTheDocument();
+    expect(screen.getByText("Aerobic threshold HR")).toBeInTheDocument();
   });
 });

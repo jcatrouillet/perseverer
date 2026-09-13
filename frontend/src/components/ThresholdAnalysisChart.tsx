@@ -6,7 +6,11 @@
 // VO2max -- deliberately never Garmin's own daily_lactate_threshold fields. Same MetricExplorer +
 // TrendControls + trendWindow.ts wiring as FitnessPage.tsx. Renamed from ThresholdMaxHrChart.tsx
 // once the aerobic threshold and the factor-analysis panel (ThresholdFactorAnalysis.tsx, rendered
-// alongside this on the same tab) expanded this well past "threshold pace + max HR."
+// alongside this on the same tab) expanded this well past "threshold pace + max HR." Both
+// thresholds share one pace chart and one HR chart (rather than four separate ones) by explicit
+// request -- both threshold paces are seconds/km on the same scale, and all three HR series are
+// bpm on the same scale, so the shared axis is directly comparable (aerobic always below
+// anaerobic, both always below max HR) without needing TrendChart's second axis at all.
 import { useMemo, useState } from "react";
 
 import { usePerformance } from "../api/queries";
@@ -54,15 +58,15 @@ function formatPaceSPerKm(seconds: number): string {
 
 const formatBpm = (v: number) => `${v.toFixed(0)} bpm`;
 
-const ANAEROBIC_PACE_SERIES: TrendSeries[] = [
+// Both threshold paces on one chart, one shared axis (both seconds/km) -- distinct tones since
+// they'd otherwise both render in the same "pace" hue.
+const PACE_SERIES: TrendSeries[] = [
   {
     key: "threshold_pace_s_per_km",
     label: "Anaerobic threshold pace",
     color: toneColor("pace"),
     formatValue: formatPaceSPerKm,
   },
-];
-const AEROBIC_PACE_SERIES: TrendSeries[] = [
   {
     key: "aerobic_threshold_pace_s_per_km",
     label: "Aerobic threshold pace",
@@ -70,13 +74,13 @@ const AEROBIC_PACE_SERIES: TrendSeries[] = [
     formatValue: formatPaceSPerKm,
   },
 ];
-// Threshold HR and max HR share one chart (and one axis -- both are bpm) rather than threshold HR
-// pairing with threshold pace: they're the same unit and directly comparable (threshold HR is
-// necessarily below max HR), whereas pace+HR together only works via two separate axes. Distinct
-// tones needed since both would otherwise render in the same "hr" hue -- same precedent
-// HealthPage.tsx's own Max+Resting heart rate chart already established (its Resting line takes
-// toneColor("pace") for the same reason).
-const ANAEROBIC_HR_SERIES: TrendSeries[] = [
+// All three HR series share one chart (and one axis -- all bpm) rather than pairing with
+// threshold pace: they're the same unit and directly comparable (aerobic threshold HR sits below
+// anaerobic threshold HR, both sit below max HR), whereas pace+HR together only works via two
+// separate axes. Three distinct tones needed since they'd otherwise all render in the same "hr"
+// hue -- same precedent HealthPage.tsx's own Max+Resting heart rate chart already established
+// (its Resting line takes toneColor("pace") for the same reason).
+const HR_SERIES: TrendSeries[] = [
   { key: "max_hr_bpm", label: "Max heart rate", color: toneColor("hr"), formatValue: formatBpm },
   {
     key: "threshold_hr_bpm",
@@ -84,9 +88,6 @@ const ANAEROBIC_HR_SERIES: TrendSeries[] = [
     color: toneColor("pace"),
     formatValue: formatBpm,
   },
-];
-const AEROBIC_HR_SERIES: TrendSeries[] = [
-  { key: "max_hr_bpm", label: "Max heart rate", color: toneColor("hr"), formatValue: formatBpm },
   {
     key: "aerobic_threshold_hr_bpm",
     label: "Aerobic threshold HR",
@@ -104,28 +105,16 @@ interface MetricDef {
 
 const METRIC_DEFS: MetricDef[] = [
   {
-    key: "anaerobic-threshold-pace",
-    title: "Anaerobic threshold pace",
-    keys: ["threshold_pace_s_per_km"],
-    series: ANAEROBIC_PACE_SERIES,
+    key: "threshold-pace",
+    title: "Threshold pace",
+    keys: ["threshold_pace_s_per_km", "aerobic_threshold_pace_s_per_km"],
+    series: PACE_SERIES,
   },
   {
-    key: "aerobic-threshold-pace",
-    title: "Aerobic threshold pace",
-    keys: ["aerobic_threshold_pace_s_per_km"],
-    series: AEROBIC_PACE_SERIES,
-  },
-  {
-    key: "anaerobic-hr",
-    title: "Anaerobic threshold & max HR",
-    keys: ["threshold_hr_bpm", "max_hr_bpm"],
-    series: ANAEROBIC_HR_SERIES,
-  },
-  {
-    key: "aerobic-hr",
-    title: "Aerobic threshold & max HR",
-    keys: ["aerobic_threshold_hr_bpm", "max_hr_bpm"],
-    series: AEROBIC_HR_SERIES,
+    key: "threshold-hr",
+    title: "Threshold & max HR",
+    keys: ["threshold_hr_bpm", "aerobic_threshold_hr_bpm", "max_hr_bpm"],
+    series: HR_SERIES,
   },
 ];
 

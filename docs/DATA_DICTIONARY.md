@@ -590,9 +590,13 @@ one per distance, since the ~10x time-range spread between 5k and marathon would
 shorter distances to near-invisibility on one shared axis and `TrendChart` only supports two
 y-axes) and `ThresholdAnalysisChart.tsx` (renamed from `ThresholdMaxHrChart.tsx` once the aerobic
 threshold and its own factor-analysis panel expanded the tab past "threshold pace + max HR" --
-four metrics now: anaerobic/aerobic threshold pace each as their own single-line chart, and
-anaerobic/aerobic threshold HR each paired with max HR on one shared-axis chart, since both are
-bpm and directly comparable — pairing pace with HR would need two separate axes) — both reuse the
+two combined metrics: one "Threshold pace" chart with both the anaerobic and aerobic pace series
+on a shared axis (both seconds/km, directly comparable — aerobic is always the slower/larger
+value), and one "Threshold & max HR" chart with all three HR series (max, anaerobic threshold,
+aerobic threshold) on a shared axis (all bpm, aerobic < anaerobic < max by construction) — by
+explicit request, after an initial version shipped these as four separate single/paired-series
+charts; pairing pace with HR would still need two separate axes, so those stay apart) — both
+reuse the
 `MetricExplorer`/`TrendControls`/`trendWindow.ts` wiring `FitnessPage.tsx` established. A third
 tab, `Vo2maxChart.tsx`, charts `rolling_vdot` directly as VO2max; since it's the only metric on
 that tab (unlike the two above), it skips `MetricExplorer`'s list+detail shell entirely rather

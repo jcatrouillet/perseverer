@@ -326,10 +326,14 @@ because you don't recognize it — stop, that's the bug.
   qualifying count is odd, two when even and the median averages them); the fallback path instead
   identifies whichever activity (any sport) set `max_hr_bpm` within its own 365-day window, or
   notes a formula-derived max HR has no activity behind it at all. Frontend:
-  `ThresholdAnalysisChart.tsx` (renamed from `ThresholdMaxHrChart.tsx`) gained two new metrics
-  (Aerobic threshold pace; Aerobic threshold & max HR, mirroring the existing anaerobic-paired
-  chart) alongside the renamed existing two (now explicitly "Anaerobic threshold pace"/"Anaerobic
-  threshold & max HR"); `ThresholdFactorAnalysis.tsx` renders the shared VO2max-driving-workout
+  `ThresholdAnalysisChart.tsx` (renamed from `ThresholdMaxHrChart.tsx`) plots both thresholds
+  together rather than as four separate charts: one "Threshold pace" chart carries both the
+  anaerobic and aerobic pace series on a shared axis (both seconds/km, directly comparable —
+  aerobic always the slower/larger value), and one "Threshold & max HR" chart carries all three
+  HR series (max, anaerobic threshold, aerobic threshold) on a shared axis (all bpm, aerobic <
+  anaerobic < max by construction) — by explicit request, after an initial version shipped these
+  as four independent single/paired-series charts. `ThresholdFactorAnalysis.tsx` renders the
+  shared VO2max-driving-workout
   card plus both threshold-HR breakdowns (each qualifying run as its own activity-linked card, the
   median one badged, or the max-HR-driving activity when on the fallback path), on the same
   "Threshold Analysis" tab as the chart, same "chart above, breakdown below" pairing `Vo2maxChart.
