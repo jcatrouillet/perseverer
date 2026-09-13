@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 import pyarrow.parquet as pq
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Connection, func, select
+from sqlalchemy import Connection, Row, func, select
 
 from perseverer.api.dependencies import get_conn, require_api_key
 from perseverer.api.schemas.common import Page, to_utc
@@ -287,21 +287,22 @@ def _body_composition_daily(
 
 
 def _merge_logical_metric(
-    conn: Connection,
     *,
-    athlete_id: str,
     aliases: list[str],
-    start_date: date,
-    end_date: date,
+    rows_by_alias: dict[str, list[Row[Any]]],
+    last_observed_by_alias: dict[str, str],
 ) -> HealthDashboardMetricOut | None:
-    rows = conn.execute(
-        select(health_metric_daily_rollup).where(
-            health_metric_daily_rollup.c.athlete_id == athlete_id,
-            health_metric_daily_rollup.c.metric_key.in_(aliases),
-            health_metric_daily_rollup.c.local_date >= start_date.isoformat(),
-            health_metric_daily_rollup.c.local_date <= end_date.isoformat(),
-        )
-    ).fetchall()
+    """Same merge as before (first alias in priority order wins a given date), but operating on
+    rows `get_health_dashboard` already fetched in one batched query across every non-outlier-
+    filtered logical metric at once, rather than this function running its own two queries
+    (one for `daily`, one for `last_observed`) per logical metric. With ~15-25 logical metrics
+    that used to mean 30-50 small queries against a `health_metric_daily_rollup` table with
+    ~150k+ rows spanning a decade -- individually fast, but their sum dominated this endpoint's
+    real-world latency (measured: ~0.85s of the ~1s total once warm, 21s+ cold, for the full-
+    history range Fitness/Health pages request). Batching cut that to two queries total. See
+    `rows_by_alias`/`last_observed_by_alias`'s own construction in `get_health_dashboard`.
+    """
+    rows = [r for alias in aliases for r in rows_by_alias.get(alias, [])]
 
     # First alias (in priority order) with a row for that date wins -- a namespace switchover
     # (e.g. export-backfill era vs. live-sync era) never produces two rows for the same day.
@@ -323,12 +324,15 @@ def _merge_logical_metric(
             source_metric_key=r.metric_key,
         )
 
-    last_observed = conn.execute(
-        select(func.max(health_metric_daily_rollup.c.local_date)).where(
-            health_metric_daily_rollup.c.athlete_id == athlete_id,
-            health_metric_daily_rollup.c.metric_key.in_(aliases),
-        )
-    ).scalar_one_or_none()
+    # Deliberately NOT bounded by the requested date range (matches the pre-batching behavior
+    # exactly) -- freshness/staleness is a fact about the metric overall, not about whatever
+    # window happens to be on screen. `last_observed_by_alias` itself already comes from an
+    # unbounded query (see get_health_dashboard).
+    last_observed: str | None = None
+    for alias in aliases:
+        candidate = last_observed_by_alias.get(alias)
+        if candidate is not None and (last_observed is None or candidate > last_observed):
+            last_observed = candidate
 
     if not by_date and last_observed is None:
         return None
@@ -394,6 +398,49 @@ def get_health_dashboard(
     end_date: date = Query(...),
     conn: Connection = Depends(get_conn),
 ) -> HealthDashboardOut:
+    # One batched fetch (plus one for the range-independent last_observed dates, see
+    # _merge_logical_metric's own docstring) across every non-outlier-filtered logical metric's
+    # aliases at once, instead of _merge_logical_metric running two queries per logical metric
+    # itself -- 30-50 small queries collapsed to 2. _body_composition_daily's own queries
+    # (already fast: each already hits health_observation's own (athlete_id, metric_key)-leading
+    # unique-constraint index directly) are untouched.
+    non_outlier_aliases = sorted(
+        {
+            alias
+            for logical_metric, aliases in LOGICAL_METRICS.items()
+            if logical_metric not in _OUTLIER_FILTERED_METRICS
+            for alias in aliases
+        }
+    )
+    rows_by_alias: dict[str, list[Row[Any]]] = {}
+    if non_outlier_aliases:
+        for row in conn.execute(
+            select(health_metric_daily_rollup).where(
+                health_metric_daily_rollup.c.athlete_id == athlete_id,
+                health_metric_daily_rollup.c.metric_key.in_(non_outlier_aliases),
+                health_metric_daily_rollup.c.local_date >= start_date.isoformat(),
+                health_metric_daily_rollup.c.local_date <= end_date.isoformat(),
+            )
+        ).fetchall():
+            rows_by_alias.setdefault(row.metric_key, []).append(row)
+
+        last_observed_by_alias: dict[str, str] = {
+            row[0]: row[1]
+            for row in conn.execute(
+                select(
+                    health_metric_daily_rollup.c.metric_key,
+                    func.max(health_metric_daily_rollup.c.local_date),
+                )
+                .where(
+                    health_metric_daily_rollup.c.athlete_id == athlete_id,
+                    health_metric_daily_rollup.c.metric_key.in_(non_outlier_aliases),
+                )
+                .group_by(health_metric_daily_rollup.c.metric_key)
+            ).fetchall()
+        }
+    else:
+        last_observed_by_alias = {}
+
     metrics = []
     metrics_by_name: dict[str, HealthDashboardMetricOut] = {}
     for logical_metric, aliases in LOGICAL_METRICS.items():
@@ -407,11 +454,9 @@ def get_health_dashboard(
             )
         else:
             merged = _merge_logical_metric(
-                conn,
-                athlete_id=athlete_id,
                 aliases=aliases,
-                start_date=start_date,
-                end_date=end_date,
+                rows_by_alias=rows_by_alias,
+                last_observed_by_alias=last_observed_by_alias,
             )
         if merged is not None:
             merged = merged.model_copy(update={"logical_metric": logical_metric})

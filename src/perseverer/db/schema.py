@@ -816,6 +816,13 @@ sleep_stage = Table(
     Column("stage", String, nullable=False),  # light | deep | rem | awake
     Column("start_time_utc", DateTime(), nullable=False),
     Column("end_time_utc", DateTime(), nullable=False),
+    # A bare FK column isn't auto-indexed by SQLite -- GET /sleep batch-fetches every session's
+    # own stages in one `sleep_session_id IN (...)` query (api/routers/sleep.py), which without
+    # this index fell back to a full sleep_stage scan per lookup value; confirmed live as the
+    # dominant cost in a real ~7s GET /sleep call over ~1,400 nights of history (that call is now
+    # ~0.1s). Added well after the table itself, hence its own migration rather than living here
+    # from the start.
+    Index("ix_sleep_stage_session", "sleep_session_id"),
 )
 
 # --- Rollups (Phase 3): derived caches, refreshed on ingest via rollups.refresh_daily_rollup,

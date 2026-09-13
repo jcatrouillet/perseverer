@@ -61,13 +61,22 @@ def list_sleep(
             by_date[row.local_date] = row
     sessions = sorted(by_date.values(), key=lambda row: row.local_date)
 
+    # One batched fetch for every session's stages, instead of one query per session -- with
+    # ~1,400+ nights of real history that was ~1,400 individual queries against sleep_stage
+    # (itself uncovered by any index on sleep_session_id, so each one was a full scan), the
+    # dominant cost in this endpoint by far. See the new ix_sleep_stage_session index.
+    stages_by_session_id: dict[int, list[Any]] = {}
+    if sessions:
+        for stage in conn.execute(
+            select(sleep_stage)
+            .where(sleep_stage.c.sleep_session_id.in_([s.id for s in sessions]))
+            .order_by(sleep_stage.c.sleep_session_id, sleep_stage.c.start_time_utc)
+        ).fetchall():
+            stages_by_session_id.setdefault(stage.sleep_session_id, []).append(stage)
+
     out = []
     for s in sessions:
-        stages = conn.execute(
-            select(sleep_stage)
-            .where(sleep_stage.c.sleep_session_id == s.id)
-            .order_by(sleep_stage.c.start_time_utc)
-        ).fetchall()
+        stages = stages_by_session_id.get(s.id, [])
         out.append(
             SleepSessionOut(
                 local_date=s.local_date,
