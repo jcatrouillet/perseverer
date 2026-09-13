@@ -90,4 +90,54 @@ describe("NotesPanel", () => {
       entityId: "2026-09-07",
     });
   });
+
+  it("hides the new-note textarea by default, showing only a '+ Add note' button", () => {
+    render(<NotesPanel entityType="week" entityId="2026-09-07" />);
+    expect(screen.getByRole("button", { name: "+ Add note" })).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Add a note…")).not.toBeInTheDocument();
+  });
+
+  it("clicking '+ Add note' reveals the textarea, and submitting creates the note", () => {
+    render(<NotesPanel entityType="week" entityId="2026-09-07" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add note" }));
+    const textarea = screen.getByPlaceholderText("Add a note…");
+    fireEvent.change(textarea, { target: { value: "New note text" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+
+    expect(mockCreateMutate).toHaveBeenCalledWith(
+      { entity_type: "week", entity_id: "2026-09-07", body: "New note text" },
+      expect.anything(),
+    );
+  });
+
+  it("clicking Cancel while adding hides the textarea again without creating anything", () => {
+    render(<NotesPanel entityType="week" entityId="2026-09-07" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add note" }));
+    fireEvent.change(screen.getByPlaceholderText("Add a note…"), {
+      target: { value: "abandoned draft" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByPlaceholderText("Add a note…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "+ Add note" })).toBeInTheDocument();
+    expect(mockCreateMutate).not.toHaveBeenCalled();
+  });
+
+  it("supports Unicode input in the new-note textarea", () => {
+    render(<NotesPanel entityType="week" entityId="2026-09-07" />);
+    const unicodeBody = "Test emoji 🏃‍♂️ café 你好 💪";
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Add note" }));
+    const textarea = screen.getByPlaceholderText("Add a note…") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: unicodeBody } });
+    expect(textarea.value).toBe(unicodeBody);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+    expect(mockCreateMutate).toHaveBeenCalledWith(
+      { entity_type: "week", entity_id: "2026-09-07", body: unicodeBody },
+      expect.anything(),
+    );
+  });
 });

@@ -173,6 +173,35 @@ def test_delete_note_404s_for_nonexistent_note(
     assert r.status_code == 404
 
 
+def test_note_body_round_trips_unicode_exactly(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    # Emoji (including a ZWJ sequence + variation selector), an accented Latin letter, and CJK --
+    # a real point of confusion once, when a Windows terminal's own cp1252 display of a raw curl
+    # response looked like mojibake; the actual stored/returned bytes were correct the whole
+    # time (verified by inspecting codepoints directly, bypassing any terminal). This test pins
+    # that down permanently rather than relying on eyeballing a terminal again.
+    body_text = "Test emoji 🏃‍♂️ café 你好 💪"
+    created = client.post(
+        "/api/v1/notes",
+        json={"entity_type": "day", "entity_id": "2025-06-01", "body": body_text},
+        headers=auth_headers,
+    ).json()
+    assert created["body"] == body_text
+
+    listed = client.get(
+        "/api/v1/notes?entity_type=day&entity_id=2025-06-01", headers=auth_headers
+    ).json()
+    assert listed[0]["body"] == body_text
+
+    updated = client.put(
+        f"/api/v1/notes/{created['id']}",
+        json={"body": body_text + " edited"},
+        headers=auth_headers,
+    ).json()
+    assert updated["body"] == body_text + " edited"
+
+
 def test_notes_require_auth(client: TestClient) -> None:
     r = client.post(
         "/api/v1/notes", json={"entity_type": "day", "entity_id": "2025-06-01", "body": "x"}

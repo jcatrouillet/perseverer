@@ -105,6 +105,7 @@ export function NotesPanel({
 }) {
   const notes = useNotes(entityType, entityId);
   const createNote = useCreateNote();
+  const [isAdding, setIsAdding] = useState(false);
   const [body, setBody] = useState("");
 
   function handleSubmit(e: React.FormEvent) {
@@ -112,7 +113,12 @@ export function NotesPanel({
     if (!body.trim()) return;
     createNote.mutate(
       { entity_type: entityType, entity_id: entityId, body: body.trim() },
-      { onSuccess: () => setBody("") },
+      {
+        onSuccess: () => {
+          setBody("");
+          setIsAdding(false);
+        },
+      },
     );
   }
 
@@ -125,7 +131,9 @@ export function NotesPanel({
           Could not load notes.
         </p>
       )}
-      {notes.data && notes.data.length === 0 && <p className="notes__status">No notes yet.</p>}
+      {notes.data && notes.data.length === 0 && !isAdding && (
+        <p className="notes__status">No notes yet.</p>
+      )}
       {notes.data && notes.data.length > 0 && (
         <ul className="notes__list">
           {notes.data.map((note) => (
@@ -133,21 +141,40 @@ export function NotesPanel({
           ))}
         </ul>
       )}
-      <form className="notes__form" onSubmit={handleSubmit}>
-        <textarea
-          className="input notes__textarea"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Add a note…"
-        />
-        <button
-          type="submit"
-          className="button button--primary notes__submit"
-          disabled={createNote.isPending || !body.trim()}
-        >
-          {createNote.isPending ? "Saving…" : "Add note"}
+      {isAdding ? (
+        <form className="notes__form" onSubmit={handleSubmit}>
+          <textarea
+            className="input notes__textarea"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Add a note…"
+            autoFocus
+          />
+          <div className="notes__item-actions">
+            <button
+              type="submit"
+              className="button button--primary"
+              disabled={createNote.isPending || !body.trim()}
+            >
+              {createNote.isPending ? "Saving…" : "Add note"}
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setBody("");
+                setIsAdding(false);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button type="button" className="button" onClick={() => setIsAdding(true)}>
+          + Add note
         </button>
-      </form>
+      )}
     </section>
   );
 }
