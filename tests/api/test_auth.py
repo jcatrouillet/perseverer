@@ -129,6 +129,64 @@ def test_per_athlete_api_key_resolves_and_scopes_to_that_athlete(
         app.dependency_overrides.clear()
 
 
+def test_per_athlete_api_key_cannot_modify_another_athletes_data(
+    tmp_path: Path, engine: Engine, duckdb_con: duckdb.DuckDBPyConnection
+) -> None:
+    """Read-scoping (above) isn't the whole story -- a key must also be unable to *write* to a
+    row it can't see, addressed by id rather than by an already-scoped list query. Every
+    PUT/DELETE-by-id route in this codebase re-checks `athlete_id` in its own WHERE clause (see
+    e.g. notes.py::update_note/delete_note, planned_races.py::put/delete), so a mismatched
+    athlete_id 404s instead of touching the row -- this test exercises that specifically via
+    /notes, but the same WHERE-clause pattern is what protects every other by-id route too.
+    """
+    _seed_second_athlete(engine)
+    raw_key = generate_api_key()
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.update()
+            .where(athlete.c.id == SECOND_ATHLETE_ID)
+            .values(api_key_hash=hash_api_key(raw_key))
+        )
+        conn.commit()
+
+    settings = Settings(data_dir=tmp_path, api_key="legacy-key", jwt_secret="test-jwt-secret")
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_engine] = lambda: engine
+    app.dependency_overrides[get_duckdb] = lambda: duckdb_con.cursor()
+    try:
+        c = TestClient(app)
+        created = c.post(
+            "/api/v1/notes",
+            json={
+                "entity_type": "day",
+                "entity_id": "2026-01-01",
+                "body": "default athlete's note",
+            },
+            headers={"X-API-Key": "legacy-key"},
+        ).json()
+
+        # The second athlete's own valid key can't edit or delete a note it doesn't own, even
+        # though it knows the note's real id.
+        r_put = c.put(
+            f"/api/v1/notes/{created['id']}",
+            json={"body": "hijacked"},
+            headers={"X-API-Key": raw_key},
+        )
+        assert r_put.status_code == 404
+        r_delete = c.delete(f"/api/v1/notes/{created['id']}", headers={"X-API-Key": raw_key})
+        assert r_delete.status_code == 404
+
+        # The note is untouched.
+        listed = c.get(
+            "/api/v1/notes?entity_type=day&entity_id=2026-01-01",
+            headers={"X-API-Key": "legacy-key"},
+        ).json()
+        assert len(listed) == 1
+        assert listed[0]["body"] == "default athlete's note"
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_bearer_jwt_resolves_athlete(
     tmp_path: Path, engine: Engine, duckdb_con: duckdb.DuckDBPyConnection
 ) -> None:

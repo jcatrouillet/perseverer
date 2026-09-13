@@ -29,9 +29,21 @@
   white-space: pre-wrap;
 }
 
+.notes__item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
 .notes__item-meta {
   font-size: var(--font-size-sm);
   color: var(--color-text-faint);
+}
+
+.notes__item-actions {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .notes__form {

@@ -226,6 +226,20 @@ class CalendarFeedUrlOut(BaseModel):
     url: str
 
 
+# GET/POST/DELETE /settings/api-key -- the self-service counterpart of `sync athlete create-key`,
+# same one-standing-secret-per-athlete shape as the calendar feed above (mirroring
+# athlete.api_key_hash/api_key_created_at, not a growing history). The raw key is never stored
+# and is returned exactly once, by the POST response -- GET only ever reports whether one exists
+# and when it was (re)created, matching every other hashed secret in this codebase.
+class ApiKeyStatusOut(BaseModel):
+    enabled: bool
+    created_at: str | None
+
+
+class ApiKeyOut(BaseModel):
+    api_key: str
+
+
 # GET/PUT /settings/email-reports + POST /settings/email-reports/test -- the two opt-in switches
 # (db/schema.py::athlete_email_report_config), plus read-only context the card needs: whether
 # the deployment has an SMTP relay configured (PERSEVERER_SMTP_*) and where reports would go

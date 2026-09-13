@@ -1,5 +1,5 @@
-"""POST/GET /notes -- the agent-writable write path CLAUDE.md's mission statement calls for.
-Scoped to activities, days, and weeks. See docs/adr/0006-phase-3-read-api-and-rollups.md
+"""POST/GET/PUT/DELETE /notes -- the agent-writable write path CLAUDE.md's mission statement
+calls for. Scoped to activities, days, and weeks. See docs/adr/0006-phase-3-read-api-and-rollups.md
 decision 7.
 """
 
@@ -13,7 +13,7 @@ from sqlalchemy import Connection, select
 
 from perseverer.api.dependencies import get_conn, require_api_key
 from perseverer.api.schemas.common import to_utc
-from perseverer.api.schemas.notes import NoteCreate, NoteOut
+from perseverer.api.schemas.notes import NoteCreate, NoteOut, NoteUpdate
 from perseverer.db.schema import activity, note
 
 router = APIRouter()
@@ -94,3 +94,47 @@ def list_notes(
         )
         for r in rows
     ]
+
+
+@router.put("/notes/{note_id}")
+def update_note(
+    note_id: int,
+    payload: NoteUpdate,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> NoteOut:
+    row = conn.execute(
+        select(note).where(note.c.id == note_id, note.c.athlete_id == athlete_id)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="note not found")
+
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    conn.execute(
+        note.update().where(note.c.id == note_id).values(body=payload.body, updated_at=now)
+    )
+    conn.commit()
+
+    return NoteOut(
+        id=row.id,
+        entity_type=row.entity_type,
+        entity_id=row.entity_id,
+        body=payload.body,
+        author=row.author,
+        created_at=to_utc(row.created_at),
+        updated_at=to_utc(now),
+    )
+
+
+@router.delete("/notes/{note_id}")
+def delete_note(
+    note_id: int,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> None:
+    result = conn.execute(
+        note.delete().where(note.c.id == note_id, note.c.athlete_id == athlete_id)
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="note not found")
+    conn.commit()

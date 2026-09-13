@@ -1018,7 +1018,7 @@ insight = Table(
 
 # --- Notes (Phase 3): the write path CLAUDE.md's mission statement calls for -- one
 # polymorphic table rather than per-entity note tables, matching the project's existing
-# preference for additively-extensible shapes. Scoped to activities/days only for now; a new
+# preference for additively-extensible shapes. Scoped to activities/days/weeks for now; a new
 # entity_type is a data-only addition, not a schema change. See ADR 0006 decision 7. ---------
 
 note = Table(
@@ -1026,8 +1026,9 @@ note = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
-    Column("entity_type", String, nullable=False),  # "activity" | "day"
-    # An activity id when entity_type="activity", an ISO local_date when entity_type="day".
+    Column("entity_type", String, nullable=False),  # "activity" | "day" | "week"
+    # An activity id when entity_type="activity"; an ISO local_date when entity_type="day"; that
+    # week's own Monday local_date when entity_type="week".
     Column("entity_id", String, nullable=False),
     Column("body", Text, nullable=False),
     Column("author", String, nullable=True),  # e.g. "agent", a human's name, or null

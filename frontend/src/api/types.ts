@@ -395,6 +395,16 @@ export interface CalendarFeedUrlOut {
   url: string;
 }
 
+// GET/POST/DELETE /settings/api-key -- see settings.py's own module docstring.
+export interface ApiKeyStatusOut {
+  enabled: boolean;
+  created_at: string | null;
+}
+
+export interface ApiKeyOut {
+  api_key: string;
+}
+
 // GET/PUT /settings/email-reports (+ POST .../test) -- see email_reports.py's module docstring.
 export interface EmailReportConfigOut {
   weekly_enabled: boolean;
@@ -819,6 +829,10 @@ export interface NoteCreate {
   entity_id: string;
   body: string;
   author?: string | null;
+}
+
+export interface NoteUpdate {
+  body: string;
 }
 
 export interface LoginRequest {

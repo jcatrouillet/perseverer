@@ -42,6 +42,9 @@ the same is_locked_out/verify_password/record_attempt sequence POST /auth/login 
 Also GET/POST /settings/eufy/status,/login -- the web counterpart of `sync athlete
 set-eufy-credentials`, verifying the credential against Eufy's own login endpoint before saving,
 mirroring the Garmin login endpoint's own "verify before persisting" posture.
+
+Also GET/POST/DELETE /settings/api-key -- the self-service counterpart of `sync athlete
+create-key`, same one-standing-secret-per-athlete shape as the calendar-feed endpoints above.
 """
 
 from __future__ import annotations
@@ -79,6 +82,8 @@ from perseverer.adapters.garmin_export import import_garmin_export
 from perseverer.adapters.strava_export import import_strava_export
 from perseverer.api.dependencies import get_conn, get_engine, require_api_key
 from perseverer.api.schemas.settings import (
+    ApiKeyOut,
+    ApiKeyStatusOut,
     AthleteProfileIn,
     AthleteProfileOut,
     CalendarFeedStatusOut,
@@ -100,6 +105,7 @@ from perseverer.api.schemas.settings import (
     RunningLoadConfigIn,
     RunningLoadConfigOut,
 )
+from perseverer.auth.api_keys import generate_api_key, hash_api_key
 from perseverer.auth.lockout import is_locked_out, record_attempt
 from perseverer.auth.passwords import hash_password, verify_password
 from perseverer.calendar_feed import generate_feed_token, hash_feed_token
@@ -281,6 +287,56 @@ def delete_calendar_feed(
     )
     conn.commit()
     return CalendarFeedStatusOut(enabled=False, created_at=None)
+
+
+@router.get("/settings/api-key")
+def get_api_key_status(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ApiKeyStatusOut:
+    row = conn.execute(
+        select(athlete.c.api_key_hash, athlete.c.api_key_created_at).where(
+            athlete.c.id == athlete_id
+        )
+    ).fetchone()
+    if row is None or row.api_key_hash is None:
+        return ApiKeyStatusOut(enabled=False, created_at=None)
+    created_at = row.api_key_created_at.isoformat() if row.api_key_created_at else None
+    return ApiKeyStatusOut(enabled=True, created_at=created_at)
+
+
+@router.post("/settings/api-key")
+def post_api_key(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ApiKeyOut:
+    # Always mints a fresh key, whether this is the first generation or a rotation -- same
+    # "one standing secret, replace on rotate" posture as the calendar feed above. Rotating
+    # immediately invalidates the old key (its hash is overwritten, not appended to a list), so
+    # any other client still using it starts getting 401s right away.
+    raw_key = generate_api_key()
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    conn.execute(
+        athlete.update()
+        .where(athlete.c.id == athlete_id)
+        .values(api_key_hash=hash_api_key(raw_key), api_key_created_at=now)
+    )
+    conn.commit()
+    return ApiKeyOut(api_key=raw_key)
+
+
+@router.delete("/settings/api-key")
+def delete_api_key(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ApiKeyStatusOut:
+    conn.execute(
+        athlete.update()
+        .where(athlete.c.id == athlete_id)
+        .values(api_key_hash=None, api_key_created_at=None)
+    )
+    conn.commit()
+    return ApiKeyStatusOut(enabled=False, created_at=None)
 
 
 def _email_report_out(

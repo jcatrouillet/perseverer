@@ -307,6 +307,61 @@ def test_calendar_feed_endpoints_require_auth(client: TestClient) -> None:
     assert client.delete("/api/v1/settings/calendar-feed").status_code in (401, 403)
 
 
+# --- GET/POST/DELETE /settings/api-key ----------------------------------------------------
+
+
+def test_api_key_disabled_by_default(client: TestClient, auth_headers: dict[str, str]) -> None:
+    r = client.get("/api/v1/settings/api-key", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {"enabled": False, "created_at": None}
+
+
+def test_api_key_create_then_status_then_delete(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    posted = client.post("/api/v1/settings/api-key", headers=auth_headers)
+    assert posted.status_code == 200
+    raw_key = posted.json()["api_key"]
+    assert len(raw_key) > 20  # a real secrets.token_urlsafe(32), not a placeholder
+
+    status = client.get("/api/v1/settings/api-key", headers=auth_headers)
+    assert status.json()["enabled"] is True
+    assert status.json()["created_at"] is not None
+
+    deleted = client.delete("/api/v1/settings/api-key", headers=auth_headers)
+    assert deleted.status_code == 200
+    assert deleted.json() == {"enabled": False, "created_at": None}
+
+    status_after = client.get("/api/v1/settings/api-key", headers=auth_headers)
+    assert status_after.json()["enabled"] is False
+
+
+def test_api_key_post_rotates_and_invalidates_the_old_key(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    first_key = client.post("/api/v1/settings/api-key", headers=auth_headers).json()["api_key"]
+    # The freshly-minted key actually authenticates -- not just a value the endpoint returned.
+    assert client.get(
+        "/api/v1/settings/api-key", headers={"X-API-Key": first_key}
+    ).status_code == 200
+
+    second_key = client.post("/api/v1/settings/api-key", headers=auth_headers).json()["api_key"]
+    assert second_key != first_key
+
+    # Rotating overwrote the stored hash -- the old key no longer authenticates anything.
+    r = client.get("/api/v1/settings/api-key", headers={"X-API-Key": first_key})
+    assert r.status_code == 401
+    assert client.get(
+        "/api/v1/settings/api-key", headers={"X-API-Key": second_key}
+    ).status_code == 200
+
+
+def test_api_key_endpoints_require_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/settings/api-key").status_code in (401, 403)
+    assert client.post("/api/v1/settings/api-key").status_code in (401, 403)
+    assert client.delete("/api/v1/settings/api-key").status_code in (401, 403)
+
+
 # --- GET/PUT /settings/email-reports + POST .../test ------------------------------------------
 
 

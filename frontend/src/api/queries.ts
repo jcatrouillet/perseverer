@@ -22,6 +22,8 @@ import type {
   ActivitySummary,
   ActivityWeatherOut,
   ActivityWorkoutOut,
+  ApiKeyOut,
+  ApiKeyStatusOut,
   AthleteProfileIn,
   AthleteProfileOut,
   CalendarFeedStatusOut,
@@ -54,6 +56,7 @@ import type {
   JobTriggerOut,
   NoteCreate,
   NoteOut,
+  NoteUpdate,
   PaceBandOut,
   Page,
   PeriodCalendarResponse,
@@ -693,6 +696,31 @@ export function useCreateNote() {
   });
 }
 
+export function useUpdateNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ noteId, ...body }: NoteUpdate & { noteId: number }) =>
+      apiPut<NoteOut>(`/api/v1/notes/${noteId}`, body),
+    onSuccess: (note) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["notes", note.entity_type, note.entity_id],
+      });
+    },
+  });
+}
+
+export function useDeleteNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ noteId }: { noteId: number; entityType: string; entityId: string }) =>
+      apiDelete<void>(`/api/v1/notes/${noteId}`),
+    onSuccess: (_data, { entityType, entityId }) => {
+      void queryClient.invalidateQueries({ queryKey: ["notes", entityType, entityId] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
 /** An athlete's own configured HR training zones (see hr_zones.py's own docstring for the
  * blended-formula rationale) -- independent of any single activity, so this isn't scoped to an
  * activity id the way the sport/race/name corrections above are. */
@@ -824,6 +852,37 @@ export function useUnpublishCalendarFeed() {
     mutationFn: () => apiDelete<CalendarFeedStatusOut>("/api/v1/settings/calendar-feed"),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["calendar-feed-status"] });
+    },
+  });
+}
+
+/** Whether the athlete has a standing personal API key, and when it was (re)created. Never
+ * carries the key itself -- that's returned once by useCreateApiKey, on create/rotate. */
+export function useApiKeyStatus() {
+  return useQuery({
+    queryKey: ["api-key-status"],
+    queryFn: () => apiGet<ApiKeyStatusOut>("/api/v1/settings/api-key"),
+  });
+}
+
+/** Always mints a fresh key, whether this is the first generation or a rotation -- the only
+ * operation that ever makes sense here (see settings.py's own POST handler docstring). */
+export function useCreateApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<ApiKeyOut>("/api/v1/settings/api-key", {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["api-key-status"] });
+    },
+  });
+}
+
+export function useDeleteApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiDelete<ApiKeyStatusOut>("/api/v1/settings/api-key"),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["api-key-status"] });
     },
   });
 }

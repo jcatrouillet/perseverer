@@ -26,6 +26,13 @@ class NoteCreate(BaseModel):
     author: str | None = None
 
 
+class NoteUpdate(BaseModel):
+    # Only the text is editable -- entity_type/entity_id aren't (a note doesn't move to a
+    # different day/week/activity, it's deleted and re-created there if that's really what's
+    # meant), and author is set once at creation and otherwise left alone.
+    body: str
+
+
 class NoteOut(BaseModel):
     id: int
     entity_type: str
