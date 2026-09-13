@@ -251,11 +251,47 @@ real per-athlete authentication instead (password login issuing a JWT, or a stan
 API key; see ADR 0008). `sync athlete set-password` / `sync athlete create-key` provision an
 athlete's credentials.
 
+### Single-origin routing: one port, not two
+
+The frontend and API used to need two separate outer reverse-proxy rules (and two external
+ports) purely because nothing forwarded API traffic that arrived on the frontend's own origin.
+That's no longer true: `docker/nginx.conf` (the frontend container's own nginx) now proxies
+`/api/` (every REST route already carries its own `/api/v1` prefix, so no rewrite is needed) and
+`/mcp` (the MCP server, with `proxy_buffering off`/long timeouts for its long-lived Streamable
+HTTP sessions) straight through to the API container, exactly the same way it already did for
+`/share/` since Phase 7. Everything else still falls through to the SPA's `index.html`.
+
+Practically, this means `PERSEVERER_API_BASE_URL` can now be set to the **same origin** the
+frontend itself is served from (e.g. `https://perseverer.catrouillet.net`, no second port) — the
+browser's own `/api/v1/...` and `/mcp` requests land on that one origin and nginx routes them to
+the right container internally. The old two-port setup (api on its own origin/port) still works
+if you'd rather keep it that way; nothing about the API container itself changed, only the
+frontend's own nginx gained two more `location` blocks. `PERSEVERER_PUBLIC_BASE_URL` (the
+`/share/{token}` link origin, see `quadlet/perseverer.env.example`) can now safely be left unset
+under single-origin routing too — its whole reason for existing was the api/frontend port
+mismatch, and an unset value already falls back to the incoming request's own base URL, which is
+now correct either way.
+
+**Migrating bercy's own DSM reverse proxy to single-origin** (a manual step on the Synology NAS,
+not something a code change can do):
+1. Deploy the new frontend image (it needs no other changes than the `nginx.conf` update above).
+2. Set `PERSEVERER_API_BASE_URL=https://perseverer.catrouillet.net` (the frontend's own existing
+   origin, not `:444`) in `~/.config/containers/systemd/perseverer.env` on bercy, then
+   `systemctl --user restart perseverer-frontend` to regenerate `config.js`.
+3. Confirm the app still works end to end (calendar loads, an activity opens, `/share/{token}`
+   links still resolve) while the old `:444`/`:81` DSM rule is still in place — the new
+   same-origin path works alongside the old dedicated port with no conflict, so this step is
+   safe to verify before removing anything.
+4. Once confirmed, delete the `api` rule in DSM's Reverse Proxy (Control Panel → Login Portal →
+   Advanced, or Application Portal depending on DSM version) and drop `81,444` from the UniFi
+   port-forward rule below — only `80,443` are needed from here on.
+
 ### The actual reverse-proxy configuration (confirmed live, not guessed)
 
 DSM's Reverse Proxy (Control Panel → Login Portal → Advanced, or Application Portal depending on
 DSM version) runs on `nas.catrouillet.net` (`192.168.1.98`), aliased as `perseverer.catrouillet.net`.
-Two rules, both HTTPS source → plain HTTP destination (bercy never terminates TLS itself):
+As of this writing, still two rules, both HTTPS source → plain HTTP destination (bercy never
+terminates TLS itself) — see "Single-origin routing" above for collapsing this to just the first:
 
 | Rule | Source | Destination |
 |---|---|---|
@@ -271,10 +307,11 @@ from outside the LAN with the port-forwarding and firewall both already confirme
 this first.
 
 **Router (UniFi):** a single port-forward rule, WAN ports `80,443,81,444` (TCP) → `192.168.1.98`
-(the reverse-proxy device — not bercy directly). The WAN IP Address field showing a private
-(`192.168.0.x`) address with a warning icon looked like a second NAT layer needing its own
-separate forwarding rule, but isn't in this case — confirmed live that all fiber traffic already
-reaches this gateway directly.
+(the reverse-proxy device — not bercy directly; drop `81,444` once the single-origin migration
+above removes the `api` DSM rule). The WAN IP Address field showing a private (`192.168.0.x`)
+address with a warning icon looked like a second NAT layer needing its own separate forwarding
+rule, but isn't in this case — confirmed live that all fiber traffic already reaches this
+gateway directly.
 
 **Split-horizon DNS** (the actual fix for "works on my phone, not on my LAN"): a UniFi Local DNS
 Record (Settings → Networks → Advanced → Local DNS Record) maps `perseverer.catrouillet.net` →
@@ -286,7 +323,9 @@ split-horizon is wired, since there's nothing there to answer HTTPS at all. With
 work from outside the LAN) is simply unreachable from inside the house — same hairpin-NAT
 limitation as testing directly against the public IP, just discovered via "no data loads" instead
 of an obvious connection error, since the *page* still loads fine (nginx serves it locally
-regardless), only the API calls it makes afterward fail.
+regardless), only the API calls it makes afterward fail. This applies identically under
+single-origin routing — nothing about split-horizon DNS changes, there's just one fewer port for
+it to matter for.
 
 ## One-time backfills
 

@@ -692,9 +692,14 @@ because you don't recognize it — stop, that's the bug.
   `PERSEVERER_PUBLIC_BASE_URL` must be the athlete-facing origin (bercy: the frontend's own
   `:443` reverse-proxy rule, which nginx forwards `/share/*` from to the api container — see
   `docker/nginx.conf`), **not** `PERSEVERER_API_BASE_URL` — those are two different origins
-  whenever the reverse proxy fronts api/frontend on different ports, which is exactly bercy's own
-  setup; leaving it unset falls back to the *incoming* request's own base URL, which is the api's
-  own port when the create-share call arrives there, not the origin a browser should open.
+  whenever the reverse proxy fronts api/frontend on different ports, which is bercy's own setup
+  as of this writing (see docs/DEPLOY.md's "Single-origin routing" section for the now-available
+  alternative, where `nginx.conf` also proxies `/api/`/`/mcp` and the two origins collapse into
+  one — not yet migrated to on bercy, a manual reverse-proxy step); leaving `PERSEVERER_PUBLIC_
+  BASE_URL` unset falls back to the *incoming* request's own base URL, which is the api's own
+  port when the create-share call arrives there under the two-origin setup, not the origin a
+  browser should open (this is exactly why the two-origin setup needs it set explicitly, and why
+  single-origin routing doesn't).
 - **Calendar feed (`calendar_feed.py`, `api/routers/calendar_feed.py`)**: a Google-Calendar-
   subscribable public iCalendar (.ics) feed of the athlete's own `planned_workout` calendar —
   deliberately a *parallel* mechanism to `share_link` above, not a third `target_type` grafted onto
