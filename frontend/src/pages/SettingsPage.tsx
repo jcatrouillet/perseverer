@@ -23,6 +23,7 @@ import type { DuplicateCandidateOut, TrimCandidateOut } from "../api/types";
 import { hrZoneRangeLabel } from "../activityMetrics";
 import { isoDate } from "../dateUtils";
 import { formatDurationHM, formatMinPerKm } from "../runningStats";
+import { ApiDocsCard } from "../components/ApiDocsCard";
 import { ApiKeyCard } from "../components/ApiKeyCard";
 import { BulkImportCard } from "../components/BulkImportCard";
 import { CalendarFeedCard } from "../components/CalendarFeedCard";
@@ -451,6 +452,7 @@ export function SettingsPage() {
           </section>
 
           <ApiKeyCard />
+          <ApiDocsCard />
         </>
       ),
     },
