@@ -14,6 +14,7 @@ from perseverer.db.schema import activity, activity_metric, performance_daily_ro
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.metrics.registry import get_or_register_metric
 from perseverer.performance import VDOT_METRIC_KEY
+from perseverer.performance_rollup import refresh_performance_rollup
 
 
 def test_performance_returns_rows_in_range_ordered_by_date_with_full_field_round_trip(
@@ -30,6 +31,9 @@ def test_performance_returns_rows_in_range_ordered_by_date_with_full_field_round
                 threshold_pace_s_per_km=255.1,
                 threshold_hr_bpm=167.0,
                 threshold_hr_source="empirical",
+                aerobic_threshold_pace_s_per_km=296.8,
+                aerobic_threshold_hr_bpm=157.0,
+                aerobic_threshold_hr_source="empirical",
                 predicted_5k_s=1196.0,
                 predicted_10k_s=2479.0,
                 predicted_half_marathon_s=5491.0,
@@ -88,6 +92,9 @@ def test_performance_returns_rows_in_range_ordered_by_date_with_full_field_round
     assert full_row["threshold_pace_s_per_km"] == 255.1
     assert full_row["threshold_hr_bpm"] == 167.0
     assert full_row["threshold_hr_source"] == "empirical"
+    assert full_row["aerobic_threshold_pace_s_per_km"] == 296.8
+    assert full_row["aerobic_threshold_hr_bpm"] == 157.0
+    assert full_row["aerobic_threshold_hr_source"] == "empirical"
     assert full_row["predicted_5k_s"] == 1196.0
     assert full_row["predicted_10k_s"] == 2479.0
     assert full_row["predicted_half_marathon_s"] == 5491.0
@@ -170,3 +177,43 @@ def test_vo2max_analysis_defaults_as_of_to_today_when_omitted(
     assert body["as_of"] == dt.datetime.now(dt.UTC).date().isoformat()
     assert body["driving_activity"] is None
     assert any("No qualifying run yet" in m for m in body["missing"])
+
+
+def test_threshold_analysis_shares_the_vo2max_driving_activity_for_both_paces(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        _add_run_with_vdot(
+            conn, activity_id="tempo", local_date="2025-06-05", name="Tempo run", vdot=50.0
+        )
+        refresh_performance_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+
+    r = client.get(
+        "/api/v1/performance/threshold-analysis?as_of=2025-06-10", headers=auth_headers
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["vo2max"]["driving_activity"]["activity_id"] == "tempo"
+    assert body["anaerobic_threshold_pace_s_per_km"] is not None
+    assert body["aerobic_threshold_pace_s_per_km"] is not None
+    # Aerobic is always the slower (larger seconds/km) of the two at the same VDOT.
+    assert body["aerobic_threshold_pace_s_per_km"] > body["anaerobic_threshold_pace_s_per_km"]
+    assert body["anaerobic_threshold_hr"]["reference_pace_s_per_km"] == (
+        body["anaerobic_threshold_pace_s_per_km"]
+    )
+    assert body["aerobic_threshold_hr"]["reference_pace_s_per_km"] == (
+        body["aerobic_threshold_pace_s_per_km"]
+    )
+
+
+def test_threshold_analysis_defaults_as_of_to_today_when_omitted(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    r = client.get("/api/v1/performance/threshold-analysis", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["as_of"] == dt.datetime.now(dt.UTC).date().isoformat()
+    assert body["vo2max"]["driving_activity"] is None
+    assert body["anaerobic_threshold_pace_s_per_km"] is None
+    assert body["anaerobic_threshold_hr"]["threshold_hr_bpm"] is None

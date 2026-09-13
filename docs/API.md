@@ -660,8 +660,11 @@ own precomputed equivalents (`daily_race_predictions`, `daily_lactate_threshold`
 
 Daily rollup of `rolling_vdot` (a 42-day trailing maximum VDOT — under the Daniels-Gilbert model
 this figure *is* the VO2max estimate, in ml/kg/min, not a separately-converted value), max HR
-(365-day trailing max, empirical-first with a Tanaka-formula fallback), threshold pace/HR
-(derived from `rolling_vdot`), and predicted 5k/10k/half-marathon/marathon times.
+(365-day trailing max, empirical-first with a Tanaka-formula fallback), anaerobic and aerobic
+threshold pace/HR (both derived from `rolling_vdot` — anaerobic is the original, unqualified
+`threshold_pace_s_per_km`/`threshold_hr_bpm` fields; aerobic is the newer, always-slower
+`aerobic_threshold_pace_s_per_km`/`aerobic_threshold_hr_bpm`), and predicted
+5k/10k/half-marathon/marathon times.
 
 | Param | In | Required | Type |
 |---|---|---|---|
@@ -685,6 +688,23 @@ this API follows, the same exception `GET /activities/needs-trim` already establ
 | `as_of` | query | optional | string (date) | Defaults to today. |
 
 **Response `200`:** `Vo2maxFactorAnalysisOut`.
+
+### `GET /performance/threshold-analysis`
+
+Point-in-time factor analysis for the current anaerobic and aerobic threshold pace/HR. Both
+threshold paces are pure functions of the same `rolling_vdot`, so "which workout led to the
+current threshold pace" is exactly `GET /performance/vo2max-analysis`'s own driving-activity
+answer, embedded here rather than re-derived. Threshold HR is answered per source: the empirical
+path lists every qualifying run near that day's threshold pace and flags which run(s) the stored
+median actually came from; the fallback path identifies whichever activity set `max_hr_bpm`, or
+notes that a formula-derived max HR has no activity behind it. Deliberately request-time, not
+rollup-backed — same exception as `GET /performance/vo2max-analysis` above.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `as_of` | query | optional | string (date) | Defaults to today. |
+
+**Response `200`:** `ThresholdFactorAnalysisOut`.
 
 ---
 
@@ -1741,10 +1761,13 @@ Training Load, 42-day EWMA — "fitness"), `atl` (Acute Training Load, 7-day EWM
 ### PerformanceDailyRollupOut
 
 `local_date`, `rolling_vdot` (number, nullable — the VO2max estimate), `max_hr_bpm` (number,
-nullable), `max_hr_source` (`"empirical"` | `"formula_fallback"` | null), `threshold_pace_s_per_km`
-(number, nullable), `threshold_hr_bpm` (number, nullable), `threshold_hr_source` (`"empirical"` |
-`"fallback"` | null), `predicted_5k_s`/`predicted_10k_s`/`predicted_half_marathon_s`/
-`predicted_marathon_s` (number, nullable).
+nullable), `max_hr_source` (`"empirical"` | `"formula_fallback"` | null),
+`threshold_pace_s_per_km`/`threshold_hr_bpm`/`threshold_hr_source` (anaerobic threshold; number,
+nullable / number, nullable / `"empirical"` | `"fallback"` | null),
+`aerobic_threshold_pace_s_per_km`/`aerobic_threshold_hr_bpm`/`aerobic_threshold_hr_source`
+(aerobic threshold, always a slower pace/lower HR than the anaerobic one above; same shape),
+`predicted_5k_s`/`predicted_10k_s`/`predicted_half_marathon_s`/`predicted_marathon_s` (number,
+nullable).
 
 ### Vo2maxFactorAnalysisOut
 
@@ -1763,6 +1786,39 @@ nullable), `max_hr_source` (`"empirical"` | `"formula_fallback"` | null), `thres
 
 `activity_id`, `local_date`, `name` (string, nullable), `sport`, `distance_m` (number, nullable),
 `duration_s` (number, nullable — moving time), `vdot` (number).
+
+### ThresholdFactorAnalysisOut
+
+| Field | Type | Description |
+|---|---|---|
+| `as_of` | string (date) | |
+| `vo2max` | `Vo2maxFactorAnalysisOut` | Both threshold paces below are pure functions of this same `rolling_vdot`, so "which workout led to the current threshold pace" is exactly this VO2max analysis's own `driving_activity` — embedded here, not answered twice. |
+| `anaerobic_threshold_pace_s_per_km`, `aerobic_threshold_pace_s_per_km` | number, nullable | Same values `GET /performance` would return for `as_of`. |
+| `anaerobic_threshold_hr`, `aerobic_threshold_hr` | `ThresholdHrBreakdownOut` | |
+| `max_hr_bpm` | number, nullable | |
+| `max_hr_source` | `"empirical"` \| `"formula_fallback"` \| null | |
+
+### ThresholdHrBreakdownOut
+
+| Field | Type | Description |
+|---|---|---|
+| `threshold_hr_bpm` | number, nullable | |
+| `threshold_hr_source` | `"empirical"` \| `"fallback"` \| null | |
+| `reference_pace_s_per_km` | number, nullable | The threshold pace this HR was computed against. |
+| `contributors` | `array<ThresholdHrContributorOut>` | Every qualifying run near `reference_pace_s_per_km` in the trailing window, sorted by `avg_hr_bpm` ascending. Populated only when `threshold_hr_source` is `"empirical"`. |
+| `max_hr_driving_activity` | `ActivityRefOut`, nullable | The activity that set `max_hr_bpm` — set only when `threshold_hr_source` is `"fallback"` and the max HR itself came from a real observation, not the Tanaka formula (a formula has no activity behind it). |
+| `missing` | `array<string>` | Human-readable gap diagnostics, if any. |
+
+### ThresholdHrContributorOut
+
+`ActivityRefOut`'s own fields, plus `pace_s_per_km` (number), `avg_hr_bpm` (number), and
+`is_median` (boolean — true for the run(s) whose own `avg_hr_bpm` defines the empirical median:
+one run when the qualifying count is odd, two when it's even and the median averages them).
+
+### ActivityRefOut
+
+`activity_id`, `local_date`, `name` (string, nullable), `sport`, `distance_m` (number, nullable),
+`duration_s` (number, nullable — moving time).
 
 ### InsightOut
 

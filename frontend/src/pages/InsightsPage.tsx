@@ -1,12 +1,14 @@
 // Five sub-tabs, each owning its own data fetch and rendered only while active (so switching
 // tabs is also what triggers that tab's otherwise-unneeded request): Pace trends (every run's
 // VDOT plotted over its own date, see PaceTrendsChart.tsx), Training bands (share of running
-// time spent at each pace, see TrainingBandsChart.tsx), Race predictions, Threshold & Max HR, and
+// time spent at each pace, see TrainingBandsChart.tsx), Race predictions, Threshold Analysis, and
 // VO2max (all three independently computed, never Garmin's own precomputed equivalents -- see
 // performance_rollup.py's own docstring for the model, RacePredictionsChart.tsx/
-// ThresholdMaxHrChart.tsx/Vo2maxChart.tsx for the charts). VO2max also pairs its trend chart with
-// Vo2maxFactorAnalysis.tsx -- which run currently drives the value, what else qualified, what's
-// missing -- on the same tab, since the two are read together. The athlete-wide window/kind view
+// ThresholdAnalysisChart.tsx/Vo2maxChart.tsx for the charts). Threshold Analysis (renamed from
+// "Threshold & Max HR" once it grew to cover both the anaerobic and the aerobic threshold, plus
+// the factor-analysis panel below) and VO2max both pair their trend chart with a factor-analysis
+// panel -- which workout(s) currently drive the value, what else qualified, what's missing -- on
+// the same tab, since chart and breakdown are read together. The athlete-wide window/kind view
 // that used to live here now lives per-activity instead (see ActivityInsightsPanel.tsx /
 // rules_activity.py) -- this page is being rebuilt one category at a time.
 import { useState } from "react";
@@ -15,7 +17,8 @@ import { useAllActivities } from "../api/queries";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { PaceTrendsChart } from "../components/PaceTrendsChart";
 import { RacePredictionsChart } from "../components/RacePredictionsChart";
-import { ThresholdMaxHrChart } from "../components/ThresholdMaxHrChart";
+import { ThresholdAnalysisChart } from "../components/ThresholdAnalysisChart";
+import { ThresholdFactorAnalysis } from "../components/ThresholdFactorAnalysis";
 import { TrainingBandsChart } from "../components/TrainingBandsChart";
 import { Vo2maxChart } from "../components/Vo2maxChart";
 import { Vo2maxFactorAnalysis } from "../components/Vo2maxFactorAnalysis";
@@ -25,7 +28,7 @@ type Tab =
   | "pace-trends"
   | "training-bands"
   | "race-predictions"
-  | "threshold-max-hr"
+  | "threshold-analysis"
   | "vo2max";
 
 export function InsightsPage() {
@@ -66,11 +69,11 @@ export function InsightsPage() {
         <button
           type="button"
           role="tab"
-          aria-selected={tab === "threshold-max-hr"}
-          className={tab === "threshold-max-hr" ? "is-active" : undefined}
-          onClick={() => setTab("threshold-max-hr")}
+          aria-selected={tab === "threshold-analysis"}
+          className={tab === "threshold-analysis" ? "is-active" : undefined}
+          onClick={() => setTab("threshold-analysis")}
         >
-          Threshold &amp; Max HR
+          Threshold Analysis
         </button>
         <button
           type="button"
@@ -92,7 +95,12 @@ export function InsightsPage() {
       )}
       {tab === "training-bands" && <TrainingBandsChart />}
       {tab === "race-predictions" && <RacePredictionsChart />}
-      {tab === "threshold-max-hr" && <ThresholdMaxHrChart />}
+      {tab === "threshold-analysis" && (
+        <>
+          <ThresholdAnalysisChart />
+          <ThresholdFactorAnalysis />
+        </>
+      )}
       {tab === "vo2max" && (
         <>
           <Vo2maxChart />

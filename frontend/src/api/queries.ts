@@ -74,6 +74,7 @@ import type {
   SleepSessionOut,
   SplitOut,
   StreamResponse,
+  ThresholdFactorAnalysisOut,
   TrimCandidateOut,
   Vo2maxFactorAnalysisOut,
 } from "./types";
@@ -154,6 +155,19 @@ export function useVo2maxFactorAnalysis(asOf?: string) {
     queryFn: () =>
       apiGet<Vo2maxFactorAnalysisOut>(
         `/api/v1/performance/vo2max-analysis${buildQuery({ as_of: asOf })}`,
+      ),
+  });
+}
+
+/** The Insights "Threshold Analysis" tab's factor-analysis panel (GET
+ * /performance/threshold-analysis) -- which workout(s) currently drive the anaerobic and aerobic
+ * threshold pace/HR, and what's missing. `asOf` defaults server-side to today when omitted. */
+export function useThresholdFactorAnalysis(asOf?: string) {
+  return useQuery({
+    queryKey: ["threshold-analysis", asOf ?? "today"],
+    queryFn: () =>
+      apiGet<ThresholdFactorAnalysisOut>(
+        `/api/v1/performance/threshold-analysis${buildQuery({ as_of: asOf })}`,
       ),
   });
 }

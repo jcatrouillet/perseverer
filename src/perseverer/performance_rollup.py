@@ -48,24 +48,40 @@ reasoning:
                         `threshold_hr_source` below. The moment one real max-HR observation
                         exists, the empirical value takes back over for that day forward.
 
-  threshold_pace_s_per_km / predicted_5k_s / predicted_10k_s / predicted_half_marathon_s /
-  predicted_marathon_s
+  threshold_pace_s_per_km / aerobic_threshold_pace_s_per_km / predicted_5k_s / predicted_10k_s /
+  predicted_half_marathon_s / predicted_marathon_s
                         Derived from `rolling_vdot` via `vdot.py`'s own
                         `compute_threshold_pace_s_per_km`/`predict_race_time_s` -- see that
                         module's docstring for the math and its literature basis.
+                        `threshold_pace_s_per_km` is the anaerobic/lactate threshold (kept as the
+                        original, unqualified field name -- every existing consumer, `hr_zones.py`
+                        and `running_load.py` included, already means this one);
+                        `aerobic_threshold_pace_s_per_km` is the newer aerobic threshold, always
+                        slower, both from the same `rolling_vdot` via the same function at a
+                        different fraction (`vdot.AEROBIC_THRESHOLD_VO2MAX_FRACTION`).
 
-  threshold_hr_bpm      Empirical median heart rate among running activities in the same 365-day
+  threshold_hr_bpm / aerobic_threshold_hr_bpm
+                        Empirical median heart rate among running activities in the same 365-day
                         window whose own grade-adjusted pace
                         (`perseverer.performance.avg_gap_speed_mps`, `gap.py`) falls within
-                        `_THRESHOLD_PACE_TOLERANCE` of that day's `threshold_pace_s_per_km` --
-                        median, not mean, to resist a single outlier (a cold-start HR spike, a
-                        chest-strap dropout). Requires at least `_MIN_THRESHOLD_HR_SAMPLES`
-                        qualifying runs; below that, falls back to
-                        `_THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR` of that day's `max_hr_bpm` (a
-                        representative point within the commonly-cited 85-92%-of-max-HR range for
-                        well-trained runners' lactate threshold). `threshold_hr_source` records
-                        which path fired ("empirical" | "fallback" | null when neither is
-                        possible yet).
+                        `THRESHOLD_PACE_TOLERANCE` of that day's own threshold pace -- median, not
+                        mean, to resist a single outlier (a cold-start HR spike, a chest-strap
+                        dropout). Requires at least `MIN_THRESHOLD_HR_SAMPLES` qualifying runs;
+                        below that, falls back to a fraction of that day's `max_hr_bpm`
+                        (`THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR` for the anaerobic threshold,
+                        `AEROBIC_THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR` for the aerobic one --
+                        see each constant's own docstring for its literature basis).
+                        `threshold_hr_source`/`aerobic_threshold_hr_source` record which path
+                        fired ("empirical" | "fallback" | null when neither is possible yet).
+                        `compute_threshold_hr` (below) is the one function both branches share, so
+                        the two thresholds can never silently drift onto different logic.
+
+`ROLLING_VDOT_WINDOW_DAYS`, `MAX_HR_WINDOW_DAYS`, `THRESHOLD_HR_WINDOW_DAYS`,
+`THRESHOLD_PACE_TOLERANCE`, `MIN_THRESHOLD_HR_SAMPLES`, `MAX_HR_METRIC_KEYS`,
+`AVG_HR_METRIC_KEYS`, `priority_merge`, and `median` are exported (no leading underscore)
+specifically so `threshold_analysis.py`'s own request-time factor-analysis query reuses the exact
+same window/tolerance/merge logic this rollup does, rather than a second copy that could drift --
+same reuse `vo2max_analysis.py` already established for `ROLLING_VDOT_WINDOW_DAYS`.
 """
 
 from __future__ import annotations
@@ -79,20 +95,33 @@ from perseverer.db.schema import activity, activity_metric, athlete, performance
 from perseverer.gap import AVG_GAP_METRIC_KEY
 from perseverer.performance import VDOT_METRIC_KEY
 from perseverer.vdot import (
+    AEROBIC_THRESHOLD_VO2MAX_FRACTION,
     RACE_DISTANCES_M,
     compute_threshold_pace_s_per_km,
     predict_race_time_s,
 )
 
 ROLLING_VDOT_WINDOW_DAYS = 42
-_MAX_HR_WINDOW_DAYS = 365
-_THRESHOLD_HR_WINDOW_DAYS = 365
+MAX_HR_WINDOW_DAYS = 365
+THRESHOLD_HR_WINDOW_DAYS = 365
 # How close (as a fraction of threshold pace) a run's own pace must be to count as a real
 # threshold-intensity effort -- wide enough for natural pace variance in a tempo/threshold
-# session, narrow enough to exclude interval work (much faster) and easy runs (much slower).
-_THRESHOLD_PACE_TOLERANCE = 0.05
-_MIN_THRESHOLD_HR_SAMPLES = 3
-_THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR = 0.88
+# session, narrow enough to exclude interval work (much faster) and easy runs (much slower). Used
+# for both the anaerobic and aerobic threshold windows -- no literature basis found for treating
+# them differently, and aerobic-threshold-paced (easy/steady) runs are if anything more common in
+# real training data than anaerobic-threshold ones, so reusing the same tolerance risks no
+# fewer qualifying samples.
+THRESHOLD_PACE_TOLERANCE = 0.05
+MIN_THRESHOLD_HR_SAMPLES = 3
+# A representative point within the commonly-cited 85-92%-of-max-HR range for well-trained
+# runners' lactate (anaerobic) threshold.
+THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR = 0.88
+# The aerobic threshold's own fallback fraction -- new, not previously computed. Esteve-Lanao,
+# Sellés-Pérez, Arévalo-Chico & Cejuela (2026, Sports 14(1):29) measured heart rate at the first
+# ventilatory threshold (VT1, aerobic threshold) at 85.1 ± 4.6% of HRpeak across 1,411 endurance-
+# trained runners -- the same study `vdot.AEROBIC_THRESHOLD_VO2MAX_FRACTION` cites for its own
+# %VO2max figure, kept consistent with that pace-domain choice rather than sourced separately.
+AEROBIC_THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR = 0.851
 # Tanaka, Monahan & Seals (2001) -- max_hr_bpm's own formula fallback, used only when the 365-day
 # empirical window (below) is empty. See this module's docstring for why empirical stays primary.
 _TANAKA_MAX_HR_INTERCEPT = 208.0
@@ -101,13 +130,11 @@ _TANAKA_MAX_HR_AGE_COEFFICIENT = 0.7
 # Same duplicated-tuple precedent already used four times in this codebase (activity_merge.py,
 # activity_trim.py, insights/engine.py, api/routers/activities.py) -- add a fifth here rather
 # than importing a router module into a plain computation module.
-_MAX_HR_METRIC_KEYS = ("fit.session.max_heart_rate", "strava.session.max_heart_rate")
-_AVG_HR_METRIC_KEYS = ("fit.session.avg_heart_rate", "strava.session.avg_heart_rate")
+MAX_HR_METRIC_KEYS = ("fit.session.max_heart_rate", "strava.session.max_heart_rate")
+AVG_HR_METRIC_KEYS = ("fit.session.avg_heart_rate", "strava.session.avg_heart_rate")
 
 
-def _priority_merge(
-    rows: list[tuple[str, str, float]], keys: tuple[str, ...]
-) -> dict[str, float]:
+def priority_merge(rows: list[tuple[str, str, float]], keys: tuple[str, ...]) -> dict[str, float]:
     """`rows` is (activity_id, metric_key, value_num); keeps, per activity_id, the value whose
     metric_key is earliest in `keys` -- same alias-merge idiom as
     api/routers/activities.py::_aliased_metric_subquery, done in Python since these rows are
@@ -124,10 +151,36 @@ def _priority_merge(
     return result
 
 
-def _median(values: list[float]) -> float:
+def median(values: list[float]) -> float:
     n = len(values)
     mid = n // 2
     return values[mid] if n % 2 == 1 else (values[mid - 1] + values[mid]) / 2
+
+
+def compute_threshold_hr(
+    window: list[tuple[str, float, float]],
+    reference_pace_s_per_km: float | None,
+    max_hr_bpm: float | None,
+    fallback_fraction: float,
+) -> tuple[float | None, str | None]:
+    """`window` is (local_date, pace_s_per_km, avg_hr_bpm) for every VDOT-eligible run with a
+    usable GAP pace and average HR in the relevant trailing window -- the same shape
+    `refresh_performance_rollup`'s own `threshold_candidates` already builds, and what
+    `threshold_analysis.py` rebuilds with full activity details for its own factor breakdown.
+    One function for both the anaerobic and aerobic thresholds (called with a different
+    `reference_pace_s_per_km`/`fallback_fraction` each time) so the two can never silently drift
+    onto different empirical/fallback logic.
+    """
+    if reference_pace_s_per_km is None:
+        return None, None
+    lo = reference_pace_s_per_km * (1 - THRESHOLD_PACE_TOLERANCE)
+    hi = reference_pace_s_per_km * (1 + THRESHOLD_PACE_TOLERANCE)
+    qualifying_hrs = sorted(h for _, p, h in window if lo <= p <= hi)
+    if len(qualifying_hrs) >= MIN_THRESHOLD_HR_SAMPLES:
+        return median(qualifying_hrs), "empirical"
+    if max_hr_bpm is not None:
+        return fallback_fraction * max_hr_bpm, "fallback"
+    return None, None
 
 
 def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
@@ -178,13 +231,13 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
         )
         .where(
             activity_metric.c.athlete_id == athlete_id,
-            activity_metric.c.metric_key.in_(_AVG_HR_METRIC_KEYS),
+            activity_metric.c.metric_key.in_(AVG_HR_METRIC_KEYS),
             activity.c.sport == "running",
             activity.c.deleted_at.is_(None),
         )
     ).fetchall()
-    avg_hr_by_activity = _priority_merge(
-        [(r.activity_id, r.metric_key, r.value_num) for r in avg_hr_raw], _AVG_HR_METRIC_KEYS
+    avg_hr_by_activity = priority_merge(
+        [(r.activity_id, r.metric_key, r.value_num) for r in avg_hr_raw], AVG_HR_METRIC_KEYS
     )
 
     max_hr_raw = conn.execute(
@@ -199,12 +252,12 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
         )
         .where(
             activity_metric.c.athlete_id == athlete_id,
-            activity_metric.c.metric_key.in_(_MAX_HR_METRIC_KEYS),
+            activity_metric.c.metric_key.in_(MAX_HR_METRIC_KEYS),
             activity.c.deleted_at.is_(None),
         )
     ).fetchall()
-    max_hr_by_activity = _priority_merge(
-        [(r.activity_id, r.metric_key, r.value_num) for r in max_hr_raw], _MAX_HR_METRIC_KEYS
+    max_hr_by_activity = priority_merge(
+        [(r.activity_id, r.metric_key, r.value_num) for r in max_hr_raw], MAX_HR_METRIC_KEYS
     )
     max_hr_local_date_by_activity = {r.activity_id: r.local_date for r in max_hr_raw}
 
@@ -266,7 +319,7 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
         while max_hr_i < len(max_hr_by_date) and max_hr_by_date[max_hr_i][0] <= iso:
             max_hr_window.append(max_hr_by_date[max_hr_i])
             max_hr_i += 1
-        max_hr_cutoff = (day - timedelta(days=_MAX_HR_WINDOW_DAYS - 1)).isoformat()
+        max_hr_cutoff = (day - timedelta(days=MAX_HR_WINDOW_DAYS - 1)).isoformat()
         max_hr_window = [(d, v) for d, v in max_hr_window if d >= max_hr_cutoff]
         max_hr_bpm = max((v for _, v in max_hr_window), default=None)
         if max_hr_bpm is not None:
@@ -284,25 +337,28 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
         ):
             threshold_window.append(threshold_candidates[threshold_i])
             threshold_i += 1
-        threshold_cutoff = (day - timedelta(days=_THRESHOLD_HR_WINDOW_DAYS - 1)).isoformat()
+        threshold_cutoff = (day - timedelta(days=THRESHOLD_HR_WINDOW_DAYS - 1)).isoformat()
         threshold_window = [
             (d, p, h) for d, p, h in threshold_window if d >= threshold_cutoff
         ]
 
         threshold_pace_s_per_km = compute_threshold_pace_s_per_km(rolling_vdot)
+        aerobic_threshold_pace_s_per_km = compute_threshold_pace_s_per_km(
+            rolling_vdot, fraction=AEROBIC_THRESHOLD_VO2MAX_FRACTION
+        )
 
-        threshold_hr_bpm: float | None = None
-        threshold_hr_source: str | None = None
-        if threshold_pace_s_per_km is not None:
-            lo = threshold_pace_s_per_km * (1 - _THRESHOLD_PACE_TOLERANCE)
-            hi = threshold_pace_s_per_km * (1 + _THRESHOLD_PACE_TOLERANCE)
-            qualifying_hrs = sorted(h for _, p, h in threshold_window if lo <= p <= hi)
-            if len(qualifying_hrs) >= _MIN_THRESHOLD_HR_SAMPLES:
-                threshold_hr_bpm = _median(qualifying_hrs)
-                threshold_hr_source = "empirical"
-            elif max_hr_bpm is not None:
-                threshold_hr_bpm = _THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR * max_hr_bpm
-                threshold_hr_source = "fallback"
+        threshold_hr_bpm, threshold_hr_source = compute_threshold_hr(
+            threshold_window,
+            threshold_pace_s_per_km,
+            max_hr_bpm,
+            THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR,
+        )
+        aerobic_threshold_hr_bpm, aerobic_threshold_hr_source = compute_threshold_hr(
+            threshold_window,
+            aerobic_threshold_pace_s_per_km,
+            max_hr_bpm,
+            AEROBIC_THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR,
+        )
 
         predicted = {
             label: (
@@ -323,6 +379,9 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
                 "threshold_pace_s_per_km": threshold_pace_s_per_km,
                 "threshold_hr_bpm": threshold_hr_bpm,
                 "threshold_hr_source": threshold_hr_source,
+                "aerobic_threshold_pace_s_per_km": aerobic_threshold_pace_s_per_km,
+                "aerobic_threshold_hr_bpm": aerobic_threshold_hr_bpm,
+                "aerobic_threshold_hr_source": aerobic_threshold_hr_source,
                 "predicted_5k_s": predicted["5k"],
                 "predicted_10k_s": predicted["10k"],
                 "predicted_half_marathon_s": predicted["half_marathon"],

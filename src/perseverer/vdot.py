@@ -131,29 +131,53 @@ def compute_vdot(
 # trained runners. One model, extended twice, is also simpler to keep correct than two.
 
 
-# A representative point within Daniels' own published "Threshold" pace range of 86-92% of
-# vVO2max (velocity at VO2max) -- Daniels' Running Formula's own training-pace table. Verified by
-# hand: at VDOT=50 this yields a threshold pace of ~4:15/km, matching publicly known VDOT=50
-# Threshold-pace tables.
+# A representative point within Daniels' own published "Threshold" (lactate/anaerobic threshold,
+# "LT2"/"VT2"/"OBLA") pace range of 86-92% of vVO2max (velocity at VO2max) -- Daniels' Running
+# Formula's own training-pace table. Verified by hand: at VDOT=50 this yields a threshold pace of
+# ~4:15/km, matching publicly known VDOT=50 Threshold-pace tables. Cross-checked against two
+# newer, running-specific studies rather than left to rest on Daniels' 1979 model alone: Fathi,
+# Shahidi & Alhusaen Aga (2025, Int J Exercise Science 18(5):1381-1392) measured the second
+# ventilatory threshold (RCP) at 89.6 ± 3.8% VO2max in trained runners (gas-exchange/visual-
+# inspection method, n=12); Esteve-Lanao, Sellés-Pérez, Arévalo-Chico & Cejuela (2026, Sports
+# 14(1):29) measured VT2 at 83.8-87.4% VO2peak across performance levels (n=1,411 endurance
+# runners). 0.88 sits between the two -- inside Fathi's ~1SD band and just above Esteve-Lanao's
+# own range -- close enough to both that a single representative point stays defensible rather
+# than needing per-study branching; kept unchanged rather than shifted toward either single new
+# study alone, since real downstream consumers already calibrate against it (race predictions,
+# `hr_zones.py`'s zone 3/4 boundaries, `running_load.py`'s rTSS).
 THRESHOLD_VO2MAX_FRACTION = 0.88
 
+# The *aerobic* threshold ("LT1"/"VT1", the upper edge of easy/aerobic running, well below
+# THRESHOLD_VO2MAX_FRACTION above) -- new, not previously computed anywhere in this codebase.
+# 0.73 is where the same two studies above converge specifically on this threshold, not just the
+# anaerobic one: Fathi et al. 2025 measured VT1 at 73.2 ± 4.1% VO2max (n=12 trained runners);
+# Esteve-Lanao et al. 2026 measured VT1 at 67.5-73.4% VO2peak depending on performance level
+# (n=1,411 endurance runners) -- 0.73 sits within both a fraction of a percent, an unusually tight
+# agreement between an independent small gas-exchange study and a much larger multi-site one.
+AEROBIC_THRESHOLD_VO2MAX_FRACTION = 0.73
 
-def compute_threshold_pace_s_per_km(vdot: float | None) -> float | None:
-    """Threshold running pace for a given VDOT -- the velocity at which VO2 equals
-    `THRESHOLD_VO2MAX_FRACTION` of VDOT (VDOT standing in for VO2max here, same substitution
-    `compute_vdot` itself is built on). Solving the module's own `VO2(v)` quadratic for `v`:
 
-        0.000104*v^2 + 0.182258*v - (4.60 + THRESHOLD_VO2MAX_FRACTION*vdot) = 0
+def compute_threshold_pace_s_per_km(
+    vdot: float | None, fraction: float = THRESHOLD_VO2MAX_FRACTION
+) -> float | None:
+    """Running pace for a given VDOT at `fraction` of VO2max (VDOT standing in for VO2max here,
+    same substitution `compute_vdot` itself is built on) -- `fraction` defaults to
+    `THRESHOLD_VO2MAX_FRACTION` (the anaerobic/lactate threshold), and the same function computes
+    the aerobic threshold pace by passing `AEROBIC_THRESHOLD_VO2MAX_FRACTION` instead: one model,
+    two representative points on it, not two formulas. Solving the module's own `VO2(v)`
+    quadratic for `v`:
 
-    `a > 0` and `c < 0` for any realistic VDOT, so the discriminant always exceeds `b^2` and
-    exactly one positive root exists (the `+` branch) -- no branch-selection ambiguity to get
-    wrong. Returns `None` for a non-positive/missing VDOT.
+        0.000104*v^2 + 0.182258*v - (4.60 + fraction*vdot) = 0
+
+    `a > 0` and `c < 0` for any realistic VDOT/fraction combination in either use, so the
+    discriminant always exceeds `b^2` and exactly one positive root exists (the `+` branch) -- no
+    branch-selection ambiguity to get wrong. Returns `None` for a non-positive/missing VDOT.
     """
     if vdot is None or vdot <= 0:
         return None
 
     a, b = 0.000104, 0.182258
-    c = -(4.60 + THRESHOLD_VO2MAX_FRACTION * vdot)
+    c = -(4.60 + fraction * vdot)
     discriminant = b * b - 4 * a * c
     if discriminant < 0:
         return None

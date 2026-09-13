@@ -6,6 +6,7 @@ predictions, causality, and idempotency. See that module's own docstring for the
 import datetime as dt
 from pathlib import Path
 
+import pytest
 from sqlalchemy import Connection, Engine, select
 
 from perseverer.db.engine import make_engine
@@ -20,8 +21,11 @@ from perseverer.db.schema import (
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.gap import AVG_GAP_METRIC_KEY
 from perseverer.performance import VDOT_METRIC_KEY
-from perseverer.performance_rollup import refresh_performance_rollup
-from perseverer.vdot import compute_threshold_pace_s_per_km
+from perseverer.performance_rollup import (
+    AEROBIC_THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR,
+    refresh_performance_rollup,
+)
+from perseverer.vdot import AEROBIC_THRESHOLD_VO2MAX_FRACTION, compute_threshold_pace_s_per_km
 
 _AVG_HR_KEY = "fit.session.avg_heart_rate"
 _MAX_HR_KEY = "fit.session.max_heart_rate"
@@ -225,6 +229,81 @@ def test_threshold_pace_matches_the_closed_form_value(tmp_path: Path) -> None:
     # Race predictions are populated whenever rolling_vdot is present.
     assert row.predicted_5k_s is not None
     assert row.predicted_marathon_s is not None
+
+
+def test_aerobic_threshold_pace_matches_the_closed_form_value_and_is_slower_than_anaerobic(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_activity(conn, activity_id="a0", local_date="2025-06-01")
+        _add_metric(conn, activity_id="a0", metric_key=VDOT_METRIC_KEY, value=50.0)
+        conn.commit()
+        refresh_performance_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+        row = _row(conn, "2025-06-01")
+    assert row is not None
+    assert row.aerobic_threshold_pace_s_per_km == compute_threshold_pace_s_per_km(
+        50.0, fraction=AEROBIC_THRESHOLD_VO2MAX_FRACTION
+    )
+    # Physiologically required: the aerobic threshold sits below the anaerobic one, so its own
+    # pace is slower (a larger seconds/km) at the same VDOT.
+    assert row.aerobic_threshold_pace_s_per_km > row.threshold_pace_s_per_km
+
+
+def test_aerobic_threshold_hr_uses_empirical_median_near_aerobic_pace(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_activity(conn, activity_id="vdot0", local_date="2025-06-01")
+        _add_metric(conn, activity_id="vdot0", metric_key=VDOT_METRIC_KEY, value=50.0)
+        aerobic_pace = compute_threshold_pace_s_per_km(
+            50.0, fraction=AEROBIC_THRESHOLD_VO2MAX_FRACTION
+        )
+        assert aerobic_pace is not None
+        aerobic_speed_mps = 1000.0 / aerobic_pace
+        # Three easy/steady runs at aerobic threshold pace (within tolerance), HRs 130/135/140 ->
+        # median 135 -- deliberately much slower/lower-HR than the anaerobic-threshold fixture
+        # above so the two thresholds can't accidentally share qualifying runs.
+        for i, hr in enumerate([130.0, 135.0, 140.0]):
+            aid = f"aerobic_near{i}"
+            _add_activity(conn, activity_id=aid, local_date=f"2025-06-0{2 + i}")
+            _add_metric(conn, activity_id=aid, metric_key=VDOT_METRIC_KEY, value=35.0)
+            _add_metric(
+                conn, activity_id=aid, metric_key=AVG_GAP_METRIC_KEY, value=aerobic_speed_mps
+            )
+            _add_metric(
+                conn, activity_id=aid, metric_key=_AVG_HR_KEY, value=hr, source="fit_folder"
+            )
+        conn.commit()
+        refresh_performance_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+        row = _row(conn, "2025-06-10")
+    assert row is not None
+    assert row.aerobic_threshold_hr_bpm == 135.0
+    assert row.aerobic_threshold_hr_source == "empirical"
+
+
+def test_aerobic_threshold_hr_falls_back_to_its_own_fraction_of_max_hr(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_activity(conn, activity_id="a0", local_date="2025-06-01")
+        _add_metric(conn, activity_id="a0", metric_key=VDOT_METRIC_KEY, value=50.0)
+        _add_activity(conn, activity_id="a1", local_date="2025-06-02")
+        _add_metric(
+            conn, activity_id="a1", metric_key=_MAX_HR_KEY, value=190.0, source="fit_folder"
+        )
+        conn.commit()
+        refresh_performance_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        conn.commit()
+        row = _row(conn, "2025-06-10")
+    assert row is not None
+    assert row.aerobic_threshold_hr_source == "fallback"
+    assert row.aerobic_threshold_hr_bpm == pytest.approx(
+        AEROBIC_THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR * 190.0
+    )
+    # The aerobic and anaerobic fallback fractions are deliberately different (0.851 vs 0.88, own
+    # separate citations) -- confirm they don't collapse to the same computed value.
+    assert row.aerobic_threshold_hr_bpm != row.threshold_hr_bpm
 
 
 def test_threshold_hr_uses_empirical_median_when_enough_samples_exist(tmp_path: Path) -> None:

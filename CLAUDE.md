@@ -285,6 +285,55 @@ because you don't recognize it — stop, that's the bug.
   `ix_activity_metric_athlete_key` (`athlete_id`, `metric_key`) dropped it to 0.002s — the same
   "verify against real data, don't guess" methodology, and the same missing-index failure mode,
   as `ix_sleep_stage_session` earlier this project.
+- **Threshold Analysis: aerobic threshold added alongside the existing anaerobic one, plus a
+  factor-analysis breakdown** (Insights tab renamed from "Threshold & Max HR", `vdot.py`,
+  `performance_rollup.py`, `threshold_analysis.py`): the athlete's own "threshold pace" had always
+  meant the anaerobic/lactate threshold ("LT2"/"VT2", `THRESHOLD_VO2MAX_FRACTION = 0.88`, unchanged
+  field names `threshold_pace_s_per_km`/`threshold_hr_bpm` — every existing consumer, `hr_zones.py`
+  and `running_load.py` included, keeps meaning this one). New `aerobic_threshold_pace_s_per_km`/
+  `aerobic_threshold_hr_bpm`/`aerobic_threshold_hr_source` columns compute the aerobic threshold
+  ("LT1"/"VT1", always a slower pace) via the exact same `compute_threshold_pace_s_per_km`
+  function at `vdot.AEROBIC_THRESHOLD_VO2MAX_FRACTION = 0.73` instead — one model, a second
+  representative point on it, not a second formula. Both fractions were checked against real,
+  recent, running-specific literature rather than left resting on Daniels' 1979 model alone: Fathi,
+  Shahidi & Alhusaen Aga (2025, *Int J Exercise Science* 18(5):1381-1392, n=12 trained runners,
+  gas-exchange/visual-inspection method) measured VT1 at 73.2±4.1% VO2max and RCP/VT2 at
+  89.6±3.8%; Esteve-Lanao, Sellés-Pérez, Arévalo-Chico & Cejuela (2026, *Sports* 14(1):29, n=1,411
+  endurance runners) measured VT1 at 67.5-73.4% VO2peak and VT2 at 83.8-87.4% depending on
+  performance level, plus VT1/VT2 heart rate at 85.1±4.6%/93.5±2.5% of HRpeak. 0.73 is where the
+  two studies converge on VT1 to within a fraction of a percent; 0.88 (anaerobic, unchanged) sits
+  between the two on VT2 rather than shifted toward either alone, since real downstream consumers
+  already calibrate against it. The aerobic threshold's own HR fallback fraction
+  (`AEROBIC_THRESHOLD_HR_FALLBACK_FRACTION_OF_MAX_HR = 0.851`) is new and uses Esteve-Lanao's VT1
+  figure directly; the anaerobic HR fallback (0.88, from an older, more generic citation) is
+  deliberately left unchanged in this same pass — Esteve-Lanao's own 93.5% VT2 figure would be a
+  real, materially different number, but revising an already-relied-upon HR-zone fallback used by
+  existing athletes is a separate decision from adding a brand-new one, not bundled in here. A
+  shared `compute_threshold_hr` helper (exported from `performance_rollup.py`, alongside
+  `ROLLING_VDOT_WINDOW_DAYS`/`MAX_HR_WINDOW_DAYS`/`THRESHOLD_HR_WINDOW_DAYS`/
+  `THRESHOLD_PACE_TOLERANCE`/`MIN_THRESHOLD_HR_SAMPLES`/`MAX_HR_METRIC_KEYS`/`AVG_HR_METRIC_KEYS`/
+  `priority_merge`/`median`) computes both thresholds' empirical-median-or-fallback HR so they can
+  never silently drift onto different logic — same reuse instinct `vo2max_analysis.py`'s own
+  `ROLLING_VDOT_WINDOW_DAYS` reuse already established.
+  **Factor analysis** (`GET /performance/threshold-analysis`, `threshold_analysis.py`, the
+  request-time exception to the rollup mandate `vo2max_analysis.py` already established): both
+  threshold PACES are pure functions of the same `rolling_vdot` VO2max already uses, so "which
+  workout led to the current threshold pace" is exactly `vo2max_analysis.py`'s own driving-activity
+  answer, embedded here rather than re-derived (`ThresholdFactorAnalysisOut.vo2max`). Threshold HR
+  is answered differently per source: the empirical path recomputes, at request time, every
+  qualifying run near that day's threshold pace (same window/tolerance the rollup itself used) and
+  flags which run(s) the stored median actually came from (`is_median` — one run when the
+  qualifying count is odd, two when even and the median averages them); the fallback path instead
+  identifies whichever activity (any sport) set `max_hr_bpm` within its own 365-day window, or
+  notes a formula-derived max HR has no activity behind it at all. Frontend:
+  `ThresholdAnalysisChart.tsx` (renamed from `ThresholdMaxHrChart.tsx`) gained two new metrics
+  (Aerobic threshold pace; Aerobic threshold & max HR, mirroring the existing anaerobic-paired
+  chart) alongside the renamed existing two (now explicitly "Anaerobic threshold pace"/"Anaerobic
+  threshold & max HR"); `ThresholdFactorAnalysis.tsx` renders the shared VO2max-driving-workout
+  card plus both threshold-HR breakdowns (each qualifying run as its own activity-linked card, the
+  median one badged, or the max-HR-driving activity when on the fallback path), on the same
+  "Threshold Analysis" tab as the chart, same "chart above, breakdown below" pairing `Vo2maxChart.
+  tsx`/`Vo2maxFactorAnalysis.tsx` already established for VO2max.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash

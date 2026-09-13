@@ -991,6 +991,15 @@ performance_daily_rollup = Table(
     # "empirical" (derived from real runs near threshold pace) | "fallback" (% of max_hr_bpm) |
     # null (no threshold_hr_bpm at all yet) -- so a chart/tooltip can show which path produced it.
     Column("threshold_hr_source", String, nullable=True),
+    # The aerobic threshold ("LT1"/"VT1", well below threshold_pace_s_per_km above, the anaerobic/
+    # lactate threshold) -- same rolling_vdot, same compute_threshold_pace_s_per_km function, a
+    # different fraction (vdot.AEROBIC_THRESHOLD_VO2MAX_FRACTION). Same empirical/fallback/source
+    # shape as threshold_hr_bpm/threshold_hr_source above, via the same shared
+    # performance_rollup.compute_threshold_hr helper so the two thresholds can't silently drift
+    # onto different logic.
+    Column("aerobic_threshold_pace_s_per_km", Float, nullable=True),
+    Column("aerobic_threshold_hr_bpm", Float, nullable=True),
+    Column("aerobic_threshold_hr_source", String, nullable=True),
     Column("predicted_5k_s", Float, nullable=True),
     Column("predicted_10k_s", Float, nullable=True),
     Column("predicted_half_marathon_s", Float, nullable=True),

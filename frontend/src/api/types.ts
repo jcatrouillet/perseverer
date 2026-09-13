@@ -775,6 +775,9 @@ export interface PerformanceDailyRollupOut {
   threshold_pace_s_per_km: number | null;
   threshold_hr_bpm: number | null;
   threshold_hr_source: "empirical" | "fallback" | null;
+  aerobic_threshold_pace_s_per_km: number | null;
+  aerobic_threshold_hr_bpm: number | null;
+  aerobic_threshold_hr_source: "empirical" | "fallback" | null;
   predicted_5k_s: number | null;
   predicted_10k_s: number | null;
   predicted_half_marathon_s: number | null;
@@ -801,6 +804,49 @@ export interface Vo2maxFactorAnalysisOut {
   expires_on: string | null;
   days_since_last_qualifying_run: number | null;
   missing: string[];
+}
+
+export interface ActivityRefOut {
+  activity_id: string;
+  local_date: string;
+  name: string | null;
+  sport: string;
+  distance_m: number | null;
+  duration_s: number | null;
+}
+
+export interface ThresholdHrContributorOut extends ActivityRefOut {
+  pace_s_per_km: number;
+  avg_hr_bpm: number;
+  // True for the run(s) whose own avg_hr_bpm defines the empirical median (one when the
+  // qualifying count is odd, two when it's even and the median averages them).
+  is_median: boolean;
+}
+
+export interface ThresholdHrBreakdownOut {
+  threshold_hr_bpm: number | null;
+  threshold_hr_source: "empirical" | "fallback" | null;
+  reference_pace_s_per_km: number | null;
+  // Every qualifying run near reference_pace_s_per_km, sorted by avg_hr_bpm ascending --
+  // populated when threshold_hr_source is "empirical", empty otherwise.
+  contributors: ThresholdHrContributorOut[];
+  // Set only when threshold_hr_source is "fallback" and max HR itself came from a real
+  // observation, not the Tanaka formula (a formula has no activity behind it).
+  max_hr_driving_activity: ActivityRefOut | null;
+  missing: string[];
+}
+
+export interface ThresholdFactorAnalysisOut {
+  as_of: string;
+  // Both threshold paces are pure functions of this same rolling_vdot, so "which workout led to
+  // the current threshold pace" is exactly this VO2max analysis's own driving_activity.
+  vo2max: Vo2maxFactorAnalysisOut;
+  anaerobic_threshold_pace_s_per_km: number | null;
+  aerobic_threshold_pace_s_per_km: number | null;
+  anaerobic_threshold_hr: ThresholdHrBreakdownOut;
+  aerobic_threshold_hr: ThresholdHrBreakdownOut;
+  max_hr_bpm: number | null;
+  max_hr_source: "empirical" | "formula_fallback" | null;
 }
 
 export interface HealthDashboardDayOut {

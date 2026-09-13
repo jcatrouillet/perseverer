@@ -1,7 +1,9 @@
 import pytest
 
 from perseverer.vdot import (
+    AEROBIC_THRESHOLD_VO2MAX_FRACTION,
     RACE_DISTANCES_M,
+    THRESHOLD_VO2MAX_FRACTION,
     compute_gap_factor,
     compute_threshold_pace_s_per_km,
     compute_vdot,
@@ -129,6 +131,32 @@ class TestComputeThresholdPaceSPerKm:
         assert slow is not None
         assert fast is not None
         assert fast < slow
+
+    def test_aerobic_fraction_matches_independently_hand_worked_value_at_vdot_50(self) -> None:
+        # Independently re-derived from the same quadratic at AEROBIC_THRESHOLD_VO2MAX_FRACTION:
+        # 0.000104*v^2 + 0.182258*v - (4.60 + 0.73*50) = 0 -> v ~= 202.18 m/min -> pace ~= 4:57/km.
+        pace = compute_threshold_pace_s_per_km(50, fraction=AEROBIC_THRESHOLD_VO2MAX_FRACTION)
+        assert pace is not None
+        assert pace == pytest.approx(296.8, abs=0.5)  # ~4:57/km in seconds
+
+    def test_aerobic_threshold_pace_is_always_slower_than_anaerobic_at_the_same_vdot(
+        self,
+    ) -> None:
+        # Physiologically required ordering: the aerobic threshold sits below the anaerobic one
+        # on the same intensity continuum, so its pace must be slower (a larger seconds/km).
+        for vdot in (35, 45, 55, 65):
+            anaerobic = compute_threshold_pace_s_per_km(vdot)
+            aerobic = compute_threshold_pace_s_per_km(
+                vdot, fraction=AEROBIC_THRESHOLD_VO2MAX_FRACTION
+            )
+            assert anaerobic is not None
+            assert aerobic is not None
+            assert aerobic > anaerobic
+
+    def test_default_fraction_is_unchanged_from_before_parameterization(self) -> None:
+        assert compute_threshold_pace_s_per_km(50) == compute_threshold_pace_s_per_km(
+            50, fraction=THRESHOLD_VO2MAX_FRACTION
+        )
 
 
 class TestPredictRaceTimeS:
