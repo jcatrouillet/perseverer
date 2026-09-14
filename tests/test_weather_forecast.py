@@ -72,6 +72,19 @@ class TestFetchForecast:
         assert captured["forecast_days"] == "5"
         assert captured["latitude"] == "48.8566"
         assert captured["longitude"] == "2.3522"
+        assert captured["timezone"] == "UTC"
+
+    def test_passes_the_given_timezone_through_to_open_meteo(self) -> None:
+        captured: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.update(request.url.params)
+            return httpx.Response(200, json={"daily": {}})
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        fetch_forecast(48.8566, 2.3522, 5, tz="America/Los_Angeles", client=client)
+
+        assert captured["timezone"] == "America/Los_Angeles"
 
     def test_clamps_days_to_open_meteos_own_cap(self) -> None:
         captured: dict[str, str] = {}

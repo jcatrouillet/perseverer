@@ -1189,7 +1189,10 @@ The athlete's own home-location forecast, up to Open-Meteo's own 16-day cap — 
 counterpart to `GET /activities/{id}/weather`'s past-activity weather. Deliberately **not**
 archived or cached (see `weather_forecast.py`'s own module docstring): a forecast has no
 permanent-record concept, unlike every other vendor fetch in this codebase, since it's
-superseded by reality as the date approaches.
+superseded by reality as the date approaches. Requested in the athlete's own timezone (`PUT
+/settings/profile`'s `timezone`), never a hardcoded UTC, so a forecast day's own date lines up
+with the athlete's real local calendar dates rather than shifting by a day for roughly a third of
+the globe.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
@@ -1259,28 +1262,33 @@ optional, must be positive if given.
 
 ### `GET /settings/profile`
 
-The athlete's optional profile facts (birthdate, height, biological sex, email, home location).
-birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (`GET
-/performance`'s `max_hr_bpm`, `GET /health/dashboard`'s `bmr_kcal`) when there isn't enough
+The athlete's optional profile facts (birthdate, height, biological sex, email, home location,
+timezone). birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere
+(`GET /performance`'s `max_hr_bpm`, `GET /health/dashboard`'s `bmr_kcal`) when there isn't enough
 empirical/device data yet — never reconciled against or overriding real data once it exists.
 `email` is the recipient for the opt-in weekly/monthly training-report emails (`GET/PUT
 /settings/email-reports`). `home_lat`/`home_lon` are the one location `GET /weather/forecast`
-fetches a forecast for. `null` for any field means not set.
+fetches a forecast for. `timezone` is the athlete's own IANA timezone — also used by `GET
+/weather/forecast` (so a forecast's own days land on the athlete's real local dates) and by the
+calendar feed's VTIMEZONE. `null` for any field except `timezone` means not set (`timezone` is
+never null, defaulting to `"UTC"`).
 
 **Response `200`:** `AthleteProfileOut` — `birthdate` (string, nullable, ISO date), `height_cm`
 (number, nullable), `sex` (`"male"|"female"`, nullable), `email` (string, nullable), `home_lat`
-(number, nullable, degrees), `home_lon` (number, nullable, degrees).
+(number, nullable, degrees), `home_lon` (number, nullable, degrees), `timezone` (string, e.g.
+`"America/Los_Angeles"`).
 
 ### `PUT /settings/profile`
 
 Replaces the athlete's profile. **A full replacement, not a partial patch**, same convention as
-`PUT /settings/hr-zones`.
+`PUT /settings/hr-zones` — omitting `timezone` resets it to `"UTC"` since it can never be null.
 
 **Request body** (`AthleteProfileIn`): `birthdate` (string, nullable, ISO date — rejected if in
 the future or implies an age over 120 years), `height_cm` (number, nullable, 50-250), `sex`
 (`"male"|"female"`, nullable), `email` (string, nullable, a light format check only), `home_lat`
 (number, nullable, -90..90), `home_lon` (number, nullable, -180..180 — must be set together with
-`home_lat`, both or neither) — all optional.
+`home_lat`, both or neither), `timezone` (string, default `"UTC"` — must be a real IANA timezone
+name) — all optional except `timezone` carries a default rather than being nullable.
 
 **Response `200`:** `AthleteProfileOut`. **`422`** — a value fails validation.
 

@@ -376,8 +376,10 @@ export interface RunningLoadConfigIn {
 // GET/PUT /settings/profile -- birthdate/height/sex are used only as inputs to formula-based
 // fallbacks elsewhere (max HR, BMR) when there isn't enough empirical/device data yet; email is
 // the recipient for the opt-in weekly/monthly training-report emails; home_lat/home_lon are the
-// one location GET /weather/forecast fetches a forecast for. See
-// api/schemas/settings.py::AthleteProfileIn.
+// one location GET /weather/forecast fetches a forecast for; timezone (a real IANA name, e.g.
+// "America/Los_Angeles") is the existing athlete.timezone column, previously CLI-only -- now
+// also the timezone GET /weather/forecast requests from Open-Meteo so a forecast day's own date
+// lines up with the Week view's local-date grouping. See api/schemas/settings.py::AthleteProfileIn.
 export interface AthleteProfileOut {
   birthdate: string | null;
   height_cm: number | null;
@@ -385,6 +387,7 @@ export interface AthleteProfileOut {
   email: string | null;
   home_lat: number | null;
   home_lon: number | null;
+  timezone: string;
 }
 
 export interface AthleteProfileIn {
@@ -394,6 +397,7 @@ export interface AthleteProfileIn {
   email: string | null;
   home_lat: number | null;
   home_lon: number | null;
+  timezone: string;
 }
 
 // GET /weather/forecast -- the athlete's own home-location forecast, up to Open-Meteo's own

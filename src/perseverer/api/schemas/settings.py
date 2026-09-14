@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, model_validator
 
@@ -99,8 +100,12 @@ class RunningLoadConfigOut(BaseModel):
 # api/routers/health.py::get_health_dashboard) when there isn't enough empirical/device data yet.
 # email is the recipient for the opt-in weekly/monthly training-report emails (email_reports.py),
 # nothing else. home_lat/home_lon are the athlete's own default location, the input
-# weather_forecast.py uses for GET /weather/forecast -- both null or both set. See
-# db/schema.py::athlete's own birthdate/height_cm/sex/email/home_lat/home_lon columns.
+# weather_forecast.py uses for GET /weather/forecast -- both null or both set. timezone is the
+# existing athlete.timezone column (previously CLI-only, set at seed time and read only by
+# calendar_feed.py's own VTIMEZONE) -- exposed here so it's self-service, and now also read by
+# weather_forecast.py so a forecast's own day boundaries land on the athlete's real local
+# calendar dates rather than UTC's, matching the Week view's own local-date grouping. See
+# db/schema.py::athlete's own birthdate/height_cm/sex/email/home_lat/home_lon/timezone columns.
 class AthleteProfileIn(BaseModel):
     birthdate: str | None = None
     height_cm: float | None = None
@@ -108,6 +113,10 @@ class AthleteProfileIn(BaseModel):
     email: str | None = None
     home_lat: float | None = None
     home_lon: float | None = None
+    # Unlike every other field above, this can never be null on the athlete row (schema default
+    # "UTC") -- so, consistent with this endpoint's own "full replacement" contract, omitting it
+    # resets it to "UTC" rather than leaving it untouched.
+    timezone: str = "UTC"
 
     @model_validator(mode="after")
     def _sane_values(self) -> AthleteProfileIn:
@@ -132,6 +141,12 @@ class AthleteProfileIn(BaseModel):
             raise ValueError("home_lon must be between -180 and 180")
         if (self.home_lat is None) != (self.home_lon is None):
             raise ValueError("home_lat and home_lon must be set together")
+        try:
+            ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError) as e:
+            raise ValueError(
+                f"timezone must be a real IANA timezone name, got {self.timezone!r}"
+            ) from e
         return self
 
 
@@ -142,6 +157,7 @@ class AthleteProfileOut(BaseModel):
     email: str | None
     home_lat: float | None
     home_lon: float | None
+    timezone: str
 
 
 # PUT /settings/password -- self-service password change, see api/routers/settings.py for the

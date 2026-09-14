@@ -1486,10 +1486,26 @@ full reasoning; this section is the schema/API-shape reference.
   the historical archive API `weather.py` calls. `forecast_days` is hard-capped to 0-16,
   confirmed live (`weather_forecast.MAX_FORECAST_DAYS = 16`) -- requesting more raises an error
   response rather than silently truncating. Request: `daily=weathercode,temperature_2m_max,
-  temperature_2m_min&timezone=UTC`, returning parallel `time`/`weathercode`/
+  temperature_2m_min`, returning parallel `time`/`weathercode`/
   `temperature_2m_max`/`temperature_2m_min` arrays, the same field-naming convention
   `weather.py`'s own historical request already uses. A day missing any of the three fields is
   skipped (never fabricated), though Open-Meteo reliably fills every requested day in practice.
+  `timezone` is the athlete's own `athlete.timezone` (see below), never a hardcoded `UTC` --
+  confirmed live that Open-Meteo's `daily` entries are dates in the *requested* timezone, so a
+  UTC request for an athlete west of Greenwich returns "today" as already tomorrow locally for
+  several hours a day, a full calendar-day misalignment against the Week view's own local-date
+  grouping.
+- **`athlete.timezone`** (existing column, `String`, `nullable=False`, default `"UTC"` -- not a
+  new one): previously CLI-only (`sync athlete create`'s own default, read only by
+  `calendar_feed.py`'s VTIMEZONE for the iCal feed's timed events), now also exposed via
+  `GET/PUT /settings/profile` (validated as a real IANA name via `zoneinfo.ZoneInfo`, raising on
+  anything else) and read by `weather_forecast.py` above. Settings page: a native `<select>`
+  populated from `Intl.supportedValuesOf("timeZone")` at render time (no bundled/hand-maintained
+  IANA list needed) plus a "Use my browser's timezone" button
+  (`Intl.DateTimeFormat().resolvedOptions().timeZone`). Since this field can never be null on the
+  athlete row, `PUT /settings/profile` omitting it resets it to `"UTC"` -- consistent with this
+  endpoint's own pre-existing "full replacement, not a partial patch" contract for every other
+  field.
 - **`WeatherForecastOut`** (`api/schemas/weather_forecast.py`): `available: bool` (`false` --
   never a fabricated forecast -- when the athlete has no home location set or the fetch fails,
   matching `ActivityWeatherOut`/`ActivityLocationOut`'s own convention) plus `days:

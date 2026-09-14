@@ -1,7 +1,11 @@
 """GET /weather/forecast -- the athlete's own home-location forecast, up to Open-Meteo's own
-16-day cap. See api/schemas/weather_forecast.py for the response shape and weather_forecast.py
-for the fetch/parse (deliberately un-cached and un-archived -- a forecast has no permanent-record
-concept, unlike weather.py's own past-activity weather, see that module's own docstring).
+16-day cap, in the athlete's own local timezone (`athlete.timezone`, so a forecast day's
+`local_date` lines up with the Week view's own local-date grouping -- see
+weather_forecast.py::fetch_forecast's own docstring for why UTC would misalign by a day for
+roughly a third of the globe). See api/schemas/weather_forecast.py for the response shape and
+weather_forecast.py for the fetch/parse (deliberately un-cached and un-archived -- a forecast has
+no permanent-record concept, unlike weather.py's own past-activity weather, see that module's own
+docstring).
 """
 
 from __future__ import annotations
@@ -30,12 +34,14 @@ def get_weather_forecast(
     Open-Meteo's own 0-16 range at the query-param level already; `fetch_forecast` clamps again
     defensively."""
     row = conn.execute(
-        select(athlete.c.home_lat, athlete.c.home_lon).where(athlete.c.id == athlete_id)
+        select(athlete.c.home_lat, athlete.c.home_lon, athlete.c.timezone).where(
+            athlete.c.id == athlete_id
+        )
     ).fetchone()
     if row is None or row.home_lat is None or row.home_lon is None:
         return WeatherForecastOut(available=False)
 
-    forecast_days = fetch_forecast(row.home_lat, row.home_lon, days)
+    forecast_days = fetch_forecast(row.home_lat, row.home_lon, days, tz=row.timezone)
     if not forecast_days:
         return WeatherForecastOut(available=False)
 

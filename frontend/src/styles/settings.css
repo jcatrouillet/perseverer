@@ -18,6 +18,20 @@
   width: 9ch;
 }
 
+/* Groups a few fields onto their own dedicated line within the form's own flex-wrap flow,
+   rather than leaving them to wrap wherever the preceding fields' own widths happen to run out
+   -- a `flex-basis: 100%` item can never share a line with anything (before or after it), so it
+   always starts fresh and pushes whatever follows it to the next line too. Used for the Profile
+   card's home-location fields (which previously split across two lines unpredictably depending
+   on the Email field's own width) and its timezone field. */
+.settings-form__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+  flex-basis: 100%;
+}
+
 /* A date picker needs room for the full "MM/DD/YYYY"-shaped value plus the browser's own
    calendar-icon affordance -- the general 9ch above reads fine for a bpm/pace number but leaves
    a date input's own text and icon cramped together. */

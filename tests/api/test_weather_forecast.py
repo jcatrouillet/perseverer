@@ -18,13 +18,14 @@ from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.weather_forecast import ForecastDay
 
 
-def _set_home_location(engine: Engine, lat: float, lon: float) -> None:
+def _set_home_location(
+    engine: Engine, lat: float, lon: float, *, timezone: str | None = None
+) -> None:
+    values: dict[str, object] = {"home_lat": lat, "home_lon": lon}
+    if timezone is not None:
+        values["timezone"] = timezone
     with engine.connect() as conn:
-        conn.execute(
-            athlete.update()
-            .where(athlete.c.id == DEFAULT_ATHLETE_ID)
-            .values(home_lat=lat, home_lon=lon)
-        )
+        conn.execute(athlete.update().where(athlete.c.id == DEFAULT_ATHLETE_ID).values(**values))
         conn.commit()
 
 
@@ -99,17 +100,38 @@ def test_days_query_param_is_passed_through(
     _set_home_location(engine, 48.8566, 2.3522)
     captured: dict[str, object] = {}
 
-    def fake_fetch(lat: float, lon: float, days: int) -> list[ForecastDay]:
+    def fake_fetch(lat: float, lon: float, days: int, *, tz: str) -> list[ForecastDay]:
         captured["lat"] = lat
         captured["lon"] = lon
         captured["days"] = days
+        captured["tz"] = tz
         return []
 
     monkeypatch.setattr("perseverer.api.routers.weather_forecast.fetch_forecast", fake_fetch)
 
     r = client.get("/api/v1/weather/forecast?days=5", headers=auth_headers)
     assert r.status_code == 200
-    assert captured == {"lat": 48.8566, "lon": 2.3522, "days": 5}
+    assert captured == {"lat": 48.8566, "lon": 2.3522, "days": 5, "tz": "UTC"}
+
+
+def test_athletes_own_timezone_is_passed_to_the_forecast_fetch(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_home_location(engine, 48.8566, 2.3522, timezone="America/Los_Angeles")
+    captured: dict[str, object] = {}
+
+    def fake_fetch(lat: float, lon: float, days: int, *, tz: str) -> list[ForecastDay]:
+        captured["tz"] = tz
+        return []
+
+    monkeypatch.setattr("perseverer.api.routers.weather_forecast.fetch_forecast", fake_fetch)
+
+    r = client.get("/api/v1/weather/forecast", headers=auth_headers)
+    assert r.status_code == 200
+    assert captured["tz"] == "America/Los_Angeles"
 
 
 def test_days_query_param_is_bounded(client: TestClient, auth_headers: dict[str, str]) -> None:

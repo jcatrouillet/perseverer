@@ -442,6 +442,7 @@ def test_profile_returns_all_null_when_unconfigured(
         "email": None,
         "home_lat": None,
         "home_lon": None,
+        "timezone": "UTC",
     }
 
 
@@ -457,6 +458,7 @@ def test_put_profile_stores_and_returns_the_values(
             "email": "erwan@example.com",
             "home_lat": 48.8566,
             "home_lon": 2.3522,
+            "timezone": "America/Los_Angeles",
         },
         headers=auth_headers,
     )
@@ -468,6 +470,7 @@ def test_put_profile_stores_and_returns_the_values(
         "email": "erwan@example.com",
         "home_lat": 48.8566,
         "home_lon": 2.3522,
+        "timezone": "America/Los_Angeles",
     }
 
     with engine.connect() as conn:
@@ -479,6 +482,7 @@ def test_put_profile_stores_and_returns_the_values(
                 athlete.c.email,
                 athlete.c.home_lat,
                 athlete.c.home_lon,
+                athlete.c.timezone,
             )
         ).fetchone()
     assert row is not None
@@ -489,6 +493,7 @@ def test_put_profile_stores_and_returns_the_values(
         row.email,
         row.home_lat,
         row.home_lon,
+        row.timezone,
     ) == (
         "1990-01-01",
         178.0,
@@ -496,7 +501,27 @@ def test_put_profile_stores_and_returns_the_values(
         "erwan@example.com",
         48.8566,
         2.3522,
+        "America/Los_Angeles",
     )
+
+
+def test_put_profile_defaults_timezone_to_utc_when_omitted(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    # timezone can never be null on the athlete row -- consistent with this endpoint's own
+    # "full replacement, not a partial patch" contract, omitting it resets to the schema default.
+    r = client.put("/api/v1/settings/profile", json={}, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json()["timezone"] == "UTC"
+
+
+def test_put_profile_rejects_an_unknown_timezone(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        "/api/v1/settings/profile", json={"timezone": "Not/A_Real_Zone"}, headers=auth_headers
+    )
+    assert r.status_code == 422
 
 
 def test_put_profile_rejects_out_of_range_home_lat(

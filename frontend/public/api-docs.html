@@ -1120,13 +1120,14 @@ const SCHEMAS = [
   { name: "RunningLoadConfigOut", note: "Returned by GET and PUT /settings/running-load.", fields: [
       ["threshold_pace_sec_per_km","number|null","null means not configured yet -- Fitness & Form keeps using Garmin's own training_load_peak for every activity in that case."],
     ] },
-  { name: "AthleteProfileOut", note: "Returned by GET and PUT /settings/profile. birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (GET /performance's max_hr_bpm, GET /health/dashboard's bmr_kcal) when there isn't enough empirical/device data yet. email is the recipient for the opt-in weekly/monthly training-report emails. home_lat/home_lon are the one location GET /weather/forecast fetches a forecast for.", fields: [
+  { name: "AthleteProfileOut", note: "Returned by GET and PUT /settings/profile. birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (GET /performance's max_hr_bpm, GET /health/dashboard's bmr_kcal) when there isn't enough empirical/device data yet. email is the recipient for the opt-in weekly/monthly training-report emails. home_lat/home_lon are the one location GET /weather/forecast fetches a forecast for. timezone is also used by GET /weather/forecast (so its days land on the athlete's real local dates) and by the calendar feed's VTIMEZONE.", fields: [
       ["birthdate","string(date)|null",""],
       ["height_cm","number|null",""],
       ["sex","string|null","male | female"],
       ["email","string|null",""],
       ["home_lat","number|null","Degrees, -90..90."],
       ["home_lon","number|null","Degrees, -180..180."],
+      ["timezone","string","A real IANA name, e.g. \"America/Los_Angeles\". Never null -- defaults to \"UTC\"."],
     ] },
   { name: "WeatherForecastOut", note: "Returned by GET /weather/forecast. See “available: false” in Conventions -- false when the athlete hasn't set a home location (home_lat/home_lon on PUT /settings/profile) or the Open-Meteo fetch failed. Deliberately not archived or cached, unlike every other Open-Meteo response in this API -- see docs/DATA_DICTIONARY.md's own Weather forecast section.", fields: [
       ["available","boolean","required"],
@@ -2006,7 +2007,7 @@ const GROUPS = [
 
   { id: "weather-forecast", title: "Weather forecast", endpoints: [
     { method: "GET", path: "/api/v1/weather/forecast", summary: "Get the athlete's home-location forecast.",
-      description: "The future-facing counterpart to GET /activities/{id}/weather's past-activity weather -- keyed to the athlete's own home_lat/home_lon (set via PUT /settings/profile) rather than an activity's GPS point. Deliberately not archived or cached (see docs/DATA_DICTIONARY.md's own Weather forecast section): a forecast has no permanent-record concept, since it's superseded by reality as the date approaches.",
+      description: "The future-facing counterpart to GET /activities/{id}/weather's past-activity weather -- keyed to the athlete's own home_lat/home_lon (set via PUT /settings/profile) rather than an activity's GPS point. Deliberately not archived or cached (see docs/DATA_DICTIONARY.md's own Weather forecast section): a forecast has no permanent-record concept, since it's superseded by reality as the date approaches. Requested in the athlete's own timezone (also set via PUT /settings/profile), never a hardcoded UTC, so a forecast day's own date lines up with the athlete's real local calendar dates.",
       params: [ ["days","query","opt","integer, 1-16","16","Defaults to Open-Meteo's own 16-day cap."] ],
       responses: [ { code: 200, ref: "WeatherForecastOut" }, { code: 422, note: "days outside 1-16." } ],
       example: { curl: `curl https://your-perseverer-host/api/v1/weather/forecast?days=7 \\
@@ -2047,13 +2048,13 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"threshold_pace_sec_per_km": 308}'` }
     },
-    { method: "GET", path: "/api/v1/settings/profile", summary: "Get the athlete's optional profile (birthdate, height, sex, email, home location).",
-      description: "birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (max_hr_bpm on GET /performance, bmr_kcal on GET /health/dashboard) when there isn't enough empirical/device data yet -- never reconciled against or overriding real data once it exists. email is the recipient for the opt-in weekly/monthly training-report emails. home_lat/home_lon are the one location GET /weather/forecast fetches a forecast for. null for any field means not set.",
+    { method: "GET", path: "/api/v1/settings/profile", summary: "Get the athlete's optional profile (birthdate, height, sex, email, home location, timezone).",
+      description: "birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (max_hr_bpm on GET /performance, bmr_kcal on GET /health/dashboard) when there isn't enough empirical/device data yet -- never reconciled against or overriding real data once it exists. email is the recipient for the opt-in weekly/monthly training-report emails. home_lat/home_lon are the one location GET /weather/forecast fetches a forecast for. timezone is also used by GET /weather/forecast and the calendar feed. null for any field except timezone means not set (timezone defaults to \"UTC\").",
       responses: [ { code: 200, ref: "AthleteProfileOut" } ],
       example: {}
     },
     { method: "PUT", path: "/api/v1/settings/profile", summary: "Replace the athlete's profile.",
-      description: "A full replacement, not a partial patch, same convention as PUT /settings/hr-zones.",
+      description: "A full replacement, not a partial patch, same convention as PUT /settings/hr-zones -- omitting timezone resets it to \"UTC\" since it can never be null.",
       body: { schema: "AthleteProfileIn", fields: [
         ["birthdate","string(date)|null","opt","","Rejected if in the future or implies an age over 120 years."],
         ["height_cm","number|null","opt","","50-250."],
@@ -2061,11 +2062,12 @@ const GROUPS = [
         ["email","string|null","opt","","A light format check only."],
         ["home_lat","number|null","opt","","-90..90. Must be set together with home_lon."],
         ["home_lon","number|null","opt","","-180..180. Must be set together with home_lat."],
+        ["timezone","string","opt","\"UTC\"","Must be a real IANA timezone name."],
       ]},
       responses: [ { code: 200, ref: "AthleteProfileOut" }, { code: 422, note: "A value fails validation." } ],
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/profile \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
-  -d '{"birthdate": "1990-01-01", "height_cm": 178, "sex": "male", "email": "me@example.com", "home_lat": 48.8566, "home_lon": 2.3522}'` }
+  -d '{"birthdate": "1990-01-01", "height_cm": 178, "sex": "male", "email": "me@example.com", "home_lat": 48.8566, "home_lon": 2.3522, "timezone": "America/Los_Angeles"}'` }
     },
     { method: "PUT", path: "/api/v1/settings/password", summary: "Change the athlete's own login password.",
       description: "Verifies current_password first -- the same is_locked_out/verify_password/record_attempt sequence POST /auth/login uses, so repeated wrong attempts lock the username out the same way a brute-forced login would. Skips that check only when the athlete has no password set yet. Never changes username.",

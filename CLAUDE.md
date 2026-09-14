@@ -1039,6 +1039,13 @@ because you don't recognize it — stop, that's the bug.
   Open-Meteo actually returned, capped at 16) shows a weather icon (`weatherCodeInfo()`, reused
   as-is) plus min/max temperature on its own row directly under that day's date label — a past
   day or one beyond the forecast horizon simply has no matching entry and renders nothing.
+  The Open-Meteo `timezone` param is the athlete's own `athlete.timezone` (a real IANA name,
+  previously CLI-only/`sync athlete create`'s own default, read only by `calendar_feed.py`'s
+  VTIMEZONE, now also self-service via `GET/PUT /settings/profile` and a "Use my browser's
+  timezone" convenience button), never a hardcoded UTC — confirmed live that Open-Meteo's `daily`
+  entries are dates in the *requested* timezone, so a UTC request for an athlete west of
+  Greenwich returns "today" as already tomorrow locally for several hours a day, misaligning the
+  forecast's own day boundaries against the Week view's local-date grouping by exactly one day.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

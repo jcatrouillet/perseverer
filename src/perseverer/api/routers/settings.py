@@ -25,13 +25,16 @@ management routes; the public `.ics` response itself is `GET /share/calendar/{to
 own module docstring for why this is a single standing per-athlete secret (mirroring
 athlete.api_key_hash), not a share_link-style growing history.
 
-Also GET/PUT /settings/profile -- optional birthdate/height/sex/email/home_lat/home_lon, mutated
-directly on the `athlete` row (same shape as the calendar-feed endpoints above, not the
+Also GET/PUT /settings/profile -- optional birthdate/height/sex/email/home_lat/home_lon/timezone,
+mutated directly on the `athlete` row (same shape as the calendar-feed endpoints above, not the
 hr-zones/running-load insert-or-update dance, since the athlete row always already exists).
 birthdate/height/sex feed formula-based fallbacks elsewhere (performance_rollup.py's max HR,
 health.py's BMR) when there isn't enough empirical/device data yet; email is the recipient for
 the opt-in weekly/monthly training-report emails (email_reports.py); home_lat/home_lon are the
-one location weather_forecast.py's GET /weather/forecast fetches a forecast for -- see
+one location weather_forecast.py's GET /weather/forecast fetches a forecast for; timezone was
+previously CLI-only (`sync athlete create`'s own default, read only by calendar_feed.py's
+VTIMEZONE) and is now self-service here too, and also read by weather_forecast.py so a forecast's
+day boundaries land on the athlete's real local dates -- see
 api/schemas/settings.py::AthleteProfileIn.
 
 Also GET/PUT /settings/email-reports + POST /settings/email-reports/test -- the two per-athlete
@@ -443,11 +446,18 @@ def get_athlete_profile(
             athlete.c.email,
             athlete.c.home_lat,
             athlete.c.home_lon,
+            athlete.c.timezone,
         ).where(athlete.c.id == athlete_id)
     ).fetchone()
     if row is None:
         return AthleteProfileOut(
-            birthdate=None, height_cm=None, sex=None, email=None, home_lat=None, home_lon=None
+            birthdate=None,
+            height_cm=None,
+            sex=None,
+            email=None,
+            home_lat=None,
+            home_lon=None,
+            timezone="UTC",
         )
     return AthleteProfileOut(
         birthdate=row.birthdate,
@@ -456,6 +466,7 @@ def get_athlete_profile(
         email=row.email,
         home_lat=row.home_lat,
         home_lon=row.home_lon,
+        timezone=row.timezone,
     )
 
 
@@ -475,6 +486,7 @@ def put_athlete_profile(
             email=payload.email,
             home_lat=payload.home_lat,
             home_lon=payload.home_lon,
+            timezone=payload.timezone,
         )
     )
     conn.commit()
@@ -485,6 +497,7 @@ def put_athlete_profile(
         email=payload.email,
         home_lat=payload.home_lat,
         home_lon=payload.home_lon,
+        timezone=payload.timezone,
     )
 
 

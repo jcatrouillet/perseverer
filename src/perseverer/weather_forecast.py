@@ -4,9 +4,19 @@ against the real endpoint (https://api.open-meteo.com/v1/forecast, distinct from
 archive API `weather.py` calls) rather than assumed: `forecast_days` is hard-capped to the range
 0-16 -- requesting more returns `{"error":true,"reason":"Forecast days is invalid. Allowed range
 0 to 16. Given <n>."}` -- and the daily response shape (`daily=weathercode,temperature_2m_max,
-temperature_2m_min&timezone=UTC`) returns parallel `time`/`weathercode`/`temperature_2m_max`/
+temperature_2m_min`) returns parallel `time`/`weathercode`/`temperature_2m_max`/
 `temperature_2m_min` arrays, the same field-naming convention `weather.py`'s own historical
 request already uses.
+
+`timezone` is the athlete's own IANA zone (`athlete.timezone`, GET/PUT /settings/profile),
+never hardcoded UTC -- confirmed live that Open-Meteo's `daily` entries are dates in the
+*requested* timezone, so a UTC request for an athlete west of Greenwich returns "today" as
+already tomorrow locally for several hours each day (e.g. requesting `timezone=UTC` at 20:00
+Pacific returns a `time[0]` one calendar day ahead of the same request with
+`timezone=America/Los_Angeles`). The Week view matches a forecast day to a column by exact
+`local_date` string equality against its own browser-local "today" -- a UTC-anchored forecast
+would misalign by one day for roughly a third of the globe, exactly the kind of "changing weeks
+at the wrong time" bug an athlete would actually notice.
 
 Deliberately NOT archived raw and NOT cached, unlike every other vendor fetch in this codebase
 (CLAUDE.md's "raw first, always" rule exists so a permanent record can be re-derived from an
@@ -73,19 +83,24 @@ def parse_forecast_response(raw: dict[str, Any]) -> list[ForecastDay]:
 
 
 def fetch_forecast(
-    lat: float, lon: float, days: int, *, client: httpx.Client | None = None
+    lat: float, lon: float, days: int, *, tz: str = "UTC", client: httpx.Client | None = None
 ) -> list[ForecastDay] | None:
     """Calls Open-Meteo's forecast endpoint for `min(days, MAX_FORECAST_DAYS)` days starting
-    today (Open-Meteo's own `forecast_days` semantics -- today plus `forecast_days - 1` more).
-    Returns None (never a fabricated forecast) on any HTTP failure; returns [] if the response
-    parses but has no usable daily data."""
+    today (Open-Meteo's own `forecast_days` semantics -- today plus `forecast_days - 1` more) in
+    `tz`, the athlete's own IANA timezone -- see this module's own docstring for why this must be
+    a real per-athlete zone, not a hardcoded UTC, for `local_date` to line up with the Week
+    view's own local-date grouping. `tz` is trusted as already-validated (see
+    api/schemas/settings.py::AthleteProfileIn's own zoneinfo check) -- Open-Meteo itself would
+    just 400 on a garbage value, which surfaces as a plain fetch failure (None) below. Returns
+    None (never a fabricated forecast) on any HTTP failure; returns [] if the response parses but
+    has no usable daily data."""
     requested_days = max(0, min(days, MAX_FORECAST_DAYS))
     params = {
         "latitude": f"{lat:.4f}",
         "longitude": f"{lon:.4f}",
         "daily": "weathercode,temperature_2m_max,temperature_2m_min",
         "forecast_days": str(requested_days),
-        "timezone": "UTC",
+        "timezone": tz,
     }
 
     owns_client = client is None

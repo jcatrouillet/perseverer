@@ -3,7 +3,7 @@
 // Setting these here is what switches TimeInZoneChart (activity detail) over from the device's
 // own per-activity zone breakdown to zones computed from the raw HR stream against these three
 // reference values -- see ActivityDetailPage.tsx's own wiring.
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 
 import {
@@ -161,6 +161,7 @@ export function SettingsPage() {
   const [email, setEmail] = useState("");
   const [homeLat, setHomeLat] = useState("");
   const [homeLon, setHomeLon] = useState("");
+  const [timezone, setTimezone] = useState("UTC");
   const [geolocationError, setGeolocationError] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -175,8 +176,30 @@ export function SettingsPage() {
     setEmail(profileConfig.data.email ?? "");
     setHomeLat(toInputValue(profileConfig.data.home_lat));
     setHomeLon(toInputValue(profileConfig.data.home_lon));
+    setTimezone(profileConfig.data.timezone);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileConfig.isSuccess]);
+
+  // Intl.supportedValuesOf is well-supported in every modern evergreen browser (Chrome/Edge 99+,
+  // Firefox 93+, Safari 15.4+) -- no need to bundle or hand-maintain a ~400-zone IANA list just
+  // to populate this dropdown. Computed once (a static list, independent of the current
+  // selection); the currently-set value is unioned in afterward so a zone this browser doesn't
+  // happen to list (or the pre-Intl.supportedValuesOf fallback) still renders as a real option
+  // rather than silently jumping to whatever the <select> falls back to.
+  const allTimezones = useMemo(() => {
+    try {
+      return Intl.supportedValuesOf("timeZone");
+    } catch {
+      return [];
+    }
+  }, []);
+  const timezoneOptions = allTimezones.includes(timezone)
+    ? allTimezones
+    : [timezone, ...allTimezones];
+
+  function useBrowserTimezone() {
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }
 
   const heightCmNum = parseField(heightCm);
   const homeLatNum = parseField(homeLat);
@@ -356,7 +379,8 @@ export function SettingsPage() {
               observed max HR and any Eufy-scale readings always take priority once they exist.
               Email is where the weekly/monthly summaries go, if you enable them under External
               tools. Home latitude/longitude is what the Week view's weather forecast is fetched
-              for -- set both, or leave both blank.
+              for -- set both, or leave both blank. Timezone is used for that same forecast (so
+              its days land on your own local dates) and for the calendar feed.
             </p>
             <form
               className="settings-form"
@@ -370,6 +394,7 @@ export function SettingsPage() {
                   email: email.trim() === "" ? null : email.trim(),
                   home_lat: homeLatNum,
                   home_lon: homeLonNum,
+                  timezone,
                 });
               }}
             >
@@ -412,36 +437,53 @@ export function SettingsPage() {
                   autoComplete="off"
                 />
               </label>
-              <label>
-                Home latitude
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  value={homeLat}
-                  onChange={(e) => setHomeLat(e.target.value)}
-                  placeholder="e.g. 48.8566"
-                />
-              </label>
-              <label>
-                Home longitude
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  value={homeLon}
-                  onChange={(e) => setHomeLon(e.target.value)}
-                  placeholder="e.g. 2.3522"
-                />
-              </label>
-              <button type="button" className="button-link" onClick={useCurrentLocationForHome}>
-                Use current location
-              </button>
+              <div className="settings-form__row">
+                <label>
+                  Home latitude
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    value={homeLat}
+                    onChange={(e) => setHomeLat(e.target.value)}
+                    placeholder="e.g. 48.8566"
+                  />
+                </label>
+                <label>
+                  Home longitude
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    value={homeLon}
+                    onChange={(e) => setHomeLon(e.target.value)}
+                    placeholder="e.g. 2.3522"
+                  />
+                </label>
+                <button type="button" className="button-link" onClick={useCurrentLocationForHome}>
+                  Use current location
+                </button>
+              </div>
               {geolocationError && (
                 <span role="alert" className="settings-form__error">
                   {geolocationError}
                 </span>
               )}
+              <div className="settings-form__row">
+                <label>
+                  Timezone
+                  <select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+                    {timezoneOptions.map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="button" className="button-link" onClick={useBrowserTimezone}>
+                  Use my browser's timezone
+                </button>
+              </div>
               <button
                 type="submit"
                 disabled={profileMutation.isPending || profileClientError != null}
