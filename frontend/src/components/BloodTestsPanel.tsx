@@ -64,6 +64,41 @@ interface MarkerCatalogEntry {
   referenceHigh: number | null;
 }
 
+// Plain marker NAMES only -- carrying no unit or reference range, so this never crosses this
+// app's own long-standing rule that a reference range is never asserted, only ever copied from
+// the athlete's own lab report. Without this list, an athlete with no blood-test history yet (an
+// empty markerCatalog below) saw no dropdown at all on their very first entry -- confirmed live,
+// a real gap, not a hypothetical one -- since the dropdown's only source was the athlete's own
+// prior entries. This is just a common-lab-panel naming aid, same spirit as the exercise
+// library's own bundled catalog: it helps typing, it asserts nothing clinical. "+ New marker"
+// still covers anything not listed here.
+const COMMON_MARKERS = [
+  "Total Cholesterol",
+  "LDL Cholesterol",
+  "HDL Cholesterol",
+  "Triglycerides",
+  "Glucose (Fasting)",
+  "HbA1c",
+  "Hemoglobin",
+  "Hematocrit",
+  "White Blood Cell Count",
+  "Platelet Count",
+  "Creatinine",
+  "eGFR",
+  "ALT",
+  "AST",
+  "TSH",
+  "Free T4",
+  "Vitamin D",
+  "Vitamin B12",
+  "Ferritin",
+  "Iron",
+  "Sodium",
+  "Potassium",
+  "Calcium",
+  "CRP",
+] as const;
+
 /** The athlete's own marker names, each carrying forward the unit/reference range from their
  * own MOST RECENT entry for that marker -- never a hardcoded "normal range" catalog (this app's
  * own long-standing rule: reference ranges genuinely vary by lab/assay/sex/age, so the only
@@ -380,14 +415,17 @@ function AddForm({
   const [localDate, setLocalDate] = useState(TODAY);
   const [labName, setLabName] = useState("");
   const [notes, setNotes] = useState("");
-  const [markers, setMarkers] = useState<MarkerDraft[]>([
-    markerCatalog.size === 0 ? { ...emptyMarker(), isNewMarker: true } : emptyMarker(),
-  ]);
+  const [markers, setMarkers] = useState<MarkerDraft[]>([emptyMarker()]);
   const [error, setError] = useState<string | null>(null);
-  const knownMarkerNames = useMemo(
-    () => [...markerCatalog.keys()].sort((a, b) => a.localeCompare(b)),
-    [markerCatalog],
-  );
+  // The athlete's own past markers (each carrying real unit/range autofill) plus the common-panel
+  // names above that aren't already one of those -- so the dropdown always has something to offer,
+  // even on an athlete's very first entry, rather than only appearing once they already have
+  // history to draw from.
+  const knownMarkerNames = useMemo(() => {
+    const names = new Set(markerCatalog.keys());
+    for (const name of COMMON_MARKERS) names.add(name);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [markerCatalog]);
 
   function updateMarker(index: number, patch: Partial<MarkerDraft>) {
     setMarkers((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));

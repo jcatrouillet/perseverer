@@ -1323,22 +1323,29 @@ solve, only a marker name and a value the athlete is entering themselves.
   with a regression test asserting the exact formatted string rather than just that *some* date
   renders — this repo's own test environment defaults to `America/Los_Angeles`, so the test
   genuinely exercises the bug rather than passing by accident of the runner's own timezone.
-- **The marker field is a dropdown built from the athlete's own history, never a hardcoded
-  catalog** (`buildMarkerCatalog`, `BloodTestsPanel.tsx`): `marker` stays freeform text in the
-  database (no catalog table, no foreign key — the "Reference ranges are informational only"
-  bullet above applies exactly as much to marker names themselves), but the add form now offers a
-  `<select>` of every distinct marker name already present in the athlete's own fetched history,
+- **The marker field is a dropdown built from the athlete's own history, plus a small bundled
+  name list -- never a hardcoded reference range** (`buildMarkerCatalog`, `COMMON_MARKERS`,
+  `BloodTestsPanel.tsx`): `marker` stays freeform text in the database (no catalog table, no
+  foreign key — the "Reference ranges are informational only" bullet above applies exactly as
+  much to marker names themselves), but the add form now offers a `<select>` of every distinct
+  marker name already present in the athlete's own fetched history, unioned with `COMMON_MARKERS`
+  (~24 plain names -- Total Cholesterol, HbA1c, TSH, Vitamin D, and the like), sorted
   alphabetically. Since `GET /blood-tests` is already ordered `local_date` desc, the first row
   seen for a given marker name in that same array is already its own most recent entry, so no
   extra sort or query is needed to know which unit/reference range to carry forward. Choosing a
-  known marker auto-fills unit/reference low/high from that most-recent row — still plain,
-  independently editable `<input>`s afterward, the same as a freshly-typed value would be, since a
-  different lab or a genuinely revised range is exactly as real as the first one. A "+ New
-  marker…" option (a sentinel `<option>` value, not a real marker string) switches that row back
-  to a free-text `<input>`, with a small "Choose existing" link to switch back; the very first
-  blood test ever (empty history) skips the dropdown entirely and starts in free-text mode, since
-  an empty `<select>` with nothing but "+ New marker…" in it would just be an extra click for no
-  benefit.
+  marker from the athlete's own history auto-fills unit/reference low/high from that most-recent
+  row -- still plain, independently editable `<input>`s afterward, the same as a freshly-typed
+  value would be, since a different lab or a genuinely revised range is exactly as real as the
+  first one; choosing a bundled-list name the athlete has never entered before fills in nothing
+  (there's no personal data behind it yet). `COMMON_MARKERS` carries names only, never a unit or
+  range -- that would be exactly the "normal range this app asserts" the reference-range
+  principle above forbids. It exists because the athlete's-own-history-only version of this
+  dropdown, confirmed live, left a brand-new athlete with no dropdown at all on their very first
+  entry (an empty `<select>` with nothing but "+ New marker…" seemed like a worse experience than
+  a small standard list to start from) -- a real gap the bundled list closes, not a hypothetical
+  one. A "+ New marker…" option (a sentinel `<option>` value, not a real marker string) switches
+  that row to a free-text `<input>` instead, with a small "Choose existing" link back, for
+  anything not in either list.
 
 ## Running Eddington number, per year (eddington.ts)
 

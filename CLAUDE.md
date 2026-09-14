@@ -230,16 +230,20 @@ because you don't recognize it — stop, that's the bug.
   regression test asserting the exact formatted string (this repo's own test environment defaults
   to `America/Los_Angeles`, so the test genuinely exercises the bug, not just *a* rendered date).
   **The add form's own marker field is a dropdown, not free text** (`buildMarkerCatalog`), built
-  from the athlete's own already-fetched history — never a hardcoded catalog of markers or
-  "normal" ranges, which would directly contradict the reference-range principle two paragraphs
-  up. `GET /blood-tests` already returns every result ordered `local_date` desc, so the first row
+  from the athlete's own already-fetched history, unioned with a small bundled `COMMON_MARKERS`
+  list of plain marker *names* (Total Cholesterol, HbA1c, TSH, Vitamin D, and ~20 others) —
+  deliberately just names, never a hardcoded "normal" range, which would directly contradict the
+  reference-range principle two paragraphs up (a name asserts nothing clinical; a range does).
+  `GET /blood-tests` already returns every result ordered `local_date` desc, so the first row
   seen for a given marker name is already that marker's own most recent entry — the dropdown
-  offers every distinct marker name the athlete has typed before (alphabetical), and choosing one
-  auto-fills unit/reference low/high from that same most-recent row (still freely editable
-  afterward, since a different lab or a genuinely changed range is real too). A "+ New marker…"
-  option switches that one row to the original free-text input, with a "Choose existing" link
-  back; an athlete with zero blood-test history yet gets the free-text input directly, with no
-  empty dropdown to click through first.
+  offers every distinct marker name the athlete has typed before (auto-filling unit/reference
+  low/high from that same most-recent row, still freely editable afterward, since a different lab
+  or a genuinely changed range is real too) plus any common-panel name not already in that
+  history (offering no autofill, since there's no personal data behind it yet). The bundled list
+  exists specifically so a dropdown still has something to offer on an athlete's very first
+  entry — confirmed live that with only the athlete's-own-history source, a brand-new athlete saw
+  no dropdown at all, a real gap this closed. A "+ New marker…" option switches that one row to a
+  free-text input instead, with a "Choose existing" link back, for anything not in either list.
 - **Running Eddington number, per year (`eddington.ts`, `EddingtonChart.tsx`, an Insights tab)**:
   the largest integer E such that the athlete completed at least E runs of at least E km each in
   a given calendar year — a classic cycling-logging statistic (VeloViewer and others use it for

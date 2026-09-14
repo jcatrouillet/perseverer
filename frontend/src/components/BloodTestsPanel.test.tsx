@@ -120,6 +120,7 @@ describe("BloodTestsPanel", () => {
     render(<BloodTestsPanel />);
 
     fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "__new_marker__" } });
     fireEvent.change(screen.getByPlaceholderText("e.g. LDL Cholesterol"), {
       target: { value: "Glucose" },
     });
@@ -142,12 +143,12 @@ describe("BloodTestsPanel", () => {
     render(<BloodTestsPanel />);
     fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
 
-    expect(screen.getAllByPlaceholderText("e.g. LDL Cholesterol")).toHaveLength(1);
+    expect(screen.getAllByRole("combobox")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "+ Add another marker" }));
-    expect(screen.getAllByPlaceholderText("e.g. LDL Cholesterol")).toHaveLength(2);
+    expect(screen.getAllByRole("combobox")).toHaveLength(2);
 
     fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]!);
-    expect(screen.getAllByPlaceholderText("e.g. LDL Cholesterol")).toHaveLength(1);
+    expect(screen.getAllByRole("combobox")).toHaveLength(1);
   });
 
   it("shows a marker dropdown, not free text, once the athlete has entered a marker before", () => {
@@ -213,13 +214,28 @@ describe("BloodTestsPanel", () => {
     expect(screen.queryByPlaceholderText("e.g. LDL Cholesterol")).not.toBeInTheDocument();
   });
 
-  it("defaults straight to free text with no dropdown when there's no marker history yet", () => {
+  it("still shows a marker dropdown with no marker history yet, from the bundled common list", () => {
     mockUseBloodTests.mockReturnValue({ ...EMPTY, data: [] });
     render(<BloodTestsPanel />);
     fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
 
-    expect(screen.getByPlaceholderText("e.g. LDL Cholesterol")).toBeInTheDocument();
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("e.g. LDL Cholesterol")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Total Cholesterol" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "+ New marker…" })).toBeInTheDocument();
+  });
+
+  it("selecting a common-list marker with no personal history leaves unit/range blank", () => {
+    mockUseBloodTests.mockReturnValue({ ...EMPTY, data: [] });
+    render(<BloodTestsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "TSH" } });
+
+    expect(screen.getByPlaceholderText("mg/dL")).toHaveValue("");
+    for (const input of screen.getAllByRole("spinbutton")) {
+      expect(input).toHaveValue(null);
+    }
   });
 
   it("clicking Cancel on the add form hides it without submitting", () => {
