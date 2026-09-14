@@ -58,6 +58,32 @@ function groupIntoPanels(results: BloodTestResultOut[]): Panel[] {
     }));
 }
 
+interface MarkerCatalogEntry {
+  unit: string | null;
+  referenceLow: number | null;
+  referenceHigh: number | null;
+}
+
+/** The athlete's own marker names, each carrying forward the unit/reference range from their
+ * own MOST RECENT entry for that marker -- never a hardcoded "normal range" catalog (this app's
+ * own long-standing rule: reference ranges genuinely vary by lab/assay/sex/age, so the only
+ * range this app will ever assert is one the athlete already typed in themselves). `results` is
+ * already ordered local_date desc (GET /blood-tests's own contract), so the first row seen for
+ * a given marker name is already its most recent one -- no extra sort needed here. */
+function buildMarkerCatalog(results: BloodTestResultOut[]): Map<string, MarkerCatalogEntry> {
+  const catalog = new Map<string, MarkerCatalogEntry>();
+  for (const r of results) {
+    if (!catalog.has(r.marker)) {
+      catalog.set(r.marker, {
+        unit: r.unit,
+        referenceLow: r.reference_low,
+        referenceHigh: r.reference_high,
+      });
+    }
+  }
+  return catalog;
+}
+
 function isOutOfRange(r: BloodTestResultOut): boolean {
   return (
     (r.reference_low != null && r.value_num < r.reference_low) ||
@@ -323,26 +349,62 @@ function PanelCard({ panel, defaultOpen }: { panel: Panel; defaultOpen: boolean 
 
 interface MarkerDraft {
   marker: string;
+  // True once "+ New marker" is chosen -- shows a free-text input instead of the dropdown, for
+  // a marker the athlete has never entered before.
+  isNewMarker: boolean;
   value: string;
   unit: string;
   refLow: string;
   refHigh: string;
 }
 
+// Sentinel <option> value distinguishing "add a marker not in the list" from a real marker name
+// -- a real marker could theoretically collide with a plain string like "new", so this uses a
+// value no lab report would ever produce.
+const NEW_MARKER_OPTION = "__new_marker__";
+
 function emptyMarker(): MarkerDraft {
-  return { marker: "", value: "", unit: "", refLow: "", refHigh: "" };
+  return { marker: "", isNewMarker: false, value: "", unit: "", refLow: "", refHigh: "" };
 }
 
-function AddForm({ onCancel, onDone }: { onCancel: () => void; onDone: () => void }) {
+function AddForm({
+  markerCatalog,
+  onCancel,
+  onDone,
+}: {
+  markerCatalog: Map<string, MarkerCatalogEntry>;
+  onCancel: () => void;
+  onDone: () => void;
+}) {
   const createBatch = useCreateBloodTestBatch();
   const [localDate, setLocalDate] = useState(TODAY);
   const [labName, setLabName] = useState("");
   const [notes, setNotes] = useState("");
-  const [markers, setMarkers] = useState<MarkerDraft[]>([emptyMarker()]);
+  const [markers, setMarkers] = useState<MarkerDraft[]>([
+    markerCatalog.size === 0 ? { ...emptyMarker(), isNewMarker: true } : emptyMarker(),
+  ]);
   const [error, setError] = useState<string | null>(null);
+  const knownMarkerNames = useMemo(
+    () => [...markerCatalog.keys()].sort((a, b) => a.localeCompare(b)),
+    [markerCatalog],
+  );
 
   function updateMarker(index: number, patch: Partial<MarkerDraft>) {
     setMarkers((prev) => prev.map((m, i) => (i === index ? { ...m, ...patch } : m)));
+  }
+
+  function selectMarker(index: number, selected: string) {
+    if (selected === NEW_MARKER_OPTION) {
+      updateMarker(index, { marker: "", isNewMarker: true, unit: "", refLow: "", refHigh: "" });
+      return;
+    }
+    const known = markerCatalog.get(selected);
+    updateMarker(index, {
+      marker: selected,
+      unit: known?.unit ?? "",
+      refLow: known?.referenceLow != null ? String(known.referenceLow) : "",
+      refHigh: known?.referenceHigh != null ? String(known.referenceHigh) : "",
+    });
   }
 
   function removeMarker(index: number) {
@@ -433,12 +495,42 @@ function AddForm({ onCancel, onDone }: { onCancel: () => void; onDone: () => voi
             {markers.map((m, i) => (
               <tr key={i}>
                 <td>
-                  <input
-                    className="input blood-tests__cell-input"
-                    value={m.marker}
-                    onChange={(e) => updateMarker(i, { marker: e.target.value })}
-                    placeholder="e.g. LDL Cholesterol"
-                  />
+                  {m.isNewMarker ? (
+                    <div className="blood-tests__marker-cell">
+                      <input
+                        className="input blood-tests__cell-input"
+                        value={m.marker}
+                        onChange={(e) => updateMarker(i, { marker: e.target.value })}
+                        placeholder="e.g. LDL Cholesterol"
+                        autoFocus
+                      />
+                      {knownMarkerNames.length > 0 && (
+                        <button
+                          type="button"
+                          className="button-link"
+                          onClick={() => updateMarker(i, { marker: "", isNewMarker: false })}
+                        >
+                          Choose existing
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      className="input blood-tests__cell-input"
+                      value={m.marker}
+                      onChange={(e) => selectMarker(i, e.target.value)}
+                    >
+                      <option value="" disabled>
+                        Select a marker…
+                      </option>
+                      {knownMarkerNames.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                      <option value={NEW_MARKER_OPTION}>+ New marker…</option>
+                    </select>
+                  )}
                 </td>
                 <td>
                   <input
@@ -487,7 +579,16 @@ function AddForm({ onCancel, onDone }: { onCancel: () => void; onDone: () => voi
           </tbody>
         </table>
       </div>
-      <button type="button" className="button" onClick={() => setMarkers((prev) => [...prev, emptyMarker()])}>
+      <button
+        type="button"
+        className="button"
+        onClick={() =>
+          setMarkers((prev) => [
+            ...prev,
+            knownMarkerNames.length === 0 ? { ...emptyMarker(), isNewMarker: true } : emptyMarker(),
+          ])
+        }
+      >
         + Add another marker
       </button>
 
@@ -519,6 +620,7 @@ export function BloodTestsPanel() {
   const results = useBloodTests(EARLIEST_PLAUSIBLE_DATE, TODAY);
 
   const panels = useMemo(() => groupIntoPanels(results.data ?? []), [results.data]);
+  const markerCatalog = useMemo(() => buildMarkerCatalog(results.data ?? []), [results.data]);
 
   return (
     <section className="card">
@@ -545,7 +647,11 @@ export function BloodTestsPanel() {
       )}
 
       {isAdding ? (
-        <AddForm onCancel={() => setIsAdding(false)} onDone={() => setIsAdding(false)} />
+        <AddForm
+          markerCatalog={markerCatalog}
+          onCancel={() => setIsAdding(false)}
+          onDone={() => setIsAdding(false)}
+        />
       ) : (
         <button type="button" className="button" onClick={() => setIsAdding(true)}>
           + Add blood test

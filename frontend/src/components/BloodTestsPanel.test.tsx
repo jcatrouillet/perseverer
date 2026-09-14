@@ -150,6 +150,78 @@ describe("BloodTestsPanel", () => {
     expect(screen.getAllByPlaceholderText("e.g. LDL Cholesterol")).toHaveLength(1);
   });
 
+  it("shows a marker dropdown, not free text, once the athlete has entered a marker before", () => {
+    mockUseBloodTests.mockReturnValue({ ...EMPTY, data: [result()] });
+    render(<BloodTestsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
+
+    expect(screen.queryByPlaceholderText("e.g. LDL Cholesterol")).not.toBeInTheDocument();
+    const select = screen.getByRole("combobox");
+    expect(select).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "LDL Cholesterol" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "+ New marker…" })).toBeInTheDocument();
+  });
+
+  it("selecting a known marker auto-fills its unit and reference range", () => {
+    mockUseBloodTests.mockReturnValue({ ...EMPTY, data: [result()] });
+    render(<BloodTestsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "LDL Cholesterol" } });
+
+    expect(screen.getByDisplayValue("mg/dL")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("0")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("130")).toBeInTheDocument();
+  });
+
+  it("submits the auto-filled unit/reference range when saving with a known marker", () => {
+    mockUseBloodTests.mockReturnValue({ ...EMPTY, data: [result()] });
+    render(<BloodTestsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "LDL Cholesterol" } });
+    fireEvent.change(screen.getAllByRole("spinbutton")[0]!, { target: { value: "95" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save blood test" }));
+
+    expect(mockCreateBatchMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        results: [
+          expect.objectContaining({
+            marker: "LDL Cholesterol",
+            value_num: 95,
+            unit: "mg/dL",
+            reference_low: 0,
+            reference_high: 130,
+          }),
+        ],
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("choosing '+ New marker' reveals free text, and 'Choose existing' reverts to the dropdown", () => {
+    mockUseBloodTests.mockReturnValue({ ...EMPTY, data: [result()] });
+    render(<BloodTestsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "__new_marker__" } });
+    expect(screen.getByPlaceholderText("e.g. LDL Cholesterol")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose existing" }));
+    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("e.g. LDL Cholesterol")).not.toBeInTheDocument();
+  });
+
+  it("defaults straight to free text with no dropdown when there's no marker history yet", () => {
+    mockUseBloodTests.mockReturnValue({ ...EMPTY, data: [] });
+    render(<BloodTestsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add blood test" }));
+
+    expect(screen.getByPlaceholderText("e.g. LDL Cholesterol")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
   it("clicking Cancel on the add form hides it without submitting", () => {
     mockUseBloodTests.mockReturnValue({ ...EMPTY, data: [] });
     render(<BloodTestsPanel />);
