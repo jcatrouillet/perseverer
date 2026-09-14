@@ -25,12 +25,14 @@ management routes; the public `.ics` response itself is `GET /share/calendar/{to
 own module docstring for why this is a single standing per-athlete secret (mirroring
 athlete.api_key_hash), not a share_link-style growing history.
 
-Also GET/PUT /settings/profile -- optional birthdate/height/sex/email, mutated directly on the
-`athlete` row (same shape as the calendar-feed endpoints above, not the hr-zones/running-load
-insert-or-update dance, since the athlete row always already exists). birthdate/height/sex feed
-formula-based fallbacks elsewhere (performance_rollup.py's max HR, health.py's BMR) when there
-isn't enough empirical/device data yet; email is the recipient for the opt-in weekly/monthly
-training-report emails (email_reports.py) -- see api/schemas/settings.py::AthleteProfileIn.
+Also GET/PUT /settings/profile -- optional birthdate/height/sex/email/home_lat/home_lon, mutated
+directly on the `athlete` row (same shape as the calendar-feed endpoints above, not the
+hr-zones/running-load insert-or-update dance, since the athlete row always already exists).
+birthdate/height/sex feed formula-based fallbacks elsewhere (performance_rollup.py's max HR,
+health.py's BMR) when there isn't enough empirical/device data yet; email is the recipient for
+the opt-in weekly/monthly training-report emails (email_reports.py); home_lat/home_lon are the
+one location weather_forecast.py's GET /weather/forecast fetches a forecast for -- see
+api/schemas/settings.py::AthleteProfileIn.
 
 Also GET/PUT /settings/email-reports + POST /settings/email-reports/test -- the two per-athlete
 opt-in switches for those report emails (db/schema.py::athlete_email_report_config), plus the
@@ -434,14 +436,26 @@ def get_athlete_profile(
     conn: Connection = Depends(get_conn),
 ) -> AthleteProfileOut:
     row = conn.execute(
-        select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex, athlete.c.email).where(
-            athlete.c.id == athlete_id
-        )
+        select(
+            athlete.c.birthdate,
+            athlete.c.height_cm,
+            athlete.c.sex,
+            athlete.c.email,
+            athlete.c.home_lat,
+            athlete.c.home_lon,
+        ).where(athlete.c.id == athlete_id)
     ).fetchone()
     if row is None:
-        return AthleteProfileOut(birthdate=None, height_cm=None, sex=None, email=None)
+        return AthleteProfileOut(
+            birthdate=None, height_cm=None, sex=None, email=None, home_lat=None, home_lon=None
+        )
     return AthleteProfileOut(
-        birthdate=row.birthdate, height_cm=row.height_cm, sex=row.sex, email=row.email
+        birthdate=row.birthdate,
+        height_cm=row.height_cm,
+        sex=row.sex,
+        email=row.email,
+        home_lat=row.home_lat,
+        home_lon=row.home_lon,
     )
 
 
@@ -459,6 +473,8 @@ def put_athlete_profile(
             height_cm=payload.height_cm,
             sex=payload.sex,
             email=payload.email,
+            home_lat=payload.home_lat,
+            home_lon=payload.home_lon,
         )
     )
     conn.commit()
@@ -467,6 +483,8 @@ def put_athlete_profile(
         height_cm=payload.height_cm,
         sex=payload.sex,
         email=payload.email,
+        home_lat=payload.home_lat,
+        home_lon=payload.home_lon,
     )
 
 

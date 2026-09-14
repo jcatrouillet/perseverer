@@ -166,6 +166,19 @@
   font-size: var(--font-size-sm);
 }
 
+/* Sits right under the date/weekday header (its own row, deliberately not folded into the
+   header's own flex-wrap row alongside the sleep chip) -- forecast.py/weather_forecast.py's
+   Open-Meteo icon + min/max temperature for this day, only rendered when this date falls
+   inside the athlete's own home-location forecast (today through Open-Meteo's own 16-day cap;
+   a past day or one beyond that horizon renders nothing here at all). */
+.week-columns__forecast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 /* Stops the day-level click-to-navigate (WeekDayColumn's own onClick) from also firing when the
    click actually lands on one of these activity cards -- each already links to that specific
    activity, the more useful destination. */

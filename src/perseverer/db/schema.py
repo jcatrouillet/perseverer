@@ -79,6 +79,14 @@ athlete = Table(
     # nothing else reads it. Validated at the API layer with a light regex, not a full RFC 5322
     # parse. NULL means the athlete hasn't set one; the email jobs skip that athlete with a warn.
     Column("email", String, nullable=True),
+    # A single "home" point, settable via GET/PUT /settings/profile (manual entry or the
+    # Settings page's own browser-geolocation button) -- the location weather_forecast.py fetches
+    # a forecast for, since no other concept of an athlete's default location exists anywhere in
+    # this schema (every other weather feature, weather.py included, is keyed to one specific
+    # activity's own GPS start point). Both null or both set -- validated at the API layer, not
+    # here. Degrees, WGS84, matching route_geom's own lat/lon convention.
+    Column("home_lat", Float, nullable=True),
+    Column("home_lon", Float, nullable=True),
 )
 
 # An athlete's own configured HR training zones -- independent of the per-activity, device-

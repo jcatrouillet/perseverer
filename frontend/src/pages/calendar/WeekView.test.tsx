@@ -72,6 +72,8 @@ mockUseActivities.mockReturnValue({ data: { items: [] }, isLoading: false, isErr
 const mockUseNotes = vi.fn();
 mockUseNotes.mockReturnValue({ data: [], isLoading: false, isError: false });
 const mockUseCreateNote = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
+const mockUseWeatherForecast = vi.fn();
+mockUseWeatherForecast.mockReturnValue({ data: undefined, isLoading: false, isError: false });
 const EMPTY_QUERY = { data: undefined, isLoading: false, isError: false };
 const EMPTY_DAYS_QUERY = { data: { days: [] }, isLoading: false, isError: false };
 const EMPTY_PERIODS_QUERY = { data: { periods: [] }, isLoading: false, isError: false };
@@ -91,6 +93,7 @@ vi.mock("../../api/queries", () => ({
   usePlannedRacesForDate: (...args: unknown[]) => mockUsePlannedRacesForDate(...args),
   useNotes: (...args: unknown[]) => mockUseNotes(...args),
   useCreateNote: () => mockUseCreateNote(),
+  useWeatherForecast: () => mockUseWeatherForecast(),
 }));
 
 const RUNNING_WORKOUT: PlannedWorkoutOut = {
@@ -214,6 +217,65 @@ describe("WeekView day columns", () => {
     render(<WeekView date="2026-09-01" />);
     fireEvent.click(screen.getByRole("link", { name: /running/i }));
     expect(window.location.pathname).toBe("/activities/a1");
+  });
+});
+
+describe("WeekView weather forecast", () => {
+  it("shows nothing when the athlete has no home location set", () => {
+    mockUseWeatherForecast.mockReturnValue({
+      data: { available: false, days: [] },
+      isLoading: false,
+      isError: false,
+    });
+    render(<WeekView date="2026-09-01" />);
+    expect(document.querySelector(".week-columns__forecast")).not.toBeInTheDocument();
+  });
+
+  it("shows an icon and min/max temperature under a day's date for a day within the forecast", () => {
+    mockUseWeatherForecast.mockReturnValue({
+      data: {
+        available: true,
+        days: [
+          {
+            local_date: "2026-09-01",
+            weather_code: 3,
+            temperature_min_c: 12.4,
+            temperature_max_c: 21.6,
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<WeekView date="2026-09-01" />);
+    const forecastRow = document.querySelector(".week-columns__forecast");
+    expect(forecastRow).toBeInTheDocument();
+    expect(forecastRow).toHaveTextContent("12–22°");
+    expect(forecastRow!.querySelector(".icon")).toBeInTheDocument();
+    // Sits right after the header (weekday/date), before the planned-workout/activity sections.
+    const day = document.querySelectorAll(".week-columns__day")[1]!; // Tuesday = 2026-09-01
+    const header = day.querySelector(".week-columns__header")!;
+    expect(header.compareDocumentPosition(forecastRow!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows no forecast row for a day outside the returned forecast range", () => {
+    mockUseWeatherForecast.mockReturnValue({
+      data: {
+        available: true,
+        days: [
+          {
+            local_date: "2026-09-01",
+            weather_code: 0,
+            temperature_min_c: 10.0,
+            temperature_max_c: 20.0,
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<WeekView date="2026-09-01" />);
+    expect(document.querySelectorAll(".week-columns__forecast")).toHaveLength(1);
   });
 });
 

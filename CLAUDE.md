@@ -1009,6 +1009,32 @@ because you don't recognize it — stop, that's the bug.
   archived response already has a `dew_point_2m` key in its `hourly` block (a structural "was
   this fetched under the newer request" marker, independent of whether any particular hour's
   reading came back non-null) before ever calling Open-Meteo for it again.
+- **Weather forecast for the Week view, deliberately un-cached
+  (`weather_forecast.py`, `GET /weather/forecast`)**: `weather.py` above is entirely
+  past-activity weather, keyed to that one activity's own GPS start point — there was no concept
+  of an athlete's own default/current location anywhere in this schema until this feature added
+  one (`athlete.home_lat`/`home_lon`, nullable, settable via `GET/PUT /settings/profile`, a
+  manual lat/lon entry or the Settings page's own "Use current location" browser-geolocation
+  button). Calls Open-Meteo's *forecast* API (`api.open-meteo.com/v1/forecast`), a distinct
+  endpoint from the historical archive API `weather.py` uses, with its own hard-capped
+  `forecast_days` range of 0-16 confirmed live (requesting more raises an error response rather
+  than silently truncating) — `MAX_FORECAST_DAYS = 16`. Deliberately **not** archived raw and
+  **not** cached in `activity_metric`, unlike every other vendor fetch in this codebase: raw-
+  first exists so a permanent record can be re-derived from an archive without recontacting a
+  vendor, and a forecast has no such permanent-record concept, since it's superseded by reality
+  as the date approaches — archiving it would only accumulate useless bytes with zero
+  re-derivation benefit. This is the same "bounded, occasional live lookup" exception
+  `vo2max_analysis.py`/`threshold_analysis.py` already establish for a request-time-only
+  computation, not a new precedent. `available: false` (never a fabricated forecast) when the
+  athlete hasn't set a home location or the fetch fails, matching `ActivityWeatherOut`/
+  `ActivityLocationOut`'s own convention. Frontend: `WeekView.tsx` fetches the whole week's
+  forecast once in the parent component (`useWeatherForecast`, one call, not per-day — unlike
+  `WeekDayPlannedWorkouts`/`WeekDayRaces`, which exist specifically to work around Rules-of-Hooks
+  for genuinely per-date endpoints), keyed by `local_date` and passed down to each
+  `WeekDayColumn`; a day with a matching forecast entry (today through however many days
+  Open-Meteo actually returned, capped at 16) shows a weather icon (`weatherCodeInfo()`, reused
+  as-is) plus min/max temperature on its own row directly under that day's date label — a past
+  day or one beyond the forecast horizon simply has no matching entry and renders nothing.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

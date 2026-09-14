@@ -435,7 +435,14 @@ def test_profile_returns_all_null_when_unconfigured(
 ) -> None:
     r = client.get("/api/v1/settings/profile", headers=auth_headers)
     assert r.status_code == 200
-    assert r.json() == {"birthdate": None, "height_cm": None, "sex": None, "email": None}
+    assert r.json() == {
+        "birthdate": None,
+        "height_cm": None,
+        "sex": None,
+        "email": None,
+        "home_lat": None,
+        "home_lon": None,
+    }
 
 
 def test_put_profile_stores_and_returns_the_values(
@@ -448,6 +455,8 @@ def test_put_profile_stores_and_returns_the_values(
             "height_cm": 178.0,
             "sex": "male",
             "email": "erwan@example.com",
+            "home_lat": 48.8566,
+            "home_lon": 2.3522,
         },
         headers=auth_headers,
     )
@@ -457,19 +466,68 @@ def test_put_profile_stores_and_returns_the_values(
         "height_cm": 178.0,
         "sex": "male",
         "email": "erwan@example.com",
+        "home_lat": 48.8566,
+        "home_lon": 2.3522,
     }
 
     with engine.connect() as conn:
         row = conn.execute(
-            select(athlete.c.birthdate, athlete.c.height_cm, athlete.c.sex, athlete.c.email)
+            select(
+                athlete.c.birthdate,
+                athlete.c.height_cm,
+                athlete.c.sex,
+                athlete.c.email,
+                athlete.c.home_lat,
+                athlete.c.home_lon,
+            )
         ).fetchone()
     assert row is not None
-    assert (row.birthdate, row.height_cm, row.sex, row.email) == (
+    assert (
+        row.birthdate,
+        row.height_cm,
+        row.sex,
+        row.email,
+        row.home_lat,
+        row.home_lon,
+    ) == (
         "1990-01-01",
         178.0,
         "male",
         "erwan@example.com",
+        48.8566,
+        2.3522,
     )
+
+
+def test_put_profile_rejects_out_of_range_home_lat(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        "/api/v1/settings/profile",
+        json={"home_lat": 95.0, "home_lon": 2.3522},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+
+
+def test_put_profile_rejects_out_of_range_home_lon(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        "/api/v1/settings/profile",
+        json={"home_lat": 48.8566, "home_lon": 200.0},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+
+
+def test_put_profile_rejects_lat_without_lon(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        "/api/v1/settings/profile", json={"home_lat": 48.8566}, headers=auth_headers
+    )
+    assert r.status_code == 422
 
 
 def test_put_profile_rejects_an_invalid_email(

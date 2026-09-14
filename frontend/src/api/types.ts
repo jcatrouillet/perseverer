@@ -375,12 +375,16 @@ export interface RunningLoadConfigIn {
 
 // GET/PUT /settings/profile -- birthdate/height/sex are used only as inputs to formula-based
 // fallbacks elsewhere (max HR, BMR) when there isn't enough empirical/device data yet; email is
-// currently inert (stored for a future feature). See api/schemas/settings.py::AthleteProfileIn.
+// the recipient for the opt-in weekly/monthly training-report emails; home_lat/home_lon are the
+// one location GET /weather/forecast fetches a forecast for. See
+// api/schemas/settings.py::AthleteProfileIn.
 export interface AthleteProfileOut {
   birthdate: string | null;
   height_cm: number | null;
   sex: "male" | "female" | null;
   email: string | null;
+  home_lat: number | null;
+  home_lon: number | null;
 }
 
 export interface AthleteProfileIn {
@@ -388,6 +392,22 @@ export interface AthleteProfileIn {
   height_cm: number | null;
   sex: "male" | "female" | null;
   email: string | null;
+  home_lat: number | null;
+  home_lon: number | null;
+}
+
+// GET /weather/forecast -- the athlete's own home-location forecast, up to Open-Meteo's own
+// 16-day cap. See weather_forecast.py/api/schemas/weather_forecast.py.
+export interface ForecastDayOut {
+  local_date: string;
+  weather_code: number;
+  temperature_min_c: number;
+  temperature_max_c: number;
+}
+
+export interface WeatherForecastOut {
+  available: boolean;
+  days: ForecastDayOut[];
 }
 
 // PUT /settings/password -- self-service password change.

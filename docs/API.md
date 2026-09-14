@@ -1181,6 +1181,40 @@ calendar-feed docs) and the weekly email's "Races this week" section — both re
 
 ---
 
+## Weather forecast
+
+### `GET /weather/forecast`
+
+The athlete's own home-location forecast, up to Open-Meteo's own 16-day cap — the future-facing
+counterpart to `GET /activities/{id}/weather`'s past-activity weather. Deliberately **not**
+archived or cached (see `weather_forecast.py`'s own module docstring): a forecast has no
+permanent-record concept, unlike every other vendor fetch in this codebase, since it's
+superseded by reality as the date approaches.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `days` | query | optional | integer, 1-16 | Defaults to 16 (Open-Meteo's own cap). |
+
+**Response `200`:** `WeatherForecastOut`:
+
+| Field | Type | Description |
+|---|---|---|
+| `available` | boolean | `false` — never a fabricated forecast — when the athlete hasn't set a home location (`PUT /settings/profile`'s `home_lat`/`home_lon`) or the Open-Meteo fetch failed. |
+| `days` | `ForecastDayOut[]` | Empty when `available` is `false`. |
+
+`ForecastDayOut`:
+
+| Field | Type | Description |
+|---|---|---|
+| `local_date` | string | ISO date. |
+| `weather_code` | integer | WMO weather code (same taxonomy `GET /activities/{id}/weather`'s `weather_code` uses) — icon/label mapping is a frontend presentation concern, not modeled here. |
+| `temperature_min_c` | number | |
+| `temperature_max_c` | number | |
+
+**`422`** — `days` outside 1-16.
+
+---
+
 ## Settings
 
 ### `GET /settings/hr-zones`
@@ -1225,14 +1259,17 @@ optional, must be positive if given.
 
 ### `GET /settings/profile`
 
-The athlete's optional profile facts (birthdate, height, biological sex, email). birthdate/
-height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (`GET /performance`'s
-`max_hr_bpm`, `GET /health/dashboard`'s `bmr_kcal`) when there isn't enough empirical/device data
-yet — never reconciled against or overriding real data once it exists. `email` is currently inert
-(stored for a future feature). `null` for any field means not set.
+The athlete's optional profile facts (birthdate, height, biological sex, email, home location).
+birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (`GET
+/performance`'s `max_hr_bpm`, `GET /health/dashboard`'s `bmr_kcal`) when there isn't enough
+empirical/device data yet — never reconciled against or overriding real data once it exists.
+`email` is the recipient for the opt-in weekly/monthly training-report emails (`GET/PUT
+/settings/email-reports`). `home_lat`/`home_lon` are the one location `GET /weather/forecast`
+fetches a forecast for. `null` for any field means not set.
 
 **Response `200`:** `AthleteProfileOut` — `birthdate` (string, nullable, ISO date), `height_cm`
-(number, nullable), `sex` (`"male"|"female"`, nullable), `email` (string, nullable).
+(number, nullable), `sex` (`"male"|"female"`, nullable), `email` (string, nullable), `home_lat`
+(number, nullable, degrees), `home_lon` (number, nullable, degrees).
 
 ### `PUT /settings/profile`
 
@@ -1241,8 +1278,9 @@ Replaces the athlete's profile. **A full replacement, not a partial patch**, sam
 
 **Request body** (`AthleteProfileIn`): `birthdate` (string, nullable, ISO date — rejected if in
 the future or implies an age over 120 years), `height_cm` (number, nullable, 50-250), `sex`
-(`"male"|"female"`, nullable), `email` (string, nullable, a light format check only) — all
-optional.
+(`"male"|"female"`, nullable), `email` (string, nullable, a light format check only), `home_lat`
+(number, nullable, -90..90), `home_lon` (number, nullable, -180..180 — must be set together with
+`home_lat`, both or neither) — all optional.
 
 **Response `200`:** `AthleteProfileOut`. **`422`** — a value fails validation.
 

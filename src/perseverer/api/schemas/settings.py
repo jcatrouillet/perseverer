@@ -98,12 +98,16 @@ class RunningLoadConfigOut(BaseModel):
 # only as inputs to formula-based FALLBACKS elsewhere (max HR: performance_rollup.py; BMR:
 # api/routers/health.py::get_health_dashboard) when there isn't enough empirical/device data yet.
 # email is the recipient for the opt-in weekly/monthly training-report emails (email_reports.py),
-# nothing else. See db/schema.py::athlete's own birthdate/height_cm/sex/email columns.
+# nothing else. home_lat/home_lon are the athlete's own default location, the input
+# weather_forecast.py uses for GET /weather/forecast -- both null or both set. See
+# db/schema.py::athlete's own birthdate/height_cm/sex/email/home_lat/home_lon columns.
 class AthleteProfileIn(BaseModel):
     birthdate: str | None = None
     height_cm: float | None = None
     sex: str | None = None
     email: str | None = None
+    home_lat: float | None = None
+    home_lon: float | None = None
 
     @model_validator(mode="after")
     def _sane_values(self) -> AthleteProfileIn:
@@ -122,6 +126,12 @@ class AthleteProfileIn(BaseModel):
             raise ValueError("sex must be 'male' or 'female'")
         if self.email is not None and not _EMAIL_RE.match(self.email):
             raise ValueError("email must look like a valid email address")
+        if self.home_lat is not None and not (-90.0 <= self.home_lat <= 90.0):
+            raise ValueError("home_lat must be between -90 and 90")
+        if self.home_lon is not None and not (-180.0 <= self.home_lon <= 180.0):
+            raise ValueError("home_lon must be between -180 and 180")
+        if (self.home_lat is None) != (self.home_lon is None):
+            raise ValueError("home_lat and home_lon must be set together")
         return self
 
 
@@ -130,6 +140,8 @@ class AthleteProfileOut(BaseModel):
     height_cm: float | None
     sex: str | None
     email: str | None
+    home_lat: float | None
+    home_lon: float | None
 
 
 # PUT /settings/password -- self-service password change, see api/routers/settings.py for the

@@ -159,6 +159,9 @@ export function SettingsPage() {
   const [heightCm, setHeightCm] = useState("");
   const [sex, setSex] = useState<"" | "male" | "female">("");
   const [email, setEmail] = useState("");
+  const [homeLat, setHomeLat] = useState("");
+  const [homeLon, setHomeLon] = useState("");
+  const [geolocationError, setGeolocationError] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
@@ -170,10 +173,14 @@ export function SettingsPage() {
     setHeightCm(toInputValue(profileConfig.data.height_cm));
     setSex(profileConfig.data.sex ?? "");
     setEmail(profileConfig.data.email ?? "");
+    setHomeLat(toInputValue(profileConfig.data.home_lat));
+    setHomeLon(toInputValue(profileConfig.data.home_lon));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileConfig.isSuccess]);
 
   const heightCmNum = parseField(heightCm);
+  const homeLatNum = parseField(homeLat);
+  const homeLonNum = parseField(homeLon);
   const profileClientError =
     heightCm.trim() !== "" && heightCmNum == null
       ? "Height must be a number."
@@ -183,7 +190,34 @@ export function SettingsPage() {
           ? "Birthdate can't be in the future."
           : email.trim() !== "" && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())
             ? "Enter a valid email address."
-            : null;
+            : homeLat.trim() !== "" && homeLatNum == null
+              ? "Latitude must be a number."
+              : homeLon.trim() !== "" && homeLonNum == null
+                ? "Longitude must be a number."
+                : homeLatNum != null && (homeLatNum < -90 || homeLatNum > 90)
+                  ? "Latitude must be between -90 and 90."
+                  : homeLonNum != null && (homeLonNum < -180 || homeLonNum > 180)
+                    ? "Longitude must be between -180 and 180."
+                    : (homeLat.trim() === "") !== (homeLon.trim() === "")
+                      ? "Set both latitude and longitude, or leave both blank."
+                      : null;
+
+  function useCurrentLocationForHome() {
+    if (!("geolocation" in navigator)) {
+      setGeolocationError("Your browser doesn't support geolocation.");
+      return;
+    }
+    setGeolocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setHomeLat(position.coords.latitude.toFixed(4));
+        setHomeLon(position.coords.longitude.toFixed(4));
+      },
+      (error) => {
+        setGeolocationError(error.message || "Could not read your location.");
+      },
+    );
+  }
 
   const passwordClientError =
     newPassword !== "" && newPassword.length < 8
@@ -321,7 +355,8 @@ export function SettingsPage() {
               estimates with a formula when there isn't enough of your own real data yet; your own
               observed max HR and any Eufy-scale readings always take priority once they exist.
               Email is where the weekly/monthly summaries go, if you enable them under External
-              tools.
+              tools. Home latitude/longitude is what the Week view's weather forecast is fetched
+              for -- set both, or leave both blank.
             </p>
             <form
               className="settings-form"
@@ -333,6 +368,8 @@ export function SettingsPage() {
                   height_cm: heightCmNum,
                   sex: sex === "" ? null : sex,
                   email: email.trim() === "" ? null : email.trim(),
+                  home_lat: homeLatNum,
+                  home_lon: homeLonNum,
                 });
               }}
             >
@@ -375,6 +412,36 @@ export function SettingsPage() {
                   autoComplete="off"
                 />
               </label>
+              <label>
+                Home latitude
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  value={homeLat}
+                  onChange={(e) => setHomeLat(e.target.value)}
+                  placeholder="e.g. 48.8566"
+                />
+              </label>
+              <label>
+                Home longitude
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  value={homeLon}
+                  onChange={(e) => setHomeLon(e.target.value)}
+                  placeholder="e.g. 2.3522"
+                />
+              </label>
+              <button type="button" className="button-link" onClick={useCurrentLocationForHome}>
+                Use current location
+              </button>
+              {geolocationError && (
+                <span role="alert" className="settings-form__error">
+                  {geolocationError}
+                </span>
+              )}
               <button
                 type="submit"
                 disabled={profileMutation.isPending || profileClientError != null}

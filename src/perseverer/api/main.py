@@ -41,6 +41,7 @@ from perseverer.api.routers import (
     planned_workouts,
     share,
     sleep,
+    weather_forecast,
 )
 from perseverer.api.routers import settings as settings_router
 from perseverer.config import get_settings
@@ -81,6 +82,7 @@ app.include_router(notes.router, prefix="/api/v1")
 app.include_router(goals.router, prefix="/api/v1")
 app.include_router(planned_workouts.router, prefix="/api/v1")
 app.include_router(planned_races.router, prefix="/api/v1")
+app.include_router(weather_forecast.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(share.management_router, prefix="/api/v1")
 # No prefix, no auth -- the one deliberately public surface in this app besides

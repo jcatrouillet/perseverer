@@ -11,8 +11,9 @@ import {
   usePlannedRacesForDate,
   usePlannedWorkoutsForDate,
   useSleep,
+  useWeatherForecast,
 } from "../../api/queries";
-import type { ActivitySummary, DayRollupOut } from "../../api/types";
+import type { ActivitySummary, DayRollupOut, ForecastDayOut } from "../../api/types";
 import { ActivityCard } from "../../components/ActivityCard";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
@@ -27,6 +28,7 @@ import { WorkoutLoadBar } from "../../components/WorkoutLoadBar";
 import { eachDate, isoDate, parseIsoDate, weekRange } from "../../dateUtils";
 import { plannedWorkoutSportStyle } from "../../metricStyle";
 import { formatDurationHM, personalRecords } from "../../runningStats";
+import { weatherCodeInfo } from "../../weatherCode";
 import { groupByLocalDate } from "../../yearStats";
 import "../../styles/activity-list.css";
 import "../../styles/calendar.css";
@@ -99,16 +101,19 @@ function WeekDayColumn({
   date,
   day,
   activities,
+  forecast,
   isToday,
   onNavigate,
 }: {
   date: string;
   day: DayRollupOut | undefined;
   activities: ActivitySummary[];
+  forecast: ForecastDayOut | undefined;
   isToday: boolean;
   onNavigate: (date: string) => void;
 }) {
   const { date: dateLabel, weekday } = formatDayHeading(date);
+  const forecastInfo = forecast ? weatherCodeInfo(forecast.weather_code) : null;
   return (
     <div
       className={`week-columns__day${isToday ? " week-columns__day--today" : ""}`}
@@ -127,6 +132,14 @@ function WeekDayColumn({
           />
         )}
       </div>
+      {forecast && forecastInfo && (
+        <div className="week-columns__forecast" title={forecastInfo.label}>
+          <Icon name={forecastInfo.icon} />
+          <span>
+            {Math.round(forecast.temperature_min_c)}–{Math.round(forecast.temperature_max_c)}°
+          </span>
+        </div>
+      )}
       <WeekDayPlannedWorkouts date={date} />
       <WeekDayRaces date={date} />
       {activities.length > 0 && (
@@ -170,6 +183,13 @@ export function WeekView({ date }: { date: string }) {
   const health = useHealthDashboard(start, end);
   const sleep = useSleep(start, end);
   const climbing = useClimbingSummary(start, end);
+  // One fetch for the whole week, not per-day (unlike WeekDayPlannedWorkouts/WeekDayRaces above)
+  // -- Open-Meteo's forecast is naturally a single call regardless of how many of its returned
+  // days fall inside this particular week, so there's no Rules-of-Hooks reason to split it per
+  // column. Keyed by local_date; a date with no matching entry (past days, or days beyond
+  // Open-Meteo's own forecast horizon) simply renders no forecast row.
+  const forecast = useWeatherForecast();
+  const forecastByDate = new Map((forecast.data?.days ?? []).map((d) => [d.local_date, d]));
   const [, setLocation] = useLocation();
   // Deliberately the browser's own local calendar date, not `isoDate(new Date())`'s UTC
   // conversion (the pattern used elsewhere in this app for a coarse "today" default) -- that
@@ -235,6 +255,7 @@ export function WeekView({ date }: { date: string }) {
             date={d}
             day={calendar.data?.days.find((x) => x.local_date === d)}
             activities={activitiesByDate.get(d) ?? []}
+            forecast={forecastByDate.get(d)}
             isToday={d === today}
             onNavigate={(navDate) => setLocation(`/day/${navDate}`)}
           />

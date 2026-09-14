@@ -1186,6 +1186,53 @@ month's totals, no planned-workout section). Two `APScheduler` jobs in `worker/m
   read-only context: `smtp_configured`, `recipient_email`), `POST /settings/email-reports/test`
   (sends the current weekly report immediately — 400 if SMTP or the Profile email isn't set, 502
   on send failure). Frontend: `EmailReportsCard.tsx` (Settings → External tools).
+- **Weekly-only additions: a running-distance bar chart, average pace, and a steps bar chart** —
+  all Mon–Sun of the week that just ended, the monthly report untouched. `running_distance_by_day`
+  and `steps_by_day` are `DailyMetricPoint` lists (one entry per calendar day, `value: None` —
+  never a fabricated 0 — when nothing was recorded that day); `avg_running_pace_s_per_km` is the
+  week's total running distance over total moving duration, exact `sport == "running"` match (not
+  `sport_family()`, same precedent as every other running-specific stat in this app). Steps come
+  from `health_metric_daily_rollup` via the same alias list/priority as `api/routers/health.py::
+  LOGICAL_METRICS["steps"]` (`garmin.daily_summary.totalSteps` before `garmin.export.UDSFile.
+  totalSteps`), duplicated as `_STEPS_ALIASES` rather than imported — this module doesn't depend
+  on the API layer, same precedent `insights/engine.py::_RESTING_HR_ALIASES` already established.
+  Both bar charts are entirely omitted (not rendered as an all-empty chart) when there's nothing
+  to show that week. Rendered as one row per weekday with a horizontal bar (`_bar_rows`/`_bar`) —
+  a real, confirmed-live rendering trap: a percentage-width `<div>`, and even a percentage-width
+  nested `<table width="100%">`, both collapse to 0px rendered width when their containing `<td>`
+  has no width of its own for the outer table's auto layout to resolve a percentage against (a
+  `&nbsp;`-only cell gives that algorithm no real content to size from). Only literal **pixel**
+  widths (`_BAR_TRACK_PX`, applied to both the containing `<td>` and the nested bar table) render
+  correctly — this class of bug is invisible to a plain string assertion on the rendered HTML
+  (both broken versions still had "sensible-looking" percentage markup); it only surfaced by
+  actually rendering the HTML and reading `getBoundingClientRect()`, the same way this codebase's
+  own `.time-in-zone__fill` bug (share pages) was originally caught.
+- **The "By sport" breakdown's own real bug this pass fixed**: a recorded yoga/strength/
+  breathwork session is stored `sport="training"`/`sub_sport="<real type>"` (Garmin's FIT taxonomy
+  uses "training" as a generic container for all three), so grouping by the raw `sport` column
+  showed "Training" instead of "Yoga" in both the weekly and monthly report. `_sport_breakdown`
+  now groups by `_display_sport(sport, sub_sport)` — a duplicated port of `frontend/src/
+  yearStats.ts::displaySport`'s identical `GENERIC_CONTAINER_SPORTS` substitution, same precedent
+  `sharing.py::_display_sport` already established for the same reason (module-private, tiny,
+  duplicated rather than cross-imported).
+- **A third weekly-only bar chart: sleep hours per day** (`_sleep_hours_by_day`) — Mon–Sun of the
+  week just ended, same omit-when-empty / pixel-width-bar convention as running/steps above.
+  Reads `sleep_session.total_sleep_s` (hours, converted at the point of use), grouped by
+  `local_date` with `func.max`, not `sum` — `sleep_session` is unique on `(athlete_id, local_date,
+  source)`, so more than one source could in principle report the same night, and summing would
+  double-count it. A real overlap has never actually been observed in practice (same posture the
+  frontend's own `HealthPage.tsx::sleepToDailyPoints` already takes — it doesn't merge sources at
+  all), `func.max` is just the safe choice if one ever does.
+- **Future races** (`_future_races`) — every `planned_race` after today, however far out on the
+  calendar, unlike `coming_races` above (which stays scoped to just the coming Mon–Sun week and
+  its own full target-vs-predicted comparison). Rendered as a quick-glance line per race: date
+  (weekday, zero-padded day, abbreviated month, year), days-until in parens, the race name, and —
+  only when a target time is set — a "goal" line with the implied pace (`target_duration_s /
+  (distance_m / 1000)`, plain division, no prediction involved since a race this far out has no
+  current prediction worth showing). `_clock_hm` renders the goal time as "4:00" for a round
+  marathon-style goal (`_clock`'s own "4:00:00" with the trailing `:00` seconds dropped, but only
+  when there's an hours component) while leaving a 5K/10K goal like "22:30"/"45:00" untouched,
+  since those already carry real seconds precision worth keeping.
 
 ## Races on the calendar (planned_races.py)
 
@@ -1276,6 +1323,22 @@ solve, only a marker name and a value the athlete is entering themselves.
   with a regression test asserting the exact formatted string rather than just that *some* date
   renders — this repo's own test environment defaults to `America/Los_Angeles`, so the test
   genuinely exercises the bug rather than passing by accident of the runner's own timezone.
+- **The marker field is a dropdown built from the athlete's own history, never a hardcoded
+  catalog** (`buildMarkerCatalog`, `BloodTestsPanel.tsx`): `marker` stays freeform text in the
+  database (no catalog table, no foreign key — the "Reference ranges are informational only"
+  bullet above applies exactly as much to marker names themselves), but the add form now offers a
+  `<select>` of every distinct marker name already present in the athlete's own fetched history,
+  alphabetically. Since `GET /blood-tests` is already ordered `local_date` desc, the first row
+  seen for a given marker name in that same array is already its own most recent entry, so no
+  extra sort or query is needed to know which unit/reference range to carry forward. Choosing a
+  known marker auto-fills unit/reference low/high from that most-recent row — still plain,
+  independently editable `<input>`s afterward, the same as a freshly-typed value would be, since a
+  different lab or a genuinely revised range is exactly as real as the first one. A "+ New
+  marker…" option (a sentinel `<option>` value, not a real marker string) switches that row back
+  to a free-text `<input>`, with a small "Choose existing" link to switch back; the very first
+  blood test ever (empty history) skips the dropdown entirely and starts in free-text mode, since
+  an empty `<select>` with nothing but "+ New marker…" in it would just be an extra click for no
+  benefit.
 
 ## Running Eddington number, per year (eddington.ts)
 
@@ -1388,3 +1451,51 @@ metric-key/API-shape reference.
   with zero further work, so a second run over an already-backfilled athlete costs one archive
   read per activity and no network calls at all. Run once after upgrading past this change; every
   activity ingested from then on is fetched with the full field set from the start.
+
+## Weather forecast for the Week view (weather_forecast.py)
+
+`GET /weather/forecast` is the future-facing counterpart to the section above -- and a
+deliberately different shape from it. See `weather_forecast.py`'s own module docstring for the
+full reasoning; this section is the schema/API-shape reference.
+
+- **`athlete.home_lat`/`home_lon`** (both `Float`, nullable, added alongside `athlete.email`):
+  the one location this feature (and this schema) has for "where does this athlete live" --
+  nothing else in this project has a concept of a default/current location, since every other
+  weather feature (`weather.py`) is keyed to one specific activity's own GPS start point.
+  Settable via `GET/PUT /settings/profile` (`AthleteProfileIn.home_lat`/`home_lon`, validated to
+  -90..90/-180..180 and required to be set or cleared together) -- manual entry, or the Settings
+  page's own "Use current location" button (`navigator.geolocation.getCurrentPosition`, browser-
+  side only, never sent anywhere but into these two fields).
+- **No archiving, no caching** -- the one deliberate exception to this project's own raw-first
+  rule for a live vendor fetch. Every other Open-Meteo/vendor call in this codebase archives the
+  raw response and caches the derived value forever (`weather.py`'s own `activity_metric` cache),
+  because CLAUDE.md's raw-first rule exists so a permanent record can be re-derived without
+  recontacting a vendor. A forecast has no permanent-record concept: it's superseded by reality
+  as the date approaches, so archiving it would only accumulate useless bytes with zero
+  re-derivation benefit. This mirrors the "request-time exception to the rollup mandate"
+  `vo2max_analysis.py`/`threshold_analysis.py` already establish for a bounded, occasional live
+  lookup, not a new precedent.
+- **Open-Meteo's *forecast* API** (`api.open-meteo.com/v1/forecast`), a distinct endpoint from
+  the historical archive API `weather.py` calls. `forecast_days` is hard-capped to 0-16,
+  confirmed live (`weather_forecast.MAX_FORECAST_DAYS = 16`) -- requesting more raises an error
+  response rather than silently truncating. Request: `daily=weathercode,temperature_2m_max,
+  temperature_2m_min&timezone=UTC`, returning parallel `time`/`weathercode`/
+  `temperature_2m_max`/`temperature_2m_min` arrays, the same field-naming convention
+  `weather.py`'s own historical request already uses. A day missing any of the three fields is
+  skipped (never fabricated), though Open-Meteo reliably fills every requested day in practice.
+- **`WeatherForecastOut`** (`api/schemas/weather_forecast.py`): `available: bool` (`false` --
+  never a fabricated forecast -- when the athlete has no home location set or the fetch fails,
+  matching `ActivityWeatherOut`/`ActivityLocationOut`'s own convention) plus `days:
+  ForecastDayOut[]` (`local_date`, `weather_code`, `temperature_min_c`, `temperature_max_c`).
+  `GET /weather/forecast?days=N` accepts 1-16, defaulting to the 16-day cap.
+- **Frontend** (`WeekView.tsx`): `useWeatherForecast()` fetches the whole week's forecast once
+  in the parent `WeekView` component -- not per-day, unlike `WeekDayPlannedWorkouts`/
+  `WeekDayRaces`, which exist specifically to work around Rules-of-Hooks for genuinely per-date
+  endpoints; a whole-week forecast is naturally one call regardless of how many of its returned
+  days fall inside this particular week. Indexed by `local_date` and passed down to each
+  `WeekDayColumn`; a day with a matching entry (today through however many days Open-Meteo
+  actually returned) renders a `.week-columns__forecast` row -- a weather icon
+  (`weatherCodeInfo()`, reused as-is from `weatherCode.ts`) plus min/max temperature -- on its
+  own row directly under that day's date label (`week-columns__header`), deliberately not folded
+  into that header's own flex-wrap row alongside the sleep chip. A past day, or one beyond
+  Open-Meteo's forecast horizon, simply has no matching entry and renders nothing.

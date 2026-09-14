@@ -80,6 +80,7 @@ import type {
   ThresholdFactorAnalysisOut,
   TrimCandidateOut,
   Vo2maxFactorAnalysisOut,
+  WeatherForecastOut,
 } from "./types";
 
 interface ActivityFilters {
@@ -821,7 +822,24 @@ export function useSetAthleteProfile() {
       // performance_daily_rollup).
       void queryClient.invalidateQueries({ queryKey: ["performance"] });
       void queryClient.invalidateQueries({ queryKey: ["health-dashboard"] });
+      // home_lat/home_lon is what makes GET /weather/forecast available at all -- invalidate so
+      // an already-open Week view picks up a newly-set (or cleared) home location immediately.
+      void queryClient.invalidateQueries({ queryKey: ["weather-forecast"] });
     },
+  });
+}
+
+/** GET /weather/forecast -- the athlete's own home-location forecast, up to Open-Meteo's own
+ * 16-day cap (`days` defaults to that cap server-side). `available: false` when no home location
+ * is set yet or the fetch failed -- never a fabricated forecast. See weather_forecast.py. */
+export function useWeatherForecast() {
+  return useQuery({
+    queryKey: ["weather-forecast"],
+    queryFn: () => apiGet<WeatherForecastOut>("/api/v1/weather/forecast"),
+    // A forecast is only useful for a few hours; refetching on every calendar visit is fine
+    // (Open-Meteo's public tier, no rate-limit concern this project has hit) but there's no
+    // reason to keep polling a Week view left open in a background tab.
+    staleTime: 60 * 60 * 1000,
   });
 }
 
