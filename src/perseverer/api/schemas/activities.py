@@ -297,6 +297,26 @@ class ClimbingSummaryOut(BaseModel):
     grade_breakdown: list[ClimbGradeBreakdownOut]
 
 
+class ActivityWeatherHourlyPointOut(BaseModel):
+    """One hourly bucket of the activity's own window -- the field that lets a consumer (an AI
+    coaching agent, this project's own frontend) render a full run-window conditions table
+    without a second call to Open-Meteo. Re-derived from the archived raw response on every
+    request (weather.py::parse_open_meteo_hourly_series) rather than stored -- see weather.py's
+    own module docstring. Every field below is independently None (never fabricated) whenever
+    Open-Meteo's response lacks that array entirely (an old archive predating dew_point_2m/
+    shortwave_radiation/cloud_cover) or that one hour's reading."""
+
+    time_utc: datetime
+    temperature_c: float | None = None
+    apparent_temperature_c: float | None = None
+    dew_point_c: float | None = None
+    relative_humidity_pct: float | None = None
+    shortwave_radiation_wm2: float | None = None
+    cloud_cover_pct: float | None = None
+    wind_speed_mps: float | None = None
+    wind_direction_deg: float | None = None
+
+
 class ActivityWeatherOut(BaseModel):
     # False whenever there's nothing to show -- no GPS start point to query against, or the
     # Open-Meteo fetch failed/returned no usable data for this activity's time window. Never a
@@ -318,6 +338,33 @@ class ActivityWeatherOut(BaseModel):
     feels_like_c: float | None = None
     wind_speed_mps: float | None = None
     wind_direction_deg: float | None = None
+    # Everything below was added for a materially different consumer than the fields above: an
+    # AI coaching agent judging heat stress in bpm/pace terms, not just quoting numbers -- see
+    # weather.py's own module docstring for exactly why each field matters and how it's derived.
+    # All are min/max window aggregates (same convention as temperature/humidity above) unless
+    # noted, and all are independently None (never fabricated) whenever Open-Meteo's response
+    # lacks that array entirely -- including for every activity whose weather was cached before
+    # these fields existed, until a backfill re-fetches it (weather_backfill.py).
+    dew_point_min_c: float | None = None
+    dew_point_max_c: float | None = None
+    solar_radiation_max_wm2: float | None = None
+    solar_radiation_mean_wm2: float | None = None
+    cloud_cover_min_pct: float | None = None
+    cloud_cover_max_pct: float | None = None
+    apparent_temperature_min_c: float | None = None
+    apparent_temperature_max_c: float | None = None
+    # The daily entry matching the activity's own start date -- not itself a range.
+    sunrise_utc: datetime | None = None
+    sunset_utc: datetime | None = None
+    # Whether sunset_utc falls inside [start, end] of the activity -- computed at request time
+    # from sunset_utc/the activity's own start+duration (never stored as a synthetic
+    # activity_metric row, see weather.py's own docstring). None whenever sunset_utc itself is
+    # None (nothing to judge against), never a guessed True/False.
+    sunset_during_run: bool | None = None
+    # The hour-by-hour trajectory across the activity's own window -- the field that replaces a
+    # consumer's own second call to Open-Meteo. [] (never omitted, never a fabricated point) when
+    # nothing was ever archived for this activity or no hour overlaps the window.
+    hourly: list[ActivityWeatherHourlyPointOut] = []
 
 
 class ActivityLocationOut(BaseModel):

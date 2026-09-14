@@ -1314,3 +1314,77 @@ didn't have yet.
   horizontal/vertical lines, not a diagonal) — the bar curve's crossing point with that diagonal
   is the Eddington number itself, made visible rather than only tabulated. Only the current
   calendar year gets this chart; every year still gets its own row in the table above.
+
+## Weather: full conditions judgement from one endpoint (weather.py)
+
+`GET /activities/{id}/weather` originally carried just enough for a header badge (temperature/
+humidity range, a representative weather code/feels-like/wind at the activity's own start). It
+was extended so the endpoint alone supports a full conditions *judgement* — heat stress in bpm/
+pace terms, not just numbers — for a consumer (an AI coaching agent reading this endpoint daily)
+that previously had to make its own second call to Open-Meteo for the data this project wasn't
+storing. See `weather.py`'s own module docstring for the complete reasoning; this section is the
+metric-key/API-shape reference.
+
+- **New `activity_metric` keys** (`weather.open_meteo.*`, `source="open-meteo"`, all in
+  `weather.py::_OPTIONAL_METRIC_KEYS` — never `_ALL_METRIC_KEYS`, the five-key cache-hit
+  requirement `_read_cached` checks; see that function's own docstring for why adding a key there
+  would be the bug that makes every already-cached activity re-fetch from Open-Meteo forever):
+  `dew_point_min_c`/`dew_point_max_c`, `solar_radiation_max_wm2`/`solar_radiation_mean_wm2`,
+  `cloud_cover_min_pct`/`cloud_cover_max_pct`, `apparent_temperature_min_c`/
+  `apparent_temperature_max_c` — all window aggregates over every hourly bucket overlapping the
+  activity's own time window, the same convention `temperature_min_c`/`max_c` already established
+  — and `sunrise_utc`/`sunset_utc`, the daily entry matching the activity's own start date, stored
+  as `value_text` (ISO string) rather than `value_num` since `activity_metric.value_num` is a
+  Float column with no datetime concept of its own (same `value_type="text"` precedent
+  `geocoding.py`'s own location-name metric already established). Every field is independently
+  `None`/absent (never fabricated) whenever Open-Meteo's response lacks that array entirely — most
+  notably on every activity whose weather was cached before these fields were ever requested,
+  until `sync backfill-weather-fields` re-fetches it (see below).
+- **Why heat stress needs these specifically**: relative humidity alone doesn't say how much
+  moisture the air can actually hold — dew point does, and it's the number that predicts real
+  physiological heat strain. Shortwave radiation (W/m²) captures direct-sun load a min/max on air
+  temperature can't: >800 W/m² sustained is severe, and two runs at the same air temperature can
+  be wildly different efforts depending on cloud cover. Apparent temperature sitting notably below
+  air temperature signals dry air or wind doing real evaporative-cooling work — invisible if only
+  a single start-of-run value is ever shown, which is why it now also gets a full window range
+  (`apparent_temperature_min_c`/`max_c`) alongside the pre-existing single `feels_like_c`
+  representative value (unchanged, still the hour closest to the activity's own start — see
+  `weather.py`'s own docstring for why that field stays a single value like wind, not a range).
+- **The `hourly[]` trajectory** (`ActivityWeatherOut.hourly`, `weather.py::
+  parse_open_meteo_hourly_series`) is the field that actually replaces a consumer's own second
+  Open-Meteo call: one entry per hourly bucket overlapping the activity's window, each carrying
+  the UTC timestamp plus air temp, apparent temp, dew point, relative humidity, shortwave
+  radiation, cloud cover, wind speed, and wind direction — enough to render a full run-window
+  conditions table directly from this one response. Deliberately **not** stored in
+  `activity_metric` at all: that table is scalar-only (`value_num`/`value_text`, one row per
+  metric key), and inventing per-hour synthetic metric keys would pollute `metric_definition` with
+  hundreds of junk rows for zero benefit over just re-reading the archive. Instead it's re-derived
+  at request time from the same raw Open-Meteo response already archived verbatim on first fetch
+  (`weather.py::read_archived_open_meteo_response`, a plain gzip-decompress + JSON parse of bytes
+  already on disk — no network call, exactly what "raw first, always" exists to enable). This is
+  also what makes an already-cached activity behave correctly with zero special-casing: its
+  archived response genuinely doesn't have the newer arrays, so every hourly point simply has
+  those fields `None` — re-parsing an old payload can't manufacture data that was never fetched.
+- **`sunset_during_run`** (`ActivityWeatherOut` only — not a stored metric): whether
+  `sunset_utc` falls inside `[start, end]` of the activity, computed once at the API layer from
+  already-available data rather than persisted as a synthetic activity_metric row. `None` when
+  `sunset_utc` itself is `None` (nothing to judge against), never a guessed `True`/`False`.
+- **Request shape**: `hourly=` now also requests `dew_point_2m,shortwave_radiation,cloud_cover`
+  (alongside the original `temperature_2m,relative_humidity_2m,weathercode,
+  apparent_temperature,wind_speed_10m,wind_direction_10m`), and a new `daily=sunrise,sunset` param
+  is added — both still under the same `timezone=UTC`/`wind_speed_unit=ms` request-level params
+  the original fetch already used, so every timestamp in the response (hourly and daily alike)
+  stays UTC-aligned with no per-activity-timezone handling needed.
+- **Backfill** (`weather_backfill.py::backfill_weather_fields`, CLI: `sync
+  backfill-weather-fields [--dry-run] [--athlete-id ...]`): an already-cached activity's archived
+  response genuinely doesn't have the newer Open-Meteo variables on disk — they can't be
+  re-derived, only re-fetched (`get_or_fetch_activity_weather(force_refresh=True)`). Idempotent
+  and cheap to re-run: an activity's own archived response is read back first (free, no network
+  call) and checked for whether its `hourly` block already has a `dew_point_2m` key at all — a
+  structural marker for "this was fetched under the newer request," independent of whether
+  Open-Meteo actually had a non-null reading for every hour (the same reason `_read_cached`
+  doesn't require the newer fields to be non-`None`: a real historical date can legitimately lack
+  that data on Open-Meteo's own side). An activity that already carries this marker is skipped
+  with zero further work, so a second run over an already-backfilled athlete costs one archive
+  read per activity and no network calls at all. Run once after upgrading past this change; every
+  activity ingested from then on is fetched with the full field set from the start.

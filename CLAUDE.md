@@ -920,6 +920,45 @@ because you don't recognize it — stop, that's the bug.
   feed (`calendar_feed.py::_build_race_event`) and the weekly email's "Races this week" section
   (`email_reports.py`) — both read the same `planned_race` row the calendar already fetches, no
   new query shape.
+- **Weather: full conditions judgement from one endpoint, no second Open-Meteo call
+  (`weather.py`, `GET /activities/{id}/weather`)**: originally just enough for a header badge
+  (temperature/humidity range, a representative weather code/feels-like/wind at the activity's
+  own start) — extended so an AI coaching agent reading this endpoint daily can judge conditions
+  in bpm/pace terms without making its own second call to `api.open-meteo.com`. Three additions,
+  all following the pre-existing window-aggregate/single-representative-value conventions exactly:
+  dew point, shortwave radiation, and cloud cover (`dew_point_min_c`/`max_c`,
+  `solar_radiation_max_wm2`/`mean_wm2`, `cloud_cover_min_pct`/`max_pct` — relative humidity alone
+  doesn't say how much heat strain the air actually causes, dew point does; >800 W/m² sustained
+  shortwave radiation is severe direct-sun load a min/max on air temperature can't show); a full
+  window range on apparent temperature (`apparent_temperature_min_c`/`max_c`, alongside the
+  pre-existing single start-of-run `feels_like_c`) since apparent temperature sitting notably
+  below air temperature — dry air/wind doing real evaporative-cooling work — is invisible in one
+  start-of-run value; and `sunrise_utc`/`sunset_utc` (the daily entry matching the activity's own
+  start date, stored as `value_text` since `activity_metric.value_num` has no datetime concept of
+  its own) plus a request-time-derived `sunset_during_run` boolean (never a stored synthetic
+  metric — a pure function of `sunset_utc` vs. the activity's own start/end). The new
+  `hourly[]` array (one entry per hourly bucket in the activity's window: UTC timestamp, air
+  temp, apparent temp, dew point, relative humidity, shortwave radiation, cloud cover, wind speed/
+  direction) is the field that actually replaces a consumer's own second Open-Meteo call — a full
+  run-window conditions table renderable straight from this one response. Deliberately **not**
+  stored in `activity_metric` at all (that table is scalar-only, `value_num`/`value_text` one row
+  per metric key — an hourly series doesn't fit it, and per-hour synthetic metric keys would
+  pollute `metric_definition` with hundreds of junk rows); instead re-derived at request time from
+  the same raw Open-Meteo response already archived verbatim on first fetch
+  (`weather.py::read_archived_open_meteo_response`, a free gzip-decompress + JSON parse of bytes
+  already on disk, picking the *newest* archived blob when more than one exists for an activity —
+  no vendor call, exactly what "raw first, always" exists to enable). All new scalar keys live in
+  `weather.py::_OPTIONAL_METRIC_KEYS`, never `_ALL_METRIC_KEYS` (the five-key cache-hit
+  requirement `_read_cached` checks) — adding a key to the wrong tuple is the exact bug that would
+  make every already-cached activity fail the cache-hit check and re-fetch from Open-Meteo on
+  every single view, forever, since the new key would never exist on old rows. An already-cached
+  activity's archived response genuinely lacks the new Open-Meteo variables on disk, though, so
+  getting real values onto it needs `weather_backfill.py::backfill_weather_fields` (CLI: `sync
+  backfill-weather-fields`), which force-refreshes it via `get_or_fetch_activity_weather
+  (force_refresh=True)` — idempotent and cheap to re-run by checking whether an activity's own
+  archived response already has a `dew_point_2m` key in its `hourly` block (a structural "was
+  this fetched under the newer request" marker, independent of whether any particular hour's
+  reading came back non-null) before ever calling Open-Meteo for it again.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip

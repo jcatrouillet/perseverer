@@ -340,9 +340,17 @@ knowledge of activities that hadn't happened yet.
 
 ### `GET /activities/{activity_id}/weather`
 
-Temperature/humidity range, feels-like temperature, wind speed/direction, and a WMO weather
-code for the activity's time window, from Open-Meteo's historical archive, cached forever once
-fetched. `available: false` when there's no GPS start point or the fetch came back empty.
+Temperature/humidity range, feels-like temperature, wind speed/direction, a WMO weather code,
+dew point/solar radiation/cloud cover/apparent-temperature ranges, sunrise/sunset, and an
+hour-by-hour trajectory for the activity's time window, from Open-Meteo's historical archive,
+cached forever once fetched. `available: false` when there's no GPS start point or the fetch came
+back empty. Everything besides the original temperature/humidity/weather-code/feels-like/wind
+fields is designed so this one response supports a full conditions judgement (heat stress in
+bpm/pace terms) with no second call to Open-Meteo needed — see `ActivityWeatherOut` below and
+`weather.py`'s own module docstring for exactly why each field matters. Every field added
+alongside the original ones is `None` (or `hourly: []`) on an activity whose weather was cached
+before these fields existed, until a backfill re-fetches it (`sync backfill-weather-fields`, see
+docs/DATA_DICTIONARY.md's own Weather section).
 
 **Responses:** `200` → `ActivityWeatherOut`. `404`.
 
@@ -1713,15 +1721,53 @@ counted conservatively rather than assumed completed), `completed` (integer).
 ### ActivityWeatherOut
 
 `available` (boolean, required) — `false` whenever there's no GPS start point to query against,
-or the Open-Meteo fetch/parse came back empty; every other field is `null` in that case rather
-than omitted. `temperature_min_c`/`temperature_max_c`/`humidity_min_pct`/`humidity_max_pct`
-(number, nullable) are ranges across the activity's own duration; `weather_code` (integer,
-nullable — WMO weather interpretation code, see https://open-meteo.com/en/docs) is a single
-representative code at the hour closest to the activity's start. `feels_like_c`,
+or the Open-Meteo fetch/parse came back empty; every other field is `null` (or `hourly: []`) in
+that case rather than omitted. `temperature_min_c`/`temperature_max_c`/`humidity_min_pct`/
+`humidity_max_pct` (number, nullable) are ranges across the activity's own duration; `weather_code`
+(integer, nullable — WMO weather interpretation code, see https://open-meteo.com/en/docs) is a
+single representative code at the hour closest to the activity's start. `feels_like_c`,
 `wind_speed_mps` (metres/second), and `wind_direction_deg` (degrees, meteorological convention —
 the direction the wind is blowing *from*) are likewise single values at that same closest hour,
 not ranges, and each is independently nullable since Open-Meteo's historical archive doesn't
 always carry every field for every hour.
+
+Everything below was added so this one endpoint supports a full conditions judgement (heat stress
+in bpm/pace terms) without a second call to Open-Meteo. All are window aggregates over the
+activity's own duration (same convention as `temperature_min_c`/`max_c` above) unless noted, and
+all are independently `null` — never fabricated — whenever Open-Meteo's response lacks that
+particular data, including on every activity whose weather was cached before these fields
+existed (until a backfill re-fetches it, see docs/DATA_DICTIONARY.md's own Weather section):
+
+| Field | Type | Description |
+|---|---|---|
+| `dew_point_min_c` / `dew_point_max_c` | number, nullable | Dew point (°C) — the humidity number that actually predicts heat strain; relative humidity alone doesn't. |
+| `solar_radiation_max_wm2` / `solar_radiation_mean_wm2` | number, nullable | Shortwave radiation (W/m²) — direct-sun load. Sustained readings past ~800 are severe. |
+| `cloud_cover_min_pct` / `cloud_cover_max_pct` | number, nullable | Cloud cover (%). |
+| `apparent_temperature_min_c` / `apparent_temperature_max_c` | number, nullable | Full-window range on apparent temperature — a materially different signal than the single start-of-run `feels_like_c` above, since apparent temperature sitting notably below air temperature (dry air/wind doing real evaporative-cooling work) is invisible in one value. |
+| `sunrise_utc` / `sunset_utc` | string(date-time), nullable | The daily entry matching the activity's own start date — not a range. |
+| `sunset_during_run` | boolean, nullable | Whether `sunset_utc` falls inside `[start, end]` of the activity — computed at request time, never stored. `null` only when `sunset_utc` itself is `null` (nothing to judge against). |
+| `hourly` | array\<`ActivityWeatherHourlyPointOut`\> | The hour-by-hour trajectory across the activity's window — the field that actually replaces a consumer's own second Open-Meteo call. `[]` (never omitted) when nothing was ever archived for this activity or no hour overlaps the window. |
+
+### ActivityWeatherHourlyPointOut
+
+One hourly bucket of the activity's own window, re-derived from the archived raw Open-Meteo
+response on every request rather than stored (`activity_metric` is scalar-only, so an hourly
+series doesn't fit it — see docs/DATA_DICTIONARY.md's own Weather section). Every field below is
+independently `null` — never fabricated — whenever Open-Meteo's response lacks that array
+entirely (an old archive predating `dew_point_2m`/`shortwave_radiation`/`cloud_cover`) or that
+one hour's reading.
+
+| Field | Type | Description |
+|---|---|---|
+| `time_utc` | string(date-time) | The UTC hour this bucket starts at. |
+| `temperature_c` | number, nullable | Air temperature. |
+| `apparent_temperature_c` | number, nullable | |
+| `dew_point_c` | number, nullable | |
+| `relative_humidity_pct` | number, nullable | |
+| `shortwave_radiation_wm2` | number, nullable | |
+| `cloud_cover_pct` | number, nullable | |
+| `wind_speed_mps` | number, nullable | |
+| `wind_direction_deg` | number, nullable | Degrees, meteorological convention — the direction the wind is blowing *from*. |
 
 ### ActivityLocationOut
 

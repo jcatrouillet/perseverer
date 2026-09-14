@@ -59,6 +59,7 @@ from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
 from perseverer.rebuild import rebuild_database_tracked, rebuild_database_via_shadow
+from perseverer.weather_backfill import backfill_weather_fields
 from perseverer.weather_titles import backfill_weather_titles
 from perseverer.worker.main import run_daily_sync
 
@@ -808,6 +809,37 @@ def backfill_weather_titles_cmd(
     typer.echo(f"{verb} {len(changes)} activities")
     for activity_id, old_title, new_title in changes:
         typer.echo(f"  {activity_id}: {old_title!r} -> {new_title!r}")
+
+
+@app.command("backfill-weather-fields")
+def backfill_weather_fields_cmd(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be re-fetched without writing anything."),
+    ] = False,
+    athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
+) -> None:
+    """Re-fetches every already-cached activity's Open-Meteo weather so the fields added
+    alongside dew point/shortwave radiation/cloud cover (dew_point_min_c/max_c,
+    solar_radiation_max_wm2/mean_wm2, cloud_cover_min_pct/max_pct,
+    apparent_temperature_min_c/max_c, sunrise_utc/sunset_utc, and GET /activities/{id}/weather's
+    own hourly[] trajectory) land for real on activities whose weather was cached before those
+    variables were ever requested from Open-Meteo -- see weather_backfill.py's own docstring.
+
+    Idempotent and safe to re-run: an activity whose archived response already carries the newer
+    fields is skipped with no network call, so re-running after a first full pass only touches
+    whatever's newly ingested since. Run this once after upgrading past this change; new
+    activities from then on are fetched with the full field set from the start, no backfill
+    needed.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        refreshed = backfill_weather_fields(
+            conn, settings.raw_archive_dir, athlete_id=athlete_id, dry_run=dry_run
+        )
+    verb = "would refresh" if dry_run else "refreshed"
+    typer.echo(f"{verb} weather for {len(refreshed)} activities")
 
 
 @app.command("backfill-garmin-activity-names")

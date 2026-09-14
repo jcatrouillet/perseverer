@@ -15,6 +15,18 @@ function weather(overrides: Partial<ActivityWeatherOut> = {}): ActivityWeatherOu
     feels_like_c: null,
     wind_speed_mps: null,
     wind_direction_deg: null,
+    dew_point_min_c: null,
+    dew_point_max_c: null,
+    solar_radiation_max_wm2: null,
+    solar_radiation_mean_wm2: null,
+    cloud_cover_min_pct: null,
+    cloud_cover_max_pct: null,
+    apparent_temperature_min_c: null,
+    apparent_temperature_max_c: null,
+    sunrise_utc: null,
+    sunset_utc: null,
+    sunset_during_run: null,
+    hourly: [],
     ...overrides,
   };
 }

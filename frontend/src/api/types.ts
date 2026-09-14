@@ -254,6 +254,18 @@ export interface ActivityRouteOut {
   simplified_polyline: string | null;
 }
 
+export interface ActivityWeatherHourlyPointOut {
+  time_utc: string;
+  temperature_c: number | null;
+  apparent_temperature_c: number | null;
+  dew_point_c: number | null;
+  relative_humidity_pct: number | null;
+  shortwave_radiation_wm2: number | null;
+  cloud_cover_pct: number | null;
+  wind_speed_mps: number | null;
+  wind_direction_deg: number | null;
+}
+
 export interface ActivityWeatherOut {
   available: boolean;
   temperature_min_c: number | null;
@@ -265,6 +277,24 @@ export interface ActivityWeatherOut {
   feels_like_c: number | null;
   wind_speed_mps: number | null;
   wind_direction_deg: number | null;
+  // Window-aggregate fields added for heat-stress judgement (dew point, solar radiation, cloud
+  // cover, a full apparent-temperature range) -- see weather.py's own module docstring. Null on
+  // every activity cached before these existed, until a backfill re-fetches it.
+  dew_point_min_c: number | null;
+  dew_point_max_c: number | null;
+  solar_radiation_max_wm2: number | null;
+  solar_radiation_mean_wm2: number | null;
+  cloud_cover_min_pct: number | null;
+  cloud_cover_max_pct: number | null;
+  apparent_temperature_min_c: number | null;
+  apparent_temperature_max_c: number | null;
+  sunrise_utc: string | null;
+  sunset_utc: string | null;
+  sunset_during_run: boolean | null;
+  // The hour-by-hour trajectory across the activity's own window -- replaces a consumer's own
+  // second call to Open-Meteo. [] (never omitted) when nothing was ever archived for this
+  // activity or no hour overlaps the window.
+  hourly: ActivityWeatherHourlyPointOut[];
 }
 
 export interface ActivityLocationOut {

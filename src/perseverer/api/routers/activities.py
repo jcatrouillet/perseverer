@@ -48,6 +48,7 @@ from perseverer.api.schemas.activities import (
     ActivitySportOverrideOut,
     ActivitySummary,
     ActivityTrimIn,
+    ActivityWeatherHourlyPointOut,
     ActivityWeatherOut,
     ActivityWorkoutOut,
     ActivityWorkoutStepOut,
@@ -112,7 +113,11 @@ from perseverer.sport_override import (
 )
 from perseverer.stream_query import downsample
 from perseverer.transport_mix import ELIGIBLE_SPORTS, detect_transport_mix
-from perseverer.weather import get_or_fetch_activity_weather
+from perseverer.weather import (
+    get_or_fetch_activity_weather,
+    parse_open_meteo_hourly_series,
+    read_archived_open_meteo_response,
+)
 
 router = APIRouter()
 
@@ -1496,12 +1501,17 @@ def get_activity_weather(
     conn: Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
 ) -> ActivityWeatherOut:
-    """Temperature/humidity range, feels-like temperature, wind, and a representative WMO
-    weather code for this activity's own time window, sourced from Open-Meteo's historical
-    archive (see weather.py's own docstring for the raw-first/cache-forever design and why
-    feels-like/wind are single values rather than a range). `available=False` -- never a
-    fabricated range -- whenever the activity has no GPS start point to query against, or the
-    fetch/parse comes back empty (e.g. Open-Meteo unreachable)."""
+    """Temperature/humidity range, feels-like temperature, wind, a representative WMO weather
+    code, dew point/solar radiation/cloud cover/apparent-temperature ranges, sunrise/sunset, and
+    an hour-by-hour trajectory for this activity's own time window, sourced from Open-Meteo's
+    historical archive -- everything a consumer needs to judge conditions in bpm/pace terms
+    without a second call to Open-Meteo (see weather.py's own module docstring for the raw-first/
+    cache-forever design, why feels-like/wind stay single start-of-run values, and why `hourly`
+    is re-derived from the archive rather than stored). `available=False` -- never a fabricated
+    range -- whenever the activity has no GPS start point to query against, or the fetch/parse
+    comes back empty (e.g. Open-Meteo unreachable). Every field added alongside the original ones
+    is independently None (or `hourly=[]`) until a backfill re-fetches an activity whose weather
+    was cached before these fields existed -- see weather_backfill.py."""
     row = conn.execute(
         select(
             activity.c.start_time_utc,
@@ -1522,12 +1532,15 @@ def get_activity_weather(
     if row.start_lat is None or row.start_lng is None or row.duration_s is None:
         return ActivityWeatherOut(available=False)
 
+    start_time_utc = to_utc(row.start_time_utc)
+    end_time_utc = start_time_utc + timedelta(seconds=row.duration_s)
+
     summary = get_or_fetch_activity_weather(
         conn,
         settings.raw_archive_dir,
         athlete_id=athlete_id,
         activity_id=activity_id,
-        start_time_utc=to_utc(row.start_time_utc),
+        start_time_utc=start_time_utc,
         duration_s=row.duration_s,
         lat=row.start_lat,
         lon=row.start_lng,
@@ -1535,6 +1548,23 @@ def get_activity_weather(
     conn.commit()
     if summary is None:
         return ActivityWeatherOut(available=False)
+
+    # Free re-derivation from the same raw response already archived by the fetch above (or by
+    # an earlier request, on a cache hit) -- no second Open-Meteo call, see weather.py's own
+    # module docstring for why this doesn't come from activity_metric.
+    raw = read_archived_open_meteo_response(
+        conn, settings.raw_archive_dir, athlete_id=athlete_id, activity_id=activity_id
+    )
+    hourly = (
+        parse_open_meteo_hourly_series(raw, start_time_utc, end_time_utc) if raw is not None
+        else []
+    )
+
+    sunset_during_run = (
+        start_time_utc <= to_utc(summary.sunset_utc) <= end_time_utc
+        if summary.sunset_utc is not None
+        else None
+    )
 
     return ActivityWeatherOut(
         available=True,
@@ -1546,6 +1576,31 @@ def get_activity_weather(
         feels_like_c=summary.feels_like_c,
         wind_speed_mps=summary.wind_speed_mps,
         wind_direction_deg=summary.wind_direction_deg,
+        dew_point_min_c=summary.dew_point_min_c,
+        dew_point_max_c=summary.dew_point_max_c,
+        solar_radiation_max_wm2=summary.solar_radiation_max_wm2,
+        solar_radiation_mean_wm2=summary.solar_radiation_mean_wm2,
+        cloud_cover_min_pct=summary.cloud_cover_min_pct,
+        cloud_cover_max_pct=summary.cloud_cover_max_pct,
+        apparent_temperature_min_c=summary.apparent_temperature_min_c,
+        apparent_temperature_max_c=summary.apparent_temperature_max_c,
+        sunrise_utc=to_utc(summary.sunrise_utc) if summary.sunrise_utc is not None else None,
+        sunset_utc=to_utc(summary.sunset_utc) if summary.sunset_utc is not None else None,
+        sunset_during_run=sunset_during_run,
+        hourly=[
+            ActivityWeatherHourlyPointOut(
+                time_utc=to_utc(p.time_utc),
+                temperature_c=p.temperature_c,
+                apparent_temperature_c=p.apparent_temperature_c,
+                dew_point_c=p.dew_point_c,
+                relative_humidity_pct=p.relative_humidity_pct,
+                shortwave_radiation_wm2=p.shortwave_radiation_wm2,
+                cloud_cover_pct=p.cloud_cover_pct,
+                wind_speed_mps=p.wind_speed_mps,
+                wind_direction_deg=p.wind_direction_deg,
+            )
+            for p in hourly
+        ],
     )
 
 

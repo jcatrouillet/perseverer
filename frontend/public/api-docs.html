@@ -788,7 +788,7 @@ const SCHEMAS = [
       ["attempted","integer","Includes any unconfirmed raw \"unknown_<n>\" result, counted conservatively rather than assumed completed."],
       ["completed","integer",""],
     ] },
-  { name: "ActivityWeatherOut", note: "Returned by GET /activities/{id}/weather. See “available: false” in Conventions.", fields: [
+  { name: "ActivityWeatherOut", note: "Returned by GET /activities/{id}/weather. See “available: false” in Conventions. Everything from dew_point_min_c onward was added so this one response supports a full conditions judgement (heat stress in bpm/pace terms) with no second call to Open-Meteo -- see docs/DATA_DICTIONARY.md's own Weather section. All are independently null (or hourly: []) -- never fabricated -- on an activity whose weather was cached before these fields existed, until a backfill re-fetches it (sync backfill-weather-fields).", fields: [
       ["available","boolean","required"],
       ["temperature_min_c","number|null","null when available is false; a range across the activity's duration otherwise","opt"],
       ["temperature_max_c","number|null","","opt"],
@@ -797,6 +797,29 @@ const SCHEMAS = [
       ["weather_code","integer|null","WMO weather interpretation code — a single value at the hour closest to the activity's start.","opt"],
       ["feels_like_c","number|null","Single value at the hour closest to the activity's start, not a range.","opt"],
       ["wind_speed_mps","number|null","Metres/second, same closest-hour convention as feels_like_c.","opt"],
+      ["wind_direction_deg","number|null","Degrees, meteorological convention (direction the wind blows from).","opt"],
+      ["dew_point_min_c","number|null","Dew point (°C), window range -- the humidity number that actually predicts heat strain; relative humidity alone doesn't.","opt"],
+      ["dew_point_max_c","number|null","","opt"],
+      ["solar_radiation_max_wm2","number|null","Shortwave radiation (W/m²), window range. Sustained readings past ~800 are severe direct-sun load.","opt"],
+      ["solar_radiation_mean_wm2","number|null","","opt"],
+      ["cloud_cover_min_pct","number|null","Window range.","opt"],
+      ["cloud_cover_max_pct","number|null","","opt"],
+      ["apparent_temperature_min_c","number|null","Full-window range -- a materially different signal than the single start-of-run feels_like_c above, since apparent temperature sitting notably below air temperature (dry air/wind doing real evaporative-cooling work) is invisible in one value.","opt"],
+      ["apparent_temperature_max_c","number|null","","opt"],
+      ["sunrise_utc","string(date-time)|null","The daily entry matching the activity's own start date -- not a range.","opt"],
+      ["sunset_utc","string(date-time)|null","","opt"],
+      ["sunset_during_run","boolean|null","Whether sunset_utc falls inside [start, end] of the activity -- computed at request time, never stored. null only when sunset_utc itself is null.","opt"],
+      ["hourly","array<ActivityWeatherHourlyPointOut>","The hour-by-hour trajectory across the activity's window -- the field that actually replaces a consumer's own second Open-Meteo call. [] (never omitted) when nothing was ever archived or no hour overlaps the window.","opt"],
+    ] },
+  { name: "ActivityWeatherHourlyPointOut", note: "One hourly bucket of the activity's own window, re-derived from the archived raw Open-Meteo response on every request rather than stored (activity_metric is scalar-only, so an hourly series doesn't fit it). Every field is independently null -- never fabricated -- whenever Open-Meteo's response lacks that array entirely (an old archive predating dew_point_2m/shortwave_radiation/cloud_cover) or that one hour's reading.", fields: [
+      ["time_utc","string(date-time)","The UTC hour this bucket starts at."],
+      ["temperature_c","number|null","Air temperature.","opt"],
+      ["apparent_temperature_c","number|null","","opt"],
+      ["dew_point_c","number|null","","opt"],
+      ["relative_humidity_pct","number|null","","opt"],
+      ["shortwave_radiation_wm2","number|null","","opt"],
+      ["cloud_cover_pct","number|null","","opt"],
+      ["wind_speed_mps","number|null","","opt"],
       ["wind_direction_deg","number|null","Degrees, meteorological convention (direction the wind blows from).","opt"],
     ] },
   { name: "ActivityLocationOut", note: "Returned by GET /activities/{id}/location. See “available: false” in Conventions.", fields: [
@@ -1391,8 +1414,8 @@ const GROUPS = [
       responses: [ { code: 200, ref: "array&lt;InsightOut&gt;" }, { code: 404, note: "" } ],
       example: {}
     },
-    { method: "GET", path: "/api/v1/activities/{activity_id}/weather", summary: "Temperature/humidity range, feels-like temperature, wind, and conditions during the activity.",
-      description: "Sourced from Open-Meteo's historical archive, keyed on the activity's GPS start point and time window; cached forever once fetched. available: false — never a fabricated range — when there's no GPS start point, or the fetch came back empty.",
+    { method: "GET", path: "/api/v1/activities/{activity_id}/weather", summary: "Full conditions judgement for the activity's own time window -- temperature/humidity/dew-point/solar-radiation/cloud-cover/apparent-temperature ranges, sunrise/sunset, and an hour-by-hour trajectory.",
+      description: "Sourced from Open-Meteo's historical archive, keyed on the activity's GPS start point and time window; cached forever once fetched. available: false — never a fabricated range — when there's no GPS start point, or the fetch came back empty. Designed so this one response supports judging heat stress in bpm/pace terms with no second call to Open-Meteo needed -- see ActivityWeatherOut below and docs/DATA_DICTIONARY.md's own Weather section for exactly why each field matters.",
       params: [ ["activity_id","path","req","string","—",""] ],
       responses: [ { code: 200, ref: "ActivityWeatherOut" }, { code: 404, note: "" } ],
       example: {}
@@ -2194,7 +2217,10 @@ const GROUPS = [
     },
     { method: "PUT", path: "/api/v1/settings/email-reports", summary: "Set the two opt-in switches.",
       description: "Upsert. Weekly = Sunday 18:00 (the week just ended + the coming week's planned workouts); monthly = the month's last day 18:00 (that month's totals).",
-      body: "EmailReportConfigIn",
+      body: { schema: "EmailReportConfigIn", fields: [
+        ["weekly_enabled","boolean","req","",""],
+        ["monthly_enabled","boolean","req","",""],
+      ]},
       responses: [ { code: 200, ref: "EmailReportConfigOut" } ],
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/email-reports \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
