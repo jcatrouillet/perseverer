@@ -912,7 +912,46 @@ because you don't recognize it — stop, that's the bug.
   says so. `GET/PUT /settings/email-reports` (+ read-only `smtp_configured`/`recipient_email`
   context) and `POST /settings/email-reports/test` (sends the current weekly report now — 400 if
   unconfigured, 502 on send failure); frontend `EmailReportsCard.tsx` under Settings → External
-  tools.
+  tools. The weekly report additionally carries a per-day running-distance bar chart, the week's
+  average running pace, and a per-day steps bar chart — all Mon–Sun of the week just ended (the
+  monthly report is unchanged, totals-only). Both bar charts (`_bar_rows`/`_bar`) are one row per
+  weekday with a horizontal bar sized to that day's value against the week's own max: a real,
+  confirmed-live rendering trap here is that a percentage-width `<div>`, and even a percentage-
+  width nested `<table width="100%">`, both collapse to **0px rendered width** when their
+  containing `<td>` (the row's own middle column) has no width of its own for the outer table's
+  auto layout to resolve a percentage against — a `&nbsp;`-only cell gives that algorithm no real
+  content to size from, so the whole column collapses and every percentage inside it becomes 0.
+  Only literal **pixel** widths (`_BAR_TRACK_PX`, the containing `<td>` and the nested bar table
+  both fixed to the same pixel value) render correctly regardless of the parent's own auto-layout
+  decisions — this class of email/table layout bug is invisible to a plain string assertion on
+  the rendered HTML (the "sensible-looking" percentage markup was there in both broken versions
+  too); it only showed up rendering the actual HTML and reading `getBoundingClientRect()`, the
+  same way this codebase's own `.time-in-zone__fill` bug (share pages) was originally caught.
+  Average running pace (`_running_avg_pace_s_per_km`) and both daily series
+  (`_running_distance_by_day`/`_steps_by_day`) are exact `sport == "running"` matches / the same
+  `LOGICAL_METRICS["steps"]` alias-merge `api/routers/health.py` uses (duplicated as
+  `_STEPS_ALIASES` rather than imported, so this module doesn't depend on the API layer — same
+  precedent `insights/engine.py::_RESTING_HR_ALIASES` already established). The "By sport" table's
+  own grouping was also a real bug this pass fixed: a recorded yoga/strength/breathwork session is
+  stored `sport="training"`/`sub_sport="<real type>"` (Garmin's FIT taxonomy uses "training" as a
+  generic container for all three), so grouping by the raw `sport` column showed "Training"
+  instead of "Yoga" — `_sport_breakdown` now groups by `_display_sport(sport, sub_sport)`, a
+  duplicated port of `frontend/src/yearStats.ts::displaySport`'s identical `GENERIC_CONTAINER_
+  SPORTS` substitution (same precedent `sharing.py::_display_sport` already established). A third
+  bar chart, sleep hours per day (`_sleep_hours_by_day`, `sleep_session.total_sleep_s` grouped by
+  `local_date` — `func.max`, not sum, since the table's own uniqueness is `(athlete_id,
+  local_date, source)` and more than one source could in principle report the same night),
+  follows the identical omit-when-empty/pixel-width-bar convention as running/steps above.
+  **Future races**: a further section listing every `planned_race` after today, however far out
+  on the calendar (`_future_races`, unbounded — unlike `coming_races`, which stays scoped to just
+  the coming Mon–Sun week) — a quick-glance date/days-until/name/goal-pace line per race (`Sun 06
+  Dec 2026 (84d): 🏁 California International Marathon`, then `4:00 goal (5:41 /km)` on its own
+  line) rather than the coming week's own full target-vs-predicted comparison, since a race that
+  far out has no current prediction worth showing. `_clock_hm` renders a marathon-style goal
+  ("4:00:00") as "4:00" (drops a trailing `:00` seconds component only when there's an hours
+  part — a 5K/10K goal like "22:30"/"45:00" keeps its own real seconds precision unchanged), and
+  the goal pace is a plain `target_duration_s / (distance_m / 1000)` division, `None` (the whole
+  goal line omitted) whenever the race has no target time set.
 - **Races on the calendar (`planned_race`, `planned_races.py`)**: a dated event with a distance
   and an optional target finish time — deliberately its own table, not a `planned_workout` sport
   tier, since a race has no step model and is never pushed to Garmin. Own id-keyed table (any

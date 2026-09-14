@@ -18,14 +18,23 @@ from perseverer.db.schema import (
     athlete,
     athlete_email_report_config,
     athlete_running_load_config,
+    health_metric_daily_rollup,
     metadata,
+    metric_definition,
     performance_daily_rollup,
     period_rollup,
     planned_race,
     planned_workout,
+    sleep_session,
 )
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.email_reports import (
+    _BAR_TRACK_PX,
+    PlannedRaceLine,
+    _bar,
+    _clock_hm,
+    _future_race_date_label,
+    _future_race_goal,
     athletes_opted_in,
     build_monthly_report,
     build_weekly_report,
@@ -131,6 +140,78 @@ def _race(conn: Connection, **kw: object) -> None:
     )
 
 
+def _activity(
+    conn: Connection,
+    *,
+    activity_id: str,
+    local_date: str,
+    sport: str,
+    sub_sport: str | None = None,
+    distance_m: float | None = None,
+    duration_s: float | None = None,
+) -> None:
+    conn.execute(
+        activity.insert().values(
+            id=activity_id,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            start_time_utc=dt.datetime.fromisoformat(f"{local_date}T07:00:00"),
+            utc_offset_s=0,
+            local_date=local_date,
+            sport=sport,
+            sub_sport=sub_sport,
+            distance_m=distance_m,
+            duration_s=duration_s,
+            moving_duration_s=duration_s,
+            primary_source="fit_folder",
+            created_at=dt.datetime(2026, 9, 12, 8, 0),
+            updated_at=dt.datetime(2026, 9, 12, 8, 0),
+        )
+    )
+
+
+def _steps(conn: Connection, *, local_date: str, metric_key: str, value_sum: float) -> None:
+    existing = conn.execute(
+        metric_definition.select().where(metric_definition.c.metric_key == metric_key)
+    ).fetchone()
+    if existing is None:
+        conn.execute(
+            metric_definition.insert().values(
+                metric_key=metric_key,
+                display_name=metric_key,
+                category="health",
+                value_type="numeric",
+                first_seen_at=dt.datetime(2026, 9, 12, 8, 0),
+                first_seen_source="garmin_connect",
+            )
+        )
+    conn.execute(
+        health_metric_daily_rollup.insert().values(
+            athlete_id=DEFAULT_ATHLETE_ID,
+            local_date=local_date,
+            metric_key=metric_key,
+            value_sum=value_sum,
+            n_observations=1,
+            refreshed_at=dt.datetime(2026, 9, 12, 8, 0),
+        )
+    )
+
+
+def _sleep(
+    conn: Connection, *, local_date: str, total_sleep_s: float, source: str = "garmin_connect"
+) -> None:
+    start = dt.datetime.fromisoformat(f"{local_date}T23:00:00")
+    conn.execute(
+        sleep_session.insert().values(
+            athlete_id=DEFAULT_ATHLETE_ID,
+            local_date=local_date,
+            start_time_utc=start,
+            end_time_utc=start + dt.timedelta(seconds=total_sleep_s),
+            total_sleep_s=total_sleep_s,
+            source=source,
+        )
+    )
+
+
 def test_build_weekly_report_totals_and_sport_breakdown(conn: Connection) -> None:
     _seed_week_rollup(conn)
     report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
@@ -146,6 +227,39 @@ def test_build_weekly_report_totals_and_sport_breakdown(conn: Connection) -> Non
     assert [s.sport for s in report.sports] == ["running", "strength_training"]
     assert report.sports[0].count == 2
     assert report.sports[0].distance_m == 30000.0
+
+
+def test_recorded_yoga_activity_labeled_yoga_not_training(conn: Connection) -> None:
+    # A real recorded yoga session is stored sport="training"/sub_sport="yoga" (Garmin's own FIT
+    # taxonomy uses "training" as a generic container for indoor cardio/strength/mindfulness
+    # work) -- the sport breakdown must show "Yoga", never the device's own generic container.
+    _activity(conn, activity_id="y1", local_date="2026-09-09", sport="training", sub_sport="yoga")
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert [s.sport for s in report.sports] == ["yoga"]
+
+    rendered = render_weekly_email(report)
+    assert "Yoga" in rendered.html and "Yoga" in rendered.text
+    assert "Training" not in rendered.html and "Training" not in rendered.text
+
+
+def test_sport_breakdown_merges_multiple_training_sub_sports_separately(
+    conn: Connection,
+) -> None:
+    _activity(conn, activity_id="y1", local_date="2026-09-09", sport="training", sub_sport="yoga")
+    _activity(
+        conn,
+        activity_id="y2",
+        local_date="2026-09-10",
+        sport="training",
+        sub_sport="strength_training",
+    )
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert {s.sport for s in report.sports} == {"yoga", "strength_training"}
+    assert all(s.count == 1 for s in report.sports)
 
 
 def test_build_weekly_report_is_empty_when_no_rollup_row(conn: Connection) -> None:
@@ -199,6 +313,210 @@ def test_weekly_report_coming_workouts_with_running_estimate(conn: Connection) -
     assert running.estimate_line is not None
     assert "km" in running.estimate_line and "Load" in running.estimate_line
     assert report.coming_workouts[1].estimate_line is None
+
+
+def test_running_distance_by_day_and_average_pace(conn: Connection) -> None:
+    # r1: Tue 2026-09-08, 12 km in 3600s. r2: Thu 2026-09-10, 18 km in 4800s. Strength day (s1)
+    # has no distance and must not contribute to either the daily series or the pace average.
+    _seed_week_rollup(conn)
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+
+    by_date = {p.local_date: p.value for p in report.running_distance_by_day}
+    assert by_date == {
+        "2026-09-07": None,
+        "2026-09-08": 12000.0,
+        "2026-09-09": None,
+        "2026-09-10": 18000.0,
+        "2026-09-11": None,
+        "2026-09-12": None,
+        "2026-09-13": None,
+    }
+    # Total 30 km in 8400s -- 280 s/km, i.e. 4:40 /km.
+    assert report.avg_running_pace_s_per_km == 280.0
+
+
+def test_running_distance_by_day_covers_every_day_even_with_no_runs(conn: Connection) -> None:
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert len(report.running_distance_by_day) == 7
+    assert all(p.value is None for p in report.running_distance_by_day)
+    assert report.avg_running_pace_s_per_km is None
+
+
+def test_steps_by_day_prefers_the_higher_priority_alias_on_a_shared_date(
+    conn: Connection,
+) -> None:
+    _steps(
+        conn,
+        local_date="2026-09-08",
+        metric_key="garmin.export.UDSFile.totalSteps",
+        value_sum=1000.0,
+    )
+    _steps(
+        conn,
+        local_date="2026-09-08",
+        metric_key="garmin.daily_summary.totalSteps",
+        value_sum=9500.0,
+    )
+    _steps(
+        conn,
+        local_date="2026-09-09",
+        metric_key="garmin.daily_summary.totalSteps",
+        value_sum=8200.0,
+    )
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    by_date = {p.local_date: p.value for p in report.steps_by_day}
+    assert by_date["2026-09-08"] == 9500.0  # daily_summary wins over the export alias
+    assert by_date["2026-09-09"] == 8200.0
+    assert by_date["2026-09-07"] is None
+
+
+def test_sleep_hours_by_day(conn: Connection) -> None:
+    _sleep(conn, local_date="2026-09-08", total_sleep_s=7 * 3600 + 30 * 60)  # 7h30m
+    _sleep(conn, local_date="2026-09-10", total_sleep_s=6 * 3600)
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    by_date = {p.local_date: p.value for p in report.sleep_hours_by_day}
+    assert by_date["2026-09-08"] == 7.5
+    assert by_date["2026-09-10"] == 6.0
+    assert by_date["2026-09-07"] is None
+    assert len(report.sleep_hours_by_day) == 7
+
+
+def test_sleep_hours_by_day_takes_the_max_when_two_sources_share_a_date(
+    conn: Connection,
+) -> None:
+    _sleep(conn, local_date="2026-09-08", total_sleep_s=6 * 3600, source="garmin_export")
+    _sleep(conn, local_date="2026-09-08", total_sleep_s=7 * 3600, source="garmin_connect")
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    by_date = {p.local_date: p.value for p in report.sleep_hours_by_day}
+    assert by_date["2026-09-08"] == 7.0
+
+
+def test_bar_uses_literal_pixel_widths_not_percentages() -> None:
+    # Regression: a percentage-width <div>, and then a percentage-width nested <table
+    # width="100%">, both confirmed LIVE (in a real rendered browser preview, not just by
+    # reading the markup -- an assertion on the string alone can't catch this class of bug,
+    # same as the identical `.time-in-zone__fill` bug this codebase's own share pages already
+    # hit) to collapse to 0 rendered width inside _bar_rows' own containing <td>, which has no
+    # width of its own for the outer table's auto layout to resolve a percentage against.
+    # Literal pixel widths have nothing to resolve, so they render correctly regardless of the
+    # parent's own layout algorithm.
+    bar_html = _bar(40)
+    assert 'width="40%"' not in bar_html
+    assert f'width="{round(_BAR_TRACK_PX * 0.4)}"' in bar_html
+    assert f'width="{_BAR_TRACK_PX - round(_BAR_TRACK_PX * 0.4)}"' in bar_html
+
+
+def test_bar_at_0_and_100_percent_draws_only_one_segment() -> None:
+    empty = _bar(0)
+    assert f'width="{_BAR_TRACK_PX}"' in empty
+    assert empty.count("<td") == 1  # only the track, no zero-width fill segment
+
+    full = _bar(100)
+    assert f'width="{_BAR_TRACK_PX}"' in full
+    assert full.count("<td") == 1  # only the fill, no zero-width track segment
+
+
+def test_clock_hm_drops_a_trailing_00_seconds_only_when_there_is_an_hours_component() -> None:
+    assert _clock_hm(4 * 3600) == "4:00"  # marathon goal: 4:00:00 -> 4:00
+    assert _clock_hm(4 * 3600 + 5 * 60) == "4:05"  # 4:05:00 -> 4:05
+    assert _clock_hm(4 * 3600 + 5 * 60 + 30) == "4:05:30"  # real seconds precision kept
+    assert _clock_hm(22 * 60 + 30) == "22:30"  # no hours component -- kept as-is
+    assert _clock_hm(45 * 60) == "45:00"  # no hours component -- kept as-is, not stripped
+
+
+def test_future_race_goal_and_date_label_match_the_worked_example() -> None:
+    # A real marathon (42.195 km) with a 4-hour goal: 14400s / 42.195km = 341.4s/km = 5:41/km.
+    race = PlannedRaceLine(
+        local_date="2026-12-06",
+        name="California International Marathon",
+        distance_m=42195.0,
+        target_duration_s=4 * 3600.0,
+        predicted_duration_s=None,
+    )
+    assert _future_race_goal(race) == "4:00 goal (5:41 /km)"
+    assert _future_race_date_label(race, dt.date(2026, 9, 13)) == (
+        "Sun 06 Dec 2026 (84d)"
+    )
+
+
+def test_future_race_goal_is_none_without_a_target() -> None:
+    race = PlannedRaceLine(
+        local_date="2026-12-06",
+        name="Fun Run",
+        distance_m=5000.0,
+        target_duration_s=None,
+        predicted_duration_s=None,
+    )
+    assert _future_race_goal(race) is None
+
+
+def test_future_races_query_is_unbounded_and_excludes_today_and_the_past(
+    conn: Connection,
+) -> None:
+    _race(conn, local_date="2026-09-13", name="Today", distance_m=5000.0)  # excluded: not future
+    _race(conn, local_date="2026-09-01", name="Past", distance_m=5000.0)  # excluded: in the past
+    _race(conn, local_date="2026-09-20", name="Next Sunday", distance_m=10000.0)
+    _race(conn, local_date="2027-06-01", name="Way out", distance_m=42195.0)
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert [r.name for r in report.future_races] == ["Next Sunday", "Way out"]
+
+
+def test_weekly_email_shows_future_races(conn: Connection) -> None:
+    _race(
+        conn,
+        local_date="2026-12-06",
+        name="California International Marathon",
+        distance_m=42195.0,
+        target_duration_s=4 * 3600.0,
+    )
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+
+    assert "Future races" in rendered.html and "Future races" in rendered.text
+    assert "California International Marathon" in rendered.html
+    assert "Sun 06 Dec 2026 (84d)" in rendered.html
+    assert "4:00 goal (5:41 /km)" in rendered.html
+    assert "Sun 06 Dec 2026 (84d): California International Marathon - 4:00 goal (5:41 /km)" in (
+        rendered.text
+    )
+
+
+def test_weekly_email_omits_future_races_section_when_there_are_none(
+    conn: Connection,
+) -> None:
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    assert "Future races" not in rendered.html
+    assert "Future races" not in rendered.text
+
+
+def test_weekly_email_shows_sleep_bar_chart(conn: Connection) -> None:
+    _seed_week_rollup(conn)
+    _sleep(conn, local_date="2026-09-08", total_sleep_s=7.5 * 3600)
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+
+    assert "Sleep this week" in rendered.html and "Sleep this week" in rendered.text
+    assert "7h 30m" in rendered.html and "7h 30m" in rendered.text
+
+
+def test_weekly_email_omits_sleep_section_when_theres_no_data(conn: Connection) -> None:
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    assert "Sleep this week" not in rendered.html
+    assert "Sleep this week" not in rendered.text
 
 
 def test_render_weekly_email_is_email_safe_and_has_the_figures(conn: Connection) -> None:
@@ -267,6 +585,46 @@ def test_coming_week_race_appears_with_target_and_prediction(conn: Connection) -
     assert "Races this week" in rendered.html and "Races this week" in rendered.text
     # Predicted (39:10) is faster than the 40:00 target -- reads as on track.
     assert "on track" in rendered.html
+
+
+def test_weekly_email_shows_running_bar_chart_and_average_pace(conn: Connection) -> None:
+    _seed_week_rollup(conn)
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+
+    assert "Running this week" in rendered.html and "Running this week" in rendered.text
+    assert "Average pace: 4:40 /km" in rendered.html
+    assert "avg pace 4:40 /km" in rendered.text
+    # One bar row per weekday, Tue (12.0 km) and Thu (18.0 km) among them.
+    assert "12.0 km" in rendered.html and "18.0 km" in rendered.html
+
+
+def test_weekly_email_shows_steps_bar_chart(conn: Connection) -> None:
+    _seed_week_rollup(conn)
+    _steps(
+        conn,
+        local_date="2026-09-08",
+        metric_key="garmin.daily_summary.totalSteps",
+        value_sum=9432.0,
+    )
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+
+    assert "Steps this week" in rendered.html and "Steps this week" in rendered.text
+    assert "9,432" in rendered.html and "9,432" in rendered.text
+
+
+def test_weekly_email_omits_running_and_steps_sections_when_theres_no_data(
+    conn: Connection,
+) -> None:
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+
+    assert "Running this week" not in rendered.html
+    assert "Running this week" not in rendered.text
+    assert "Steps this week" not in rendered.html
+    assert "Steps this week" not in rendered.text
 
 
 def test_no_coming_races_omits_the_races_section(conn: Connection) -> None:
