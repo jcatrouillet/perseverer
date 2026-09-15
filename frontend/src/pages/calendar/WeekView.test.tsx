@@ -7,7 +7,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { ActivitySummary, PlannedWorkoutOut } from "../../api/types";
+import type { ActivitySummary, PlannedWorkoutListItemOut, PlannedWorkoutOut } from "../../api/types";
 import { WeekView } from "./WeekView";
 
 beforeAll(() => {
@@ -74,7 +74,11 @@ mockUseNotes.mockReturnValue({ data: [], isLoading: false, isError: false });
 const mockUseCreateNote = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
 const mockUseWeatherForecast = vi.fn();
 mockUseWeatherForecast.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+const mockUsePlannedWorkoutsList = vi.fn();
+mockUsePlannedWorkoutsList.mockReturnValue({ data: [], isLoading: false, isError: false });
+const mockUseHealthDashboard = vi.fn();
 const EMPTY_QUERY = { data: undefined, isLoading: false, isError: false };
+mockUseHealthDashboard.mockReturnValue(EMPTY_QUERY);
 const EMPTY_DAYS_QUERY = { data: { days: [] }, isLoading: false, isError: false };
 const EMPTY_PERIODS_QUERY = { data: { periods: [] }, isLoading: false, isError: false };
 
@@ -84,13 +88,14 @@ vi.mock("../../api/queries", () => ({
   useActivities: (...args: unknown[]) => mockUseActivities(...args),
   useAllActivities: () => ({ data: undefined }),
   useFitness: () => ({ data: undefined }),
-  useHealthDashboard: () => EMPTY_QUERY,
+  useHealthDashboard: (...args: unknown[]) => mockUseHealthDashboard(...args),
   useSleep: () => EMPTY_QUERY,
   useClimbingSummary: () => EMPTY_QUERY,
   useActivityYears: () => EMPTY_QUERY,
   useActivityLocation: () => ({ data: undefined }),
   usePlannedWorkoutsForDate: (...args: unknown[]) => mockUsePlannedWorkoutsForDate(...args),
   usePlannedRacesForDate: (...args: unknown[]) => mockUsePlannedRacesForDate(...args),
+  usePlannedWorkoutsList: (...args: unknown[]) => mockUsePlannedWorkoutsList(...args),
   useNotes: (...args: unknown[]) => mockUseNotes(...args),
   useCreateNote: () => mockUseCreateNote(),
   useWeatherForecast: () => mockUseWeatherForecast(),
@@ -276,6 +281,127 @@ describe("WeekView weather forecast", () => {
     });
     render(<WeekView date="2026-09-01" />);
     expect(document.querySelectorAll(".week-columns__forecast")).toHaveLength(1);
+  });
+});
+
+describe("WeekView steps", () => {
+  afterEach(() => {
+    // mockReturnValue (not -Once) persists across tests in this file's own convention -- reset
+    // explicitly so a later describe block doesn't inherit this block's own health data.
+    mockUseHealthDashboard.mockReturnValue(EMPTY_QUERY);
+  });
+
+  it("shows nothing when there's no health data yet", () => {
+    mockUseHealthDashboard.mockReturnValue(EMPTY_QUERY);
+    render(<WeekView date="2026-09-01" />);
+    expect(document.querySelector(".week-columns__steps")).not.toBeInTheDocument();
+  });
+
+  it("shows the steps icon and count for a day with a real reading", () => {
+    mockUseHealthDashboard.mockReturnValue({
+      data: {
+        metrics: [
+          {
+            logical_metric: "steps",
+            last_observed: "2026-09-01",
+            daily: [
+              {
+                local_date: "2026-09-01",
+                value_sum: 9432,
+                value_avg: null,
+                value_min: null,
+                value_max: null,
+                value_last: null,
+                n_observations: 1,
+                source_metric_key: "garmin.daily_summary.totalSteps",
+              },
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<WeekView date="2026-09-01" />);
+
+    const stepsRow = document.querySelector(".week-columns__steps");
+    expect(stepsRow).toBeInTheDocument();
+    expect(stepsRow).toHaveTextContent("9,432");
+    expect(stepsRow!.querySelector(".icon")).toBeInTheDocument();
+    // Only the one day with a real reading gets a row -- never a fabricated 0 for the rest.
+    expect(document.querySelectorAll(".week-columns__steps")).toHaveLength(1);
+  });
+});
+
+describe("WeekView compliance", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function planned(
+    overrides: Partial<PlannedWorkoutListItemOut> = {},
+  ): PlannedWorkoutListItemOut {
+    return {
+      local_date: "2026-09-01",
+      id: 1,
+      sport: "running",
+      name: null,
+      scheduled_time: null,
+      push_status: "draft",
+      completed_at: null,
+      ...overrides,
+    };
+  }
+
+  it("shows no Compliance section when nothing was scheduled this week", () => {
+    mockUsePlannedWorkoutsList.mockReturnValue({ data: [], isLoading: false, isError: false });
+    render(<WeekView date="2026-09-01" />);
+    expect(screen.queryByRole("heading", { name: "Compliance" })).not.toBeInTheDocument();
+  });
+
+  it("shows a per-sport compliance percentage, excluding workouts later than today", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-03T12:00:00"));
+    mockUsePlannedWorkoutsList.mockReturnValue({
+      data: [
+        planned({ id: 1, local_date: "2026-09-01", completed_at: "2026-09-01T08:00:00" }),
+        planned({ id: 2, local_date: "2026-09-02", completed_at: null }),
+        // Later than the faked "today" (Sept 3) -- must not count toward running's totals.
+        planned({ id: 3, local_date: "2026-09-05", completed_at: null }),
+        planned({
+          id: 4,
+          local_date: "2026-09-02",
+          sport: "yoga",
+          completed_at: "2026-09-02T08:00:00",
+        }),
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<WeekView date="2026-09-01" />);
+
+    expect(screen.getByRole("heading", { name: "Compliance" })).toBeInTheDocument();
+    expect(screen.getByText("Running compliance")).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 done")).toBeInTheDocument();
+    expect(screen.getByText("Yoga compliance")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 done")).toBeInTheDocument();
+  });
+
+  it("omits the Compliance section entirely for a fully future week", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-01T12:00:00"));
+    mockUsePlannedWorkoutsList.mockReturnValue({
+      data: [planned({ local_date: "2026-09-01" })],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<WeekView date="2026-09-01" />);
+    expect(screen.queryByRole("heading", { name: "Compliance" })).not.toBeInTheDocument();
   });
 });
 

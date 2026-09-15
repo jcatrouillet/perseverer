@@ -163,8 +163,10 @@ class PlannedWorkoutOut(BaseModel):
 
 class PlannedWorkoutListItemOut(BaseModel):
     """One row of GET /planned-workouts?start_date=&end_date= -- just enough for the calendar
-    grid's own per-day indicator (mirrors day_rollup's own summary-row shape for GET /calendar);
-    fetch GET /planned-workouts/by-date/{date} for the full workout(s) once a day is expanded."""
+    grid's own per-day indicator (mirrors day_rollup's own summary-row shape for GET /calendar)
+    and the Week view's own sport-by-sport compliance stat (completed_at vs the total scheduled,
+    per sport -- see WeekView.tsx); fetch GET /planned-workouts/by-date/{date} for the full
+    workout(s) once a day is expanded."""
 
     local_date: str
     id: int
@@ -172,6 +174,7 @@ class PlannedWorkoutListItemOut(BaseModel):
     name: str | None
     scheduled_time: str | None
     push_status: str
+    completed_at: str | None
 
 
 class RecurringWorkoutIn(BaseModel):

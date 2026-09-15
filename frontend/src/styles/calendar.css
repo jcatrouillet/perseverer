@@ -179,6 +179,17 @@
   color: var(--color-text-muted);
 }
 
+/* Same own-row treatment as .week-columns__forecast above, right under it -- GET
+   /health/dashboard's "steps" logical metric for this day. Rendered only when a real reading
+   exists (never a fabricated 0 for a day with no data yet). */
+.week-columns__steps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 /* Stops the day-level click-to-navigate (WeekDayColumn's own onClick) from also firing when the
    click actually lands on one of these activity cards -- each already links to that specific
    activity, the more useful destination. */

@@ -645,6 +645,7 @@ export interface PlannedWorkoutListItemOut {
   name: string | null;
   scheduled_time: string | null;
   push_status: "draft" | "pushed" | "push_failed";
+  completed_at: string | null;
 }
 
 export interface RecurringWorkoutOut {

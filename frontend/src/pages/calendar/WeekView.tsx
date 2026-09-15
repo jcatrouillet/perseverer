@@ -10,10 +10,16 @@ import {
   useHealthDashboard,
   usePlannedRacesForDate,
   usePlannedWorkoutsForDate,
+  usePlannedWorkoutsList,
   useSleep,
   useWeatherForecast,
 } from "../../api/queries";
-import type { ActivitySummary, DayRollupOut, ForecastDayOut } from "../../api/types";
+import type {
+  ActivitySummary,
+  DayRollupOut,
+  ForecastDayOut,
+  PlannedWorkoutListItemOut,
+} from "../../api/types";
 import { ActivityCard } from "../../components/ActivityCard";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
@@ -41,6 +47,63 @@ function formatDayHeading(localDate: string): { date: string; weekday: string } 
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
   const weekday = d.toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
   return { date, weekday };
+}
+
+// planned_workout.sport is always one of these five exact strings (never the recorded-activity
+// taxonomy's own sport/sub_sport pair, e.g. yoga is sport="training"/sub_sport="yoga" once
+// actually recorded) -- same small duplicated label map ScheduleWorkoutForm.tsx's own (private)
+// SPORTS array already carries, duplicated here rather than exported/imported since it's a
+// three-line constant, not shared logic.
+const PLANNED_SPORT_LABELS: Record<string, string> = {
+  running: "Running",
+  yoga: "Yoga",
+  bouldering: "Bouldering",
+  hiit: "HIIT",
+  strength_training: "Strength training",
+};
+
+function plannedSportLabel(sport: string): string {
+  return PLANNED_SPORT_LABELS[sport] ?? sport;
+}
+
+interface SportCompliance {
+  sport: string;
+  completed: number;
+  scheduled: number;
+  pct: number;
+}
+
+// Compliance is deliberately count-based (completed workouts / scheduled workouts), not
+// distance- or load-weighted -- `completed_at` is this app's own explicit, athlete-asserted
+// "I did this" marker (db/schema.py::planned_workout's own docstring: there is no automatic
+// planned-vs-recorded activity matching at all, by design), and count is the one signal every
+// sport tier carries identically -- running's own estimated_distance_m/estimated_load are null
+// for yoga/bouldering/hiit/strength_training (planned_workout_stats.py is running-only), so a
+// distance- or load-weighted number couldn't be computed for four of the five sport tiers anyway.
+// Scoped to `local_date <= today`: a workout scheduled later this week hasn't happened yet, so
+// counting it as "not done" would understate a week that's still in progress rather than
+// reflect anything the athlete actually missed. A fully future week (every date > today)
+// naturally produces an empty list, needing no separate case.
+function computeCompliance(
+  workouts: PlannedWorkoutListItemOut[],
+  today: string,
+): SportCompliance[] {
+  const bySport = new Map<string, { completed: number; scheduled: number }>();
+  for (const w of workouts) {
+    if (w.local_date > today) continue;
+    const entry = bySport.get(w.sport) ?? { completed: 0, scheduled: 0 };
+    entry.scheduled += 1;
+    if (w.completed_at != null) entry.completed += 1;
+    bySport.set(w.sport, entry);
+  }
+  return [...bySport.entries()]
+    .map(([sport, { completed, scheduled }]) => ({
+      sport,
+      completed,
+      scheduled,
+      pct: Math.round((completed / scheduled) * 100),
+    }))
+    .sort((a, b) => b.scheduled - a.scheduled || a.sport.localeCompare(b.sport));
 }
 
 // One `usePlannedWorkoutsForDate` call per day, each in its own component instance -- a week has
@@ -102,6 +165,7 @@ function WeekDayColumn({
   day,
   activities,
   forecast,
+  steps,
   isToday,
   onNavigate,
 }: {
@@ -109,6 +173,7 @@ function WeekDayColumn({
   day: DayRollupOut | undefined;
   activities: ActivitySummary[];
   forecast: ForecastDayOut | undefined;
+  steps: number | null | undefined;
   isToday: boolean;
   onNavigate: (date: string) => void;
 }) {
@@ -138,6 +203,12 @@ function WeekDayColumn({
           <span>
             {Math.round(forecast.temperature_min_c)}–{Math.round(forecast.temperature_max_c)}°
           </span>
+        </div>
+      )}
+      {steps != null && (
+        <div className="week-columns__steps" title="Steps">
+          <Icon name="steps" />
+          <span>{Math.round(steps).toLocaleString()}</span>
         </div>
       )}
       <WeekDayPlannedWorkouts date={date} />
@@ -190,6 +261,18 @@ export function WeekView({ date }: { date: string }) {
   // Open-Meteo's own forecast horizon) simply renders no forecast row.
   const forecast = useWeatherForecast();
   const forecastByDate = new Map((forecast.data?.days ?? []).map((d) => [d.local_date, d]));
+  // Steps is a summed-per-day metric (same LOGICAL_METRICS["steps"] alias-merge GET
+  // /health/dashboard already resolves, e.g. garmin.daily_summary.totalSteps) -- reuses the same
+  // `health` fetch WeekWellnessCharts already draws its own metrics from, no second call.
+  const stepsMetric = health.data?.metrics.find((m) => m.logical_metric === "steps");
+  const stepsByDate = new Map(
+    (stepsMetric?.daily ?? []).map((d) => [d.local_date, d.value_sum]),
+  );
+  // One bulk fetch for the whole week (the summary-list endpoint MonthView's own grid cell
+  // already uses), not the per-day usePlannedWorkoutsForDate hook WeekDayPlannedWorkouts calls
+  // above -- compliance needs every day's own scheduled workouts at once to aggregate by sport,
+  // and the summary shape (sport + completed_at, no steps/estimates) is all it needs.
+  const plannedWorkoutsThisWeek = usePlannedWorkoutsList(start, end);
   const [, setLocation] = useLocation();
   // Deliberately the browser's own local calendar date, not `isoDate(new Date())`'s UTC
   // conversion (the pattern used elsewhere in this app for a coarse "today" default) -- that
@@ -198,6 +281,7 @@ export function WeekView({ date }: { date: string }) {
   // "today" for the exact hours an athlete is most likely to be looking at their own week.
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const compliance = computeCompliance(plannedWorkoutsThisWeek.data ?? [], today);
   const weekTotal = weeks.data?.periods.find((p) => p.period_start === start);
   const priorWeekTotal = weeks.data?.periods.find((p) => p.period_start === priorWeekStart);
   const monthOfWeekStart = start.slice(0, 7); // YYYY-MM
@@ -256,6 +340,7 @@ export function WeekView({ date }: { date: string }) {
             day={calendar.data?.days.find((x) => x.local_date === d)}
             activities={activitiesByDate.get(d) ?? []}
             forecast={forecastByDate.get(d)}
+            steps={stepsByDate.get(d)}
             isToday={d === today}
             onNavigate={(navDate) => setLocation(`/day/${navDate}`)}
           />
@@ -336,6 +421,24 @@ export function WeekView({ date }: { date: string }) {
                 tone="elevation"
               />
             )}
+          </div>
+        </section>
+      )}
+
+      {compliance.length > 0 && (
+        <section className="card">
+          <h2>Compliance</h2>
+          <div className="stat-grid">
+            {compliance.map((c) => (
+              <StatTile
+                key={c.sport}
+                label={`${plannedSportLabel(c.sport)} compliance`}
+                value={`${c.pct}%`}
+                meta={`${c.completed} of ${c.scheduled} done`}
+                icon={plannedWorkoutSportStyle(c.sport).icon}
+                tone={plannedWorkoutSportStyle(c.sport).tone}
+              />
+            ))}
           </div>
         </section>
       )}

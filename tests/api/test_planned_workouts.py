@@ -43,6 +43,41 @@ def test_by_date_list_is_empty_when_no_workout_scheduled(
     assert r.json() == []
 
 
+def test_range_list_returns_summary_rows_including_completed_at(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    run = _create(client, auth_headers, "2026-09-01", sport="running", source_text="Warmup 10m")
+    _create(client, auth_headers, "2026-09-03", sport="yoga", duration_minutes=30)
+    # Outside the requested range -- must not appear.
+    _create(client, auth_headers, "2026-09-10", sport="running", source_text="Warmup 10m")
+    client.post(f"/api/v1/planned-workouts/{run['id']}/complete", headers=auth_headers)
+
+    r = client.get(
+        "/api/v1/planned-workouts",
+        params={"start_date": "2026-09-01", "end_date": "2026-09-07"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    rows = r.json()
+    assert [row["local_date"] for row in rows] == ["2026-09-01", "2026-09-03"]
+    assert rows[0]["sport"] == "running"
+    assert rows[0]["completed_at"] is not None
+    assert rows[1]["sport"] == "yoga"
+    assert rows[1]["completed_at"] is None
+
+
+def test_range_list_is_empty_outside_any_scheduled_workout(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get(
+        "/api/v1/planned-workouts",
+        params={"start_date": "2026-09-01", "end_date": "2026-09-07"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json() == []
+
+
 def test_post_creates_and_parses_steps(client: TestClient, auth_headers: dict[str, str]) -> None:
     body = _create(
         client,

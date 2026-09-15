@@ -71,6 +71,7 @@ def list_planned_workouts(
             planned_workout.c.name,
             planned_workout.c.scheduled_time,
             planned_workout.c.push_status,
+            planned_workout.c.completed_at,
         )
         .where(
             planned_workout.c.athlete_id == athlete_id,
@@ -87,6 +88,7 @@ def list_planned_workouts(
             name=r.name,
             scheduled_time=r.scheduled_time,
             push_status=r.push_status,
+            completed_at=r.completed_at.isoformat() if r.completed_at else None,
         )
         for r in rows
     ]
