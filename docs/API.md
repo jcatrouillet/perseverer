@@ -787,6 +787,41 @@ rollup-backed — same exception as `GET /performance/vo2max-analysis` above.
 
 **Response `200`:** `ThresholdFactorAnalysisOut`.
 
+### `GET /performance/race-readiness`
+
+Has the athlete run enough *volume* for their next scheduled race, not just "are they fit" — a
+materially different question from this same API's own VDOT-based race prediction (`GET
+/planned-races`'s `predicted_duration_s`), which is reused as-is here and shown alongside,
+never blended into the readiness percentage. Compares recency-weighted weekly running distance
+(182-day window) and long-run distance (70-day window, a week's own longest run standing in for
+"long run") against targets interpolated from published training-plan data for the race's own
+distance, combined into one readiness percentage (60% weekly distance / 40% long run — see
+`race_readiness.py`'s own module docstring for the full reasoning behind every number here).
+Deliberately request-time, not rollup-backed — same "bounded, occasional diagnostic lookup"
+exception `GET /performance/vo2max-analysis` above already establishes.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `race_id` | query | optional | integer | A specific `planned_race` id. Defaults to the athlete's own nearest upcoming running race. |
+| `as_of` | query | optional | string (date) | Defaults to today. |
+
+**Response `200`:** `RaceReadinessOut` — `available` (`false` — never fabricated — when there's
+no upcoming running race, or `race_id` doesn't belong to the caller), `race_id`/`race_name`/
+`race_local_date`/`race_distance_m` (all nullable), `weekly_distance_target_m`/
+`long_run_target_m` (meters, nullable), `as_of` (string, nullable), `current`
+(`RaceReadinessPointOut`, nullable), `predicted_duration_s` (number, nullable — `null` for a
+non-standard race distance), `history` (`RaceReadinessPointOut[]`, oldest first, one point per
+week over the 182-day window), `weekly_distance_series`/`long_run_series`
+(`RaceReadinessWeekOut[]`, oldest first, one entry per Monday-start week over each series' own
+182-day/70-day window — the actual realized distance behind the two compliance percentages
+above, `0.0` never omitted for a week with nothing recorded).
+
+`RaceReadinessPointOut`: `as_of` (string, date), `weekly_distance_compliance_pct` (number),
+`long_run_compliance_pct` (number), `readiness_pct` (number) — all 0-100.
+
+`RaceReadinessWeekOut`: `week_start` (string, date, the Monday that week starts), `distance_m`
+(number).
+
 ---
 
 ## Insights
@@ -2027,6 +2062,29 @@ one run when the qualifying count is odd, two when it's even and the median aver
 `activity_id`, `local_date`, `name` (string, nullable), `sport`, `distance_m` (number, nullable),
 `duration_s` (number, nullable — moving time).
 
+### RaceReadinessOut
+
+| Field | Type | Description |
+|---|---|---|
+| `available` | boolean | `false` — never fabricated — when there's no upcoming running race, or `race_id` doesn't belong to the caller. |
+| `race_id`, `race_name`, `race_local_date`, `race_distance_m` | nullable | The targeted `planned_race`'s own fields. |
+| `weekly_distance_target_m`, `long_run_target_m` | number, nullable | Interpolated from this race's own distance — see `race_readiness.py`'s own module docstring. |
+| `as_of` | string (date), nullable | |
+| `current` | `RaceReadinessPointOut`, nullable | Today's own reading — the last entry of `history` too. |
+| `predicted_duration_s` | number, nullable | The same VDOT-based prediction `GET /planned-races` already surfaces for this distance, reused as-is — `null` for a non-standard distance. |
+| `history` | `array<RaceReadinessPointOut>` | One point per week over the 182-day weekly-distance window, oldest first — a genuine backtest, not a fabricated smoothing. |
+| `weekly_distance_series`, `long_run_series` | `array<RaceReadinessWeekOut>` | The actual realized distance behind the two compliance percentages above, not just the recency-weighted fraction — one entry per Monday-start week, oldest first, over each series' own window (182 days / 70 days). `0.0` never omitted for a week with nothing recorded. |
+
+### RaceReadinessPointOut
+
+`as_of` (string, date), `weekly_distance_compliance_pct` (number, 0-100), `long_run_compliance_pct`
+(number, 0-100), `readiness_pct` (number, 0-100 — `0.6 * weekly_distance_compliance_pct + 0.4 *
+long_run_compliance_pct`).
+
+### RaceReadinessWeekOut
+
+`week_start` (string, date — the Monday that week starts), `distance_m` (number).
+
 ### InsightOut
 
 | Field | Type | Description |
@@ -2103,7 +2161,10 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 ### PlannedWorkoutListItemOut
 
 `local_date` (string, date), `id` (integer), `sport` (string), `name` (string, nullable),
-`scheduled_time` (string, nullable — `"HH:MM"`), `push_status` (`draft`/`pushed`/`push_failed`).
+`scheduled_time` (string, nullable — `"HH:MM"`), `push_status` (`draft`/`pushed`/`push_failed`),
+`completed_at` (string, nullable, ISO datetime — the athlete's own manual "I did this" marker,
+`null` until marked; see `POST .../{workout_id}/complete` above. Used by the Week view's own
+sport-by-sport compliance stat).
 
 ### PlannedWorkoutOut
 

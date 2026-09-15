@@ -1079,6 +1079,25 @@ parameter alongside `scheduled_time`, threaded through `PlannedWorkoutIn`/`Out`/
 ahead of the existing per-sport description) and the weekly summary email's coming-workouts
 section (`email_reports.py`).
 
+**Compliance, sport by sport (Week view)**: a "Compliance" card on `WeekView.tsx`, one stat tile
+per sport with at least one scheduled workout in the viewed week -- `{Sport} compliance`, the
+percentage of that sport's scheduled workouts marked `completed_at` (e.g. "Running compliance:
+67%", meta "2 of 3 done"). Count-based, not distance- or load-weighted: `completed_at` is the
+athlete's own manual "I did this" marker with no link to any recorded `activity` row (see this
+section's own `completed_at` bullet above -- there is no automatic planned-vs-recorded matching
+in this codebase at all), and a plain count is the one signal every sport tier carries
+identically, since `planned_workout_stats.py`'s distance/load estimate exists only for running
+(`estimated_distance_m`/`estimated_load` are always `null` for yoga/bouldering/hiit/
+strength_training). Only workouts with `local_date <= today` count toward either the numerator
+or denominator -- a workout later in the same week that hasn't happened yet would otherwise drag
+down a week that's still in progress; a fully future week (every scheduled date past today)
+correctly produces no compliance entries at all, and the whole card is omitted (not shown empty)
+in that case. `GET /planned-workouts?start_date=&end_date=` (`PlannedWorkoutListItemOut`, the
+same summary-list endpoint the Month view's own per-day grid indicator already uses) gained one
+more scalar field, `completed_at`, to support this -- the one bulk-range call the Week view needs
+for this, rather than the per-day `usePlannedWorkoutsForDate` hook its own `WeekDayPlannedWorkouts`
+sub-component already calls seven times for full per-day workout detail.
+
 ## Calendar feed: publishing planned_workout to Google Calendar
 
 `calendar_feed.py` builds a public iCalendar (RFC 5545) feed of the athlete's own `planned_workout`
@@ -1223,6 +1242,22 @@ month's totals, no planned-workout section). Two `APScheduler` jobs in `worker/m
   double-count it. A real overlap has never actually been observed in practice (same posture the
   frontend's own `HealthPage.tsx::sleepToDailyPoints` already takes — it doesn't merge sources at
   all), `func.max` is just the safe choice if one ever does.
+- **Running distance vs. the week before** (`_running_distance_total_m`) — a second sum over the
+  Mon–Sun immediately before the week the report covers, folded into the "Running this week" bar
+  chart's own caption as two absolute figures (`"38.4 km vs 32.1 km the week before"`), not a bare
+  delta — the same preference `WeekView.tsx`'s own `priorWeekMeta` already established for total
+  distance (a delta with nothing to compare against was found less useful than the number it's
+  relative to). `None` — the whole comparison line omitted — when there were no runs at all the
+  week before, never a fabricated `0 km`.
+- **A per-run table: `RunLine`/`_week_runs`** — one row per individual running *activity* in the
+  week that just ended, not a per-day sum like the bar chart above (two runs on the same day are
+  two rows here). Columns: Day, Distance, Pace, Duration. The week's own farthest distance,
+  fastest pace (the lowest seconds/km, i.e. best), and longest duration are each bolded and
+  accent-colored in their own column (`_highlight_cell`, a plain inline `<span>`, not a row
+  background — no separate "highlighted row" color decision needed); a tie bolds every tied run,
+  since "the week's fastest run" genuinely describes all of them equally when more than one ties.
+  An activity missing either distance or duration is skipped (never a fabricated pace); the whole
+  section is omitted, not shown empty, on a week with no qualifying runs.
 - **Future races** (`_future_races`) — every `planned_race` after today, however far out on the
   calendar, unlike `coming_races` above (which stays scoped to just the coming Mon–Sun week and
   its own full target-vs-predicted comparison). Rendered as a quick-glance line per race: date
@@ -1233,6 +1268,22 @@ month's totals, no planned-workout section). Two `APScheduler` jobs in `worker/m
   marathon-style goal (`_clock`'s own "4:00:00" with the trailing `:00` seconds dropped, but only
   when there's an hours component) while leaving a 5K/10K goal like "22:30"/"45:00" untouched,
   since those already carry real seconds precision worth keeping.
+- **Coming week: per-day weather + the athlete's own notes** — the "Coming week" table used to be
+  one row per *scheduled workout*, so a day with nothing planned had no row at all.
+  `_coming_day_rows` renders one row per day of the coming Mon–Sun instead, always all seven: each
+  day's own forecast (an emoji from `weather_code.py::weather_code_info` plus min-max temperature)
+  shows even on a day with no workout, and that day's workout(s) — a day can hold more than one —
+  render underneath it. `_coming_week_forecast` calls `weather_forecast.py::fetch_forecast`
+  exactly as `GET /weather/forecast` does (un-cached, un-archived, the athlete's own
+  `athlete.timezone`, never hardcoded UTC), sizing `days` to reach `coming_end` from `today` (the
+  Sunday the job fires on) — `[]` when the athlete has no home location set or the fetch fails,
+  never fabricated. The day-by-day table falls back to the original single "Nothing scheduled
+  yet." row only when the whole week is bare (no workouts *and* no forecast at all), avoiding
+  seven identical empty rows for an athlete with neither set up yet. A "Notes for the coming week"
+  section, placed immediately before this table, reads the athlete's own `note` rows for the
+  coming week (`entity_type="week"`, `entity_id` = that week's Monday — the same row
+  `WeekView.tsx`'s own Notes card reads/writes), ordered oldest-first like `GET /notes`; omitted
+  entirely, not shown empty, when the athlete hasn't written one for that week yet.
 
 ## Races on the calendar (planned_races.py)
 
@@ -1276,6 +1327,95 @@ step model to push to Garmin, it's just an event to look forward to and pace a g
   default; description is `"{distance} km"` plus `" · target {clock}"` when set) and the weekly
   summary email's "Races this week" section (`email_reports.py`, target/predicted comparison
   included) — never the monthly email, which is stats-only.
+
+## Race Readiness (race_readiness.py)
+
+Has the athlete actually run enough *volume* for their next scheduled race, not just "are they
+fit" — a materially different question from `planned_race`'s own VDOT-based prediction above
+(`predicted_duration_s_for_distance`), which only answers what the athlete could run today at
+their current fitness. This module answers whether they've put in the specific weekly mileage
+and long runs a race of this distance actually calls for, and leaves the VDOT prediction
+untouched, surfaced alongside as this module's own "prognosis" rather than re-derived or blended
+into a new number.
+
+- **Targets, by race distance** (`_WEEKLY_TARGET_ANCHORS`/`_LONG_RUN_TARGET_ANCHORS`): four
+  anchor points (5k/10k/half/marathon distance → target), log-linear interpolated for anything in
+  between (`_interpolate`) and clamped — never extrapolated — outside that range, same "honest
+  rather than extrapolated" posture `predict_race_time_s`'s own search bounds already establish.
+  Unlike VDOT, "how much should you run for a marathon" has no single physiological equation —
+  real published plans disagree by roughly 2x depending on athlete level (Hal Higdon Intermediate
+  peaks around 55 km/34 mi with a 29 km/18 mi long run; Pfitzinger Advanced plans peak past
+  110 km/70 mi with a 32 km/20+ mi long run). This module deliberately targets the
+  recreational/intermediate end (Higdon Novice/Intermediate, Daniels' Running Formula's own
+  easier plans), not an advanced/competitive baseline, since the advanced number would read as
+  "not ready" for the common recreational case this app is built for. The two targets are set
+  independently per distance rather than derived from each other via one shared ratio — the real
+  "long run as % of weekly volume" relationship itself varies by athlete level (roughly 25% at
+  high weekly volumes to over 40% at recreational volumes), so no single ratio stays honest
+  across the whole range.
+- **Compliance is recency-weighted, not a flat average** (`_weighted_compliance`) — an
+  exponential decay by days-ago (`0.5 ** (days_ago / half_life_days)`), mirroring the same EWMA
+  philosophy `fitness_daily_rollup`'s own Coggan/Banister CTL(42d)/ATL(7d) already uses in this
+  codebase. Weekly running distance looks back `WEEKLY_DISTANCE_WINDOW_DAYS` (182 days/26 weeks)
+  with a `WEEKLY_DISTANCE_HALF_LIFE_DAYS` (28-day) half-life; the long run — this app's stand-in
+  for a "long run" it has no separate tag for is simply that week's own single longest run —
+  looks back a shorter `LONG_RUN_WINDOW_DAYS` (70 days/10 weeks) with a shorter
+  `LONG_RUN_HALF_LIFE_DAYS` (14-day) half-life, since a taper's most recent long run matters far
+  more than one from two months out. Each week is credited up to (never past) 100% of target — a
+  week at 2x target isn't "200% ready," it's fully credited, same capping instinct
+  `email_reports.py::_bar`/`_bar_rows` already apply elsewhere to a comparison against a target. A
+  week with nothing recorded contributes a real `0.0` at its own full weight (not excluded from
+  the average) — genuinely no running that week is genuinely 0% compliant for it, not unknown.
+- **Combining the two into one readiness percentage** (`READINESS_WEEKLY_DISTANCE_WEIGHT` = 0.6,
+  `READINESS_LONG_RUN_WEIGHT` = 0.4): overall weekly volume is the primary driver of
+  endurance-race readiness in the same literature the targets come from (Daniels, Pfitzinger both
+  treat total volume as the dominant training variable, the long run an important but secondary
+  specificity factor) — hence weighted toward weekly distance. Like the target anchors, this is
+  this app's own stated policy, not a claimed universal formula — an ordinary module constant,
+  easy to revisit.
+- **The prognosis is the existing VDOT-based prediction, reused as-is, never blended** — the same
+  `predicted_duration_s_for_distance` value `planned_race` itself already surfaces. Shown
+  *alongside* readiness rather than mathematically combined with it: a volume-adequacy fraction
+  and a fitness-derived time have different physiological bases, and inventing a formula that
+  adjusts one by the other would overclaim precision this app has no grounds for. `None` for a
+  non-standard race distance, same as that existing field's own limitation.
+- **Which race** (`_nearest_upcoming_race`): defaults to the athlete's own nearest upcoming
+  `sport == "running"` race (`local_date >= as_of`); `GET /performance/race-readiness`'s own
+  `race_id` query param targets a specific one instead. `available: false` (never fabricated)
+  when there's no upcoming running race at all, or `race_id` doesn't belong to the caller.
+- **Deliberately request-time, not rollup-backed** (CLAUDE.md's rollup mandate) — the same
+  "bounded, occasional diagnostic lookup" exception `vo2max_analysis.py`/`threshold_analysis.py`
+  already establish. Which race this even applies to can change day to day (a nearer race gets
+  added, an old one passes), so there's no stable rollup-row identity to accumulate against; the
+  whole computation, history included, is cheap enough (two queries total — running distance and
+  the weekly-longest-run, both fetched once over a window wide enough to cover every historical
+  `as_of` point's own lookback, with all bucketing/weighting done in Python) to redo on request.
+- **History ("the evolution of this readiness over time")**: one point per week over the
+  182-day weekly-distance window — a genuine backtest, the same weighted-compliance calculation
+  re-run with `as_of` shifted back to each historical week and only data available up to that
+  date used, never leaking future weeks into a past reading.
+- **The realized numbers, not just the compliance percentage** (`WeekValue`,
+  `_dense_weekly_series()`): `weekly_distance_series`/`long_run_series` are dense, zero-filled
+  weekly series (one entry per Monday-start week, oldest first, over each series' own window —
+  182 days for weekly distance, 70 days for the long run) carrying the actual realized
+  `distance_m` a dedicated chart plots real bars for against a target reference line — `0.0`
+  never omitted for a week with nothing recorded, the same never-fabricated convention `history`
+  above already follows. Built from the same `weekly_totals`/`longest_runs` queries
+  `compute_race_readiness` already fetches once for `history`'s own weighted-compliance
+  calculation, not a third query.
+- **`GET /performance/race-readiness`** (`race_id`/`as_of` optional query params) returns
+  `available`, the race's own `race_id`/`race_name`/`race_local_date`/`race_distance_m`, both
+  targets, `current` (today's own `RaceReadinessPointOut`: `weekly_distance_compliance_pct`/
+  `long_run_compliance_pct`/`readiness_pct`), `predicted_duration_s`, `history` (a list of the
+  same point shape, oldest first), and `weekly_distance_series`/`long_run_series` (a list of
+  `RaceReadinessWeekOut`: `week_start`/`distance_m`). Frontend: `RaceReadinessChart.tsx`, a new
+  Insights tab — a stat-tile row (readiness/weekly distance/long run/prognosis, the latter two
+  also showing their own target distance as `meta` text) plus a `TrendChart` fed the `history`
+  array directly (already pre-bucketed weekly server-side, unlike `Vo2maxChart.tsx`'s own raw
+  daily series, so this skips `TrendControls`/`trendWindow.ts` entirely), and two dedicated
+  `RaceVolumeBarChart.tsx` bar charts — one bar per week from `weekly_distance_series`/
+  `long_run_series`, a dashed `ReferenceLine` at the matching target, the same "bars against a
+  threshold" idiom `EddingtonBarChart.tsx` already establishes.
 
 ## Blood test results (blood_tests.py)
 

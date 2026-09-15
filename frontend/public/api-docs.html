@@ -1059,6 +1059,31 @@ const SCHEMAS = [
       ["distance_m","number|null",""],
       ["duration_s","number|null","Moving time."],
     ] },
+  { name: "RaceReadinessOut", note: "Returned by GET /performance/race-readiness. Has the athlete run enough volume for their next race, not just \"are they fit\" -- see race_readiness.py's own module docstring for the full model.", fields: [
+      ["available","boolean","false — never fabricated — when there's no upcoming running race, or race_id doesn't belong to the caller."],
+      ["race_id","integer|null",""],
+      ["race_name","string|null",""],
+      ["race_local_date","string(date)|null",""],
+      ["race_distance_m","number|null",""],
+      ["weekly_distance_target_m","number|null","Interpolated from the race's own distance."],
+      ["long_run_target_m","number|null","Interpolated from the race's own distance."],
+      ["as_of","string(date)|null",""],
+      ["current","RaceReadinessPointOut|null","Today's own reading -- the last entry of history too."],
+      ["predicted_duration_s","number|null","The same VDOT-based prediction GET /planned-races already surfaces for this distance, reused as-is, never blended into readiness_pct. null for a non-standard distance."],
+      ["history","array<RaceReadinessPointOut>","One point per week over the 182-day weekly-distance window, oldest first -- a genuine backtest."],
+      ["weekly_distance_series","array<RaceReadinessWeekOut>","The actual realized weekly running distance behind weekly_distance_compliance_pct -- one entry per Monday-start week, oldest first, over the same 182-day window. 0.0 never omitted for a week with nothing recorded."],
+      ["long_run_series","array<RaceReadinessWeekOut>","The actual realized weekly longest-run distance behind long_run_compliance_pct -- one entry per Monday-start week, oldest first, over the 70-day window. 0.0 never omitted for a week with nothing recorded."],
+    ] },
+  { name: "RaceReadinessPointOut", fields: [
+      ["as_of","string(date)",""],
+      ["weekly_distance_compliance_pct","number","0-100."],
+      ["long_run_compliance_pct","number","0-100."],
+      ["readiness_pct","number","0-100 -- 0.6 * weekly_distance_compliance_pct + 0.4 * long_run_compliance_pct."],
+    ] },
+  { name: "RaceReadinessWeekOut", fields: [
+      ["week_start","string(date)","The Monday that week starts."],
+      ["distance_m","number",""],
+    ] },
   { name: "InsightOut", note: "Returned by GET /insights and GET /activities/{id}/insights.", fields: [
       ["kind","string","effort, health, load, pb, or streak."],
       ["window","string","current, 30d, 90d, 180d, 365d, or all_time, depending on kind."],
@@ -1196,13 +1221,14 @@ const SCHEMAS = [
       ["weekly_enabled","boolean",""],
       ["monthly_enabled","boolean",""],
     ] },
-  { name: "PlannedWorkoutListItemOut", note: "One row of GET /planned-workouts — the calendar grid's own per-day indicator.", fields: [
+  { name: "PlannedWorkoutListItemOut", note: "One row of GET /planned-workouts — the calendar grid's own per-day indicator, and the Week view's own sport-by-sport compliance stat.", fields: [
       ["local_date","string(date)",""],
       ["id","integer",""],
       ["sport","string",""],
       ["name","string|null",""],
       ["scheduled_time","string|null","\"HH:MM\" (24h)."],
       ["push_status","string","draft | pushed | push_failed."],
+      ["completed_at","string(date-time)|null","The athlete's own manual \"I did this\" marker -- null until marked complete (POST .../{workout_id}/complete)."],
     ] },
   { name: "PlannedWorkoutOut", note: "Returned by POST/GET/PUT /planned-workouts and GET .../by-date/{local_date}. available is always true here — a nonexistent workout_id is a 404, not an available:false object.", fields: [
       ["available","boolean","required — always true"],
@@ -1734,6 +1760,16 @@ const GROUPS = [
       params: [ ["as_of","query","opt","string(date)","today",""] ],
       responses: [ { code: 200, ref: "ThresholdFactorAnalysisOut" } ],
       example: {}
+    },
+    { method: "GET", path: "/api/v1/performance/race-readiness", summary: "Has the athlete run enough volume for their next race, not just \"are they fit\"?",
+      description: "A materially different question from this same API's own VDOT-based race prediction (GET /planned-races's predicted_duration_s), which is reused as-is here and shown alongside, never blended into the readiness percentage. Compares recency-weighted weekly running distance (182-day window) and long-run distance (70-day window, a week's own longest run standing in for \"long run\") against targets interpolated from published training-plan data for the race's own distance, combined into one readiness percentage (60% weekly distance / 40% long run — see race_readiness.py's own module docstring for the full reasoning behind every number here). Deliberately request-time, not rollup-backed — same exception GET /performance/vo2max-analysis above already establishes.",
+      params: [
+        ["race_id","query","opt","integer","nearest upcoming","A specific planned_race id."],
+        ["as_of","query","opt","string(date)","today",""],
+      ],
+      responses: [ { code: 200, ref: "RaceReadinessOut" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/performance/race-readiness \\
+  -H "X-API-Key: YOUR_API_KEY"` }
     },
   ]},
 
