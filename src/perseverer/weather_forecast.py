@@ -27,7 +27,9 @@ mandate" precedent `vo2max_analysis.py`/`threshold_analysis.py` already establis
 occasional live lookup, not a new one.
 
 No API key needed (Open-Meteo's public tier). Weather-code-to-icon mapping stays a frontend
-presentation concern (`weatherCode.ts`), same posture as `weather.py`.
+presentation concern (`weatherCode.ts`) for the Week view, same posture as `weather.py` --
+`email_reports.py`'s own per-day emoji is the one non-frontend-display exception, reusing
+`weather_code.py` (backend) the same way `weather_titles.py` already does for an activity title.
 """
 
 from __future__ import annotations

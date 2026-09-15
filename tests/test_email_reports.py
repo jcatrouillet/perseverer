@@ -8,6 +8,7 @@ import datetime as dt
 from pathlib import Path
 from typing import ClassVar
 
+import httpx
 import pytest
 from sqlalchemy import Connection, Engine
 
@@ -21,6 +22,7 @@ from perseverer.db.schema import (
     health_metric_daily_rollup,
     metadata,
     metric_definition,
+    note,
     performance_daily_rollup,
     period_rollup,
     planned_race,
@@ -29,12 +31,19 @@ from perseverer.db.schema import (
 )
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.email_reports import (
+    _ACCENT,
     _BAR_TRACK_PX,
+    NoteLine,
     PlannedRaceLine,
+    RunLine,
     _bar,
     _clock_hm,
+    _coming_week_forecast,
+    _coming_week_notes,
     _future_race_date_label,
     _future_race_goal,
+    _running_distance_total_m,
+    _week_runs,
     athletes_opted_in,
     build_monthly_report,
     build_weekly_report,
@@ -42,11 +51,15 @@ from perseverer.email_reports import (
     render_weekly_email,
     send_report_email,
 )
+from perseverer.weather_forecast import ForecastDay
 
 # The Sunday the weekly job fires on; the Mon-Sun week that just ended is 2026-09-07..2026-09-13.
 SUNDAY = dt.date(2026, 9, 13)
 PREV_WEEK_START = "2026-09-07"
 COMING_WEEK_START = dt.date(2026, 9, 14)
+COMING_WEEK_END = dt.date(2026, 9, 20)
+WEEK_BEFORE_START = "2026-08-31"
+WEEK_BEFORE_END = "2026-09-06"
 
 
 @pytest.fixture
@@ -137,6 +150,28 @@ def _race(conn: Connection, **kw: object) -> None:
             updated_at=dt.datetime(2026, 9, 1),
             **kw,
         )
+    )
+
+
+def _note(conn: Connection, *, entity_id: str, body: str, author: str | None = None) -> None:
+    conn.execute(
+        note.insert().values(
+            athlete_id=DEFAULT_ATHLETE_ID,
+            entity_type="week",
+            entity_id=entity_id,
+            body=body,
+            author=author,
+            created_at=dt.datetime(2026, 9, 1),
+            updated_at=dt.datetime(2026, 9, 1),
+        )
+    )
+
+
+def _set_home_location(conn: Connection, *, lat: float, lon: float, timezone: str = "UTC") -> None:
+    conn.execute(
+        athlete.update()
+        .where(athlete.c.id == DEFAULT_ATHLETE_ID)
+        .values(home_lat=lat, home_lon=lon, timezone=timezone)
     )
 
 
@@ -268,6 +303,8 @@ def test_build_weekly_report_is_empty_when_no_rollup_row(conn: Connection) -> No
     assert report.totals.distance_m is None
     assert report.sports == []
     assert report.coming_workouts == []
+    assert report.coming_forecast == []
+    assert report.coming_week_notes == []
 
 
 def test_weekly_report_coming_workouts_with_running_estimate(conn: Connection) -> None:
@@ -315,6 +352,83 @@ def test_weekly_report_coming_workouts_with_running_estimate(conn: Connection) -
     assert report.coming_workouts[1].estimate_line is None
 
 
+def test_coming_week_notes_reads_the_coming_mondays_week_notes_only(conn: Connection) -> None:
+    _note(conn, entity_id=COMING_WEEK_START.isoformat(), body="Taper this week.", author="Jerome")
+    _note(conn, entity_id=COMING_WEEK_START.isoformat(), body="Legs still sore Monday.")
+    # A note on last week (a different entity_id) must not leak into the coming week's list.
+    _note(conn, entity_id=PREV_WEEK_START, body="Last week's note.")
+    conn.commit()
+
+    notes = _coming_week_notes(conn, DEFAULT_ATHLETE_ID, COMING_WEEK_START.isoformat())
+    assert notes == [
+        NoteLine(body="Taper this week.", author="Jerome"),
+        NoteLine(body="Legs still sore Monday.", author=None),
+    ]
+
+
+def test_build_weekly_report_includes_coming_week_notes(conn: Connection) -> None:
+    _note(conn, entity_id=COMING_WEEK_START.isoformat(), body="Recovery week.")
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert report.coming_week_notes == [NoteLine(body="Recovery week.", author=None)]
+
+
+def test_coming_week_forecast_unavailable_without_a_home_location(conn: Connection) -> None:
+    forecast = _coming_week_forecast(
+        conn, DEFAULT_ATHLETE_ID, SUNDAY, COMING_WEEK_START, COMING_WEEK_END
+    )
+    assert forecast == []
+
+
+def test_coming_week_forecast_fetches_in_the_athletes_own_timezone_and_days(
+    conn: Connection,
+) -> None:
+    _set_home_location(conn, lat=48.8566, lon=2.3522, timezone="America/Los_Angeles")
+    conn.commit()
+    captured: dict[str, str] = {}
+    raw = {
+        "daily": {
+            "time": [
+                "2026-09-13", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17",
+                "2026-09-18", "2026-09-19", "2026-09-20",
+            ],
+            "weathercode": [0, 3, 3, 61, 0, 0, 2, 3],
+            "temperature_2m_max": [25.0, 26.0, 27.0, 20.0, 24.0, 23.0, 22.0, 21.0],
+            "temperature_2m_min": [15.0, 16.0, 17.0, 14.0, 15.0, 14.0, 13.0, 12.0],
+        }
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(request.url.params)
+        return httpx.Response(200, json=raw)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    forecast = _coming_week_forecast(
+        conn, DEFAULT_ATHLETE_ID, SUNDAY, COMING_WEEK_START, COMING_WEEK_END, client=client
+    )
+
+    assert captured["timezone"] == "America/Los_Angeles"
+    assert captured["forecast_days"] == "8"
+    # Sept 13 (today, day offset 0) is dropped -- only the coming Mon..Sun week itself.
+    assert [f.local_date.isoformat() for f in forecast] == [
+        "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17",
+        "2026-09-18", "2026-09-19", "2026-09-20",
+    ]
+
+
+def test_build_weekly_report_includes_coming_forecast(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_home_location(conn, lat=48.8566, lon=2.3522)
+    conn.commit()
+    fake_days = [ForecastDay(COMING_WEEK_START, 3, 12.0, 20.0)]
+    monkeypatch.setattr(
+        "perseverer.email_reports.fetch_forecast", lambda *a, **kw: fake_days
+    )
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert report.coming_forecast == fake_days
+
+
 def test_running_distance_by_day_and_average_pace(conn: Connection) -> None:
     # r1: Tue 2026-09-08, 12 km in 3600s. r2: Thu 2026-09-10, 18 km in 4800s. Strength day (s1)
     # has no distance and must not contribute to either the daily series or the pace average.
@@ -341,6 +455,69 @@ def test_running_distance_by_day_covers_every_day_even_with_no_runs(conn: Connec
     assert len(report.running_distance_by_day) == 7
     assert all(p.value is None for p in report.running_distance_by_day)
     assert report.avg_running_pace_s_per_km is None
+    assert report.running_distance_week_before_m is None
+    assert report.week_runs == []
+
+
+def test_running_distance_total_m_sums_only_running_and_none_when_no_runs(
+    conn: Connection,
+) -> None:
+    _seed_week_rollup(conn)
+    assert (
+        _running_distance_total_m(conn, DEFAULT_ATHLETE_ID, PREV_WEEK_START, "2026-09-13")
+        == 30000.0
+    )
+    assert (
+        _running_distance_total_m(conn, DEFAULT_ATHLETE_ID, WEEK_BEFORE_START, WEEK_BEFORE_END)
+        is None
+    )
+
+
+def test_build_weekly_report_running_distance_vs_week_before(conn: Connection) -> None:
+    _seed_week_rollup(conn)  # 30 km running in the week that just ended
+    _activity(
+        conn,
+        activity_id="w1",
+        local_date=WEEK_BEFORE_END,
+        sport="running",
+        distance_m=20000.0,
+        duration_s=6000.0,
+    )
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert report.running_distance_week_before_m == 20000.0
+
+
+def test_week_runs_lists_each_run_and_skips_a_run_missing_duration(conn: Connection) -> None:
+    _seed_week_rollup(conn)  # r1: Tue 12 km/3600s; r2: Thu 18 km/4800s; s1: strength (not running)
+    _activity(
+        conn,
+        activity_id="r3",
+        local_date="2026-09-11",
+        sport="running",
+        distance_m=5000.0,
+        duration_s=None,
+    )
+    conn.commit()
+
+    runs = _week_runs(conn, DEFAULT_ATHLETE_ID, PREV_WEEK_START, "2026-09-13")
+    assert runs == [
+        RunLine(
+            local_date="2026-09-08", distance_m=12000.0, duration_s=3600.0, pace_s_per_km=300.0
+        ),
+        RunLine(
+            local_date="2026-09-10",
+            distance_m=18000.0,
+            duration_s=4800.0,
+            pace_s_per_km=4800.0 / 18.0,
+        ),
+    ]
+
+
+def test_build_weekly_report_includes_week_runs(conn: Connection) -> None:
+    _seed_week_rollup(conn)
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert [r.local_date for r in report.week_runs] == ["2026-09-08", "2026-09-10"]
 
 
 def test_steps_by_day_prefers_the_higher_priority_alias_on_a_shared_date(
@@ -553,6 +730,54 @@ def test_coming_workout_comment_shown_in_both_html_and_text(conn: Connection) ->
     assert "Base-building phase -- keep it aerobic." in rendered.text
 
 
+def test_weekly_email_shows_a_weather_icon_and_range_for_each_coming_day(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_home_location(conn, lat=48.8566, lon=2.3522)
+    conn.commit()
+    fake_days = [
+        ForecastDay(dt.date(2026, 9, 15), 61, 12.0, 18.0),  # Tue: rain
+        ForecastDay(dt.date(2026, 9, 18), 0, 10.0, 22.0),  # Fri: clear
+    ]
+    monkeypatch.setattr(
+        "perseverer.email_reports.fetch_forecast", lambda *a, **kw: fake_days
+    )
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+
+    # The rain emoji + range for Tuesday, the clear-sky emoji + range for Friday -- both days
+    # show up even though neither has a scheduled workout.
+    assert "🌧️" in rendered.html and "12-18°C" in rendered.html
+    assert "☀️" in rendered.html and "10-22°C" in rendered.html
+    assert "🌧️" in rendered.text and "12-18°C" in rendered.text
+    assert "☀️" in rendered.text and "10-22°C" in rendered.text
+
+
+def test_weekly_email_omits_weather_when_no_home_location_is_set(conn: Connection) -> None:
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    assert "°C" not in rendered.html
+    assert "°C" not in rendered.text
+
+
+def test_weekly_email_shows_coming_week_notes_and_omits_the_section_when_empty(
+    conn: Connection,
+) -> None:
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    assert "Notes for the coming week" not in rendered.html
+    assert "Notes for the coming week" not in rendered.text
+
+    _note(conn, entity_id=COMING_WEEK_START.isoformat(), body="Focus on hill work.")
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    assert "Notes for the coming week" in rendered.html
+    assert "Focus on hill work." in rendered.html
+    assert "Notes for the coming week" in rendered.text
+    assert "Focus on hill work." in rendered.text
+
+
 def test_coming_week_race_appears_with_target_and_prediction(conn: Connection) -> None:
     conn.execute(
         performance_daily_rollup.insert().values(
@@ -599,6 +824,88 @@ def test_weekly_email_shows_running_bar_chart_and_average_pace(conn: Connection)
     assert "12.0 km" in rendered.html and "18.0 km" in rendered.html
 
 
+def test_weekly_email_shows_running_distance_vs_the_week_before(conn: Connection) -> None:
+    _seed_week_rollup(conn)  # 30 km running in the week that just ended
+    _activity(
+        conn,
+        activity_id="w1",
+        local_date=WEEK_BEFORE_END,
+        sport="running",
+        distance_m=20000.0,
+        duration_s=6000.0,
+    )
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+
+    assert "30.0 km vs 20.0 km the week before" in rendered.html
+    assert "30.0 km vs 20.0 km the week before" in rendered.text
+
+
+def test_weekly_email_omits_the_week_before_comparison_with_no_prior_data(
+    conn: Connection,
+) -> None:
+    _seed_week_rollup(conn)
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    assert "the week before" not in rendered.html
+    assert "the week before" not in rendered.text
+
+
+def test_weekly_email_shows_a_runs_table_with_the_bests_highlighted(conn: Connection) -> None:
+    # Tue: 12 km / 3600s (5:00/km). Thu: 18 km / 4800s (4:27/km) -- farthest, fastest, and
+    # longest all land on Thursday in this fixture.
+    _seed_week_rollup(conn)
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+
+    assert "Runs this week" in rendered.html and "Runs this week" in rendered.text
+    assert "Tue 8" in rendered.html
+    assert "Thu 10" in rendered.html
+    # Thursday's own distance/pace/duration cells are the bold/accent-colored ones.
+    highlighted_18km = f'color:{_ACCENT};font-weight:700">18.0 km'
+    highlighted_pace = f'color:{_ACCENT};font-weight:700">4:27 /km'
+    highlighted_duration = f'color:{_ACCENT};font-weight:700">1h 20m'
+    assert highlighted_18km in rendered.html
+    assert highlighted_pace in rendered.html
+    assert highlighted_duration in rendered.html
+    # Tuesday's own cells, not being any of the week's bests, are plain (not accent-colored).
+    assert f'color:{_ACCENT};font-weight:700">12.0 km' not in rendered.html
+    # Plaintext marks the same bests with a plain-language tag instead of color.
+    assert "(farthest, fastest, longest)" in rendered.text
+
+
+def test_weekly_email_highlights_ties_on_every_tied_run(conn: Connection) -> None:
+    # Two runs, same distance/pace/duration -- both are "the week's fastest run" equally.
+    _activity(
+        conn,
+        activity_id="r1",
+        local_date="2026-09-08",
+        sport="running",
+        distance_m=10000.0,
+        duration_s=3000.0,
+    )
+    _activity(
+        conn,
+        activity_id="r2",
+        local_date="2026-09-10",
+        sport="running",
+        distance_m=10000.0,
+        duration_s=3000.0,
+    )
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    assert rendered.html.count(f'color:{_ACCENT};font-weight:700">10.0 km') == 2
+
+
+def test_weekly_email_omits_runs_table_when_theres_no_running(conn: Connection) -> None:
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    assert "Runs this week" not in rendered.html
+    assert "Runs this week" not in rendered.text
+
+
 def test_weekly_email_shows_steps_bar_chart(conn: Connection) -> None:
     _seed_week_rollup(conn)
     _steps(
@@ -623,6 +930,8 @@ def test_weekly_email_omits_running_and_steps_sections_when_theres_no_data(
 
     assert "Running this week" not in rendered.html
     assert "Running this week" not in rendered.text
+    assert "Runs this week" not in rendered.html
+    assert "Runs this week" not in rendered.text
     assert "Steps this week" not in rendered.html
     assert "Steps this week" not in rendered.text
 
