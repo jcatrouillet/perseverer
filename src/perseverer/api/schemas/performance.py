@@ -90,3 +90,45 @@ class ThresholdFactorAnalysisOut(BaseModel):
     aerobic_threshold_hr: ThresholdHrBreakdownOut
     max_hr_bpm: float | None
     max_hr_source: str | None
+
+
+class RaceReadinessPointOut(BaseModel):
+    as_of: str
+    weekly_distance_compliance_pct: float
+    long_run_compliance_pct: float
+    readiness_pct: float
+
+
+class RaceReadinessWeekOut(BaseModel):
+    week_start: str
+    distance_m: float
+
+
+class RaceReadinessOut(BaseModel):
+    # False -- never a fabricated readiness -- when the athlete has no upcoming running race on
+    # the calendar (or the given race_id doesn't belong to them). See race_readiness.py's own
+    # module docstring for the full reasoning behind every field below.
+    available: bool
+    race_id: int | None = None
+    race_name: str | None = None
+    race_local_date: str | None = None
+    race_distance_m: float | None = None
+    weekly_distance_target_m: float | None = None
+    long_run_target_m: float | None = None
+    # This request's own resolved "now" -- the same value `current.as_of` carries, included at
+    # the top level too since it's the one field a caller reaches for immediately.
+    as_of: str | None = None
+    current: RaceReadinessPointOut | None = None
+    # The independently-computed VDOT-based prediction for this race's own distance (the same
+    # value `planned_race.predicted_duration_s` already surfaces) -- shown alongside readiness,
+    # never blended into it. `None` for a non-standard distance, same as that existing field.
+    predicted_duration_s: float | None = None
+    # One point per week over the weekly-distance window (182 days) -- "the evolution of this
+    # readiness over time."
+    history: list[RaceReadinessPointOut] = []
+    # The actual realized numbers behind weekly_distance_compliance_pct/long_run_compliance_pct
+    # above -- one entry per Monday-start week (0.0 never omitted), for a dedicated chart to plot
+    # real bars against a target reference line, distinct from history's already-weighted/
+    # combined percentages.
+    weekly_distance_series: list[RaceReadinessWeekOut] = []
+    long_run_series: list[RaceReadinessWeekOut] = []

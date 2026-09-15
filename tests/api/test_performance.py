@@ -10,7 +10,7 @@ import datetime as dt
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection, Engine
 
-from perseverer.db.schema import activity, activity_metric, performance_daily_rollup
+from perseverer.db.schema import activity, activity_metric, performance_daily_rollup, planned_race
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.metrics.registry import get_or_register_metric
 from perseverer.performance import VDOT_METRIC_KEY
@@ -217,3 +217,117 @@ def test_threshold_analysis_defaults_as_of_to_today_when_omitted(
     assert body["vo2max"]["driving_activity"] is None
     assert body["anaerobic_threshold_pace_s_per_km"] is None
     assert body["anaerobic_threshold_hr"]["threshold_hr_bpm"] is None
+
+
+def test_race_readiness_unavailable_without_an_upcoming_race(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/performance/race-readiness", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body == {
+        "available": False,
+        "race_id": None,
+        "race_name": None,
+        "race_local_date": None,
+        "race_distance_m": None,
+        "weekly_distance_target_m": None,
+        "long_run_target_m": None,
+        "as_of": None,
+        "current": None,
+        "predicted_duration_s": None,
+        "history": [],
+        "weekly_distance_series": [],
+        "long_run_series": [],
+    }
+
+
+def test_race_readiness_for_the_nearest_upcoming_race(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        conn.execute(
+            planned_race.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-12-06",
+                name="Test Marathon",
+                sport="running",
+                distance_m=42_195.0,
+                created_at=dt.datetime(2026, 1, 1),
+                updated_at=dt.datetime(2026, 1, 1),
+            )
+        )
+        conn.commit()
+
+    r = client.get(
+        "/api/v1/performance/race-readiness?as_of=2026-09-13", headers=auth_headers
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert body["race_name"] == "Test Marathon"
+    assert body["race_distance_m"] == 42195.0
+    assert body["weekly_distance_target_m"] == 55000.0
+    assert body["long_run_target_m"] == 29000.0
+    assert body["as_of"] == "2026-09-13"
+    # No running at all yet -- both compliance figures, and the combined readiness, are a real
+    # 0%, not omitted, since "no training recorded" genuinely is 0% compliant.
+    assert body["current"] == {
+        "as_of": "2026-09-13",
+        "weekly_distance_compliance_pct": 0.0,
+        "long_run_compliance_pct": 0.0,
+        "readiness_pct": 0.0,
+    }
+    assert len(body["history"]) > 1
+    assert body["history"][-1] == body["current"]
+    # Dense, zero-filled weekly series -- no running recorded, so every week is a real 0.0, none
+    # omitted -- one entry per Monday-start week over each series' own window.
+    assert len(body["weekly_distance_series"]) > 1
+    assert all(w["distance_m"] == 0.0 for w in body["weekly_distance_series"])
+    assert body["weekly_distance_series"][-1]["week_start"] == "2026-09-07"
+    assert len(body["long_run_series"]) > 1
+    assert all(w["distance_m"] == 0.0 for w in body["long_run_series"])
+    assert body["long_run_series"][-1]["week_start"] == "2026-09-07"
+    assert len(body["weekly_distance_series"]) > len(body["long_run_series"])
+
+
+def test_race_readiness_can_target_a_specific_race_id(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        conn.execute(
+            planned_race.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-10-11",
+                name="Nearer half",
+                sport="running",
+                distance_m=21_097.5,
+                created_at=dt.datetime(2026, 1, 1),
+                updated_at=dt.datetime(2026, 1, 1),
+            )
+        )
+        later_race = conn.execute(
+            planned_race.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2026-12-06",
+                name="Later marathon",
+                sport="running",
+                distance_m=42_195.0,
+                created_at=dt.datetime(2026, 1, 1),
+                updated_at=dt.datetime(2026, 1, 1),
+            )
+        )
+        conn.commit()
+        assert later_race.inserted_primary_key is not None
+        later_race_id = later_race.inserted_primary_key[0]
+
+    r = client.get(
+        f"/api/v1/performance/race-readiness?race_id={later_race_id}&as_of=2026-09-13",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["race_name"] == "Later marathon"
+
+
+def test_race_readiness_endpoint_requires_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/performance/race-readiness").status_code in (401, 403)

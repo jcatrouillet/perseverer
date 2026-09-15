@@ -948,6 +948,41 @@ export interface ThresholdFactorAnalysisOut {
   max_hr_source: "empirical" | "formula_fallback" | null;
 }
 
+// GET /performance/race-readiness -- see race_readiness.py's own module docstring for the full
+// model (recency-weighted weekly-distance/long-run compliance against the athlete's next
+// upcoming running race, combined into one readiness percentage; predicted_duration_s reuses the
+// existing VDOT-based prediction, shown alongside, never blended into readiness_pct).
+export interface RaceReadinessPointOut {
+  as_of: string;
+  weekly_distance_compliance_pct: number;
+  long_run_compliance_pct: number;
+  readiness_pct: number;
+}
+
+// One entry per Monday-start week (0.0 never omitted) -- the actual realized numbers a
+// dedicated chart plots real bars for against a target reference line, distinct from
+// RaceReadinessPointOut's own already-weighted/combined percentages.
+export interface RaceReadinessWeekOut {
+  week_start: string;
+  distance_m: number;
+}
+
+export interface RaceReadinessOut {
+  available: boolean;
+  race_id: number | null;
+  race_name: string | null;
+  race_local_date: string | null;
+  race_distance_m: number | null;
+  weekly_distance_target_m: number | null;
+  long_run_target_m: number | null;
+  as_of: string | null;
+  current: RaceReadinessPointOut | null;
+  predicted_duration_s: number | null;
+  history: RaceReadinessPointOut[];
+  weekly_distance_series: RaceReadinessWeekOut[];
+  long_run_series: RaceReadinessWeekOut[];
+}
+
 export interface HealthDashboardDayOut {
   local_date: string;
   value_sum: number | null;

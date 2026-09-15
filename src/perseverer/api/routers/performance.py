@@ -1,10 +1,11 @@
 """GET /performance -- reads performance_daily_rollup only, no request-time computation
 (CLAUDE.md's rollup mandate). See performance_rollup.py's own docstring for the model.
 
-GET /performance/vo2max-analysis and GET /performance/threshold-analysis are the deliberate
-exceptions in this file -- see vo2max_analysis.py's/threshold_analysis.py's own docstrings for
-why a tiny, occasional diagnostic lookup doesn't fall under that mandate, the same "bounded,
-occasional lookup" exception /activities/needs-trim and /activities/possible-duplicates
+GET /performance/vo2max-analysis, GET /performance/threshold-analysis, and GET
+/performance/race-readiness are the deliberate exceptions in this file -- see
+vo2max_analysis.py's/threshold_analysis.py's/race_readiness.py's own docstrings for why a tiny,
+occasional diagnostic lookup doesn't fall under that mandate, the same "bounded, occasional
+lookup" exception /activities/needs-trim and /activities/possible-duplicates
 (api/routers/activities.py) already establish.
 """
 
@@ -20,6 +21,9 @@ from perseverer.api.dependencies import get_conn, require_api_key
 from perseverer.api.schemas.performance import (
     ActivityRefOut,
     PerformanceDailyRollupOut,
+    RaceReadinessOut,
+    RaceReadinessPointOut,
+    RaceReadinessWeekOut,
     ThresholdFactorAnalysisOut,
     ThresholdHrBreakdownOut,
     ThresholdHrContributorOut,
@@ -27,6 +31,7 @@ from perseverer.api.schemas.performance import (
     Vo2maxFactorAnalysisOut,
 )
 from perseverer.db.schema import performance_daily_rollup
+from perseverer.race_readiness import ReadinessPoint, WeekValue, compute_race_readiness
 from perseverer.threshold_analysis import (
     ActivityRef,
     ThresholdHrBreakdown,
@@ -39,6 +44,19 @@ from perseverer.vo2max_analysis import (
 )
 
 router = APIRouter()
+
+
+def _readiness_point_out(p: ReadinessPoint) -> RaceReadinessPointOut:
+    return RaceReadinessPointOut(
+        as_of=p.as_of.isoformat(),
+        weekly_distance_compliance_pct=round(p.weekly_distance_compliance * 100, 1),
+        long_run_compliance_pct=round(p.long_run_compliance * 100, 1),
+        readiness_pct=round(p.readiness * 100, 1),
+    )
+
+
+def _readiness_week_out(w: WeekValue) -> RaceReadinessWeekOut:
+    return RaceReadinessWeekOut(week_start=w.week_start.isoformat(), distance_m=w.distance_m)
 
 
 def _contributor_out(c: Vo2maxContributor) -> Vo2maxContributorOut:
@@ -175,4 +193,37 @@ def get_threshold_factor_analysis(
         aerobic_threshold_hr=_threshold_hr_out(analysis.aerobic_threshold_hr),
         max_hr_bpm=analysis.max_hr_bpm,
         max_hr_source=analysis.max_hr_source,
+    )
+
+
+@router.get("/performance/race-readiness")
+def get_race_readiness(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    race_id: int | None = Query(None),
+    as_of: date | None = Query(None),
+    conn: Connection = Depends(get_conn),
+) -> RaceReadinessOut:
+    """`race_id` defaults to the athlete's own nearest upcoming running race. `available=False`
+    (never a fabricated readiness) when there's no such race, or `race_id` doesn't belong to this
+    athlete -- see race_readiness.py's own module docstring for the full model."""
+    resolved_as_of = as_of if as_of is not None else datetime.now(UTC).date()
+    readiness = compute_race_readiness(
+        conn, athlete_id=athlete_id, as_of=resolved_as_of, race_id=race_id
+    )
+    if readiness is None:
+        return RaceReadinessOut(available=False)
+    return RaceReadinessOut(
+        available=True,
+        race_id=readiness.race_id,
+        race_name=readiness.race_name,
+        race_local_date=readiness.race_local_date,
+        race_distance_m=readiness.race_distance_m,
+        weekly_distance_target_m=readiness.weekly_distance_target_m,
+        long_run_target_m=readiness.long_run_target_m,
+        as_of=readiness.current.as_of.isoformat(),
+        current=_readiness_point_out(readiness.current),
+        predicted_duration_s=readiness.predicted_duration_s,
+        history=[_readiness_point_out(p) for p in readiness.history],
+        weekly_distance_series=[_readiness_week_out(w) for w in readiness.weekly_distance_series],
+        long_run_series=[_readiness_week_out(w) for w in readiness.long_run_series],
     )

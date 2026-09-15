@@ -21,6 +21,7 @@ import { EddingtonChart } from "../components/EddingtonChart";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { PaceTrendsChart } from "../components/PaceTrendsChart";
 import { RacePredictionsChart } from "../components/RacePredictionsChart";
+import { RaceReadinessChart } from "../components/RaceReadinessChart";
 import { ThresholdAnalysisChart } from "../components/ThresholdAnalysisChart";
 import { ThresholdFactorAnalysis } from "../components/ThresholdFactorAnalysis";
 import { TrainingBandsChart } from "../components/TrainingBandsChart";
@@ -32,6 +33,7 @@ type Tab =
   | "pace-trends"
   | "training-bands"
   | "race-predictions"
+  | "race-readiness"
   | "threshold-analysis"
   | "vo2max"
   | "eddington";
@@ -74,6 +76,15 @@ export function InsightsPage() {
         <button
           type="button"
           role="tab"
+          aria-selected={tab === "race-readiness"}
+          className={tab === "race-readiness" ? "is-active" : undefined}
+          onClick={() => setTab("race-readiness")}
+        >
+          Race Readiness
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={tab === "threshold-analysis"}
           className={tab === "threshold-analysis" ? "is-active" : undefined}
           onClick={() => setTab("threshold-analysis")}
@@ -109,6 +120,7 @@ export function InsightsPage() {
       )}
       {tab === "training-bands" && <TrainingBandsChart />}
       {tab === "race-predictions" && <RacePredictionsChart />}
+      {tab === "race-readiness" && <RaceReadinessChart />}
       {tab === "threshold-analysis" && (
         <>
           <ThresholdAnalysisChart />

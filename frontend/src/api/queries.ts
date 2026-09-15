@@ -69,6 +69,7 @@ import type {
   PlannedWorkoutListItemOut,
   PlannedWorkoutOut,
   PlannedWorkoutStepIn,
+  RaceReadinessOut,
   RecurringWorkoutOut,
   RevokeShareOut,
   RunningLoadConfigIn,
@@ -172,6 +173,21 @@ export function useThresholdFactorAnalysis(asOf?: string) {
     queryFn: () =>
       apiGet<ThresholdFactorAnalysisOut>(
         `/api/v1/performance/threshold-analysis${buildQuery({ as_of: asOf })}`,
+      ),
+  });
+}
+
+/** The Insights "Race Readiness" tab (GET /performance/race-readiness) -- recency-weighted
+ * weekly-distance/long-run compliance against the athlete's next upcoming running race, combined
+ * into one readiness percentage, plus its own week-by-week evolution. `raceId` targets a specific
+ * `planned_race` instead of the default (nearest upcoming); `asOf` defaults server-side to today.
+ * See race_readiness.py's own module docstring for the full model. */
+export function useRaceReadiness(raceId?: number, asOf?: string) {
+  return useQuery({
+    queryKey: ["race-readiness", raceId ?? "nearest", asOf ?? "today"],
+    queryFn: () =>
+      apiGet<RaceReadinessOut>(
+        `/api/v1/performance/race-readiness${buildQuery({ race_id: raceId, as_of: asOf })}`,
       ),
   });
 }
