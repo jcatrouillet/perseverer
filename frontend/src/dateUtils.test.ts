@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { DayRollupOut } from "./api/types";
 import {
   eachDate,
   isoWeekNumber,
@@ -7,6 +8,9 @@ import {
   monthGridWeeks,
   monthRange,
   parseIsoDate,
+  startOfWeek,
+  sumDayRollups,
+  weekdayLabels,
   weekRange,
   yearRange,
 } from "./dateUtils";
@@ -25,9 +29,41 @@ describe("mondayOf", () => {
   });
 });
 
+describe("startOfWeek", () => {
+  it("defaults to Monday-start", () => {
+    expect(startOfWeek(parseIsoDate("2025-06-04")).toISOString().slice(0, 10)).toBe("2025-06-02");
+  });
+
+  it("returns the same date when already the requested start day", () => {
+    expect(startOfWeek(parseIsoDate("2025-06-08"), "sunday").toISOString().slice(0, 10)).toBe(
+      "2025-06-08",
+    );
+  });
+
+  it("returns that week's Sunday for a mid-week date when weekStartDay is sunday", () => {
+    expect(startOfWeek(parseIsoDate("2025-06-04"), "sunday").toISOString().slice(0, 10)).toBe(
+      "2025-06-01",
+    );
+  });
+});
+
+describe("weekdayLabels", () => {
+  it("defaults to Monday-first", () => {
+    expect(weekdayLabels()).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+  });
+
+  it("rotates to Sunday-first", () => {
+    expect(weekdayLabels("sunday")).toEqual(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+  });
+});
+
 describe("weekRange", () => {
   it("returns Monday-Sunday for any date in the week", () => {
     expect(weekRange("2025-06-04")).toEqual({ start: "2025-06-02", end: "2025-06-08" });
+  });
+
+  it("returns Sunday-Saturday for any date in the week when weekStartDay is sunday", () => {
+    expect(weekRange("2025-06-04", "sunday")).toEqual({ start: "2025-06-01", end: "2025-06-07" });
   });
 });
 
@@ -84,6 +120,69 @@ describe("monthGridWeeks", () => {
     const weeks = monthGridWeeks(2025, 6);
     expect(weeks[0]![0]).toBe("2025-05-26");
     expect(weeks[0]![6]).toBe("2025-06-01");
+  });
+
+  it("aligns rows to Sunday instead when weekStartDay is sunday", () => {
+    // June 2025: Jun 1 is itself a Sunday, so the first row starts exactly there.
+    const weeks = monthGridWeeks(2025, 6, "sunday");
+    for (const week of weeks) {
+      expect(week).toHaveLength(7);
+      expect(new Date(week[0]! + "T00:00:00Z").getUTCDay()).toBe(0);
+    }
+    expect(weeks[0]![0]).toBe("2025-06-01");
+  });
+});
+
+describe("sumDayRollups", () => {
+  function day(overrides: Partial<DayRollupOut> = {}): DayRollupOut {
+    return {
+      local_date: "2026-01-01",
+      activity_count: 0,
+      activity_duration_s: null,
+      activity_moving_duration_s: null,
+      activity_distance_m: null,
+      activity_elevation_gain_m: null,
+      activity_calories: null,
+      sleep_total_s: null,
+      sleep_score: null,
+      health_metrics: [],
+      ...overrides,
+    };
+  }
+
+  it("sums counts/distance/duration across days, treating a null field as 0", () => {
+    const result = sumDayRollups([
+      day({ activity_count: 1, activity_distance_m: 5000, activity_moving_duration_s: 1500 }),
+      day({ activity_count: 2, activity_distance_m: 3000, activity_moving_duration_s: null }),
+      day({ activity_count: 0 }),
+    ]);
+    expect(result.activity_count).toBe(3);
+    expect(result.activity_distance_m).toBe(8000);
+    expect(result.activity_moving_duration_s).toBe(1500);
+    expect(result.activity_days_count).toBe(2);
+  });
+
+  it("returns null elevation when no day recorded any elevation channel", () => {
+    const result = sumDayRollups([
+      day({ activity_count: 1, activity_elevation_gain_m: null }),
+      day({ activity_count: 1, activity_elevation_gain_m: null }),
+    ]);
+    expect(result.activity_elevation_gain_m).toBeNull();
+  });
+
+  it("sums real elevation values even when mixed with days that recorded none", () => {
+    const result = sumDayRollups([
+      day({ activity_count: 1, activity_elevation_gain_m: 40 }),
+      day({ activity_count: 1, activity_elevation_gain_m: null }),
+    ]);
+    expect(result.activity_elevation_gain_m).toBe(40);
+  });
+
+  it("returns all zeros (not null elevation-excepted) for an empty list", () => {
+    const result = sumDayRollups([]);
+    expect(result.activity_count).toBe(0);
+    expect(result.activity_distance_m).toBe(0);
+    expect(result.activity_elevation_gain_m).toBeNull();
   });
 });
 

@@ -404,6 +404,28 @@ export interface AthleteProfileIn {
   timezone: string;
 }
 
+export type WeekStartDay = "monday" | "sunday";
+export type TimeFormat = "24h" | "12h";
+export type DefaultView = "week" | "month" | "day" | "activities";
+export type UnitPreference = "metric" | "imperial";
+
+// GET/PUT /settings/personalize -- pure display preferences (never read by any backend
+// computation, unlike Profile's own fields above). A full-replacement PUT, same contract as
+// AthleteProfileIn/Out.
+export interface PersonalizeSettingsOut {
+  week_start_day: WeekStartDay;
+  time_format: TimeFormat;
+  default_view: DefaultView;
+  unit_preference: UnitPreference;
+}
+
+export interface PersonalizeSettingsIn {
+  week_start_day: WeekStartDay;
+  time_format: TimeFormat;
+  default_view: DefaultView;
+  unit_preference: UnitPreference;
+}
+
 // GET /weather/forecast -- the athlete's own home-location forecast, up to Open-Meteo's own
 // 16-day cap. See weather_forecast.py/api/schemas/weather_forecast.py.
 export interface ForecastDayOut {

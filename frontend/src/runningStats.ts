@@ -2,8 +2,9 @@
 // Deliberately built from `GET /activities` (already the pattern ActivityListPage uses for
 // direct, non-rollup-backed queries) rather than a new backend endpoint -- these are one-off,
 // bounded-by-a-year client-side aggregates, not a decade-spanning dashboard scan.
-import type { ActivitySummary } from "./api/types";
-import { isoDate, mondayOf, parseIsoDate } from "./dateUtils";
+import type { ActivitySummary, TimeFormat } from "./api/types";
+import { isoDate, mondayOf, parseIsoDate, type WeekStartDay } from "./dateUtils";
+import { formatClock } from "./formatTime";
 
 // Elapsed time (duration_s) includes any paused/stopped time (waiting at a light, tying a
 // shoe); moving time excludes it. Pace/speed should always be computed from moving time when
@@ -224,10 +225,12 @@ export function weekdayLabel(index: number): string {
   return WEEKDAY_LABELS[index] ?? String(index);
 }
 
-/** Monday=0 .. Sunday=6, matching this app's Monday-start convention everywhere else
- * (mondayOf/WEEKDAY_LABELS in dateUtils.ts and MonthView), not JS's native Sunday=0. */
-export function weekdayIndex(localDate: string): number {
-  return (parseIsoDate(localDate).getUTCDay() + 6) % 7;
+/** Index of `localDate` within its own display week, per `weekStartDay` (default Monday=0, the
+ * app's own long-standing convention, not JS's native Sunday=0). Sunday-start is `getUTCDay()`
+ * directly (already 0=Sun..6=Sat). Used for calendar-grid/heatmap column placement. */
+export function weekdayIndex(localDate: string, weekStartDay: WeekStartDay = "monday"): number {
+  const day = parseIsoDate(localDate).getUTCDay();
+  return weekStartDay === "monday" ? (day + 6) % 7 : day;
 }
 
 export function monthlyDistanceM(activities: ActivitySummary[]): number[] {
@@ -465,17 +468,15 @@ export function localHour(activity: ActivitySummary): number {
   return new Date(localMs).getUTCHours();
 }
 
-/** "6:32 AM" -- the activity's own local start time (same utc_offset_s math as `localHour`),
- * for a per-activity card where the date is already shown by the day it's grouped under and
- * only the time of day is new information. */
-export function localTimeLabel(activity: ActivitySummary): string {
+/** "6:32 AM" / "06:32" -- the activity's own local start time (same utc_offset_s math as
+ * `localHour`), for a per-activity card where the date is already shown by the day it's grouped
+ * under and only the time of day is new information. `format` is the athlete's own Personalize
+ * time-format preference (useTimeFormat()), 12h to match this function's own historical default
+ * when a caller doesn't pass one. */
+export function localTimeLabel(activity: ActivitySummary, format: TimeFormat = "12h"): string {
   const localMs = new Date(activity.start_time_utc).getTime() + activity.utc_offset_s * 1000;
   const d = new Date(localMs);
-  const hour24 = d.getUTCHours();
-  const minute = d.getUTCMinutes();
-  const period = hour24 < 12 ? "AM" : "PM";
-  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  return `${hour12}:${minute.toString().padStart(2, "0")} ${period}`;
+  return formatClock(d.getUTCHours(), d.getUTCMinutes(), format);
 }
 
 export interface AmPmCounts {

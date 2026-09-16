@@ -7,7 +7,13 @@
 import type { ActivityDetail } from "../api/types";
 import { metricValue, metricValueAliased } from "../activityMetrics";
 import { boulderingRoutes, climbSummary, formatGrade, isBoulderingActivity } from "../boulderingRoutes";
-import { effectiveDurationS, formatDurationHM, formatPaceMinPerKm, isPaceSport } from "../runningStats";
+import { useDistanceFormat } from "../formatDistance";
+import {
+  effectiveDurationS,
+  formatDurationHM,
+  formatMinPerKm,
+  isPaceSport,
+} from "../runningStats";
 import { StatTile } from "./StatTile";
 
 /** Distance & time, Heart rate, and the `afterHeartRate` slot (the route map) -- the part of the
@@ -28,6 +34,8 @@ export function ActivityStatsGridPrimary({
 }) {
   const durationS = effectiveDurationS(activity);
   const paceSport = isPaceSport(activity.sport);
+  const { metersToDisplay, unitLabel, paceMinPerDisplayUnit, kmhToDisplay, speedUnitLabel } =
+    useDistanceFormat();
   const totalDescent = metricValueAliased(activity.metrics, [
     "fit.session.total_descent",
     "strava.session.total_descent",
@@ -62,8 +70,8 @@ export function ActivityStatsGridPrimary({
             {activity.distance_m != null && (
               <StatTile
                 label="Distance"
-                value={(activity.distance_m / 1000).toFixed(2)}
-                unit="km"
+                value={metersToDisplay(activity.distance_m).toFixed(2)}
+                unit={unitLabel}
                 icon="route"
                 tone="pace"
                 hero
@@ -78,10 +86,12 @@ export function ActivityStatsGridPrimary({
                 label={paceSport ? "Avg pace" : "Avg speed"}
                 value={
                   paceSport
-                    ? formatPaceMinPerKm(durationS, activity.distance_m)
-                    : (activity.distance_m / 1000 / (durationS / 3600)).toFixed(1)
+                    ? formatMinPerKm(
+                        paceMinPerDisplayUnit(durationS / (activity.distance_m / 1000)),
+                      )
+                    : kmhToDisplay(activity.distance_m / 1000 / (durationS / 3600)).toFixed(1)
                 }
-                unit={paceSport ? "/km" : "km/h"}
+                unit={paceSport ? `/${unitLabel}` : speedUnitLabel}
                 icon="gauge"
                 tone="pace"
               />

@@ -8,12 +8,12 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { StreamResponse } from "../api/types";
+import { useDistanceFormat } from "../formatDistance";
 import { downloadBlob, renderRoutePosterBlob } from "../routeExport";
 import {
   buildPauseCompressor,
   detectPauseGaps,
   formatClockDuration,
-  formatPaceMinPerKm,
   isPaceSport,
 } from "../runningStats";
 import { computeKmSplits } from "../splits";
@@ -101,6 +101,8 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
     [route],
   );
   const paceSport = isPaceSport(sport);
+  const { metersToDisplay, unitLabel, formatPace, kmhToDisplay, speedUnitLabel } =
+    useDistanceFormat();
 
   const [hoveredKm, setHoveredKm] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
@@ -169,8 +171,8 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
     if (totalDistanceM == null || totalDurationS == null || totalDurationS <= 0) return;
     const distanceKm = totalDistanceM / 1000;
     const paceLabel = paceSport
-      ? `${formatPaceMinPerKm(totalDurationS, totalDistanceM)} /km`
-      : `${(distanceKm / (totalDurationS / 3600)).toFixed(1)} km/h`;
+      ? formatPace(totalDurationS / distanceKm)
+      : `${kmhToDisplay(distanceKm / (totalDurationS / 3600)).toFixed(1)} ${speedUnitLabel}`;
     const blob = await renderRoutePosterBlob(
       POSTER_SIZE,
       POSTER_SIZE,
@@ -178,7 +180,7 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
       route.distanceM,
       route.elapsedS,
       {
-        distanceLabel: `Distance: ${distanceKm.toFixed(2)} km`,
+        distanceLabel: `Distance: ${metersToDisplay(totalDistanceM).toFixed(2)} ${unitLabel}`,
         durationLabel: `Time: ${formatClockDuration(totalDurationS)}`,
         paceLabel: `Pace: ${paceLabel}`,
       },
@@ -190,8 +192,8 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
     if (totalDistanceM == null || totalDurationS == null || totalDurationS <= 0) return;
     const distanceKm = totalDistanceM / 1000;
     const paceLabel = paceSport
-      ? `${formatPaceMinPerKm(totalDurationS, totalDistanceM)} /km`
-      : `${(distanceKm / (totalDurationS / 3600)).toFixed(1)} km/h`;
+      ? formatPace(totalDurationS / distanceKm)
+      : `${kmhToDisplay(distanceKm / (totalDurationS / 3600)).toFixed(1)} ${speedUnitLabel}`;
     setGifProgress(0);
     try {
       // Dynamically imported: gif.js pulls in its own Web Worker asset and is only ever needed
@@ -202,7 +204,7 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
         route.distanceM,
         route.elapsedS,
         {
-          distanceLabel: `Distance: ${distanceKm.toFixed(2)} km`,
+          distanceLabel: `Distance: ${metersToDisplay(totalDistanceM).toFixed(2)} ${unitLabel}`,
           durationLabel: `Time: ${formatClockDuration(totalDurationS)}`,
           paceLabel: `Pace: ${paceLabel}`,
         },
@@ -260,7 +262,8 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
             />
             <span className="activity-route__player-readout">
               {formatClockDuration(currentElapsedS)}
-              {currentDistanceM != null && ` · ${(currentDistanceM / 1000).toFixed(2)} km`}
+              {currentDistanceM != null &&
+                ` · ${metersToDisplay(currentDistanceM).toFixed(2)} ${unitLabel}`}
             </span>
           </div>
           <div className="activity-route__export-row">

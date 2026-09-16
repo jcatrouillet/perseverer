@@ -11,27 +11,29 @@
 // anyway would mean inventing a number, which is exactly what the raw-first ethos rules out.
 import { Link } from "wouter";
 
-import type { ActivitySummary } from "../api/types";
+import type { ActivitySummary, UnitPreference } from "../api/types";
 import { formatGrade } from "../boulderingRoutes";
+import { kmhToDisplaySpeed, speedUnitLabel, useDistanceFormat } from "../formatDistance";
+import { useTimeFormat } from "../formatTime";
 import { sportStyle, toneColor } from "../metricStyle";
-import {
-  effectiveDurationS,
-  formatDurationHM,
-  formatPaceMinPerKm,
-  isPaceSport,
-  localTimeLabel,
-} from "../runningStats";
+import { effectiveDurationS, formatDurationHM, isPaceSport, localTimeLabel } from "../runningStats";
 import { displayActivityName, displaySport } from "../yearStats";
 import { ActivityMap } from "./ActivityMap";
 import { Icon } from "./Icon";
 import { MetricChip } from "./StatTile";
 
-function paceOrSpeedLabel(sport: string, durationS: number, distanceM: number): string {
+function paceOrSpeedLabel(
+  sport: string,
+  durationS: number,
+  distanceM: number,
+  unit: UnitPreference,
+  formatPace: (secPerKm: number) => string,
+): string {
   if (isPaceSport(sport)) {
-    return `${formatPaceMinPerKm(durationS, distanceM)} /km`;
+    return formatPace(durationS / (distanceM / 1000));
   }
   const kmh = distanceM / 1000 / (durationS / 3600);
-  return `${kmh.toFixed(1)} km/h`;
+  return `${kmhToDisplaySpeed(kmh, unit).toFixed(1)} ${speedUnitLabel(unit)}`;
 }
 
 export function ActivityCard({
@@ -63,6 +65,8 @@ export function ActivityCard({
   const style = sportStyle(sport);
   const durationS = effectiveDurationS(activity);
   const displayName = displayActivityName(activity);
+  const { unit, metersToDisplay, unitLabel, formatPace } = useDistanceFormat();
+  const { format: timeFormat } = useTimeFormat();
 
   return (
     <div className="activity-card">
@@ -84,13 +88,13 @@ export function ActivityCard({
             </span>
             {displayName && <span className="activity-card__name">{displayName}</span>}
           </div>
-          <span className="activity-card__time">{localTimeLabel(activity)}</span>
+          <span className="activity-card__time">{localTimeLabel(activity, timeFormat)}</span>
         </div>
 
         <div className="activity-card__stats">
           {activity.distance_m != null && (
             <MetricChip
-              label={`${(activity.distance_m / 1000).toFixed(2)} km`}
+              label={`${metersToDisplay(activity.distance_m).toFixed(2)} ${unitLabel}`}
               icon="route"
               tone="pace"
             />
@@ -103,7 +107,7 @@ export function ActivityCard({
               measurement rather than "this activity has no meaningful distance". */}
           {activity.distance_m != null && activity.distance_m > 0 && durationS != null && durationS > 0 && (
             <MetricChip
-              label={paceOrSpeedLabel(sport, durationS, activity.distance_m)}
+              label={paceOrSpeedLabel(sport, durationS, activity.distance_m, unit, formatPace)}
               icon="gauge"
               tone="pace"
             />

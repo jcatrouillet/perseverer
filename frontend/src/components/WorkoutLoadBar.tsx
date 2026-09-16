@@ -10,6 +10,7 @@
 // this from, so `workout.segments` is always empty for them (api/routers/planned_workouts.py's
 // own sport-gating) and this component renders nothing.
 import type { PlannedWorkoutOut } from "../api/types";
+import { useDistanceFormat } from "../formatDistance";
 import { toneColor } from "../metricStyle";
 import "../styles/plannedWorkout.css";
 
@@ -57,6 +58,7 @@ function segmentHeightPx(intensityFactor: number | null): number {
 }
 
 export function WorkoutLoadBar({ workout }: { workout: PlannedWorkoutOut }) {
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
   if (workout.sport !== "running" || workout.segments.length === 0) return null;
 
   const totalDurationS = workout.segments.reduce((sum, s) => sum + s.duration_s, 0) || 1;
@@ -65,7 +67,7 @@ export function WorkoutLoadBar({ workout }: { workout: PlannedWorkoutOut }) {
     <div className="workout-load">
       {workout.estimated_distance_m != null && workout.estimated_duration_s != null && (
         <p className="chart-note">
-          Distance: {(workout.estimated_distance_m / 1000).toFixed(1)}km - Duration:{" "}
+          Distance: {metersToDisplay(workout.estimated_distance_m).toFixed(1)}{unitLabel} - Duration:{" "}
           {Math.round(workout.estimated_duration_s / 60)} minutes
         </p>
       )}

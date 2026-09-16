@@ -1,11 +1,12 @@
 // The small set/edit form shown inside the Goals popup -- either in place of the chart (no
-// goal set yet) or revealed above it (editing an existing one). Target is entered in km (the
-// unit the reference widget and every other distance readout in this app already use) and
-// converted to metres at submit time, matching CLAUDE.md's SI-in-storage rule.
+// goal set yet) or revealed above it (editing an existing one). Target is entered in the
+// athlete's own Personalize distance unit (km or miles) and converted to metres at submit time,
+// matching CLAUDE.md's SI-in-storage rule.
 import { useState } from "react";
 
 import type { GoalOut } from "../api/types";
 import { useSetGoal } from "../api/queries";
+import { useDistanceFormat } from "../formatDistance";
 import { KNOWN_SPORTS } from "../metricStyle";
 
 export function GoalForm({
@@ -19,22 +20,23 @@ export function GoalForm({
   existing: GoalOut | null;
   onSaved: () => void;
 }) {
-  const [targetKm, setTargetKm] = useState(
-    existing ? String(Math.round(existing.target_distance_m / 1000)) : "",
+  const { unitLabel, metersToDisplay, displayToMeters } = useDistanceFormat();
+  const [targetDisplay, setTargetDisplay] = useState(
+    existing ? String(Math.round(metersToDisplay(existing.target_distance_m))) : "",
   );
   const [sport, setSport] = useState(existing?.sport ?? "running");
   const setGoal = useSetGoal();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const km = Number(targetKm);
-    if (!Number.isFinite(km) || km <= 0) return;
+    const target = Number(targetDisplay);
+    if (!Number.isFinite(target) || target <= 0) return;
     setGoal.mutate(
       {
         period_type: periodType,
         period_start: periodStart,
         sport: sport === "" ? null : sport,
-        target_distance_m: km * 1000,
+        target_distance_m: displayToMeters(target),
       },
       { onSuccess: onSaved },
     );
@@ -54,14 +56,14 @@ export function GoalForm({
         </select>
       </label>
       <label className="field">
-        Target distance (km)
+        Target distance ({unitLabel})
         <input
           className="input"
           type="number"
           min="1"
           step="1"
-          value={targetKm}
-          onChange={(e) => setTargetKm(e.target.value)}
+          value={targetDisplay}
+          onChange={(e) => setTargetDisplay(e.target.value)}
           required
         />
       </label>

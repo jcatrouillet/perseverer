@@ -17,7 +17,11 @@ import type { TooltipContentProps } from "recharts";
 
 import type { EddingtonBar } from "../eddington";
 
-function BarTooltip({ active, payload }: TooltipContentProps) {
+function BarTooltip({
+  active,
+  payload,
+  unitLabel,
+}: TooltipContentProps & { unitLabel: string }) {
   if (!active || !payload?.length) return null;
   const bar = payload[0]!.payload as EddingtonBar;
   return (
@@ -29,7 +33,7 @@ function BarTooltip({ active, payload }: TooltipContentProps) {
         padding: "8px 12px",
       }}
     >
-      <p style={{ margin: 0, fontWeight: 600 }}>{bar.km} km</p>
+      <p style={{ margin: 0, fontWeight: 600 }}>{bar.km} {unitLabel}</p>
       <p style={{ margin: 0 }}>
         {bar.count} run{bar.count === 1 ? "" : "s"} that far or further
       </p>
@@ -37,7 +41,13 @@ function BarTooltip({ active, payload }: TooltipContentProps) {
   );
 }
 
-export function EddingtonBarChart({ bars }: { bars: EddingtonBar[] }) {
+export function EddingtonBarChart({
+  bars,
+  unitLabel,
+}: {
+  bars: EddingtonBar[];
+  unitLabel: string;
+}) {
   if (bars.length === 0) return null;
 
   const maxKm = bars[bars.length - 1]!.km;
@@ -55,7 +65,7 @@ export function EddingtonBarChart({ bars }: { bars: EddingtonBar[] }) {
           ticks={ticks}
           stroke="var(--color-text-muted)"
           fontSize={11}
-          unit="km"
+          unit={unitLabel}
         />
         <YAxis
           dataKey="count"
@@ -65,7 +75,10 @@ export function EddingtonBarChart({ bars }: { bars: EddingtonBar[] }) {
           fontSize={11}
           width={36}
         />
-        <Tooltip content={BarTooltip} cursor={{ fill: "var(--color-surface-raised)" }} />
+        <Tooltip
+          content={(props) => <BarTooltip {...props} unitLabel={unitLabel} />}
+          cursor={{ fill: "var(--color-surface-raised)" }}
+        />
         <Bar dataKey="count" isAnimationActive={false}>
           {bars.map((bar) => (
             <Cell

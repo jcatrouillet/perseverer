@@ -38,9 +38,11 @@ import { LoadingSpinner } from "../components/LoadingSpinner";
 import { NotesPanel } from "../components/NotesPanel";
 import { ScheduleWorkoutForm } from "../components/ScheduleWorkoutForm";
 import { StatTile } from "../components/StatTile";
-import { mondayOf, parseIsoDate } from "../dateUtils";
+import { parseIsoDate, startOfWeek } from "../dateUtils";
+import { useDistanceFormat } from "../formatDistance";
 import { latestObservation, valueForDate } from "../healthStats";
 import { healthMetricStyle } from "../metricStyle";
+import { usePersonalize } from "../PersonalizeContext";
 import { newAllTimePrs, personalRecords } from "../runningStats";
 import "../styles/activity-list.css";
 import "../styles/calendar.css";
@@ -59,6 +61,8 @@ const PlannedRaceForm = lazy(() =>
 );
 
 export function DayViewPage({ date }: { date: string }) {
+  const { week_start_day: weekStartDay } = usePersonalize();
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
   const calendar = useCalendar(date, date);
   const activities = useActivities({ startDate: date, endDate: date, limit: 50 });
   // Unbounded all-time running history, for the "PBs set today" callout below -- see ADR 0011
@@ -82,7 +86,7 @@ export function DayViewPage({ date }: { date: string }) {
     personalRecords(dayRunning),
     personalRecords(allTimeRunning.data ?? []),
   );
-  const weekStart = mondayOf(parseIsoDate(date));
+  const weekStart = startOfWeek(parseIsoDate(date), weekStartDay);
   const year = weekStart.getUTCFullYear();
   const month = weekStart.getUTCMonth() + 1;
 
@@ -151,7 +155,7 @@ export function DayViewPage({ date }: { date: string }) {
           </span>
           {day.activity_distance_m != null && (
             <span>
-              <strong>{(day.activity_distance_m / 1000).toFixed(1)}</strong> km
+              <strong>{metersToDisplay(day.activity_distance_m).toFixed(1)}</strong> {unitLabel}
             </span>
           )}
           {day.activity_moving_duration_s != null && (

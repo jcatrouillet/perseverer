@@ -10,6 +10,7 @@ import { Link } from "wouter";
 
 import { useActivityLocation } from "../api/queries";
 import type { ActivitySummary } from "../api/types";
+import { useDistanceFormat } from "../formatDistance";
 import { effectiveDurationS, formatDurationHM } from "../runningStats";
 import { displayActivityName } from "../yearStats";
 import { Icon } from "./Icon";
@@ -88,6 +89,7 @@ function FeaturedHikeCard({
 }) {
   const durationS = effectiveDurationS(activity);
   const title = displayActivityName(activity) ?? "Hike";
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
   return (
     <Link href={`/activities/${activity.id}`} className="hike-featured-card">
       <span className="hike-featured-card__label">
@@ -99,7 +101,8 @@ function FeaturedHikeCard({
         {locationName && ` · ${locationName}`}
       </span>
       <span className="hike-featured-card__stats">
-        {activity.distance_m != null && `${(activity.distance_m / 1000).toFixed(1)} km`}
+        {activity.distance_m != null &&
+          `${metersToDisplay(activity.distance_m).toFixed(1)} ${unitLabel}`}
         {durationS != null && ` · ${formatDurationHM(durationS)}`}
         {activity.elevation_gain_m != null &&
           activity.elevation_gain_m > 0 &&
@@ -137,6 +140,7 @@ export function HikeStatsCard({ activities }: { activities: ActivitySummary[] })
   const loc2 = useActivityLocation(featured[2]?.activity.id ?? "", featured[2] != null);
   const loc3 = useActivityLocation(featured[3]?.activity.id ?? "", featured[3] != null);
   const locations = [loc0, loc1, loc2, loc3];
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
 
   // No hikes at all this period -- the section simply doesn't appear, rather than a "no hikes"
   // placeholder card (unlike RunningStats, which every period has at least some of for this
@@ -161,8 +165,8 @@ export function HikeStatsCard({ activities }: { activities: ActivitySummary[] })
         />
         <StatTile
           label="Total distance"
-          value={(totalDistanceM / 1000).toFixed(1)}
-          unit="km"
+          value={metersToDisplay(totalDistanceM).toFixed(1)}
+          unit={unitLabel}
           icon="route"
           tone="elevation"
           hero

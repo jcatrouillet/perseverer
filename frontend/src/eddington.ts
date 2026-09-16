@@ -13,7 +13,8 @@
 // (via the API filter the caller already applies), matching this app's own established
 // precedent of exact-match over `sport_family()` for Running-specific stats (see
 // `RunningStats.tsx`/`CLAUDE.md`'s own note on why trail_running/track_running are excluded).
-import type { ActivitySummary } from "./api/types";
+import type { ActivitySummary, UnitPreference } from "./api/types";
+import { metersToDisplayDistance } from "./formatDistance";
 
 export interface YearEddington {
   year: number;
@@ -43,14 +44,21 @@ export function computeEddingtonNumber(distancesKm: number[]): number {
   return e;
 }
 
-/** One entry per calendar year that has at least one qualifying run, most recent year first. */
-export function computeYearlyEddington(activities: ActivitySummary[]): YearEddington[] {
+/** One entry per calendar year that has at least one qualifying run, most recent year first.
+ * `unit` genuinely changes the computed number, not just its display -- an Eddington number is
+ * defined in terms of a real distance unit (VeloViewer and others offer the same km-vs-mi
+ * choice), so a mile-preferring athlete gets their real mile-based Eddington number here, not a
+ * km-computed one just relabeled. */
+export function computeYearlyEddington(
+  activities: ActivitySummary[],
+  unit: UnitPreference = "metric",
+): YearEddington[] {
   const distancesKmByYear = new Map<number, number[]>();
   for (const a of activities) {
     if (a.local_date == null || a.distance_m == null || a.distance_m <= 0) continue;
     const year = Number(a.local_date.slice(0, 4));
     const list = distancesKmByYear.get(year) ?? [];
-    list.push(a.distance_m / 1000);
+    list.push(metersToDisplayDistance(a.distance_m, unit));
     distancesKmByYear.set(year, list);
   }
 

@@ -43,8 +43,10 @@ import { parsedStepToApiShape, parseWorkoutSyntax } from "../workoutSyntax";
 import { copyWorkoutToClipboard, readWorkoutClipboard } from "../workoutClipboard";
 import { Icon } from "./Icon";
 import { LoadingSpinner } from "./LoadingSpinner";
+import { useTimeFormat } from "../formatTime";
 import { plannedWorkoutSportStyle } from "../metricStyle";
 import { StepBuilderModal } from "./StepBuilderModal";
+import { TimeOfDayField } from "./TimeOfDayField";
 import { WorkoutLoadBar } from "./WorkoutLoadBar";
 import "../styles/plannedWorkout.css";
 
@@ -156,6 +158,7 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
   const push = usePushPlannedWorkout();
   const complete = useCompletePlannedWorkout();
   const uncomplete = useUncompletePlannedWorkout();
+  const { formatHHMM } = useTimeFormat();
   const duration = formatDurationMinutes(workout.estimated_duration_s);
   const [copied, setCopied] = useState(false);
   // isManuallyDone drives the toggle button itself (it only ever sets/clears completed_at, so
@@ -208,7 +211,7 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
       </div>
       {(workout.scheduled_time || duration) && (
         <p className="chart-note">
-          {workout.scheduled_time}
+          {workout.scheduled_time && formatHHMM(workout.scheduled_time)}
           {workout.scheduled_time && duration && " · "}
           {duration}
         </p>
@@ -463,12 +466,7 @@ function WorkoutEditForm({
             </label>
             <label className="field">
               Time of day
-              <input
-                className="input"
-                type="time"
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-              />
+              <TimeOfDayField value={scheduledTime} onChange={setScheduledTime} />
             </label>
           </div>
           <label className="field">
@@ -485,12 +483,7 @@ function WorkoutEditForm({
         <>
           <label className="field">
             Time of day (optional)
-            <input
-              className="input"
-              type="time"
-              value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
-            />
+            <TimeOfDayField value={scheduledTime} onChange={setScheduledTime} />
           </label>
 
           <ExerciseStepEditor items={exerciseItems} onChange={setExerciseItems} />
@@ -505,12 +498,7 @@ function WorkoutEditForm({
         <>
           <label className="field">
             Time of day (optional)
-            <input
-              className="input"
-              type="time"
-              value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
-            />
+            <TimeOfDayField value={scheduledTime} onChange={setScheduledTime} />
           </label>
           <label className="field">
             Workout

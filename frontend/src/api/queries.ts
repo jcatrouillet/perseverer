@@ -65,6 +65,8 @@ import type {
   PeriodCalendarResponse,
   PerformanceCurveOut,
   PerformanceDailyRollupOut,
+  PersonalizeSettingsIn,
+  PersonalizeSettingsOut,
   PlannedRaceIn,
   PlannedRaceOut,
   PlannedWorkoutListItemOut,
@@ -867,6 +869,27 @@ export function useSetAthleteProfile() {
       // home_lat/home_lon is what makes GET /weather/forecast available at all -- invalidate so
       // an already-open Week view picks up a newly-set (or cleared) home location immediately.
       void queryClient.invalidateQueries({ queryKey: ["weather-forecast"] });
+    },
+  });
+}
+
+/** GET/PUT /settings/personalize -- week start day / time format / starting page / distance
+ * units. Pure display preferences, read via the PersonalizeContext (PersonalizeContext.tsx),
+ * not usually called directly outside PersonalizeCard.tsx and that context itself. */
+export function usePersonalizeSettings() {
+  return useQuery({
+    queryKey: ["personalize-settings"],
+    queryFn: () => apiGet<PersonalizeSettingsOut>("/api/v1/settings/personalize"),
+  });
+}
+
+export function useSetPersonalizeSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PersonalizeSettingsIn) =>
+      apiPut<PersonalizeSettingsOut>("/api/v1/settings/personalize", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["personalize-settings"] });
     },
   });
 }

@@ -12,6 +12,7 @@
 import { Link } from "wouter";
 
 import type { ActivityContextRecentOut } from "../api/types";
+import { kmhToDisplaySpeed, paceMinPerDisplayUnit, speedUnitLabel, useDistanceFormat } from "../formatDistance";
 import { formatMinPerKm, isPaceSport } from "../runningStats";
 
 export function ActivityFastestTable({
@@ -24,6 +25,7 @@ export function ActivityFastestTable({
   currentActivityId: string;
 }) {
   const rows = fastest.filter((r) => r.distance_m > 0 && r.duration_s > 0);
+  const { unit } = useDistanceFormat();
 
   if (rows.length < 2) return null;
 
@@ -43,8 +45,8 @@ export function ActivityFastestTable({
         {rows.map((r) => {
           const distanceKm = r.distance_m / 1000;
           const value = paceSport
-            ? r.duration_s / 60 / distanceKm
-            : distanceKm / (r.duration_s / 3600);
+            ? paceMinPerDisplayUnit(r.duration_s / distanceKm, unit)
+            : kmhToDisplaySpeed(distanceKm / (r.duration_s / 3600), unit);
           const isCurrent = r.id === currentActivityId;
           return (
             <li key={r.id}>
@@ -53,7 +55,9 @@ export function ActivityFastestTable({
                 className={`activity-fastest__row${isCurrent ? " activity-fastest__row--current" : ""}`}
               >
                 <span className="activity-fastest__pace">
-                  {paceSport ? `${formatMinPerKm(value)}/km` : `${value.toFixed(1)}km/h`}
+                  {paceSport
+                    ? `${formatMinPerKm(value)}/${unit === "imperial" ? "mi" : "km"}`
+                    : `${value.toFixed(1)}${speedUnitLabel(unit)}`}
                 </span>
                 {r.avg_hr_bpm != null && (
                   <span className="activity-fastest__hr">{Math.round(r.avg_hr_bpm)}bpm</span>

@@ -23,6 +23,7 @@ import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { monthName, yearRange } from "../../dateUtils";
+import { useDistanceFormat } from "../../formatDistance";
 import { anyMetricHasData, weeklyAverageSleepHours } from "../../healthStats";
 import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
 import { personalRecords } from "../../runningStats";
@@ -38,6 +39,7 @@ function formatWeekTick(iso: string): string {
 }
 
 export function YearView({ year }: { year: number }) {
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
   const { start, end } = yearRange(year);
   const priorYear = yearRange(year - 1);
   const months = useCalendarMonths(start, end);
@@ -182,7 +184,7 @@ export function YearView({ year }: { year: number }) {
                     {rollup.activity_count} activit{rollup.activity_count === 1 ? "y" : "ies"}
                   </div>
                   {rollup.activity_distance_m != null && (
-                    <div>{(rollup.activity_distance_m / 1000).toFixed(1)} km</div>
+                    <div>{metersToDisplay(rollup.activity_distance_m).toFixed(1)} {unitLabel}</div>
                   )}
                   {rollup.activity_moving_duration_s != null && (
                     <div>{(rollup.activity_moving_duration_s / 3600).toFixed(1)}h</div>

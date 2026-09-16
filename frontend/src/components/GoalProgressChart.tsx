@@ -14,6 +14,7 @@ import {
 import type { TooltipContentProps } from "recharts";
 
 import type { GoalProgressOut } from "../api/types";
+import { useDistanceFormat } from "../formatDistance";
 import "../styles/goals.css";
 
 const GOLD = "var(--color-load)";
@@ -49,7 +50,11 @@ function isTooltipRow(entry: unknown): entry is TooltipRow {
   );
 }
 
-function GoalTooltip({ active, payload }: TooltipContentProps) {
+function GoalTooltip({
+  active,
+  payload,
+  unitLabel,
+}: TooltipContentProps & { unitLabel: string }) {
   if (!active || !payload || payload.length === 0) return null;
   const rows = payload.filter(isTooltipRow);
   if (rows.length === 0) return null;
@@ -64,7 +69,7 @@ function GoalTooltip({ active, payload }: TooltipContentProps) {
       <div className="goal-progress__tooltip-date">{date}</div>
       {rows.map((row) => (
         <div key={row.payload.seriesLabel}>
-          {row.payload.seriesLabel}: {row.payload.km.toFixed(1)} km
+          {row.payload.seriesLabel}: {row.payload.km.toFixed(1)} {unitLabel}
         </div>
       ))}
     </div>
@@ -72,6 +77,7 @@ function GoalTooltip({ active, payload }: TooltipContentProps) {
 }
 
 export function GoalProgressChart({ progress }: { progress: GoalProgressOut }) {
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
   if (!progress.available || progress.goal == null || progress.period_end == null) return null;
 
   const periodStartTs = parseIsoUtc(
@@ -80,7 +86,7 @@ export function GoalProgressChart({ progress }: { progress: GoalProgressOut }) {
       : `${progress.goal.period_start}-01`,
   );
   const periodEndTs = parseIsoUtc(progress.period_end);
-  const targetKm = progress.goal.target_distance_m / 1000;
+  const targetKm = metersToDisplay(progress.goal.target_distance_m);
 
   const targetData: (ChartPoint & { seriesLabel: "Target" })[] = [
     { ts: periodStartTs, km: 0, seriesLabel: "Target" },
@@ -88,7 +94,7 @@ export function GoalProgressChart({ progress }: { progress: GoalProgressOut }) {
   ];
   const actualData: (ChartPoint & { seriesLabel: "Actual" })[] = progress.daily.map((p) => ({
     ts: parseIsoUtc(p.local_date),
-    km: p.cumulative_distance_m / 1000,
+    km: metersToDisplay(p.cumulative_distance_m),
     seriesLabel: "Actual",
   }));
 
@@ -115,9 +121,9 @@ export function GoalProgressChart({ progress }: { progress: GoalProgressOut }) {
             stroke="var(--color-text-muted)"
             fontSize={11}
             width={48}
-            unit=" km"
+            unit={` ${unitLabel}`}
           />
-          <Tooltip content={GoalTooltip} />
+          <Tooltip content={(props) => <GoalTooltip {...props} unitLabel={unitLabel} />} />
           <Line
             data={targetData}
             dataKey="km"

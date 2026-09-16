@@ -6,7 +6,6 @@ import {
   useAllActivities,
   useCalendar,
   useCalendarMonths,
-  useCalendarWeeks,
   useClimbingSummary,
   useFitness,
   useHealthDashboard,
@@ -14,7 +13,7 @@ import {
   usePlannedWorkoutsList,
   useSleep,
 } from "../../api/queries";
-import type { PlannedRaceOut, PlannedWorkoutListItemOut } from "../../api/types";
+import type { DayRollupOut, PlannedRaceOut, PlannedWorkoutListItemOut } from "../../api/types";
 import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
@@ -31,15 +30,24 @@ import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { RunningStats } from "../../components/RunningStats";
 import { ScheduleWorkoutForm } from "../../components/ScheduleWorkoutForm";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
-import { eachDate, monthGridWeeks, monthName, monthRange, parseIsoDate } from "../../dateUtils";
+import {
+  eachDate,
+  monthGridWeeks,
+  monthName,
+  monthRange,
+  parseIsoDate,
+  sumDayRollups,
+  weekdayLabels,
+} from "../../dateUtils";
+import { useDistanceFormat } from "../../formatDistance";
+import { useTimeFormat } from "../../formatTime";
 import { anyMetricHasData } from "../../healthStats";
 import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
 import { plannedWorkoutSportStyle } from "../../metricStyle";
+import { usePersonalize } from "../../PersonalizeContext";
 import { personalRecords } from "../../runningStats";
 import { busiestWeekStart } from "../../yearStats";
 import "../../styles/calendar.css";
-
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // Code-split, not a static import -- see DayViewPage.tsx's own identical comment (the app-shell
 // bundle is already right at vite-plugin-pwa's 2MB single-file precache limit, and this card
@@ -62,9 +70,18 @@ function formatBusiestWeek(monday: string): string {
 }
 
 export function MonthView({ year, month }: { year: number; month: number }) {
+  const { week_start_day: weekStartDay } = usePersonalize();
+  const { formatHHMM } = useTimeFormat();
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
   const { start, end } = monthRange(year, month);
   const priorYearRange = monthRange(year - 1, month);
-  const calendar = useCalendar(start, end);
+  const weekRows = monthGridWeeks(year, month, weekStartDay);
+  // The padded grid range, not just the month's own start/end -- otherwise the first/last row's
+  // own week total (summed from these same rows below) would be missing whatever days of that
+  // real week fall in the adjacent month.
+  const gridStart = weekRows[0]![0]!;
+  const gridEnd = weekRows[weekRows.length - 1]![6]!;
+  const calendar = useCalendar(gridStart, gridEnd);
   // Rollup-backed single-month lookup for the year-over-year delta tile (ADR 0011 decision 3) --
   // reuses /calendar/months rather than fetching a whole prior-year month's raw activities.
   const priorYearMonth = useCalendarMonths(priorYearRange.start, priorYearRange.end);
@@ -88,21 +105,21 @@ export function MonthView({ year, month }: { year: number; month: number }) {
     setExpandedDate(null);
   }, [year, month]);
 
-  const weekRows = monthGridWeeks(year, month);
-  // Query the padded grid range, not just the month's own start/end -- otherwise the first/last
-  // row's week total is missing whenever that week's Monday falls in the adjacent month.
-  const weeks = useCalendarWeeks(weekRows[0]![0]!, weekRows[weekRows.length - 1]![6]!);
-  const plannedWorkouts = usePlannedWorkoutsList(
-    weekRows[0]![0]!,
-    weekRows[weekRows.length - 1]![6]!,
-  );
-  const plannedRaces = usePlannedRacesForRange(
-    weekRows[0]![0]!,
-    weekRows[weekRows.length - 1]![6]!,
-  );
+  const plannedWorkouts = usePlannedWorkoutsList(gridStart, gridEnd);
+  const plannedRaces = usePlannedRacesForRange(gridStart, gridEnd);
 
   const dayByDate = new Map(calendar.data?.days.map((d) => [d.local_date, d]));
-  const weekByStart = new Map(weeks.data?.periods.map((p) => [p.period_start, p]));
+  // Summed from the same per-day rows above, not the Monday-keyed period_rollup
+  // (useCalendarWeeks) -- keeps each row's own total correct for any weekStartDay, not just
+  // Monday. See dateUtils.ts::sumDayRollups.
+  const weekByStart = new Map(
+    weekRows.map((row) => {
+      const rowDays = row
+        .map((d) => dayByDate.get(d))
+        .filter((d): d is DayRollupOut => d != null);
+      return [row[0]!, sumDayRollups(rowDays)];
+    }),
+  );
   // A day can hold more than one planned workout now -- group rather than collapse to the last
   // one, sorted the same way the day panel itself orders them (scheduled_time, nulls last, then
   // id/creation order).
@@ -139,7 +156,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   }
 
   const all = allActivities.data?.items ?? [];
-  const busiestWeek = busiestWeekStart(all);
+  const busiestWeek = busiestWeekStart(all, weekStartDay);
   const periodLabel = `${monthName(month)} ${year}`;
   const priorYearMonthDistanceM = priorYearMonth.data?.periods[0]?.activity_distance_m ?? null;
   const compareLabel = `${monthName(month).slice(0, 3)} ${year - 1}`;
@@ -263,7 +280,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
       <table className="month-grid">
         <thead>
           <tr>
-            {WEEKDAY_LABELS.map((label) => (
+            {weekdayLabels(weekStartDay).map((label) => (
               <th key={label}>{label}</th>
             ))}
             <th>Week</th>
@@ -293,7 +310,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                         <div className="month-grid__summary">
                           {day.activity_count} act
                           {day.activity_distance_m != null &&
-                            ` · ${(day.activity_distance_m / 1000).toFixed(1)}km`}
+                            ` · ${metersToDisplay(day.activity_distance_m).toFixed(1)}${unitLabel}`}
                           {day.activity_moving_duration_s != null &&
                             ` · ${(day.activity_moving_duration_s / 3600).toFixed(1)}h`}
                         </div>
@@ -301,7 +318,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                       {planned?.map((p) => (
                         <div key={p.id} className="month-grid__planned">
                           <Icon name={plannedWorkoutSportStyle(p.sport).icon} />
-                          {p.scheduled_time && `${p.scheduled_time} `}
+                          {p.scheduled_time && `${formatHHMM(p.scheduled_time)} `}
                           {p.name || p.sport}
                         </div>
                       ))}
@@ -319,7 +336,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
                     <Link to={`/calendar/week/${week[0]}`}>
                       {weekRollup.activity_count} act
                       {weekRollup.activity_distance_m != null &&
-                        ` · ${(weekRollup.activity_distance_m / 1000).toFixed(1)} km`}
+                        ` · ${metersToDisplay(weekRollup.activity_distance_m).toFixed(1)} ${unitLabel}`}
                     </Link>
                   )}
                 </td>

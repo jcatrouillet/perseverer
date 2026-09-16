@@ -19,6 +19,7 @@ import { useLocation } from "wouter";
 
 import type { ActivitySummary } from "../api/types";
 import { ChartFullscreen } from "./ChartFullscreen";
+import { useDistanceFormat } from "../formatDistance";
 import { Icon } from "./Icon";
 import {
   effectiveDurationS,
@@ -75,6 +76,7 @@ export function WeekRunningStats({
   allTimeRecords?: PersonalRecord[];
 }) {
   const [, setLocation] = useLocation();
+  const { metersToDisplay, unitLabel, paceMinPerDisplayUnit: toDisplayPace } = useDistanceFormat();
   // A handful of real activities in this athlete's archive are tagged sport=running by the
   // device/export but are actually hikes (real GPS tracks, ~3.4 km/h average speed, mountain
   // altitude -- confirmed, not corrupted data) -- see isPlausibleRunPace's own comment. Excluded
@@ -111,7 +113,7 @@ export function WeekRunningStats({
     (a) => a.local_date != null && a.local_date >= priorWeekStart && a.local_date <= priorWeekEnd,
   );
   const priorWeekDistanceM = priorWeekRuns.reduce((sum, a) => sum + (a.distance_m ?? 0), 0);
-  const priorWeekMeta = `${(priorWeekDistanceM / 1000).toFixed(1)}km previous week`;
+  const priorWeekMeta = `${metersToDisplay(priorWeekDistanceM).toFixed(1)}${unitLabel} previous week`;
 
   // METs (see metMinutes' own docstring for the standard gross-MET formula) -- grouped by day,
   // skipping any run missing calories or a body-weight reading rather than guessing either.
@@ -156,8 +158,8 @@ export function WeekRunningStats({
       <div className="stat-grid">
         <StatTile
           label="Total distance"
-          value={(totalDistanceM / 1000).toFixed(1)}
-          unit="km"
+          value={metersToDisplay(totalDistanceM).toFixed(1)}
+          unit={unitLabel}
           meta={priorWeekMeta}
           icon="route"
           tone="pace"
@@ -182,8 +184,8 @@ export function WeekRunningStats({
         {fastestPaceMinPerKm != null && (
           <StatTile
             label="Fastest pace"
-            value={formatMinPerKm(fastestPaceMinPerKm)}
-            unit="/km"
+            value={formatMinPerKm(toDisplayPace(fastestPaceMinPerKm * 60))}
+            unit={`/${unitLabel}`}
             icon="gauge"
             tone="pace"
           />

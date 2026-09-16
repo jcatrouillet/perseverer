@@ -243,3 +243,43 @@
 .month-grid__race .icon {
   flex-shrink: 0;
 }
+
+/* TimeOfDayField -- a locale-independent replacement for <input type="time">, since neither
+   Firefox nor Safari respect the `lang` attribute for that control's own 12h/24h display. */
+.time-of-day-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.time-of-day-field__number {
+  width: 3.5rem;
+  text-align: center;
+  padding: var(--space-2);
+}
+
+.time-of-day-field__sep {
+  color: var(--color-text-muted);
+}
+
+.time-of-day-field__period {
+  display: flex;
+  gap: 2px;
+  margin-left: var(--space-1);
+}
+
+.time-of-day-field__period button {
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.time-of-day-field__period button.is-active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-contrast, #fff);
+}

@@ -60,7 +60,8 @@ describe("ActivityCard", () => {
     expect(screen.getByText("30m")).toBeInTheDocument();
     // 30:00 for 5km -> 6:00/km.
     expect(screen.getByText("6:00 /km")).toBeInTheDocument();
-    expect(screen.getByText("6:00 AM")).toBeInTheDocument();
+    // 24h by default (Personalize's own stated default) -- not "6:00 AM".
+    expect(screen.getByText("06:00")).toBeInTheDocument();
   });
 
   it("shows the activity name when present, and omits it when absent", () => {

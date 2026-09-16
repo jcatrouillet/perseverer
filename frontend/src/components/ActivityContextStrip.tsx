@@ -15,15 +15,27 @@ import {
   ZAxis,
 } from "recharts";
 
-import type { ActivityContextOut } from "../api/types";
+import type { ActivityContextOut, UnitPreference } from "../api/types";
 import { ChartFullscreen } from "./ChartFullscreen";
+import {
+  kmhToDisplaySpeed,
+  metersToDisplayDistance,
+  paceMinPerDisplayUnit,
+  speedUnitLabel,
+  useDistanceFormat,
+} from "../formatDistance";
 import { toneColor } from "../metricStyle";
 import { formatMinPerKm, isPaceSport } from "../runningStats";
 
-function avgPaceOrSpeedValue(sport: string, durationS: number, distanceM: number): number {
+function avgPaceOrSpeedValue(
+  sport: string,
+  durationS: number,
+  distanceM: number,
+  unit: UnitPreference,
+): number {
   return isPaceSport(sport)
-    ? durationS / 60 / (distanceM / 1000)
-    : distanceM / 1000 / (durationS / 3600);
+    ? paceMinPerDisplayUnit(durationS / (distanceM / 1000), unit)
+    : kmhToDisplaySpeed(distanceM / 1000 / (durationS / 3600), unit);
 }
 
 interface ContextPoint {
@@ -43,18 +55,23 @@ function ContextTooltip({
   active,
   payload,
   paceSport,
+  unit,
 }: {
   active?: boolean;
   payload?: { payload: ContextPoint }[];
   paceSport: boolean;
+  unit: UnitPreference;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const p = payload[0]!.payload;
+  const unitLabel = unit === "imperial" ? "mi" : "km";
   return (
     <div className="activity-context__tooltip">
       <div className="activity-context__tooltip-date">{p.date}</div>
-      <div>{paceSport ? `${formatMinPerKm(p.value)} /km` : `${p.value.toFixed(1)} km/h`}</div>
-      <div className="activity-context__tooltip-distance">{p.distanceKm.toFixed(2)} km</div>
+      <div>
+        {paceSport ? `${formatMinPerKm(p.value)} /${unitLabel}` : `${p.value.toFixed(1)} ${speedUnitLabel(unit)}`}
+      </div>
+      <div className="activity-context__tooltip-distance">{p.distanceKm.toFixed(2)} {unitLabel}</div>
     </div>
   );
 }
@@ -69,13 +86,14 @@ export function ActivityContextStrip({
   currentActivityId: string;
 }) {
   const paceSport = isPaceSport(sport);
+  const { unit } = useDistanceFormat();
   const points = context.recent
     .filter((r) => r.distance_m > 0 && r.duration_s > 0)
     .map((r) => ({
       id: r.id,
       date: r.local_date ?? "",
-      distanceKm: r.distance_m / 1000,
-      value: avgPaceOrSpeedValue(sport, r.duration_s, r.distance_m),
+      distanceKm: metersToDisplayDistance(r.distance_m, unit),
+      value: avgPaceOrSpeedValue(sport, r.duration_s, r.distance_m, unit),
       isCurrent: r.id === currentActivityId,
     }));
 
@@ -128,7 +146,7 @@ export function ActivityContextStrip({
             {/* Bubble size = distance -- the "bubble" half of the plan's "bubble/sparkline
                 strip", so a long run and a short shakeout at the same pace read differently. */}
             <ZAxis dataKey="distanceKm" range={[36, 260]} />
-            <Tooltip content={<ContextTooltip paceSport={paceSport} />} />
+            <Tooltip content={<ContextTooltip paceSport={paceSport} unit={unit} />} />
             <Scatter data={points} isAnimationActive={false}>
               {points.map((p) => (
                 <Cell

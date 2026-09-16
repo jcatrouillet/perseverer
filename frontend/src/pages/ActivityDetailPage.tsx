@@ -60,13 +60,14 @@ import { NotesPanel } from "../components/NotesPanel";
 import { PaceVariabilityChart } from "../components/PaceVariabilityChart";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
 import { boulderingRoutes, gradeBreakdownFromRoutes, isBoulderingActivity } from "../boulderingRoutes";
+import { useDistanceFormat } from "../formatDistance";
+import { useTimeFormat } from "../formatTime";
 import { sportStyle } from "../metricStyle";
 import { computePaceVariability } from "../paceVariability";
 import {
   effectiveDurationS,
   formatClockDuration,
   formatMinPerKm,
-  formatPaceMinPerKm,
   gapPaceMinPerKm,
   isPaceSport,
   isRunningSport,
@@ -89,6 +90,9 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const [hoveredLapIndex, setHoveredLapIndex] = useState<number | null>(null);
   const [isTrimming, setIsTrimming] = useState(false);
   const [mergeCandidateId, setMergeCandidateId] = useState<string | null>(null);
+  const { metersToDisplay, unitLabel, formatPace, kmhToDisplay, speedUnitLabel } =
+    useDistanceFormat();
+  const { format: timeFormat } = useTimeFormat();
   const activity = useActivity(id);
   const stream = useActivityStream(id, activity.data?.stream_available ?? false, "medium");
   // A separate, higher-resolution fetch just for the route map + per-km splits below -- those
@@ -272,7 +276,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
         </div>
       </div>
       <p className="activity-detail__meta">
-        {a.local_date ?? a.start_time_utc.slice(0, 10)} · {localTimeLabel(a)}
+        {a.local_date ?? a.start_time_utc.slice(0, 10)} · {localTimeLabel(a, timeFormat)}
         {location.data?.available && location.data.location_name && (
           <> · {location.data.location_name}</>
         )}
@@ -490,15 +494,17 @@ export function ActivityDetailPage({ id }: { id: string }) {
                       </td>
                       {showExpectedColumns && <td>{expectedDurationOrDistance}</td>}
                       <td>
-                        {lap.distance_m != null ? `${(lap.distance_m / 1000).toFixed(2)} km` : "—"}
+                        {lap.distance_m != null
+                          ? `${metersToDisplay(lap.distance_m).toFixed(2)} ${unitLabel}`
+                          : "—"}
                       </td>
                       <td>
                         {effectiveLapDuration != null &&
                         lap.distance_m != null &&
                         lap.distance_m > 0
                           ? paceSport
-                            ? `${formatPaceMinPerKm(effectiveLapDuration, lap.distance_m)} /km`
-                            : `${(lap.distance_m / 1000 / (effectiveLapDuration / 3600)).toFixed(1)} km/h`
+                            ? formatPace(effectiveLapDuration / (lap.distance_m / 1000))
+                            : `${kmhToDisplay(lap.distance_m / 1000 / (effectiveLapDuration / 3600)).toFixed(1)} ${speedUnitLabel}`
                           : "—"}
                       </td>
                       {paceSport && (

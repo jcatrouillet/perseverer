@@ -9,6 +9,13 @@ import { Link } from "wouter";
 
 import type { ActivityComparisonsOut, ActivityDetail } from "../api/types";
 import { metricValue } from "../activityMetrics";
+import {
+  kmhToDisplaySpeed,
+  metersToDisplayDistance,
+  paceMinPerDisplayUnit,
+  speedUnitLabel,
+  useDistanceFormat,
+} from "../formatDistance";
 import { effectiveDurationS, formatMinPerKm, gapPaceMinPerKm, isPaceSport } from "../runningStats";
 
 // Mirrors gap.py::AVG_GAP_METRIC_KEY and routers/activities.py::CADENCE_METRIC_KEY exactly --
@@ -63,9 +70,10 @@ export function ActivityComparisonTable({
   ];
 
   const paceSport = isPaceSport(sport);
+  const { unit, unitLabel, metersToDisplay } = useDistanceFormat();
   const radiusLabel =
     comparisons.start_radius_m >= 1000
-      ? `${(comparisons.start_radius_m / 1000).toFixed(1)}km`
+      ? `${metersToDisplay(comparisons.start_radius_m).toFixed(1)}${unitLabel}`
       : `${Math.round(comparisons.start_radius_m)}m`;
   const bandPct = Math.round(comparisons.distance_band_fraction * 100);
 
@@ -96,8 +104,8 @@ export function ActivityComparisonTable({
             {rows.map((r) => {
               const distanceKm = r.distance_m / 1000;
               const paceValue = paceSport
-                ? r.duration_s / 60 / distanceKm
-                : distanceKm / (r.duration_s / 3600);
+                ? paceMinPerDisplayUnit(r.duration_s / distanceKm, unit)
+                : kmhToDisplaySpeed(distanceKm / (r.duration_s / 3600), unit);
               const rowClass = r.isCurrent
                 ? "comparison-table__row comparison-table__row--current"
                 : "comparison-table__row";
@@ -111,13 +119,15 @@ export function ActivityComparisonTable({
                       <Link href={`/activities/${r.id}`}>{dateCell}</Link>
                     )}
                   </td>
-                  <td>{distanceKm.toFixed(2)} km</td>
+                  <td>{metersToDisplayDistance(r.distance_m, unit).toFixed(2)} {unitLabel}</td>
                   <td>
-                    {paceSport ? `${formatMinPerKm(paceValue)}/km` : `${paceValue.toFixed(1)}km/h`}
+                    {paceSport
+                      ? `${formatMinPerKm(paceValue)}/${unitLabel}`
+                      : `${paceValue.toFixed(1)}${speedUnitLabel(unit)}`}
                   </td>
                   <td>
                     {r.avg_gap_speed_mps != null
-                      ? `${formatMinPerKm(gapPaceMinPerKm(r.avg_gap_speed_mps))}/km`
+                      ? `${formatMinPerKm(paceMinPerDisplayUnit(gapPaceMinPerKm(r.avg_gap_speed_mps) * 60, unit))}/${unitLabel}`
                       : "—"}
                   </td>
                   <td>{r.vdot != null ? r.vdot.toFixed(1) : "—"}</td>

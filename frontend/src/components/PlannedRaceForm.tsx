@@ -13,9 +13,12 @@ import {
   useUpdatePlannedRace,
 } from "../api/queries";
 import type { PlannedRaceOut } from "../api/types";
+import { useDistanceFormat } from "../formatDistance";
+import { useTimeFormat } from "../formatTime";
 import { formatClockDuration } from "../runningStats";
 import { Icon } from "./Icon";
 import { LoadingSpinner } from "./LoadingSpinner";
+import { TimeOfDayField } from "./TimeOfDayField";
 import "../styles/plannedWorkout.css";
 
 const SPORTS = [
@@ -47,11 +50,6 @@ function distancePresetFor(distanceM: number): string {
   return match ? match.value : "custom";
 }
 
-function formatDistanceKm(distanceM: number): string {
-  const km = distanceM / 1000;
-  return `${Number.isInteger(km) ? km : km.toFixed(1)} km`;
-}
-
 function formatDayCountdown(daysUntil: number): string {
   if (daysUntil < 0) return `${Math.abs(daysUntil)} day${daysUntil === -1 ? "" : "s"} ago`;
   if (daysUntil === 0) return "today";
@@ -61,6 +59,8 @@ function formatDayCountdown(daysUntil: number): string {
 
 function RaceSummary({ race, onEdit }: { race: PlannedRaceOut; onEdit: () => void }) {
   const del = useDeletePlannedRace();
+  const { formatDistance, metersToDisplay } = useDistanceFormat();
+  const { formatHHMM } = useTimeFormat();
   const sportLabel = SPORTS.find((s) => s.value === race.sport)?.label ?? race.sport;
 
   let comparison: string | null = null;
@@ -85,8 +85,8 @@ function RaceSummary({ race, onEdit }: { race: PlannedRaceOut; onEdit: () => voi
         <span className="chart-note">({sportLabel})</span>
       </div>
       <p className="chart-note">
-        {race.scheduled_time && `${race.scheduled_time} · `}
-        {formatDistanceKm(race.distance_m)}
+        {race.scheduled_time && `${formatHHMM(race.scheduled_time)} · `}
+        {formatDistance(race.distance_m, Number.isInteger(metersToDisplay(race.distance_m)) ? 0 : 1)}
         {race.target_duration_s != null &&
           ` · Target sub ${formatClockDuration(race.target_duration_s)}`}
         {" · "}
@@ -140,15 +140,16 @@ function RaceEditForm({
 }) {
   const create = useCreatePlannedRace();
   const update = useUpdatePlannedRace();
+  const { unitLabel, metersToDisplay, displayToMeters } = useDistanceFormat();
 
   const [name, setName] = useState(initial?.name ?? "");
   const [sport, setSport] = useState(initial?.sport ?? "running");
   const [distancePreset, setDistancePreset] = useState(
     initial ? distancePresetFor(initial.distance_m) : "10000",
   );
-  const [customKm, setCustomKm] = useState(
+  const [customDistance, setCustomDistance] = useState(
     initial && distancePresetFor(initial.distance_m) === "custom"
-      ? String(initial.distance_m / 1000)
+      ? String(metersToDisplay(initial.distance_m))
       : "",
   );
   const [scheduledTime, setScheduledTime] = useState(initial?.scheduled_time ?? "");
@@ -163,7 +164,7 @@ function RaceEditForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const distanceM =
-      distancePreset === "custom" ? Number(customKm) * 1000 : Number(distancePreset);
+      distancePreset === "custom" ? displayToMeters(Number(customDistance)) : Number(distancePreset);
     if (!name.trim() || !(distanceM > 0)) return;
     const fields = {
       local_date: localDate,
@@ -222,15 +223,15 @@ function RaceEditForm({
         </label>
         {distancePreset === "custom" && (
           <label className="field">
-            Distance (km)
+            Distance ({unitLabel})
             <input
               className="input"
               type="number"
               inputMode="decimal"
               min="0"
               step="0.1"
-              value={customKm}
-              onChange={(e) => setCustomKm(e.target.value)}
+              value={customDistance}
+              onChange={(e) => setCustomDistance(e.target.value)}
               placeholder="e.g. 15"
               required
             />
@@ -238,12 +239,7 @@ function RaceEditForm({
         )}
         <label className="field">
           Time of day (optional)
-          <input
-            className="input"
-            type="time"
-            value={scheduledTime}
-            onChange={(e) => setScheduledTime(e.target.value)}
-          />
+          <TimeOfDayField value={scheduledTime} onChange={setScheduledTime} />
         </label>
       </div>
 

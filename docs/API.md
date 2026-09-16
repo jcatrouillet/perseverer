@@ -1402,6 +1402,31 @@ name) — all optional except `timezone` carries a default rather than being nul
 
 **Response `200`:** `AthleteProfileOut`. **`422`** — a value fails validation.
 
+### `GET /settings/personalize`
+
+Four pure display preferences — week start day, time format, starting page on load, and distance
+units. A deliberate second endpoint from `/settings/profile` (same `athlete` table, different
+concern): unlike Profile's fields, none of these four are ever read by any backend computation,
+only by the frontend's own rendering. `unit_preference` reuses the same `athlete.unit_preference`
+column `sync athlete create` has always set, previously never read anywhere in the app.
+
+**Response `200`:** `PersonalizeSettingsOut` — `week_start_day` (`"monday"|"sunday"`, default
+`"monday"`), `time_format` (`"24h"|"12h"`, default `"24h"`), `default_view`
+(`"week"|"month"|"day"|"activities"`, default `"week"`), `unit_preference`
+(`"metric"|"imperial"`, default `"metric"`).
+
+### `PUT /settings/personalize`
+
+Replaces the athlete's personalize settings. **A full replacement, not a partial patch**, same
+convention as `PUT /settings/profile` — omitting any field resets it to its own default, since
+every field here always carries one (none are nullable).
+
+**Request body** (`PersonalizeSettingsIn`): same four fields as the `GET` response, each
+optional with its own default. Any value outside the stated closed set is rejected.
+
+**Response `200`:** `PersonalizeSettingsOut`. **`422`** — a value outside the closed set for any
+field.
+
 ### `PUT /settings/password`
 
 Self-service password change. Verifies `current_password` first — the same `is_locked_out`/

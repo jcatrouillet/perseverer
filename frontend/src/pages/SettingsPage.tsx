@@ -22,6 +22,7 @@ import {
 import type { DuplicateCandidateOut, TrimCandidateOut } from "../api/types";
 import { hrZoneRangeLabel } from "../activityMetrics";
 import { isoDate } from "../dateUtils";
+import { useDistanceFormat } from "../formatDistance";
 import { formatDurationHM, formatMinPerKm } from "../runningStats";
 import { ApiDocsCard } from "../components/ApiDocsCard";
 import { ApiKeyCard } from "../components/ApiKeyCard";
@@ -32,6 +33,7 @@ import { EufyCard } from "../components/EufyCard";
 import { GarminConnectCard } from "../components/GarminConnectCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricExplorer, type ExplorerMetric } from "../components/MetricExplorer";
+import { PersonalizeCard } from "../components/PersonalizeCard";
 import { RebuildCard } from "../components/RebuildCard";
 import "../styles/settings.css";
 
@@ -59,14 +61,11 @@ function formatDate(iso: string): string {
   });
 }
 
-function formatDistanceKm(distanceM: number | null): string {
-  return distanceM == null ? "—" : `${(distanceM / 1000).toFixed(2)} km`;
-}
-
 export function TrimCandidateRow({ candidate }: { candidate: TrimCandidateOut }) {
   const boundaries = [candidate.flag.at_start && "start", candidate.flag.at_end && "end"].filter(
     Boolean,
   );
+  const { formatDistance } = useDistanceFormat();
   return (
     <li className="settings-scan__row">
       <Link href={`/activities/${candidate.id}`} className="settings-scan__link">
@@ -74,7 +73,7 @@ export function TrimCandidateRow({ candidate }: { candidate: TrimCandidateOut })
       </Link>
       <span className="settings-scan__meta">
         {formatDate(candidate.start_time_utc)} · {candidate.sport} ·{" "}
-        {formatDistanceKm(candidate.distance_m)}
+        {candidate.distance_m == null ? "—" : formatDistance(candidate.distance_m, 2)}
         {candidate.duration_s != null && ` · ${formatDurationHM(candidate.duration_s)}`}
       </span>
       <span className="settings-scan__flag">
@@ -142,6 +141,7 @@ export function SettingsPage() {
   const profileMutation = useSetAthleteProfile();
   const passwordMutation = useChangePassword();
   const trimCandidates = useTrimCandidates();
+  const { formatDistance } = useDistanceFormat();
   const duplicatePairs = useDuplicatePairs();
 
   const today = isoDate(new Date());
@@ -566,6 +566,11 @@ export function SettingsPage() {
       ),
     },
     {
+      key: "personalize",
+      title: "Personalize",
+      content: <PersonalizeCard />,
+    },
+    {
       key: "external-tools",
       title: "External tools",
       content: (
@@ -797,8 +802,13 @@ export function SettingsPage() {
                       </span>
                       <span className="settings-scan__meta">
                         {formatDate(pair.activity_a.start_time_utc)} ·{" "}
-                        {formatDistanceKm(pair.activity_a.distance_m)} vs.{" "}
-                        {formatDistanceKm(pair.activity_b.distance_m)}
+                        {pair.activity_a.distance_m == null
+                          ? "—"
+                          : formatDistance(pair.activity_a.distance_m, 2)}{" "}
+                        vs.{" "}
+                        {pair.activity_b.distance_m == null
+                          ? "—"
+                          : formatDistance(pair.activity_b.distance_m, 2)}
                       </span>
                     </li>
                   ))}

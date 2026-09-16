@@ -4,10 +4,26 @@
 // to an empty/loading-free state so those panels render nothing, keeping this test's mock
 // surface bounded to what the indicator itself actually needs.
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { PlannedWorkoutListItemOut } from "../../api/types";
+import type { DayRollupOut, PlannedWorkoutListItemOut } from "../../api/types";
 import { MonthView } from "./MonthView";
+
+function dayRollup(overrides: Partial<DayRollupOut> = {}): DayRollupOut {
+  return {
+    local_date: "2026-09-01",
+    activity_count: 0,
+    activity_duration_s: null,
+    activity_moving_duration_s: null,
+    activity_distance_m: null,
+    activity_elevation_gain_m: null,
+    activity_calories: null,
+    sleep_total_s: null,
+    sleep_score: null,
+    health_metrics: [],
+    ...overrides,
+  };
+}
 
 // DateNavigator (rendered unconditionally by MonthView) uses useIsMobile, which reads
 // window.matchMedia -- not implemented by jsdom, so every render needs a stub. No other test
@@ -39,6 +55,8 @@ mockUsePlannedRacesForRange.mockReturnValue({ data: [], isLoading: false, isErro
 const EMPTY_QUERY = { data: undefined, isLoading: false, isError: false };
 const EMPTY_PERIODS_QUERY = { data: { periods: [] }, isLoading: false, isError: false };
 const EMPTY_DAYS_QUERY = { data: { days: [] }, isLoading: false, isError: false };
+const mockUseCalendar = vi.fn();
+mockUseCalendar.mockReturnValue(EMPTY_DAYS_QUERY);
 
 vi.mock("../../api/queries", () => ({
   // data: undefined (not {items: []}) so the `data &&` guards around RunningStats/HikeStatsCard
@@ -46,9 +64,8 @@ vi.mock("../../api/queries", () => ({
   // (useActivityLocation etc.) that this test has no reason to also stub.
   useActivities: () => EMPTY_QUERY,
   useAllActivities: () => ({ data: undefined }),
-  useCalendar: () => EMPTY_DAYS_QUERY,
+  useCalendar: (...args: unknown[]) => mockUseCalendar(...args),
   useCalendarMonths: () => EMPTY_PERIODS_QUERY,
-  useCalendarWeeks: () => EMPTY_PERIODS_QUERY,
   useClimbingSummary: () => EMPTY_QUERY,
   useFitness: () => EMPTY_QUERY,
   useHealthDashboard: () => EMPTY_QUERY,
@@ -197,5 +214,38 @@ describe("MonthView expanded-date card", () => {
     rerender(<MonthView year={2026} month={10} />);
 
     expect(screen.queryByText("2026-09-15")).not.toBeInTheDocument();
+  });
+});
+
+describe("MonthView per-row week total", () => {
+  afterEach(() => {
+    mockUseCalendar.mockReturnValue(EMPTY_DAYS_QUERY);
+  });
+
+  it("sums a row's own week total from the padded grid's per-day rollups, including an adjacent-month day", () => {
+    // September 2026's Monday-start grid begins Mon 2026-08-31 (an adjacent-month day) --
+    // confirming the padded gridStart/gridEnd range (not just the month's own start/end) is
+    // what's actually fetched and summed for that first row's own week total.
+    mockUseCalendar.mockReturnValue({
+      data: {
+        days: [
+          dayRollup({
+            local_date: "2026-08-31",
+            activity_count: 1,
+            activity_distance_m: 4000,
+          }),
+          dayRollup({
+            local_date: "2026-09-01",
+            activity_count: 1,
+            activity_distance_m: 6000,
+          }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<MonthView year={2026} month={9} />);
+    const weekLink = screen.getByRole("link", { name: /2 act.*10\.0 km/ });
+    expect(weekLink).toHaveAttribute("href", "/calendar/week/2026-08-31");
   });
 });

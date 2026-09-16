@@ -28,7 +28,9 @@ import { ChartFullscreen } from "./ChartFullscreen";
 import { ChartLegend } from "./ChartLegend";
 import { Icon } from "./Icon";
 import { StatTile } from "./StatTile";
-import { isoDate, mondayOf, monthName, parseIsoDate } from "../dateUtils";
+import { isoDate, monthName, parseIsoDate, startOfWeek, weekdayLabels } from "../dateUtils";
+import { useDistanceFormat } from "../formatDistance";
+import { usePersonalize } from "../PersonalizeContext";
 import type { DistanceBucket, PersonalRecord } from "../runningStats";
 import {
   amPmCounts,
@@ -40,7 +42,6 @@ import {
   distinctActiveDates,
   effectiveDurationS,
   formatMinPerKm,
-  formatPaceMinPerKm,
   isLongRun,
   longestStreakAndBreak,
   longRunPieDeg,
@@ -165,6 +166,9 @@ export function RunningStats({
   // Driven by onMouseEnter/Leave rather than a CSS :hover rule, matching the legend's own
   // pattern above -- keeps row-highlight behavior consistent and directly testable.
   const [hoveredRecordLabel, setHoveredRecordLabel] = useState<string | null>(null);
+  const { week_start_day: weekStartDay } = usePersonalize();
+  const { metersToDisplay, unitLabel, paceMinPerDisplayUnit, kmhToDisplay, speedUnitLabel } =
+    useDistanceFormat();
 
   if (activities.length === 0) {
     return (
@@ -214,7 +218,7 @@ export function RunningStats({
   const newPrLabels = new Set(newPrsThisPeriod.map((r) => r.label));
   const compareMeta =
     compareLabel != null && compareDistanceM != null
-      ? `${(compareDistanceM / 1000).toFixed(0)}km in ${compareLabel}`
+      ? `${metersToDisplay(compareDistanceM).toFixed(0)}${unitLabel} in ${compareLabel}`
       : null;
 
   const bucketData: DistanceBucket[] = useDailyBuckets
@@ -281,9 +285,7 @@ export function RunningStats({
   const weeks: HeatmapDay[][] = [];
   if (!useDailyBuckets && !useYearRows) {
     const rangeStart = parseIsoDate(startDate);
-    const startWeekday = (rangeStart.getUTCDay() + 6) % 7;
-    const cursor = new Date(rangeStart);
-    cursor.setUTCDate(cursor.getUTCDate() - startWeekday);
+    const cursor = startOfWeek(rangeStart, weekStartDay);
     const end = parseIsoDate(endDate);
     let week: HeatmapDay[] = [];
     while (cursor <= end || week.length > 0) {
@@ -310,18 +312,18 @@ export function RunningStats({
     >();
     for (const a of activities) {
       if (!a.local_date) continue;
-      const monday = isoDate(mondayOf(parseIsoDate(a.local_date)));
-      const existing = weeklyTotals.get(monday) ?? { distanceM: 0, durationS: 0, elevationM: 0 };
+      const weekStart = isoDate(startOfWeek(parseIsoDate(a.local_date), weekStartDay));
+      const existing = weeklyTotals.get(weekStart) ?? { distanceM: 0, durationS: 0, elevationM: 0 };
       existing.distanceM += a.distance_m ?? 0;
       existing.durationS += effectiveDurationS(a) ?? 0;
       existing.elevationM += a.elevation_gain_m ?? 0;
-      weeklyTotals.set(monday, existing);
+      weeklyTotals.set(weekStart, existing);
     }
     const startYear = Number(startDate.slice(0, 4));
     const endYear = Number(endDate.slice(0, 4));
     for (let year = startYear; year <= endYear; year++) {
       const yearWeeks: HeatmapWeek[] = [];
-      const cursor = mondayOf(parseIsoDate(`${year}-01-01`));
+      const cursor = startOfWeek(parseIsoDate(`${year}-01-01`), weekStartDay);
       const yearEnd = parseIsoDate(`${year}-12-31`);
       while (cursor <= yearEnd) {
         const iso = isoDate(cursor);
@@ -431,9 +433,9 @@ export function RunningStats({
       <h2>Running</h2>
       <div className="stat-grid">
         <StatTile
-          label="Kilometers run"
-          value={(totalDistanceM / 1000).toFixed(0)}
-          unit="km"
+          label={unitLabel === "mi" ? "Miles run" : "Kilometers run"}
+          value={metersToDisplay(totalDistanceM).toFixed(0)}
+          unit={unitLabel}
           meta={compareMeta}
           icon="route"
           tone="pace"
@@ -442,8 +444,14 @@ export function RunningStats({
         <StatTile label="Number of runs" value={activities.length} icon="run" tone="load" hero />
         <StatTile
           label="Average pace"
-          value={formatPaceMinPerKm(totalMovingDurationS, totalDistanceM)}
-          unit="/km"
+          value={
+            totalDistanceM > 0
+              ? formatMinPerKm(
+                  paceMinPerDisplayUnit(totalMovingDurationS / (totalDistanceM / 1000)),
+                )
+              : "—"
+          }
+          unit={`/${unitLabel}`}
           icon="clock"
           tone="pace"
           hero
@@ -451,8 +459,8 @@ export function RunningStats({
         <Link href={`/activities/${longest.id}`} className="stat-tile-link">
           <StatTile
             label="Longest run"
-            value={((longest.distance_m ?? 0) / 1000).toFixed(1)}
-            unit="km"
+            value={metersToDisplay(longest.distance_m ?? 0).toFixed(1)}
+            unit={unitLabel}
             icon="trophy"
             tone="load"
             hero
@@ -483,8 +491,8 @@ export function RunningStats({
         )}
         <StatTile
           label="Average run length"
-          value={(totalDistanceM / 1000 / activities.length).toFixed(1)}
-          unit="km"
+          value={metersToDisplay(totalDistanceM / activities.length).toFixed(1)}
+          unit={unitLabel}
           icon="route"
           tone="pace"
         />
@@ -735,7 +743,7 @@ export function RunningStats({
                     );
                   })}
                 </div>
-                {WEEKDAY_ROWS.map((label, row) => (
+                {weekdayLabels(weekStartDay).map((label, row) => (
                   <div className="running-heatmap__row" key={label}>
                     <span className="running-heatmap__row-label">{label}</span>
                     {weeks.map((week, i) => {
@@ -854,9 +862,11 @@ export function RunningStats({
                           </span>
                         )}
                       </td>
-                      <td>{formatMinPerKm(r.paceMinPerKm)} /km</td>
-                      <td>{r.speedKmh.toFixed(2)} km/h</td>
-                      <td>{(r.actualDistanceM / 1000).toFixed(2)} km</td>
+                      <td>
+                        {formatMinPerKm(paceMinPerDisplayUnit(r.paceMinPerKm * 60))} /{unitLabel}
+                      </td>
+                      <td>{kmhToDisplay(r.speedKmh).toFixed(2)} {speedUnitLabel}</td>
+                      <td>{metersToDisplay(r.actualDistanceM).toFixed(2)} {unitLabel}</td>
                       <td>{formatDuration(r.durationS)}</td>
                       <td>{r.eligibleCount}</td>
                     </tr>
@@ -870,8 +880,6 @@ export function RunningStats({
     </section>
   );
 }
-
-const WEEKDAY_ROWS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function monthLabelFor(
   week: HeatmapDay[],

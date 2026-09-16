@@ -590,6 +590,104 @@ def test_profile_endpoints_require_auth(client: TestClient) -> None:
     assert client.put("/api/v1/settings/profile", json={}).status_code in (401, 403)
 
 
+# --- GET/PUT /settings/personalize -----------------------------------------------------------
+
+
+def test_personalize_get_returns_the_seeded_defaults(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/settings/personalize", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {
+        "week_start_day": "monday",
+        "time_format": "24h",
+        "default_view": "week",
+        "unit_preference": "metric",
+    }
+
+
+def test_personalize_put_stores_and_returns_the_values(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    r = client.put(
+        "/api/v1/settings/personalize",
+        json={
+            "week_start_day": "sunday",
+            "time_format": "12h",
+            "default_view": "activities",
+            "unit_preference": "imperial",
+        },
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json() == {
+        "week_start_day": "sunday",
+        "time_format": "12h",
+        "default_view": "activities",
+        "unit_preference": "imperial",
+    }
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            select(
+                athlete.c.week_start_day,
+                athlete.c.time_format,
+                athlete.c.default_view,
+                athlete.c.unit_preference,
+            )
+        ).fetchone()
+    assert row is not None
+    assert (row.week_start_day, row.time_format, row.default_view, row.unit_preference) == (
+        "sunday",
+        "12h",
+        "activities",
+        "imperial",
+    )
+
+
+def test_personalize_put_defaults_every_field_when_omitted(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    # Full replacement, like /settings/profile -- an empty body resets every field to its own
+    # schema default rather than leaving previously-stored values untouched.
+    client.put(
+        "/api/v1/settings/personalize",
+        json={"week_start_day": "sunday", "time_format": "12h"},
+        headers=auth_headers,
+    )
+    r = client.put("/api/v1/settings/personalize", json={}, headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {
+        "week_start_day": "monday",
+        "time_format": "24h",
+        "default_view": "week",
+        "unit_preference": "metric",
+    }
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("week_start_day", "tuesday"),
+        ("time_format", "military"),
+        ("default_view", "year"),
+        ("unit_preference", "furlongs"),
+    ],
+)
+def test_personalize_put_rejects_a_value_outside_the_closed_set(
+    client: TestClient, auth_headers: dict[str, str], field: str, value: str
+) -> None:
+    r = client.put(
+        "/api/v1/settings/personalize", json={field: value}, headers=auth_headers
+    )
+    assert r.status_code == 422
+
+
+def test_personalize_endpoints_require_auth(client: TestClient) -> None:
+    assert client.get("/api/v1/settings/personalize").status_code in (401, 403)
+    assert client.put("/api/v1/settings/personalize", json={}).status_code in (401, 403)
+
+
 # --- PUT /settings/password ----------------------------------------------------------------
 
 

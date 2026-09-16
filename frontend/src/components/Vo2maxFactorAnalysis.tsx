@@ -9,14 +9,11 @@ import { Link } from "wouter";
 
 import { useVo2maxFactorAnalysis } from "../api/queries";
 import type { Vo2maxContributorOut } from "../api/types";
+import { useDistanceFormat } from "../formatDistance";
 import { formatDurationHM } from "../runningStats";
 import { Icon } from "./Icon";
 import { LoadingSpinner } from "./LoadingSpinner";
 import "../styles/insights.css";
-
-function formatDistanceKm(distanceM: number | null): string {
-  return distanceM == null ? "—" : `${(distanceM / 1000).toFixed(2)} km`;
-}
 
 function ContributorRow({
   contributor,
@@ -26,6 +23,7 @@ function ContributorRow({
   isDriving: boolean;
 }) {
   const tone = isDriving ? "pace" : "neutral";
+  const { formatDistance } = useDistanceFormat();
   return (
     <Link href={`/activities/${contributor.activity_id}`} className="insight-card__link">
       <div className={`insight-card tone-${tone}`}>
@@ -39,7 +37,7 @@ function ContributorRow({
           </span>
           <span className="insight-card__date">
             {contributor.local_date} · VDOT {contributor.vdot.toFixed(1)} ·{" "}
-            {formatDistanceKm(contributor.distance_m)}
+            {contributor.distance_m == null ? "—" : formatDistance(contributor.distance_m, 2)}
             {contributor.duration_s != null && ` · ${formatDurationHM(contributor.duration_s)}`}
           </span>
         </div>

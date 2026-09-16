@@ -1172,6 +1172,12 @@ const SCHEMAS = [
       ["home_lon","number|null","Degrees, -180..180."],
       ["timezone","string","A real IANA name, e.g. \"America/Los_Angeles\". Never null -- defaults to \"UTC\"."],
     ] },
+  { name: "PersonalizeSettingsOut", note: "Returned by GET and PUT /settings/personalize. Pure display preferences -- unlike AthleteProfileOut's fields, none of these four are ever read by any backend computation, only by the frontend's own rendering. unit_preference reuses the athlete.unit_preference column sync athlete create has always set, previously never read anywhere in the app.", fields: [
+      ["week_start_day","string","\"monday\" or \"sunday\". Default \"monday\"."],
+      ["time_format","string","\"24h\" or \"12h\". Default \"24h\"."],
+      ["default_view","string","\"week\", \"month\", \"day\", or \"activities\" -- which page the app lands on by default. Default \"week\"."],
+      ["unit_preference","string","\"metric\" or \"imperial\" -- km vs. miles for every distance/pace/speed display. Default \"metric\"."],
+    ] },
   { name: "WeatherForecastOut", note: "Returned by GET /weather/forecast. See “available: false” in Conventions -- false when the athlete hasn't set a home location (home_lat/home_lon on PUT /settings/profile) or the coarse-forecast Open-Meteo fetch failed. Deliberately not archived or cached, unlike every other Open-Meteo response in this API -- see docs/DATA_DICTIONARY.md's own Weather forecast section.", fields: [
       ["available","boolean","required"],
       ["days","array<ForecastDayOut>","[] when available is false.","opt"],
@@ -2177,6 +2183,24 @@ const GROUPS = [
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/profile \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"birthdate": "1990-01-01", "height_cm": 178, "sex": "male", "email": "me@example.com", "home_lat": 48.8566, "home_lon": 2.3522, "timezone": "America/Los_Angeles"}'` }
+    },
+    { method: "GET", path: "/api/v1/settings/personalize", summary: "Get the athlete's display preferences (week start day, time format, starting page, distance units).",
+      description: "A deliberate second endpoint from GET /settings/profile (same athlete table, different concern) -- unlike Profile's fields, none of these four are ever read by any backend computation, only by the frontend's own rendering. unit_preference reuses the athlete.unit_preference column sync athlete create has always set, previously never read anywhere in the app.",
+      responses: [ { code: 200, ref: "PersonalizeSettingsOut" } ],
+      example: {}
+    },
+    { method: "PUT", path: "/api/v1/settings/personalize", summary: "Replace the athlete's display preferences.",
+      description: "A full replacement, not a partial patch, same convention as PUT /settings/profile -- omitting any field resets it to its own default, since every field here always carries one (none are nullable).",
+      body: { schema: "PersonalizeSettingsIn", fields: [
+        ["week_start_day","string","opt","\"monday\"","\"monday\" or \"sunday\"."],
+        ["time_format","string","opt","\"24h\"","\"24h\" or \"12h\"."],
+        ["default_view","string","opt","\"week\"","\"week\", \"month\", \"day\", or \"activities\"."],
+        ["unit_preference","string","opt","\"metric\"","\"metric\" or \"imperial\"."],
+      ]},
+      responses: [ { code: 200, ref: "PersonalizeSettingsOut" }, { code: 422, note: "A value outside the closed set for any field." } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/personalize \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"week_start_day": "sunday", "time_format": "12h", "default_view": "week", "unit_preference": "imperial"}'` }
     },
     { method: "PUT", path: "/api/v1/settings/password", summary: "Change the athlete's own login password.",
       description: "Verifies current_password first -- the same is_locked_out/verify_password/record_attempt sequence POST /auth/login uses, so repeated wrong attempts lock the username out the same way a brute-forced login would. Skips that check only when the athlete has no password set yet. Never changes username.",

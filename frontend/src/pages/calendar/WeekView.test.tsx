@@ -7,8 +7,30 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { ActivitySummary, PlannedWorkoutListItemOut, PlannedWorkoutOut } from "../../api/types";
+import type {
+  ActivitySummary,
+  DayRollupOut,
+  PlannedWorkoutListItemOut,
+  PlannedWorkoutOut,
+} from "../../api/types";
+import { PersonalizeContext } from "../../PersonalizeContext";
 import { WeekView } from "./WeekView";
+
+function dayRollup(overrides: Partial<DayRollupOut> = {}): DayRollupOut {
+  return {
+    local_date: "2026-09-01",
+    activity_count: 0,
+    activity_duration_s: null,
+    activity_moving_duration_s: null,
+    activity_distance_m: null,
+    activity_elevation_gain_m: null,
+    activity_calories: null,
+    sleep_total_s: null,
+    sleep_score: null,
+    health_metrics: [],
+    ...overrides,
+  };
+}
 
 beforeAll(() => {
   window.matchMedia =
@@ -80,11 +102,11 @@ const mockUseHealthDashboard = vi.fn();
 const EMPTY_QUERY = { data: undefined, isLoading: false, isError: false };
 mockUseHealthDashboard.mockReturnValue(EMPTY_QUERY);
 const EMPTY_DAYS_QUERY = { data: { days: [] }, isLoading: false, isError: false };
-const EMPTY_PERIODS_QUERY = { data: { periods: [] }, isLoading: false, isError: false };
+const mockUseCalendar = vi.fn();
+mockUseCalendar.mockReturnValue(EMPTY_DAYS_QUERY);
 
 vi.mock("../../api/queries", () => ({
-  useCalendar: () => EMPTY_DAYS_QUERY,
-  useCalendarWeeks: () => EMPTY_PERIODS_QUERY,
+  useCalendar: (...args: unknown[]) => mockUseCalendar(...args),
   useActivities: (...args: unknown[]) => mockUseActivities(...args),
   useAllActivities: () => ({ data: undefined }),
   useFitness: () => ({ data: undefined }),
@@ -446,5 +468,98 @@ describe("WeekView notes", () => {
     // "Week stats" card below it.
     render(<WeekView date="2026-09-14" />);
     expect(screen.getByRole("heading", { name: "Notes" })).toBeInTheDocument();
+  });
+});
+
+describe("WeekView week stats", () => {
+  afterEach(() => {
+    mockUseCalendar.mockReturnValue(EMPTY_DAYS_QUERY);
+  });
+
+  it("sums Week stats from the fetched per-day rollups, not a Monday-keyed period total", () => {
+    // 2026-09-01 (Tue) falls in the week of Mon 2026-08-31 - Sun 2026-09-06.
+    mockUseCalendar.mockReturnValue({
+      data: {
+        days: [
+          dayRollup({
+            local_date: "2026-08-31",
+            activity_count: 1,
+            activity_distance_m: 5000,
+            activity_moving_duration_s: 1500,
+            activity_elevation_gain_m: 40,
+          }),
+          dayRollup({
+            local_date: "2026-09-02",
+            activity_count: 1,
+            activity_distance_m: 8000,
+            activity_moving_duration_s: 2400,
+            activity_elevation_gain_m: null,
+          }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<WeekView date="2026-09-01" />);
+    const statGrid = document.querySelector(".stat-grid")!;
+    expect(statGrid).toHaveTextContent("13.0"); // (5000+8000)/1000 km
+    expect(statGrid).toHaveTextContent("2"); // 2 active days
+    // One of the two contributing days has a real elevation reading -- the tile shows a real
+    // (partial) sum, not hidden the way it would be if neither day recorded any elevation.
+    expect(statGrid).toHaveTextContent("40"); // total elevation gain (only one day reported any)
+  });
+
+  it("hides the elevation stat tile when no day in the week recorded any elevation channel", () => {
+    mockUseCalendar.mockReturnValue({
+      data: {
+        days: [
+          dayRollup({
+            local_date: "2026-08-31",
+            activity_count: 1,
+            activity_distance_m: 5000,
+            activity_moving_duration_s: 1500,
+            activity_elevation_gain_m: null,
+          }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<WeekView date="2026-09-01" />);
+    expect(screen.queryByText("Total elevation")).not.toBeInTheDocument();
+  });
+
+  it("shifts the visible week and its own totals to Sunday-Saturday when weekStartDay is sunday", () => {
+    // 2026-09-01 (Tue) belongs to the Sunday-starting week 2026-08-30 - 2026-09-05 instead.
+    mockUseCalendar.mockReturnValue({
+      data: {
+        days: [
+          dayRollup({
+            local_date: "2026-08-30",
+            activity_count: 1,
+            activity_distance_m: 3000,
+            activity_moving_duration_s: 900,
+          }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(
+      <PersonalizeContext.Provider
+        value={{
+          week_start_day: "sunday",
+          time_format: "24h",
+          default_view: "week",
+          unit_preference: "metric",
+        }}
+      >
+        <WeekView date="2026-09-01" />
+      </PersonalizeContext.Provider>,
+    );
+    expect(screen.getByRole("heading", { name: "Week of 2026-08-30 – 2026-09-05" })).toBeInTheDocument();
+    const statGrid = document.querySelector(".stat-grid")!;
+    expect(statGrid).toHaveTextContent("3.0"); // 3000m -> 3.0 km, only countable once the range
+    // actually includes 2026-08-30 (a Sunday, outside the default Monday-start range).
   });
 });

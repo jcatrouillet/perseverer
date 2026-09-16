@@ -10,6 +10,7 @@ import {
   monthRange,
   parseIsoDate,
 } from "../dateUtils";
+import { usePersonalize } from "../PersonalizeContext";
 import { useIsMobile } from "../useIsMobile";
 
 const YEARS_PER_WINDOW = 7;
@@ -35,6 +36,7 @@ export function DateNavigator({
 }) {
   const [location] = useLocation();
   const isMobile = useIsMobile();
+  const { week_start_day: weekStartDay } = usePersonalize();
   const activityYears = useActivityYears();
   const availableYears = (() => {
     const years = new Set<number>();
@@ -74,7 +76,7 @@ export function DateNavigator({
   const { start: monthStart, end: monthEnd } = month
     ? monthRange(year, month)
     : { start: "", end: "" };
-  const weeks = month ? monthGridWeeks(year, month) : [];
+  const weeks = month ? monthGridWeeks(year, month, weekStartDay) : [];
 
   return (
     <nav className="date-nav">

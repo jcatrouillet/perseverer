@@ -23,6 +23,7 @@ import type { ActivityMapPointOut } from "../api/types";
 import { CartoBasemapLayer } from "../components/CartoBasemapLayer";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { EARLIEST_PLAUSIBLE_DATE } from "../dateUtils";
+import { useDistanceFormat } from "../formatDistance";
 import { sportStyle, toneColor } from "../metricStyle";
 import "../styles/map-explorer.css";
 
@@ -31,11 +32,6 @@ const WORLD_BOUNDS: LatLngBoundsExpression = [
   [-60, -170],
   [70, 170],
 ];
-
-function formatDistance(distanceM: number | null): string | null {
-  if (distanceM == null || distanceM <= 0) return null;
-  return `${(distanceM / 1000).toFixed(1)} km`;
-}
 
 export function MapExplorerPage() {
   const points = useActivityMapPoints({});
@@ -121,7 +117,9 @@ export function MapExplorerPage() {
 function MapPoint({ point }: { point: ActivityMapPointOut }) {
   const style = sportStyle(point.sport);
   const color = toneColor(style.tone);
-  const distance = formatDistance(point.distance_m);
+  const { formatDistance } = useDistanceFormat();
+  const distance =
+    point.distance_m == null || point.distance_m <= 0 ? null : formatDistance(point.distance_m);
   return (
     <CircleMarker
       center={[point.start_lat, point.start_lng]}

@@ -8,6 +8,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import type { PieLabelRenderProps } from "recharts";
 
 import type { ActivitySummary } from "../api/types";
+import { useDistanceFormat } from "../formatDistance";
 import { sportStyle, toneColor } from "../metricStyle";
 import {
   distinctActiveDates,
@@ -100,6 +101,7 @@ export function PeriodStatsCard({
   // represent without either dropping the toggle from the fullscreen view or restructuring the
   // header row it's built for. Reuses the same .chart-fullscreen-* CSS classes and Modal.
   const [typeChartOpen, setTypeChartOpen] = useState(false);
+  const { metersToDisplay, unitLabel, kmhToDisplay, speedUnitLabel } = useDistanceFormat();
 
   if (activities.length === 0) return null;
 
@@ -118,7 +120,7 @@ export function PeriodStatsCard({
   const typeCounts = activityTypeCounts(activities);
   const compareMeta =
     compareLabel != null && compareDistanceM != null
-      ? `${(compareDistanceM / 1000).toFixed(0)}km in ${compareLabel}`
+      ? `${metersToDisplay(compareDistanceM).toFixed(0)}${unitLabel} in ${compareLabel}`
       : null;
 
   return (
@@ -131,8 +133,8 @@ export function PeriodStatsCard({
         {distanceM != null && (
           <StatTile
             label="Distance"
-            value={(distanceM / 1000).toFixed(0)}
-            unit="km"
+            value={metersToDisplay(distanceM).toFixed(0)}
+            unit={unitLabel}
             meta={compareMeta}
             icon="route"
             tone="pace"
@@ -169,8 +171,8 @@ export function PeriodStatsCard({
         {longest && (
           <StatTile
             label="Longest activity"
-            value={(longest.distanceM / 1000).toFixed(1)}
-            unit="km"
+            value={metersToDisplay(longest.distanceM).toFixed(1)}
+            unit={unitLabel}
             meta={`on ${longest.date}`}
             icon="trophy"
             tone="load"
@@ -188,8 +190,8 @@ export function PeriodStatsCard({
         {avgDistanceM != null && (
           <StatTile
             label="Average distance"
-            value={(avgDistanceM / 1000).toFixed(1)}
-            unit="km"
+            value={metersToDisplay(avgDistanceM).toFixed(1)}
+            unit={unitLabel}
             meta="per activity with a distance"
             icon="route"
             tone="pace"
@@ -207,8 +209,8 @@ export function PeriodStatsCard({
         {avgSpeedKmh != null && (
           <StatTile
             label="Average speed"
-            value={avgSpeedKmh.toFixed(1)}
-            unit="km/h"
+            value={kmhToDisplay(avgSpeedKmh).toFixed(1)}
+            unit={speedUnitLabel}
             meta="per activity with a speed"
             icon="gauge"
             tone="pace"

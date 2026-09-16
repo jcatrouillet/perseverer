@@ -5,6 +5,7 @@
 // small-line-chart shape as SleepDurationChart.tsx, just a Line instead of a Bar.
 import { Line, LineChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { useTimeFormat } from "../formatTime";
 import { toneColor } from "../metricStyle";
 
 export interface BodyBatteryPoint {
@@ -12,15 +13,11 @@ export interface BodyBatteryPoint {
   level: number;
 }
 
-function formatTimeOfDay(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export function BodyBatteryChart({ points }: { points: BodyBatteryPoint[] }) {
+  const { formatTimeOfDay } = useTimeFormat();
   if (points.length === 0) return null;
+
+  const formatTick = (timestamp: string) => formatTimeOfDay(new Date(timestamp));
 
   return (
     <ResponsiveContainer width="100%" height={140}>
@@ -28,7 +25,7 @@ export function BodyBatteryChart({ points }: { points: BodyBatteryPoint[] }) {
         <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
         <XAxis
           dataKey="timestamp"
-          tickFormatter={formatTimeOfDay}
+          tickFormatter={formatTick}
           stroke="var(--color-text-muted)"
           fontSize={11}
         />
@@ -43,7 +40,7 @@ export function BodyBatteryChart({ points }: { points: BodyBatteryPoint[] }) {
           ticks={[0, 25, 50, 75, 100]}
         />
         <Tooltip
-          labelFormatter={(label) => formatTimeOfDay(String(label))}
+          labelFormatter={(label) => formatTick(String(label))}
           formatter={(value) => [`${value}`, "Body Battery"]}
           contentStyle={{
             background: "var(--color-surface-raised)",

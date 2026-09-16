@@ -107,6 +107,8 @@ from perseverer.api.schemas.settings import (
     HrZoneConfigOut,
     JobStatusOut,
     JobTriggerOut,
+    PersonalizeSettingsIn,
+    PersonalizeSettingsOut,
     RunningLoadConfigIn,
     RunningLoadConfigOut,
 )
@@ -498,6 +500,57 @@ def put_athlete_profile(
         home_lat=payload.home_lat,
         home_lon=payload.home_lon,
         timezone=payload.timezone,
+    )
+
+
+@router.get("/settings/personalize")
+def get_personalize_settings(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> PersonalizeSettingsOut:
+    row = conn.execute(
+        select(
+            athlete.c.week_start_day,
+            athlete.c.time_format,
+            athlete.c.default_view,
+            athlete.c.unit_preference,
+        ).where(athlete.c.id == athlete_id)
+    ).fetchone()
+    if row is None:
+        return PersonalizeSettingsOut(
+            week_start_day="monday", time_format="24h", default_view="week",
+            unit_preference="metric",
+        )
+    return PersonalizeSettingsOut(
+        week_start_day=row.week_start_day,
+        time_format=row.time_format,
+        default_view=row.default_view,
+        unit_preference=row.unit_preference,
+    )
+
+
+@router.put("/settings/personalize")
+def put_personalize_settings(
+    payload: PersonalizeSettingsIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> PersonalizeSettingsOut:
+    conn.execute(
+        athlete.update()
+        .where(athlete.c.id == athlete_id)
+        .values(
+            week_start_day=payload.week_start_day,
+            time_format=payload.time_format,
+            default_view=payload.default_view,
+            unit_preference=payload.unit_preference,
+        )
+    )
+    conn.commit()
+    return PersonalizeSettingsOut(
+        week_start_day=payload.week_start_day,
+        time_format=payload.time_format,
+        default_view=payload.default_view,
+        unit_preference=payload.unit_preference,
     )
 
 

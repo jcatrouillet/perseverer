@@ -224,7 +224,8 @@ describe("ScheduleWorkoutForm", () => {
       target: { value: "Evening yoga" },
     });
     fireEvent.change(screen.getByLabelText("Duration (minutes)"), { target: { value: "45" } });
-    fireEvent.change(screen.getByLabelText("Time of day"), { target: { value: "18:30" } });
+    fireEvent.change(screen.getByLabelText("Hour"), { target: { value: "18" } });
+    fireEvent.change(screen.getByLabelText("Minute"), { target: { value: "30" } });
     fireEvent.click(screen.getByText("Save"));
 
     expect(mockCreate).toHaveBeenCalledWith(
@@ -695,7 +696,8 @@ describe("ScheduleWorkoutForm", () => {
       "Copied yoga",
     );
     expect((screen.getByLabelText("Duration (minutes)") as HTMLInputElement).value).toBe("60");
-    expect((screen.getByLabelText("Time of day") as HTMLInputElement).value).toBe("07:00");
+    expect((screen.getByLabelText("Hour") as HTMLInputElement).value).toBe("7");
+    expect((screen.getByLabelText("Minute") as HTMLInputElement).value).toBe("00");
   });
 
   it("pasting a copied strength_training workout restores its exercise steps", () => {

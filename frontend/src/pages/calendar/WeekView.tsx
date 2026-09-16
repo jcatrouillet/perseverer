@@ -4,7 +4,6 @@ import {
   useActivities,
   useAllActivities,
   useCalendar,
-  useCalendarWeeks,
   useClimbingSummary,
   useFitness,
   useHealthDashboard,
@@ -31,8 +30,11 @@ import { MetricChip, StatTile } from "../../components/StatTile";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
 import { WeekWellnessCharts } from "../../components/WeekWellnessCharts";
 import { WorkoutLoadBar } from "../../components/WorkoutLoadBar";
-import { eachDate, isoDate, parseIsoDate, weekRange } from "../../dateUtils";
+import { eachDate, isoDate, parseIsoDate, sumDayRollups, weekRange } from "../../dateUtils";
+import { useDistanceFormat } from "../../formatDistance";
+import { useTimeFormat } from "../../formatTime";
 import { plannedWorkoutSportStyle } from "../../metricStyle";
+import { usePersonalize } from "../../PersonalizeContext";
 import { formatDurationHM, personalRecords } from "../../runningStats";
 import { weatherCodeInfo } from "../../weatherCode";
 import { groupByLocalDate } from "../../yearStats";
@@ -115,6 +117,7 @@ function computeCompliance(
 // isn't an editing surface, Day/Month view already are.
 function WeekDayPlannedWorkouts({ date }: { date: string }) {
   const workouts = usePlannedWorkoutsForDate(date);
+  const { formatHHMM } = useTimeFormat();
   if (!workouts.data || workouts.data.length === 0) return null;
   return (
     <div className="activity-day-group__planned">
@@ -122,7 +125,7 @@ function WeekDayPlannedWorkouts({ date }: { date: string }) {
         <div key={w.id}>
           <div className="month-grid__planned">
             {w.sport != null && <Icon name={plannedWorkoutSportStyle(w.sport).icon} />}
-            {w.scheduled_time && `${w.scheduled_time} `}
+            {w.scheduled_time && `${formatHHMM(w.scheduled_time)} `}
             {w.name || w.sport}
           </div>
           <WorkoutLoadBar workout={w} />
@@ -137,13 +140,14 @@ function WeekDayPlannedWorkouts({ date }: { date: string }) {
 // sport tier. Read-only here too (Edit/Delete live on Day/Month view).
 function WeekDayRaces({ date }: { date: string }) {
   const races = usePlannedRacesForDate(date);
+  const { formatHHMM } = useTimeFormat();
   if (!races.data || races.data.length === 0) return null;
   return (
     <div className="activity-day-group__planned">
       {races.data.map((r) => (
         <div key={r.id} className="month-grid__race">
           <Icon name="trophy" />
-          {r.scheduled_time && `${r.scheduled_time} `}
+          {r.scheduled_time && `${formatHHMM(r.scheduled_time)} `}
           {r.name}
         </div>
       ))}
@@ -226,7 +230,9 @@ function WeekDayColumn({
 }
 
 export function WeekView({ date }: { date: string }) {
-  const { start, end } = weekRange(date);
+  const { week_start_day: weekStartDay } = usePersonalize();
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
+  const { start, end } = weekRange(date, weekStartDay);
   const priorWeekStartDate = parseIsoDate(start);
   priorWeekStartDate.setUTCDate(priorWeekStartDate.getUTCDate() - 7);
   const priorWeekStart = isoDate(priorWeekStartDate);
@@ -237,9 +243,10 @@ export function WeekView({ date }: { date: string }) {
   runningRangeStartDate.setUTCDate(runningRangeStartDate.getUTCDate() - RUNNING_HISTORY_WEEKS * 7);
   const runningRangeStart = isoDate(runningRangeStartDate);
 
-  const calendar = useCalendar(start, end);
-  // Spans the prior week too, so "this week vs last week" doesn't need a second endpoint call.
-  const weeks = useCalendarWeeks(priorWeekStart, end);
+  // Spans the prior week too (one call, not two) -- "Week stats" and "this week vs last week"
+  // are both summed client-side from these same per-day rows (sumDayRollups above) rather than
+  // read from the Monday-keyed period_rollup, so the totals stay correct for any weekStartDay.
+  const calendar = useCalendar(priorWeekStart, end);
   const activities = useActivities({ startDate: start, endDate: end, limit: 50 });
   const runningHistory = useAllActivities({
     sport: "running",
@@ -283,16 +290,22 @@ export function WeekView({ date }: { date: string }) {
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const compliance = computeCompliance(plannedWorkoutsThisWeek.data ?? [], today);
-  const weekTotal = weeks.data?.periods.find((p) => p.period_start === start);
-  const priorWeekTotal = weeks.data?.periods.find((p) => p.period_start === priorWeekStart);
+  const weekDates = new Set(eachDate(start, end));
+  const priorWeekDates = new Set(eachDate(priorWeekStart, priorWeekEnd));
+  const weekTotal = calendar.data
+    ? sumDayRollups(calendar.data.days.filter((d) => weekDates.has(d.local_date)))
+    : undefined;
+  const priorWeekTotal = calendar.data
+    ? sumDayRollups(calendar.data.days.filter((d) => priorWeekDates.has(d.local_date)))
+    : undefined;
   const monthOfWeekStart = start.slice(0, 7); // YYYY-MM
   // Week-over-week comparison: always the immediately preceding calendar week (not "this week
   // last year" -- week numbers don't align cleanly across years the way months/years do), shown
   // as that week's own total distance rather than a +/- delta (the user found a bare delta
   // disconnected from the number it was relative to -- see PeriodStatsCard's compareMeta).
   const priorWeekMeta =
-    priorWeekTotal?.activity_distance_m != null
-      ? `${(priorWeekTotal.activity_distance_m / 1000).toFixed(1)}km previous week`
+    priorWeekTotal && priorWeekTotal.activity_distance_m > 0
+      ? `${metersToDisplay(priorWeekTotal.activity_distance_m).toFixed(1)}${unitLabel} previous week`
       : null;
 
   const activitiesByDate = new Map(
@@ -354,8 +367,8 @@ export function WeekView({ date }: { date: string }) {
           <div className="stat-grid">
             <StatTile
               label="Total distance"
-              value={((weekTotal.activity_distance_m ?? 0) / 1000).toFixed(1)}
-              unit="km"
+              value={metersToDisplay(weekTotal.activity_distance_m ?? 0).toFixed(1)}
+              unit={unitLabel}
               meta={priorWeekMeta}
               icon="route"
               tone="pace"

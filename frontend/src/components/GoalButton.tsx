@@ -4,6 +4,7 @@
 import { useState } from "react";
 
 import { useDeleteGoal, useGoalProgress } from "../api/queries";
+import { useDistanceFormat } from "../formatDistance";
 import { GoalForm } from "./GoalForm";
 import { GoalProgressChart } from "./GoalProgressChart";
 import { LoadingSpinner } from "./LoadingSpinner";
@@ -23,6 +24,7 @@ export function GoalButton({
   const [editing, setEditing] = useState(false);
   const progress = useGoalProgress(periodType, periodStart);
   const deleteGoal = useDeleteGoal();
+  const { metersToDisplay, unitLabel } = useDistanceFormat();
 
   const pct = progress.data?.pct_complete != null ? Math.round(progress.data.pct_complete * 100) : null;
   const buttonLabel = progress.data?.available ? `Goal: ${pct}%` : "Set goal";
@@ -51,10 +53,10 @@ export function GoalButton({
             <div className="goal-progress__summary">
               <div className="goal-progress__summary-tile">
                 <span className="goal-progress__summary-value">
-                  {((progress.data.current_distance_m ?? 0) / 1000).toFixed(1)} km
+                  {metersToDisplay(progress.data.current_distance_m ?? 0).toFixed(1)} {unitLabel}
                 </span>
                 <span className="goal-progress__summary-label">
-                  of {(progress.data.goal.target_distance_m / 1000).toFixed(0)} km
+                  of {metersToDisplay(progress.data.goal.target_distance_m).toFixed(0)} {unitLabel}
                   {progress.data.goal.sport ? ` (${progress.data.goal.sport.replace(/_/g, " ")})` : ""}
                 </span>
               </div>
@@ -67,7 +69,7 @@ export function GoalButton({
                   }`}
                 >
                   {(progress.data.ahead_behind_m ?? 0) >= 0 ? "+" : ""}
-                  {((progress.data.ahead_behind_m ?? 0) / 1000).toFixed(1)} km
+                  {metersToDisplay(progress.data.ahead_behind_m ?? 0).toFixed(1)} {unitLabel}
                 </span>
                 <span className="goal-progress__summary-label">
                   {(progress.data.ahead_behind_m ?? 0) >= 0 ? "ahead of" : "behind"} pace

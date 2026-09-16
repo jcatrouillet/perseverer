@@ -1290,6 +1290,70 @@ because you don't recognize it — stop, that's the bug.
   stays untouched). A bulk-export upload is streamed to a per-upload-unique temp path, not the
   CLI's own fixed `extract_root` — that fixed path would collide across two concurrent web
   uploads (never a concern for the CLI's single-operator use).
+- **Personalize settings — week start day, time format, starting page, distance units**
+  (`GET/PUT /settings/personalize`, Settings → Personalize): four pure display preferences,
+  never read by any backend computation (unlike Profile's own birthdate/height/home-location
+  fields, which feed formula fallbacks) — a deliberate second endpoint from Profile, same table,
+  different concern, mirroring this app's own Profile-vs-Password split. `week_start_day`
+  (`"monday"|"sunday"`, default `"monday"`) and `time_format` (`"24h"|"12h"`, default `"24h"`)
+  and `default_view` (`"week"|"month"|"day"|"activities"`, default `"week"`) are new `athlete`
+  columns; `unit_preference` (`"metric"|"imperial"`, default `"metric"`) reuses a column that
+  already existed on the table (seed-time only, never previously read anywhere in the app) rather
+  than adding a redundant one. Closed enums via Pydantic `Literal`, not a free-text field + manual
+  validator like `AthleteProfileIn` uses for its own open-ended strings.
+  **The reported bug** — a scheduled workout's time-of-day control showed AM/PM instead of 24h —
+  turned out to have no HTML-only fix: a native `<input type="time">`'s stored *value* is always
+  24h `"HH:MM"` per spec, but its *displayed* picker follows the browser/OS locale, and neither
+  Firefox nor Safari respect the `lang` attribute override for this. `TimeOfDayField.tsx` (new
+  component) replaces every native time input in the app (4 found — 3 in `ScheduleWorkoutForm.tsx`,
+  1 in `PlannedRaceForm.tsx`) with hour/minute number steppers (+ an AM/PM toggle only in 12h
+  mode) that always store/emit the same 24h string but render per the setting rather than the
+  browser — 24h by default fixes the bug outright, cross-browser, with no locale dependency.
+  **`PersonalizeContext.tsx`** (new, this app's first React Context) exposes the athlete's own
+  settings app-wide via `usePersonalize()`, avoiding prop-drilling through the 4+ levels of view
+  components that need one or more of these four values; a `DEFAULTS` constant is returned
+  synchronously before the query resolves, so no consumer needs its own loading-state branch.
+  **`formatDistance.ts`/`formatTime.ts`** (new) are the shared unit-aware formatters this app
+  never had before this feature (confirmed by a full-codebase search: every screen did its own
+  ad hoc `distance_m / 1000` + `.toFixed()` + a literal `"km"` suffix) — `formatDistanceValue`/
+  `formatPaceValue`/`kmhToDisplaySpeed`/`displayDistanceToMeters` (the last for a form's own
+  round-trip entry, e.g. `GoalForm.tsx`/`PlannedRaceForm.tsx`'s custom-distance field) and
+  `formatClock`/`formatHHMM`/`formatTimeOfDay`, each with a `useDistanceFormat()`/`useTimeFormat()`
+  hook pre-bound to the athlete's own current setting. Pace composes with the *existing*
+  `formatMinPerKm` (`runningStats.ts`) for its "M:SS" part rather than reimplementing it, so that
+  function and its own ~15 other callers needed no changes.
+  **Week start day is a frontend display preference only** — every backend weekly concept
+  (`rollups.py`'s Monday-keyed `period_rollup`, a week-`note`'s own Monday-keyed `entity_id`,
+  `race_readiness.py`, `email_reports.py`, `sharing.py`'s recap/share-image generation) stays
+  Monday-anchored regardless of this setting; only the frontend's own calendar-grid rendering and
+  client-side weekly aggregates (`dateUtils.ts::startOfWeek`/`weekdayLabels`, generalizing the
+  previously Monday-only `mondayOf`/`monthGridWeeks`/`WEEKDAY_LABELS`;
+  `runningStats.ts::weekdayIndex`; `yearStats.ts::busiestWeekStart`; `RunningStats.tsx`'s own
+  calendar-heatmap columns) respect it. `WeekView.tsx`'s own "Week stats" card previously read a
+  Monday-keyed `period_rollup` row (`useCalendarWeeks`) for its totals — genuinely incompatible
+  with a Sunday-start display, since that backend row simply doesn't exist for a non-Monday week
+  boundary. Replaced with `dateUtils.ts::sumDayRollups`, summing the same per-day `DayRollupOut`
+  rows the view already fetches for whichever 7-day range is actually showing — numerically
+  identical to the old value for the Monday default (same underlying daily data), but correct for
+  any week start. `MonthView.tsx`'s per-row "Week" column had the identical problem and gets the
+  identical fix, additionally widening its own day-rollup fetch to the grid's full padded range
+  (not just the calendar month) so an edge row's total still includes whichever adjacent-month
+  days are real parts of that week.
+  **Distance units reach real number changes, not just relabeling, in one place**:
+  `eddington.ts::computeYearlyEddington`/`computeEddingtonBars` take a `unit` param and convert
+  before computing — the Eddington number is genuinely defined in terms of a real distance unit
+  (VeloViewer and others offer the same km-vs-mile choice), so a mile-preferring athlete gets
+  their real mile-based number, not a km-computed one just relabeled.
+  **Deliberately left on km internally** (flagged, not silently incomplete): `RunningStats.tsx`'s
+  own bar/scatter/heatmap chart data, `ActivityCharts.tsx`'s per-second pace/speed/GAP stream
+  panels, and `SplitsTable.tsx`'s per-km split table — real per-sample chart pipelines or a
+  backend-fixed bucket identity (a "1km split," `ActivityFastestTable.tsx`'s own "Fastest N km
+  runs" bucket matching `routers/activities.py::get_activity_context`'s `km_floor_m` exactly),
+  not a simple display-text swap; converting them would mean touching chart axes/color scales or
+  the underlying backend bucket semantics itself, a materially bigger job than this pass's own
+  scope. `workoutSyntax.ts`/`workoutSteps.ts`/`splits.ts` (the running workout text-syntax parser
+  and per-km splits computation) are similarly untouched — a parser for a km-denominated
+  mini-language, not a display concern.
 - **Staleness is a first-class signal, not an afterthought.** `perseverer/staleness.py` checks
   (a) whether `garmin_connect` has succeeded recently — escalating from "warning" to "critical"
   past `PERSEVERER_GARMIN_STALE_ESCALATE_DAYS` (default 7) — and (b) whether

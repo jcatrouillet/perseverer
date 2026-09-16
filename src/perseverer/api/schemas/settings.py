@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, model_validator
@@ -158,6 +159,34 @@ class AthleteProfileOut(BaseModel):
     home_lat: float | None
     home_lon: float | None
     timezone: str
+
+
+# GET/PUT /settings/personalize -- pure display preferences, a deliberate second endpoint from
+# Profile above rather than folded into it (same table, different concern -- mirrors this app's
+# own Profile-vs-Password split). Never read by any backend computation: unlike Profile's
+# birthdate/height_cm/sex (formula-fallback inputs) or home_lat/home_lon (a real input to
+# weather_forecast.py), these four only ever change how the frontend renders already-computed
+# data. Closed enums via Literal, not a free-text field + manual validator like AthleteProfileIn
+# uses -- Pydantic itself rejects anything outside the set (422), which is all any of these four
+# ever need. `week_start_day` only reaches the frontend's own calendar-grid/weekly-chart
+# rendering -- every backend weekly concept (period_rollup, week notes' own Monday-keyed
+# entity_id, race_readiness.py, email_reports.py, sharing.py's recap images) stays
+# Monday-anchored regardless of this value; see db/schema.py::athlete's own docstring.
+# `unit_preference` is the pre-existing athlete.unit_preference column (seed-time only before
+# this endpoint, never previously read anywhere in the app) repurposed as the real km/miles
+# toggle rather than adding a redundant column.
+class PersonalizeSettingsIn(BaseModel):
+    week_start_day: Literal["monday", "sunday"] = "monday"
+    time_format: Literal["24h", "12h"] = "24h"
+    default_view: Literal["week", "month", "day", "activities"] = "week"
+    unit_preference: Literal["metric", "imperial"] = "metric"
+
+
+class PersonalizeSettingsOut(BaseModel):
+    week_start_day: Literal["monday", "sunday"]
+    time_format: Literal["24h", "12h"]
+    default_view: Literal["week", "month", "day", "activities"]
+    unit_preference: Literal["metric", "imperial"]
 
 
 # PUT /settings/password -- self-service password change, see api/routers/settings.py for the

@@ -1850,3 +1850,159 @@ past run in, without a second Open-Meteo call.
   rendering in this codebase (verified: `ActivityWeather.tsx` never reads it) — it exists purely
   as an API/MCP-consumer field for exactly this kind of "judge conditions without a second vendor
   call" use case, and `upcoming` follows the identical posture.
+
+## Personalize settings: week start day, time format, starting page, distance units
+
+`GET/PUT /settings/personalize` (`api/schemas/settings.py::PersonalizeSettingsIn`/`Out`) — four
+pure display preferences, a deliberate second endpoint from `/settings/profile` rather than
+folded into it (same `athlete` table, different concern, mirroring this app's own
+Profile-vs-Password split). Unlike Profile's `birthdate`/`height_cm`/`home_lat`/`home_lon` (real
+inputs to formula fallbacks elsewhere), none of these four are ever read by any backend
+computation — they only change how the frontend renders already-computed data.
+
+- **`athlete.week_start_day`** (`String`, `nullable=False`, default `"monday"`), **`time_format`**
+  (`String`, `nullable=False`, default `"24h"`) — new columns, both added by migration
+  `9861c92c896b` with a `server_default` (not just the Python-side `Column(default=...)` every
+  other athlete-profile field relies on) so the ALTER TABLE backfills existing rows in place,
+  since these are `NOT NULL` on a table that already has rows, unlike every prior additive column
+  on `athlete` (all either nullable or added at the initial-schema migration with no existing
+  rows to violate).
+- **`athlete.default_view`** (`String`, `nullable=False`, default `"week"`) — same migration,
+  same server_default treatment. One of `"week"|"month"|"day"|"activities"`.
+- **`athlete.unit_preference`** (`String`, `nullable=False`, default `"metric"`) — **reused, not
+  new**: this column already existed on `athlete` (set only at `sync athlete create` seed time),
+  but was never read anywhere in the app before this feature — confirmed by a full-codebase grep
+  before repurposing it as the real km/miles toggle, rather than adding a redundant column.
+- **Validation**: closed `Literal` types on the Pydantic schema (`week_start_day:
+  Literal["monday", "sunday"]`, etc.) — Pydantic itself rejects anything outside the set (422),
+  unlike `AthleteProfileIn`'s own manual `_sane_values` validator, which exists because that
+  endpoint's fields are open-ended strings/floats with no fixed enum to lean on.
+- **Full replacement on PUT**, identical contract to `/settings/profile`: every field is always
+  sent, and omitting one resets it to its own schema default rather than leaving the stored value
+  untouched.
+
+### The reported bug: scheduled-workout time showed AM/PM instead of 24h
+
+A native `<input type="time">`'s stored *value* is always a 24h `"HH:MM"` string per the HTML
+spec — the bug was never in what got saved — but its *displayed* picker widget follows the
+browser/OS locale, and confirmed empirically that neither Firefox nor Safari honor the `lang`
+attribute override for this control the way Chrome partially does. No reliable HTML-only fix
+exists.
+
+- **`TimeOfDayField.tsx`** (new component): hour/minute `<input type="number">` steppers (24h
+  range 0-23, or 12h range 1-12 plus an AM/PM toggle button pair shown only in 12h mode) that
+  always store/emit the same 24h `"HH:MM"` string — the exact same `value`/`onChange` contract
+  the native control had, so it's a drop-in replacement. Fully custom-rendered, so it can't
+  silently follow browser/OS locale the way the native element does.
+- **Every native time input in the app was replaced** — 4 found by a full-codebase search, one
+  more than the single reported instance: three in `ScheduleWorkoutForm.tsx` (one per sport-tier
+  branch: placeholder/exercise/running) and one in `PlannedRaceForm.tsx`'s own race edit form.
+- **Fixed outright, not just made configurable**: `time_format` defaults to `"24h"`, so the bug
+  is gone for every athlete immediately, before anyone even visits the new Personalize section.
+
+### Frontend infrastructure: `PersonalizeContext`, `formatDistance.ts`, `formatTime.ts`
+
+- **`PersonalizeContext.tsx`** (new — this app's first React Context): `usePersonalize()` exposes
+  the athlete's own four settings anywhere in the tree, avoiding prop-drilling through the many
+  view components (calendar grids, activity cards, stat tiles, forms) that each need one or more
+  of them. A `DEFAULT_PERSONALIZE_SETTINGS` constant is returned synchronously before the
+  `GET /settings/personalize` query resolves, so no consumer needs its own loading-state branch
+  just to read a display preference. Mounted once in `App.tsx`, inside `AuthGate` (needs an
+  authenticated athlete) and wrapping the nav + route `<Switch>`.
+- **`formatDistance.ts`/`formatTime.ts`** (new): the shared unit-aware formatters this app never
+  had before — confirmed by a full-codebase search that every screen did its own ad hoc
+  `distance_m / 1000` + `.toFixed()` + a literal `"km"` suffix, and every clock-time display
+  independently hand-rolled its own 12h-only AM/PM branch. `formatDistanceValue`/`formatPaceValue`/
+  `kmhToDisplaySpeed`/`speedUnitLabel`/`paceMinPerDisplayUnit` (the last splits a pace into a bare
+  "M:SS" value + separate `"/km"`/`"/mi"` unit, for call sites using `StatTile`'s own value/unit
+  prop split rather than one combined string) and `displayDistanceToMeters` (the inverse, for an
+  entry form's own round-trip — `GoalForm.tsx`'s goal-distance field and `PlannedRaceForm.tsx`'s
+  custom-race-distance field both take input in the athlete's own display unit and convert to
+  meters at submit, matching CLAUDE.md's SI-in-storage rule). `formatClock`/`formatHHMM`/
+  `formatTimeOfDay` for time. Each has a `useDistanceFormat()`/`useTimeFormat()` hook pre-bound to
+  the athlete's own current setting via `usePersonalize()`, so a call site just does
+  `formatDistance(activity.distance_m)`. Pace composes with the **existing**
+  `runningStats.ts::formatMinPerKm` for its "M:SS" part rather than reimplementing carry-safe
+  minute/second rounding a second time — that function and its own ~15 other callers needed no
+  changes at all.
+
+### Week start day is a frontend display preference only
+
+Every backend weekly concept stays Monday-anchored regardless of this setting:
+`rollups.py::week_start_monday` and the `period_rollup` table it populates, a week-`note`'s own
+`entity_id` (literally that week's Monday `local_date`), `race_readiness.py`'s weekly-distance/
+long-run windows, `email_reports.py`'s weekly report boundaries, and `sharing.py`'s recap/
+share-image calendar-grid generation. Only the frontend's own calendar-grid rendering and
+client-side weekly aggregates respect it:
+
+- **`dateUtils.ts`**: `mondayOf` (unchanged, still the Monday-only primitive several
+  backend-aligned call sites still need) gains a sibling `startOfWeek(date, weekStartDay)`;
+  `weekRange`/`monthGridWeeks` gain an optional `weekStartDay: "monday"|"sunday" = "monday"`
+  param — additive, not breaking, so every pre-existing call site keeps compiling and behaving
+  identically unless explicitly updated to pass the setting. New `weekdayLabels(weekStartDay)`
+  returns the rotated 7-label array, replacing `MonthView.tsx`'s previously hardcoded
+  `WEEKDAY_LABELS` constant. `isoWeekNumber` is deliberately untouched — an ISO 8601 week number
+  is a fixed international standard independent of display start-day (the same convention Google
+  Calendar's own "start of week" setting follows — the week's own `W36`-style label doesn't
+  change just because its visual first column does).
+- **`runningStats.ts::weekdayIndex`** gains the same optional param: Sunday-start is `getUTCDay()`
+  directly (already 0=Sun..6=Sat); Monday-start keeps the original `(day + 6) % 7`.
+  `yearStats.ts::busiestWeekStart` and `RunningStats.tsx`'s own calendar-heatmap column placement
+  (both a Month-view/All-time-view week-grid, and the year-rows all-time heatmap's own
+  Monday-bucketed weekly totals) are generalized the same way.
+- **`WeekView.tsx`'s own "Week stats" card was genuinely incompatible with a non-Monday
+  display**, not just cosmetically wrong: it read its totals from `useCalendarWeeks`, a
+  Monday-keyed `period_rollup` row — a row that simply doesn't exist for a Sunday-Saturday
+  window, since the backend only ever computes Monday-anchored weekly rollups. Fixed by
+  **`dateUtils.ts::sumDayRollups`**, which sums the same per-day `DayRollupOut` rows the view
+  already fetches via `useCalendar`, for whichever 7-day range is actually showing — numerically
+  identical to the old `period_rollup`-based total for the Monday default (same underlying daily
+  data, just summed client-side instead of server-side), but correct for any week-start setting.
+  This also removed `WeekView`'s own dependency on `useCalendarWeeks` entirely — one code path
+  instead of two, not just a special case for the new setting. `activity_elevation_gain_m` in the
+  summed result stays `null` (hiding its own stat tile, matching the pre-existing behavior) when
+  not one day in the range actually recorded any elevation channel, rather than silently reading
+  as a real `"0m"` — distinct from a real, summed flat week.
+- **`MonthView.tsx`'s per-row "Week" column had the identical `period_rollup` mismatch** and gets
+  the identical `sumDayRollups`-based fix — but additionally needed its own `useCalendar` fetch
+  widened from just the calendar month's own start/end to the full padded grid range (the same
+  range `usePlannedWorkoutsList`/`usePlannedRacesForRange` already used), since a first/last row
+  can span into the adjacent month and a real week total must include those days too, not just
+  the ones visible inside the current month.
+- **`eddington.ts::computeYearlyEddington`/`computeEddingtonBars` reach a real, different number,
+  not just a relabeling** — a deliberate exception to "week start day is display-only," since
+  distance-unit conversion (not week-start) is what changes here: both functions take a `unit`
+  param and convert each activity's `distance_m` to the display unit *before* running the
+  Eddington algorithm, because an Eddington number is genuinely defined in terms of a real
+  distance unit (VeloViewer and others offer the same km-vs-mile choice for cycling) — a
+  mile-preferring athlete's Eddington number is a real, different integer computed over mile
+  buckets, not the km-computed number with a different suffix.
+
+### Deliberately left on km internally (flagged, not silently incomplete)
+
+A few real per-sample chart pipelines and one backend-fixed bucket identity were left
+unconverted in this pass — not overlooked, but a materially bigger job than a display-preference
+sweep, since they'd mean touching chart axes/color scales or backend bucket semantics rather than
+swapping a formatted string:
+
+- **`RunningStats.tsx`'s own bar/scatter/heatmap chart data** (the Month/Year/All-time "Running"
+  card's distance-bucket bar chart, trailing-window line chart, and calendar heatmap) — every
+  bucket value is pre-computed in km by `runningStats.ts`'s own `distanceByDay`/`distanceByYear`/
+  `monthlyDistanceM`/`rollingDistanceKm`, feeding Recharts `dataKey`s, legend thresholds, and a
+  fixed heatmap color scale (`DAILY_HEATMAP_SCALE`) all keyed to km values.
+- **`ActivityCharts.tsx`'s per-second Pace/Speed/GAP stream panels** — `runningStats.ts::
+  streamSpeedValue` converts every raw `speed_mps` sample to min/km or km/h inline, per sample,
+  feeding a live per-second chart's own y-axis domain and panel `unit`/`formatValue` fields.
+- **`SplitsTable.tsx`'s per-km split table** — each row *is* a literal 1km segment
+  (`splits.ts::computeKmSplits`), a real segmentation choice, not a formatted value; a genuine
+  "mile splits" feature would need re-deriving splits at 1-mile intervals from the raw stream, a
+  different computation, not a display conversion.
+- **`ActivityFastestTable.tsx`'s own "Fastest N km runs" heading** stays km-labeled deliberately
+  — `distanceKmLabel` must match the backend's own comparison-pool bucket exactly
+  (`routers/activities.py::get_activity_context`'s `km_floor_m`, `floor(distance_m / 1000)`), so
+  relabeling it to miles while the underlying pool stays km-bucketed would show a wrong, mixed-unit
+  number. The per-row pace/speed *values* in that same table were still converted — only the
+  heading's own bucket identity is out of scope.
+- **`workoutSyntax.ts`/`workoutSteps.ts`/`splits.ts`** (the running workout text-syntax
+  parser/preview and per-km splits computation) are untouched entirely — a parser for a
+  km-denominated mini-language and a fixed-km segmentation, neither a display concern.

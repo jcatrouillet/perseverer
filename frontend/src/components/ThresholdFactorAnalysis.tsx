@@ -16,20 +16,11 @@ import type {
   ThresholdHrContributorOut,
   Vo2maxContributorOut,
 } from "../api/types";
+import { useDistanceFormat } from "../formatDistance";
 import { formatDurationHM } from "../runningStats";
 import { Icon, type IconName } from "./Icon";
 import { LoadingSpinner } from "./LoadingSpinner";
 import "../styles/insights.css";
-
-function formatDistanceKm(distanceM: number | null): string {
-  return distanceM == null ? "—" : `${(distanceM / 1000).toFixed(2)} km`;
-}
-
-function formatPaceSPerKm(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.round(seconds % 60);
-  return `${m}:${String(s).padStart(2, "0")} /km`;
-}
 
 function ActivityCard({
   href,
@@ -65,6 +56,7 @@ function ActivityCard({
 }
 
 function Vo2maxDrivingCard({ contributor }: { contributor: Vo2maxContributorOut }) {
+  const { formatDistance } = useDistanceFormat();
   return (
     <ActivityCard
       href={`/activities/${contributor.activity_id}`}
@@ -74,7 +66,7 @@ function Vo2maxDrivingCard({ contributor }: { contributor: Vo2maxContributorOut 
       badge="Sets your threshold pace"
       meta={
         `${contributor.local_date} · VDOT ${contributor.vdot.toFixed(1)} · ` +
-        `${formatDistanceKm(contributor.distance_m)}` +
+        (contributor.distance_m == null ? "—" : formatDistance(contributor.distance_m, 2)) +
         (contributor.duration_s != null ? ` · ${formatDurationHM(contributor.duration_s)}` : "")
       }
     />
@@ -86,6 +78,7 @@ function ThresholdHrContributorCard({
 }: {
   contributor: ThresholdHrContributorOut;
 }) {
+  const { formatDistance, formatPace } = useDistanceFormat();
   return (
     <ActivityCard
       href={`/activities/${contributor.activity_id}`}
@@ -95,8 +88,8 @@ function ThresholdHrContributorCard({
       badge={contributor.is_median ? "Sets the median" : undefined}
       meta={
         `${contributor.local_date} · ${contributor.avg_hr_bpm.toFixed(0)} bpm at ` +
-        `${formatPaceSPerKm(contributor.pace_s_per_km)} · ` +
-        `${formatDistanceKm(contributor.distance_m)}` +
+        `${formatPace(contributor.pace_s_per_km)} · ` +
+        (contributor.distance_m == null ? "—" : formatDistance(contributor.distance_m, 2)) +
         (contributor.duration_s != null ? ` · ${formatDurationHM(contributor.duration_s)}` : "")
       }
     />
@@ -104,6 +97,7 @@ function ThresholdHrContributorCard({
 }
 
 function MaxHrDrivingCard({ activity }: { activity: ActivityRefOut }) {
+  const { formatDistance } = useDistanceFormat();
   return (
     <ActivityCard
       href={`/activities/${activity.activity_id}`}
@@ -113,7 +107,7 @@ function MaxHrDrivingCard({ activity }: { activity: ActivityRefOut }) {
       badge="Set your max HR"
       meta={
         `${activity.local_date} · ${activity.sport} · ` +
-        `${formatDistanceKm(activity.distance_m)}` +
+        (activity.distance_m == null ? "—" : formatDistance(activity.distance_m, 2)) +
         (activity.duration_s != null ? ` · ${formatDurationHM(activity.duration_s)}` : "")
       }
     />
@@ -127,6 +121,7 @@ function ThresholdHrCard({
   title: string;
   breakdown: ThresholdHrBreakdownOut;
 }) {
+  const { formatPace } = useDistanceFormat();
   return (
     <section className="card">
       <h2>{title}</h2>
@@ -134,7 +129,7 @@ function ThresholdHrCard({
         <p className="chart-note">
           Currently {breakdown.threshold_hr_bpm.toFixed(0)} bpm
           {breakdown.reference_pace_s_per_km != null &&
-            ` at ${formatPaceSPerKm(breakdown.reference_pace_s_per_km)}`}
+            ` at ${formatPace(breakdown.reference_pace_s_per_km)}`}
           {breakdown.threshold_hr_source === "empirical"
             ? " -- the median across the qualifying runs below."
             : " -- a fallback percentage of max HR, not enough qualifying runs yet."}

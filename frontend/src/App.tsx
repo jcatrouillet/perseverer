@@ -7,6 +7,7 @@ import { LoadingSpinner } from "./components/LoadingSpinner";
 import { LogoutButton } from "./components/LogoutButton";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { isoDate } from "./dateUtils";
+import { usePersonalize, PersonalizeProvider } from "./PersonalizeContext";
 import { MonthView } from "./pages/calendar/MonthView";
 // Statically imported (not lazy) despite being routed elsewhere: MonthView/AllTimeView/YearView
 // already import CORE_METRICS/HRV_METRIC/WEIGHT_METRIC from here, so it's pulled into the main
@@ -57,11 +58,27 @@ const SettingsPage = lazy(() =>
   import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
 
-// The default "/" landing route -- the current week, not the current month: a week is the
-// granularity an athlete actually plans and reviews training at day-to-day, and it's what most
-// benefits from being one click away on login rather than requiring a nav click every time.
-function CurrentWeek() {
-  return <WeekView date={isoDate(new Date())} />;
+// The default "/" landing route -- the athlete's own Personalize "starting page" preference
+// (default: the current week, not the current month -- a week is the granularity an athlete
+// actually plans and reviews training at day-to-day, and it's what most benefits from being one
+// click away on login rather than requiring a nav click every time). Month/Day/Activities are
+// each still a real, valid choice; Day and Activities are normally lazy-loaded specifically to
+// keep them off the default route's own first paint (see the lazy() comment below) -- choosing
+// either here reintroduces that one Suspense flash for that one athlete, already covered by the
+// outer <Suspense> in App() below, same as every other lazy route.
+function DefaultLandingPage() {
+  const { default_view: defaultView } = usePersonalize();
+  const today = new Date();
+  if (defaultView === "month") {
+    return <MonthView year={today.getFullYear()} month={today.getMonth() + 1} />;
+  }
+  if (defaultView === "day") {
+    return <DayViewPage date={isoDate(today)} />;
+  }
+  if (defaultView === "activities") {
+    return <ActivityListPage />;
+  }
+  return <WeekView date={isoDate(today)} />;
 }
 
 function NavLink({
@@ -93,69 +110,71 @@ function NavLink({
 export function App() {
   return (
     <AuthGate>
-      <nav className="app-nav">
-        <div className="app-nav__links">
-          <NavLink href="/" icon="grid" matches={["/", "/calendar", "/day"]}>
-            Calendar
-          </NavLink>
-          <NavLink href="/activities" icon="list">
-            Activities
-          </NavLink>
-          <NavLink href="/fitness" icon="trend">
-            Fitness &amp; Form
-          </NavLink>
-          <NavLink href="/health" icon="heart">
-            Health
-          </NavLink>
-          <NavLink href="/map" icon="map">
-            Map
-          </NavLink>
-          <NavLink href="/insights" icon="bolt">
-            Insights
-          </NavLink>
-          <NavLink href="/exercises" icon="dumbbell">
-            Exercises
-          </NavLink>
-          <NavLink href="/settings" icon="settings">
-            Settings
-          </NavLink>
+      <PersonalizeProvider>
+        <nav className="app-nav">
+          <div className="app-nav__links">
+            <NavLink href="/" icon="grid" matches={["/", "/calendar", "/day"]}>
+              Calendar
+            </NavLink>
+            <NavLink href="/activities" icon="list">
+              Activities
+            </NavLink>
+            <NavLink href="/fitness" icon="trend">
+              Fitness &amp; Form
+            </NavLink>
+            <NavLink href="/health" icon="heart">
+              Health
+            </NavLink>
+            <NavLink href="/map" icon="map">
+              Map
+            </NavLink>
+            <NavLink href="/insights" icon="bolt">
+              Insights
+            </NavLink>
+            <NavLink href="/exercises" icon="dumbbell">
+              Exercises
+            </NavLink>
+            <NavLink href="/settings" icon="settings">
+              Settings
+            </NavLink>
+          </div>
+          <div className="app-nav__actions">
+            <ThemeToggle />
+            <LogoutButton />
+          </div>
+        </nav>
+        <div className="app-main">
+          <Suspense fallback={<LoadingSpinner size="lg" />}>
+            <Switch>
+              <Route path="/activities/:id">
+                {(params) => <ActivityDetailPage id={params.id} />}
+              </Route>
+              <Route path="/activities" component={ActivityListPage} />
+              <Route path="/fitness" component={FitnessPage} />
+              <Route path="/health" component={HealthPage} />
+              <Route path="/map" component={MapExplorerPage} />
+              <Route path="/insights" component={InsightsPage} />
+              <Route path="/exercises" component={ExerciseLibraryPage} />
+              <Route path="/settings" component={SettingsPage} />
+              <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>
+              <Route path="/calendar/week/:date">
+                {(params) => <WeekView date={params.date ?? isoDate(new Date())} />}
+              </Route>
+              <Route path="/calendar/all" component={AllTimeView} />
+              <Route path="/calendar/:year/:month">
+                {(params) => <MonthView year={Number(params.year)} month={Number(params.month)} />}
+              </Route>
+              <Route path="/calendar/:year">
+                {(params) => <YearView year={Number(params.year)} />}
+              </Route>
+              <Route path="/" component={DefaultLandingPage} />
+              <Route>
+                <p>Not found.</p>
+              </Route>
+            </Switch>
+          </Suspense>
         </div>
-        <div className="app-nav__actions">
-          <ThemeToggle />
-          <LogoutButton />
-        </div>
-      </nav>
-      <div className="app-main">
-        <Suspense fallback={<LoadingSpinner size="lg" />}>
-          <Switch>
-            <Route path="/activities/:id">
-              {(params) => <ActivityDetailPage id={params.id} />}
-            </Route>
-            <Route path="/activities" component={ActivityListPage} />
-            <Route path="/fitness" component={FitnessPage} />
-            <Route path="/health" component={HealthPage} />
-            <Route path="/map" component={MapExplorerPage} />
-            <Route path="/insights" component={InsightsPage} />
-            <Route path="/exercises" component={ExerciseLibraryPage} />
-            <Route path="/settings" component={SettingsPage} />
-            <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>
-            <Route path="/calendar/week/:date">
-              {(params) => <WeekView date={params.date ?? isoDate(new Date())} />}
-            </Route>
-            <Route path="/calendar/all" component={AllTimeView} />
-            <Route path="/calendar/:year/:month">
-              {(params) => <MonthView year={Number(params.year)} month={Number(params.month)} />}
-            </Route>
-            <Route path="/calendar/:year">
-              {(params) => <YearView year={Number(params.year)} />}
-            </Route>
-            <Route path="/" component={CurrentWeek} />
-            <Route>
-              <p>Not found.</p>
-            </Route>
-          </Switch>
-        </Suspense>
-      </div>
+      </PersonalizeProvider>
     </AuthGate>
   );
 }

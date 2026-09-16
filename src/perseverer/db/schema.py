@@ -87,6 +87,17 @@ athlete = Table(
     # here. Degrees, WGS84, matching route_geom's own lat/lon convention.
     Column("home_lat", Float, nullable=True),
     Column("home_lon", Float, nullable=True),
+    # Display preferences, settable via GET/PUT /settings/personalize -- pure presentation,
+    # never read by any backend computation (unlike the profile fields above, which feed
+    # formula fallbacks). week_start_day only affects the frontend's own calendar-grid/weekly-
+    # chart rendering; every backend weekly concept (period_rollup, week notes, race_readiness,
+    # email_reports, sharing.py's recap images) stays Monday-anchored regardless of this value.
+    # unit_preference already existed on this table (seed-time only, never previously read
+    # anywhere in the app) -- reused here as the actual km/miles display toggle rather than
+    # adding a redundant column.
+    Column("week_start_day", String, nullable=False, default="monday"),
+    Column("time_format", String, nullable=False, default="24h"),
+    Column("default_view", String, nullable=False, default="week"),
 )
 
 # An athlete's own configured HR training zones -- independent of the per-activity, device-

@@ -1,7 +1,7 @@
 // Pure computations over the FULL activity list (any sport) for the top-level "<year> stats"
 // section -- a general-purpose counterpart to runningStats.ts, which is sport-scoped.
 import type { ActivitySummary } from "./api/types";
-import { isoDate, mondayOf, parseIsoDate } from "./dateUtils";
+import { isoDate, parseIsoDate, startOfWeek, type WeekStartDay } from "./dateUtils";
 import { effectiveDurationS } from "./runningStats";
 
 export function totalElevationM(activities: ActivitySummary[]): number {
@@ -82,22 +82,27 @@ export function busiestYear(activities: ActivitySummary[]): number | null {
   return best;
 }
 
-/** The Monday-starting week (by ISO date) with the most activities -- the month-view analog of
- * busiestMonth. Ties resolve to the earliest week. */
-export function busiestWeekStart(activities: ActivitySummary[]): string | null {
+/** The week (by its own start date, per `weekStartDay`) with the most activities -- the
+ * month-view analog of busiestMonth. Ties resolve to the earliest week. Sharing.py's own
+ * `_busiest_week_start` mirrors this exactly for the (Monday-only, backend) share-page/recap
+ * generation -- this frontend-only `weekStartDay` param doesn't reach that code path. */
+export function busiestWeekStart(
+  activities: ActivitySummary[],
+  weekStartDay: WeekStartDay = "monday",
+): string | null {
   const counts = new Map<string, number>();
   for (const a of activities) {
     if (!a.local_date) continue;
-    const monday = isoDate(mondayOf(parseIsoDate(a.local_date)));
-    counts.set(monday, (counts.get(monday) ?? 0) + 1);
+    const weekStart = isoDate(startOfWeek(parseIsoDate(a.local_date), weekStartDay));
+    counts.set(weekStart, (counts.get(weekStart) ?? 0) + 1);
   }
   let best: string | null = null;
   let bestCount = 0;
-  for (const monday of Array.from(counts.keys()).sort()) {
-    const count = counts.get(monday)!;
+  for (const weekStart of Array.from(counts.keys()).sort()) {
+    const count = counts.get(weekStart)!;
     if (count > bestCount) {
       bestCount = count;
-      best = monday;
+      best = weekStart;
     }
   }
   return best;
