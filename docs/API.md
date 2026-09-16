@@ -341,8 +341,9 @@ knowledge of activities that hadn't happened yet.
 ### `GET /activities/{activity_id}/weather`
 
 Temperature/humidity range, feels-like temperature, wind speed/direction, a WMO weather code,
-dew point/solar radiation/cloud cover/apparent-temperature ranges, sunrise/sunset, and an
-hour-by-hour trajectory for the activity's time window, from Open-Meteo's historical archive,
+dew point/solar radiation/cloud cover/apparent-temperature ranges, total precipitation,
+sunrise/sunset, and an hour-by-hour trajectory for the activity's time window, from Open-Meteo's
+historical archive,
 cached forever once fetched. `available: false` when there's no GPS start point or the fetch came
 back empty. Everything besides the original temperature/humidity/weather-code/feels-like/wind
 fields is designed so this one response supports a full conditions judgement (heat stress in
@@ -1229,16 +1230,25 @@ superseded by reality as the date approaches. Requested in the athlete's own tim
 with the athlete's real local calendar dates rather than shifting by a day for roughly a third of
 the globe.
 
+`upcoming` additionally carries the same richer field set `GET /activities/{id}/weather` gathers
+for a past run (dew point, solar radiation, cloud cover, apparent temperature, precipitation,
+sunrise/sunset, an hour-by-hour trajectory), but for just the next 3 upcoming days
+(`weather_forecast.UPCOMING_DETAIL_DAYS`) — from a **second, independent** Open-Meteo request,
+so it can succeed or fail on its own regardless of `days`/`available` above. Unlike the activity
+endpoint's own `hourly[]` (UTC), every datetime field under `upcoming` is the athlete's own local
+time (see `ForecastDayDetailOut` below).
+
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
-| `days` | query | optional | integer, 1-16 | Defaults to 16 (Open-Meteo's own cap). |
+| `days` | query | optional | integer, 1-16 | Defaults to 16 (Open-Meteo's own cap). Only affects `days` below — `upcoming` always covers its own fixed 3-day window. |
 
 **Response `200`:** `WeatherForecastOut`:
 
 | Field | Type | Description |
 |---|---|---|
-| `available` | boolean | `false` — never a fabricated forecast — when the athlete hasn't set a home location (`PUT /settings/profile`'s `home_lat`/`home_lon`) or the Open-Meteo fetch failed. |
+| `available` | boolean | `false` — never a fabricated forecast — when the athlete hasn't set a home location (`PUT /settings/profile`'s `home_lat`/`home_lon`) or the coarse-forecast Open-Meteo fetch failed. |
 | `days` | `ForecastDayOut[]` | Empty when `available` is `false`. |
+| `upcoming` | `ForecastDayDetailOut[]` | The near-term rich-conditions detail, from a separate Open-Meteo request than `days`. `[]` whenever that request fails or returns nothing usable — independent of `available`/`days`, in either direction. |
 
 `ForecastDayOut`:
 
@@ -1248,6 +1258,40 @@ the globe.
 | `weather_code` | integer | WMO weather code (same taxonomy `GET /activities/{id}/weather`'s `weather_code` uses) — icon/label mapping is a frontend presentation concern, not modeled here. |
 | `temperature_min_c` | number | |
 | `temperature_max_c` | number | |
+
+`ForecastDayDetailOut` — the same richer field set `ActivityWeatherOut` below collects for a
+past run's own window, gathered instead for one upcoming calendar day. No scalar
+`feels_like_c`/`wind_speed_mps`/`wind_direction_deg` here (unlike `ActivityWeatherOut`) — a whole
+day has no single "activity start" hour to anchor one representative reading against, so
+`hourly` carries per-hour wind/apparent-temperature instead, letting a consumer pick whichever
+hour matches their own planned time:
+
+| Field | Type | Description |
+|---|---|---|
+| `local_date` | string (date) | The athlete's own local date. |
+| `weather_code` | integer, nullable | |
+| `temperature_min_c`, `temperature_max_c` | number, nullable | |
+| `humidity_min_pct`, `humidity_max_pct` | number, nullable | |
+| `dew_point_min_c`, `dew_point_max_c` | number, nullable | |
+| `solar_radiation_max_wm2`, `solar_radiation_mean_wm2` | number, nullable | |
+| `cloud_cover_min_pct`, `cloud_cover_max_pct` | number, nullable | |
+| `apparent_temperature_min_c`, `apparent_temperature_max_c` | number, nullable | |
+| `precipitation_mm` | number, nullable | A day-total **sum**, not a range — `0.0` is a real reading (no rain forecast), `null` means no usable precipitation data at all. |
+| `sunrise_local`, `sunset_local` | string (date-time), nullable | The athlete's own local time, not UTC. |
+| `hourly` | `ForecastHourlyPointOut[]` | Defaults to `[]`. |
+
+`ForecastHourlyPointOut` — one hourly bucket of a single upcoming day; `time_local` is naive, in
+the athlete's own local time, **not** UTC (unlike `ActivityWeatherHourlyPointOut`'s own
+`time_utc` below):
+
+| Field | Type | Description |
+|---|---|---|
+| `time_local` | string (date-time) | |
+| `temperature_c`, `apparent_temperature_c`, `dew_point_c` | number, nullable | |
+| `relative_humidity_pct` | number, nullable | |
+| `shortwave_radiation_wm2`, `cloud_cover_pct` | number, nullable | |
+| `wind_speed_mps`, `wind_direction_deg` | number, nullable | |
+| `precipitation_mm` | number, nullable | |
 
 **`422`** — `days` outside 1-16.
 
@@ -1825,6 +1869,7 @@ existed (until a backfill re-fetches it, see docs/DATA_DICTIONARY.md's own Weath
 | `solar_radiation_max_wm2` / `solar_radiation_mean_wm2` | number, nullable | Shortwave radiation (W/m²) — direct-sun load. Sustained readings past ~800 are severe. |
 | `cloud_cover_min_pct` / `cloud_cover_max_pct` | number, nullable | Cloud cover (%). |
 | `apparent_temperature_min_c` / `apparent_temperature_max_c` | number, nullable | Full-window range on apparent temperature — a materially different signal than the single start-of-run `feels_like_c` above, since apparent temperature sitting notably below air temperature (dry air/wind doing real evaporative-cooling work) is invisible in one value. |
+| `precipitation_mm` | number, nullable | A window **sum**, not a range — "how much rain fell during the run." `0.0` is a real reading (no rain); `null` means no usable precipitation data for this window at all. |
 | `sunrise_utc` / `sunset_utc` | string(date-time), nullable | The daily entry matching the activity's own start date — not a range. |
 | `sunset_during_run` | boolean, nullable | Whether `sunset_utc` falls inside `[start, end]` of the activity — computed at request time, never stored. `null` only when `sunset_utc` itself is `null` (nothing to judge against). |
 | `hourly` | array\<`ActivityWeatherHourlyPointOut`\> | The hour-by-hour trajectory across the activity's window — the field that actually replaces a consumer's own second Open-Meteo call. `[]` (never omitted) when nothing was ever archived for this activity or no hour overlaps the window. |
@@ -1849,6 +1894,7 @@ one hour's reading.
 | `cloud_cover_pct` | number, nullable | |
 | `wind_speed_mps` | number, nullable | |
 | `wind_direction_deg` | number, nullable | Degrees, meteorological convention — the direction the wind is blowing *from*. |
+| `precipitation_mm` | number, nullable | This one hour's own reading (not a sum — that's the day/window-level `precipitation_mm` above). |
 
 ### ActivityLocationOut
 
@@ -2163,8 +2209,10 @@ above. `ShareLinkOut`: `id` (int), `url` (string, the full public share URL). `R
 `local_date` (string, date), `id` (integer), `sport` (string), `name` (string, nullable),
 `scheduled_time` (string, nullable — `"HH:MM"`), `push_status` (`draft`/`pushed`/`push_failed`),
 `completed_at` (string, nullable, ISO datetime — the athlete's own manual "I did this" marker,
-`null` until marked; see `POST .../{workout_id}/complete` above. Used by the Week view's own
-sport-by-sport compliance stat).
+`null` until marked; see `POST .../{workout_id}/complete` above), `matched_activity_id` (string,
+nullable — a same-day, matching-sport recorded activity, if one exists; computed at read time,
+never stored, never overriding `completed_at`). The Week view's own sport-by-sport compliance
+stat counts a workout as done when either field is non-null.
 
 ### PlannedWorkoutOut
 
@@ -2188,6 +2236,14 @@ always addressed by id rather than by date:
 | `push_error` | string, nullable | |
 | `garmin_workout_id` | integer, nullable | |
 | `garmin_scheduled_at` | string (date-time), nullable | |
+| `completed_at` | string (date-time), nullable | The athlete's own manual "I did this" marker, set/cleared via `POST .../{workout_id}/complete`/`.../uncomplete`. `null` until marked. |
+| `matched_activity_id` | string, nullable | A same-day, matching-sport recorded activity, if one exists. Computed at read time, never stored, never overriding `completed_at` — a companion "this looks done" signal for a workout already confirmed by a synced Garmin activity. |
+| `estimated_distance_m`, `estimated_load` | number, nullable | `running` only — always `null` for `yoga`/`bouldering`/`hiit`/`strength_training`, and for `running` itself until the athlete configures a running-load threshold pace (`estimated_load` only). |
+| `segments` | array\<`PlannedWorkoutSegmentOut`\> | Defaults to `[]`. Repeat-expanded (unlike `steps`), `running` only. |
+
+### PlannedWorkoutSegmentOut
+
+`duration_s` (number), `zone` (integer, nullable), `intensity_factor` (number, nullable).
 
 ### PlannedWorkoutStepOut
 

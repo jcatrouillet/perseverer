@@ -1081,22 +1081,50 @@ section (`email_reports.py`).
 
 **Compliance, sport by sport (Week view)**: a "Compliance" card on `WeekView.tsx`, one stat tile
 per sport with at least one scheduled workout in the viewed week -- `{Sport} compliance`, the
-percentage of that sport's scheduled workouts marked `completed_at` (e.g. "Running compliance:
-67%", meta "2 of 3 done"). Count-based, not distance- or load-weighted: `completed_at` is the
-athlete's own manual "I did this" marker with no link to any recorded `activity` row (see this
-section's own `completed_at` bullet above -- there is no automatic planned-vs-recorded matching
-in this codebase at all), and a plain count is the one signal every sport tier carries
-identically, since `planned_workout_stats.py`'s distance/load estimate exists only for running
-(`estimated_distance_m`/`estimated_load` are always `null` for yoga/bouldering/hiit/
-strength_training). Only workouts with `local_date <= today` count toward either the numerator
-or denominator -- a workout later in the same week that hasn't happened yet would otherwise drag
-down a week that's still in progress; a fully future week (every scheduled date past today)
-correctly produces no compliance entries at all, and the whole card is omitted (not shown empty)
-in that case. `GET /planned-workouts?start_date=&end_date=` (`PlannedWorkoutListItemOut`, the
-same summary-list endpoint the Month view's own per-day grid indicator already uses) gained one
-more scalar field, `completed_at`, to support this -- the one bulk-range call the Week view needs
-for this, rather than the per-day `usePlannedWorkoutsForDate` hook its own `WeekDayPlannedWorkouts`
-sub-component already calls seven times for full per-day workout detail.
+percentage of that sport's scheduled workouts counted as done (e.g. "Running compliance: 67%",
+meta "2 of 3 done"). Count-based, not distance- or load-weighted: a plain count is the one signal
+every sport tier carries identically, since `planned_workout_stats.py`'s distance/load estimate
+exists only for running (`estimated_distance_m`/`estimated_load` are always `null` for
+yoga/bouldering/hiit/strength_training). Only workouts with `local_date <= today` count toward
+either the numerator or denominator -- a workout later in the same week that hasn't happened yet
+would otherwise drag down a week that's still in progress; a fully future week (every scheduled
+date past today) correctly produces no compliance entries at all, and the whole card is omitted
+(not shown empty) in that case. `GET /planned-workouts?start_date=&end_date=`
+(`PlannedWorkoutListItemOut`, the same summary-list endpoint the Month view's own per-day grid
+indicator already uses) carries two fields for this: `completed_at` and `matched_activity_id` --
+the one bulk-range call the Week view needs, rather than the per-day `usePlannedWorkoutsForDate`
+hook its own `WeekDayPlannedWorkouts` sub-component already calls seven times for full per-day
+workout detail.
+
+"Done" is `completed_at != null OR matched_activity_id != null` -- two independent signals, not
+one. `completed_at` stays exactly what it always was: the athlete's own manual "I did this"
+marker, set/cleared only via `POST .../complete`/`.../uncomplete`, with no link to any `activity`
+row stored on the `planned_workout` row itself (`db/schema.py::planned_workout`'s own docstring).
+`matched_activity_id` (`planned_workouts.py::matching_activity_id`, backed by
+`activities_by_local_date` -- one query for the whole requested date range, matched in Python
+against every planned workout in it, the same "fetch once" precedent `race_readiness.py`'s own
+weekly queries already establish) is a second, read-time-only, **never persisted** signal added
+after the first version's manual-only design turned out to be real friction: a workout Garmin had
+already recorded still showed as not-done until the athlete separately clicked "Mark as done."
+`activity_matches_planned_sport` decides whether a same-day recorded activity's own
+`(sport, sub_sport)` plausibly satisfies a planned workout's sport tier -- not a literal
+`sport == sport` check, since several tiers are recorded under FIT's generic `"training"`
+container sport with the real discipline only in `sub_sport` (confirmed against
+`garmin_activity_summary.py`'s own `GARMIN_ACTIVITY_TYPE_MAP`: yoga -> `(training, yoga)`,
+strength_training -> `(training, strength_training)`, bouldering -> `(rock_climbing, bouldering)`)
+-- running instead reuses `merge/engine.py`'s own `sport_family()` so a trail/treadmill/track run
+still satisfies a plain "running" plan, and hiit/strength_training each accept either shape (a
+literal top-level sport, or the `"training"` container with a matching `sub_sport`), since real
+activities of both shapes exist in this project's own data. Never written back to
+`completed_at`, and never overrides what the athlete explicitly set there -- a manual "not done"
+still reads as not-done for the toggle itself (see the frontend note below), even while the
+broader "is this done" question the Compliance card asks says otherwise. The Day/Month view's own
+"Done" badge (`ScheduleWorkoutForm.tsx`) reflects the same combined signal, labeled plain "Done"
+when `completed_at` is set and "Done (via Garmin)" (with an explanatory tooltip) when only the
+match is present -- but the "Mark as done"/"Mark as not done" toggle button itself still only
+ever reads `completed_at` alone: basing its own label on the combined signal would let a
+matched-only workout's button read "Mark as not done" while actually being unable to clear the
+match itself, a promise the click couldn't keep.
 
 ## Calendar feed: publishing planned_workout to Google Calendar
 
@@ -1598,6 +1626,21 @@ metric-key/API-shape reference.
   with zero further work, so a second run over an already-backfilled athlete costs one archive
   read per activity and no network calls at all. Run once after upgrading past this change; every
   activity ingested from then on is fetched with the full field set from the start.
+- **`precipitation_mm`** (added later still, same `_OPTIONAL_METRIC_KEYS`/backfill treatment as
+  above): a window **SUM**, not a min/max range like every other field in this section — "how
+  much rain fell during the run" is a total, the same way a runner would describe it, not a
+  range. `0.0` is a real, meaningful reading (no rain) and stays distinct from `None`
+  (Open-Meteo's `precipitation` array is absent entirely, or every overlapping hour's reading is
+  null) — summing an empty list would silently collapse those two very different cases into the
+  same `0.0`, so the window list is checked for emptiness before summing, the same guard the
+  solar-radiation mean already uses for the identical reason. Request shape: `hourly=` gained
+  `precipitation` alongside the existing fields; `hourly[]` gained a matching
+  `precipitation_mm` per bucket. `weather_backfill.py::_NEW_FIELD_MARKER` moved from
+  `dew_point_2m` to `precipitation` when this field shipped — a response carrying `precipitation`
+  was necessarily fetched under a request that already included `dew_point_2m` too, since both
+  land in the same joint `hourly=` param list — so re-running `sync backfill-weather-fields` after
+  this change does one more real pass over every activity, even ones an earlier pass already
+  backfilled under the prior marker, rather than a no-op.
 
 ## Weather forecast for the Week view (weather_forecast.py)
 
@@ -1662,3 +1705,55 @@ full reasoning; this section is the schema/API-shape reference.
   own row directly under that day's date label (`week-columns__header`), deliberately not folded
   into that header's own flex-wrap row alongside the sleep chip. A past day, or one beyond
   Open-Meteo's forecast horizon, simply has no matching entry and renders nothing.
+
+### Revision: near-term rich conditions detail (`upcoming`)
+
+The same richer field set the Weather section above gathers for a past activity's own window,
+gathered instead for the athlete's own next `weather_forecast.UPCOMING_DETAIL_DAYS` (3) days —
+dew point, shortwave radiation, cloud cover, a full apparent-temperature range, precipitation,
+sunrise/sunset, and an hour-by-hour trajectory — so a coaching agent reading `GET
+/weather/forecast` can judge tomorrow's conditions in the same bpm/pace terms it already judges a
+past run in, without a second Open-Meteo call.
+
+- **A second, independent Open-Meteo request** (`weather_forecast.py::fetch_upcoming_conditions`),
+  not an extension of the coarse `days` forecast above: `forecast_days` controls both the `daily`
+  and `hourly` ranges together in one request, and the coarse forecast's own simple icon+
+  temperature columns need up to 16 days while the rich hourly detail is only fetched for the
+  near-term handful of days it stays meaningfully accurate for — combining the two would mean
+  fetching 16 days of mostly-unused hourly data just to serve 3 days' worth to any consumer that
+  wants it, or capping the coarse forecast at 3 days and breaking the Week view's own week-long
+  display. The two fetches can succeed or fail independently: `WeatherForecastOut.upcoming` is
+  `[]` (never fabricated) whenever this second request fails or returns nothing usable, regardless
+  of whether `available`/`days` above succeeded, and vice versa.
+- **Request shape**: `daily=weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset` and
+  `hourly=temperature_2m,relative_humidity_2m,apparent_temperature,dew_point_2m,
+  shortwave_radiation,cloud_cover,precipitation,wind_speed_10m,wind_direction_10m` (the same
+  hourly field set `weather.py`'s own historical request uses), `wind_speed_unit=ms` for the same
+  SI-units reason, `timezone` the athlete's own IANA zone (same as the coarse forecast).
+- **Every datetime field is local, not UTC** — `ForecastDayDetail.local_date`, `sunrise_local`/
+  `sunset_local`, and each `ForecastHourlyPoint.time_local` are naive values in the athlete's own
+  local time (confirmed live, same as the coarse forecast's own `daily` dates), never UTC; the
+  explicit `_local` suffix (vs. `weather.py`'s own `_utc` fields) says so rather than leaving the
+  distinction implicit. `parse_upcoming_conditions_response` groups every hourly bucket by the
+  calendar date its own local timestamp falls on (a cheap string-prefix match against `daily.
+  time`'s identical `"YYYY-MM-DD"` spelling), then reduces each day's own group to the same
+  min/max/sum aggregates `weather.py::parse_open_meteo_response` uses for an activity's window.
+- **No scalar feels_like_c/wind_speed_mps/wind_direction_deg** on `ForecastDayDetail`, unlike
+  `ActivityWeatherOut` — a whole day has no single "activity start" hour to anchor one
+  representative reading against the way a run's own start time does, so rather than fabricate an
+  arbitrary representative hour, those three fields simply don't exist at the day level; `hourly`
+  carries per-hour wind/apparent-temperature instead, letting a consumer pick whichever hour
+  matches their own planned time.
+- **`WeatherForecastOut.upcoming: list[ForecastDayDetailOut]`** (`api/schemas/weather_forecast.
+  py`): `local_date`, `weather_code`, `temperature_min_c`/`max_c`, `humidity_min_pct`/`max_pct`,
+  `dew_point_min_c`/`max_c`, `solar_radiation_max_wm2`/`mean_wm2`, `cloud_cover_min_pct`/`max_pct`,
+  `apparent_temperature_min_c`/`max_c`, `precipitation_mm` (a day-total sum, `0.0` a real reading
+  distinct from `None`, same convention as the activity-weather section above), `sunrise_local`/
+  `sunset_local`, and `hourly: list[ForecastHourlyPointOut]` (`time_local`, `temperature_c`,
+  `apparent_temperature_c`, `dew_point_c`, `relative_humidity_pct`, `shortwave_radiation_wm2`,
+  `cloud_cover_pct`, `wind_speed_mps`, `wind_direction_deg`, `precipitation_mm`).
+- **Backend-only, matching `ActivityWeatherOut.hourly[]`'s own precedent**: no Week view UI change
+  ships alongside this. `hourly[]` on a past activity's own weather already has zero frontend
+  rendering in this codebase (verified: `ActivityWeather.tsx` never reads it) — it exists purely
+  as an API/MCP-consumer field for exactly this kind of "judge conditions without a second vendor
+  call" use case, and `upcoming` follows the identical posture.

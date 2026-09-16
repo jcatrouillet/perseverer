@@ -686,21 +686,43 @@ because you don't recognize it — stop, that's the bug.
   **Compliance, sport by sport (Week view)**: a new "Compliance" card on `WeekView.tsx`, one
   `StatTile` per sport with at least one scheduled workout that week — `{sport} compliance`,
   e.g. `Running compliance: 67% (2 of 3 done)`. Deliberately count-based (completed workouts /
-  scheduled workouts), not distance- or load-weighted: `completed_at` is this app's own
-  explicit, athlete-asserted "I did this" marker (see `planned_workout`'s own docstring — there
-  is **no automatic planned-vs-recorded-activity matching at all**, by design), and count is the
-  one signal every sport tier carries identically, since `planned_workout_stats.py`'s own
-  distance/load estimate is running-only (`estimated_distance_m`/`estimated_load` are always
-  null for yoga/bouldering/hiit/strength_training). Scoped to `local_date <= today` (the
-  browser-local date `WeekView.tsx` already computes for its "today" column highlight) so a
-  workout later in the same week that hasn't happened yet doesn't drag down a week still in
-  progress — a fully future week (every date beyond today) naturally produces no compliance
-  entries at all, needing no separate case, and the whole card is omitted, not shown empty, in
-  that case. Backed by `GET /planned-workouts?start_date=&end_date=`
-  (`PlannedWorkoutListItemOut`, the same summary-list endpoint the Month view's own per-day grid
-  indicator already uses) gaining one more scalar field, `completed_at` — the one bulk-range call
-  this needs, rather than the per-day `usePlannedWorkoutsForDate` hook `WeekDayPlannedWorkouts`
-  calls 7 times for its own full-detail per-day rendering.
+  scheduled workouts), not distance- or load-weighted: count is the one signal every sport tier
+  carries identically, since `planned_workout_stats.py`'s own distance/load estimate is
+  running-only (`estimated_distance_m`/`estimated_load` are always null for yoga/bouldering/
+  hiit/strength_training). Scoped to `local_date <= today` (the browser-local date `WeekView.tsx`
+  already computes for its "today" column highlight) so a workout later in the same week that
+  hasn't happened yet doesn't drag down a week still in progress — a fully future week (every
+  date beyond today) naturally produces no compliance entries at all, needing no separate case,
+  and the whole card is omitted, not shown empty, in that case. Backed by `GET /planned-workouts?
+  start_date=&end_date=` (`PlannedWorkoutListItemOut`, the same summary-list endpoint the Month
+  view's own per-day grid indicator already uses) gaining two more fields, `completed_at` and
+  `matched_activity_id` — the one bulk-range call this needs, rather than the per-day
+  `usePlannedWorkoutsForDate` hook `WeekDayPlannedWorkouts` calls 7 times for its own full-detail
+  per-day rendering.
+  **Revision: matched against recorded activities, not manual-only** — the first version counted
+  only `completed_at` (the athlete's own explicit "I did this" marker, still the only thing
+  `POST .../complete`/`.../uncomplete` ever write), which meant a workout Garmin had already
+  confirmed still showed as not-done until the athlete separately clicked "Mark as done" — real
+  friction reported directly against a synced yoga session that already existed as a recorded
+  `activity` row. `planned_workouts.py::matching_activity_id` (backed by
+  `activities_by_local_date`, one query per request for the whole date range, not one per
+  workout — the same "fetch once, match in Python" precedent `race_readiness.py`'s own weekly
+  queries already establish) now supplies a second, read-time-only, never-persisted signal:
+  whether a same-day recorded activity's own `(sport, sub_sport)` plausibly satisfies the planned
+  workout's sport tier (`activity_matches_planned_sport` — running via `merge/engine.py`'s own
+  `sport_family()`, so a trail/treadmill run still satisfies a plain "running" plan; yoga/
+  strength_training/hiit each checked against FIT's generic `"training"` container sport with the
+  real discipline in `sub_sport`, confirmed against `garmin_activity_summary.py`'s own
+  `GARMIN_ACTIVITY_TYPE_MAP`, alongside whichever literal top-level sport that discipline can also
+  arrive as). Exposed as `matched_activity_id` (`PlannedWorkoutListItemOut`/`PlannedWorkoutOut`),
+  never written back to `completed_at` and never overriding what the athlete explicitly set there
+  — `db/schema.py::planned_workout`'s own docstring documents the distinction. Compliance (and
+  the Day/Month view's own "Done" badge, now labeled "Done (via Garmin)" when only the match is
+  present, with a tooltip explaining why) treats `completed_at != null OR matched_activity_id !=
+  null` as done; the "Mark as done"/"Mark as not done" toggle itself still only ever reads
+  `completed_at` alone, deliberately — basing it on the combined signal would let a matched-only
+  workout's button read "Mark as not done" while actually being unable to clear the match, a
+  promise the click can't keep.
 - **Exercise library page (`/exercises`, `ExerciseLibraryPage.tsx`)**: a browsable reference for
   every exercise the hiit/strength_training picker's catalog supports — 47 categories collapsed
   by default (native `<details>`, same convention as `ActivitySourcesPanel.tsx`'s own "Why these
@@ -1116,9 +1138,23 @@ because you don't recognize it — stop, that's the bug.
   getting real values onto it needs `weather_backfill.py::backfill_weather_fields` (CLI: `sync
   backfill-weather-fields`), which force-refreshes it via `get_or_fetch_activity_weather
   (force_refresh=True)` — idempotent and cheap to re-run by checking whether an activity's own
-  archived response already has a `dew_point_2m` key in its `hourly` block (a structural "was
-  this fetched under the newer request" marker, independent of whether any particular hour's
-  reading came back non-null) before ever calling Open-Meteo for it again.
+  archived response already has `weather_backfill.py::_NEW_FIELD_MARKER`'s own key in its
+  `hourly` block (a structural "was this fetched under the newer request" marker, independent of
+  whether any particular hour's reading came back non-null) before ever calling Open-Meteo for it
+  again. **`precipitation_mm`** (added later still) is a window **sum**, not a min/max range like
+  every field above — "how much rain fell during the run" is a total, the same way a runner would
+  describe it; `0.0` is a real, meaningful reading (no rain) and stays distinct from `None`
+  (Open-Meteo's response lacks the `precipitation` array entirely, or every overlapping hour's
+  reading is null) — summing an empty list would silently collapse those two very different cases
+  into the same `0.0`, so the window list is checked for emptiness first, same guard the
+  solar-radiation mean already uses. `_NEW_FIELD_MARKER` moved from `dew_point_2m` to
+  `precipitation` when this field was added (a response carrying `precipitation` was necessarily
+  fetched under a request that already included `dew_point_2m` too, since both land in the same
+  joint `hourly=` param list) — moving the marker forward like this means re-running the backfill
+  command after a field is added does one more real pass over every activity, even ones an
+  earlier pass already backfilled for the prior marker, the correct (if slightly redundant)
+  behavior since there's no cheaper way to know which activities are missing only the newest
+  field without checking for it directly.
 - **Weather forecast for the Week view, deliberately un-cached
   (`weather_forecast.py`, `GET /weather/forecast`)**: `weather.py` above is entirely
   past-activity weather, keyed to that one activity's own GPS start point — there was no concept
@@ -1152,6 +1188,31 @@ because you don't recognize it — stop, that's the bug.
   entries are dates in the *requested* timezone, so a UTC request for an athlete west of
   Greenwich returns "today" as already tomorrow locally for several hours a day, misaligning the
   forecast's own day boundaries against the Week view's local-date grouping by exactly one day.
+  **Revision: the same richer conditions `weather.py` gathers for a past run, for the next
+  `UPCOMING_DETAIL_DAYS` (3) upcoming days** (`fetch_upcoming_conditions`/`ForecastDayDetail`,
+  `WeatherForecastOut.upcoming`) — dew point, shortwave radiation, cloud cover, a full
+  apparent-temperature range, precipitation, sunrise/sunset, and an hour-by-hour trajectory, so a
+  coaching agent reading this endpoint can judge tomorrow's conditions in the same bpm/pace terms
+  it already judges a past run in, without a second Open-Meteo call. Deliberately a **second,
+  independent** Open-Meteo request from the coarse `days` forecast above, not an extension of it
+  — `forecast_days` controls both the `daily` and `hourly` ranges together in one request, and the
+  Week view's own simple icon+temperature columns need up to 16 days while the rich hourly detail
+  is only fetched for the near-term handful of days it stays meaningfully accurate for; combining
+  them would mean fetching 16 days of mostly-unused hourly data, or capping the coarse forecast at
+  3 days and breaking the Week view. The two fetches can succeed/fail independently — `upcoming`
+  is `[]` (never fabricated) whenever its own request fails or returns nothing usable, regardless
+  of whether `available`/`days` above succeeded, and vice versa. One further departure from
+  `weather.py`'s own per-activity shape: there's no single "activity start" hour to anchor a
+  representative wind/feels-like reading against the way `feels_like_c`/`wind_speed_mps`/
+  `wind_direction_deg` do for a run, so `ForecastDayDetail` has no scalar equivalents for those
+  three fields at all — `hourly` carries per-hour wind/apparent-temperature instead, letting a
+  consumer pick whichever hour matches their own planned time, honest about what a day-level
+  forecast actually is rather than fabricating one representative hour. Every datetime field
+  (`local_date`, `sunrise_local`/`sunset_local`, each `ForecastHourlyPoint.time_local`) is the
+  athlete's own local time, not UTC — confirmed live, same as the coarse forecast's own `daily`
+  dates — with an explicit `_local` suffix (vs. `weather.py`'s own `_utc` fields) rather than
+  leaving the distinction implicit. Backend-only for now, matching `ActivityWeatherOut.hourly[]`'s
+  own precedent of a rich field with zero frontend rendering — no Week view UI change.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip
