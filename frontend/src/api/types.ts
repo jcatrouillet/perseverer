@@ -678,6 +678,11 @@ export interface PlannedWorkoutOut {
   // .../uncomplete -- independent of push_status (a workout can be completed with no Garmin
   // record of it at all).
   completed_at: string | null;
+  // A same-day, matching-sport recorded activity, if one exists -- computed at read time
+  // (backend: planned_workouts.py::matching_activity_id), never stored, never overriding
+  // completed_at. A companion "this looks done" signal for a workout the athlete never
+  // explicitly marked complete, e.g. one already confirmed by a synced Garmin activity.
+  matched_activity_id: string | null;
   // running only (planned_workout_stats.py) -- always null/empty for every other sport, and for
   // running itself when the athlete hasn't configured a running-load threshold pace yet
   // (estimated_load only; distance/duration/segments still populate from the steps alone).
@@ -694,6 +699,9 @@ export interface PlannedWorkoutListItemOut {
   scheduled_time: string | null;
   push_status: "draft" | "pushed" | "push_failed";
   completed_at: string | null;
+  // A same-day, matching-sport recorded activity, if one exists -- computed at read time, never
+  // stored, never overriding completed_at. See PlannedWorkoutOut.matched_activity_id.
+  matched_activity_id: string | null;
 }
 
 export interface RecurringWorkoutOut {

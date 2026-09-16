@@ -153,6 +153,11 @@ class PlannedWorkoutOut(BaseModel):
     # .../uncomplete -- independent of push_status, see db/schema.py::planned_workout's own
     # docstring for why (a workout can be completed with no Garmin record of it at all).
     completed_at: str | None = None
+    # A same-day, matching-sport recorded activity, if one exists -- computed at read time
+    # (planned_workouts.py::matching_activity_id), never stored, never overriding completed_at.
+    # A companion "this looks done" signal for a workout the athlete never explicitly marked
+    # complete, e.g. one already confirmed by a synced Garmin activity.
+    matched_activity_id: str | None = None
     # running only (planned_workout_stats.py) -- always null/empty for every other sport, and
     # for running itself when the athlete hasn't configured a running-load threshold pace yet
     # (estimated_load only; distance/duration/segments still populate from the steps alone).
@@ -164,9 +169,9 @@ class PlannedWorkoutOut(BaseModel):
 class PlannedWorkoutListItemOut(BaseModel):
     """One row of GET /planned-workouts?start_date=&end_date= -- just enough for the calendar
     grid's own per-day indicator (mirrors day_rollup's own summary-row shape for GET /calendar)
-    and the Week view's own sport-by-sport compliance stat (completed_at vs the total scheduled,
-    per sport -- see WeekView.tsx); fetch GET /planned-workouts/by-date/{date} for the full
-    workout(s) once a day is expanded."""
+    and the Week view's own sport-by-sport compliance stat (completed_at OR matched_activity_id
+    vs the total scheduled, per sport -- see WeekView.tsx); fetch GET /planned-workouts/by-date/
+    {date} for the full workout(s) once a day is expanded."""
 
     local_date: str
     id: int
@@ -175,6 +180,8 @@ class PlannedWorkoutListItemOut(BaseModel):
     scheduled_time: str | None
     push_status: str
     completed_at: str | None
+    # See PlannedWorkoutOut.matched_activity_id -- same read-time, never-stored signal.
+    matched_activity_id: str | None = None
 
 
 class RecurringWorkoutIn(BaseModel):

@@ -45,7 +45,9 @@ from perseverer.db.schema import (
 from perseverer.planned_workout_stats import WorkoutEstimate, estimate_workout
 from perseverer.planned_workouts import (
     PlannedStepLike,
+    activities_by_local_date,
     compute_recurrence_dates,
+    matching_activity_id,
     push_planned_workout,
     save_planned_workout,
 )
@@ -80,6 +82,7 @@ def list_planned_workouts(
         )
         .order_by(planned_workout.c.local_date)
     ).fetchall()
+    activities = activities_by_local_date(conn, athlete_id, start_date, end_date)
     return [
         PlannedWorkoutListItemOut(
             local_date=r.local_date,
@@ -89,6 +92,7 @@ def list_planned_workouts(
             scheduled_time=r.scheduled_time,
             push_status=r.push_status,
             completed_at=r.completed_at.isoformat() if r.completed_at else None,
+            matched_activity_id=matching_activity_id(activities.get(r.local_date, []), r.sport),
         )
         for r in rows
     ]
@@ -176,6 +180,7 @@ def _to_out(
     steps: list[Row],  # type: ignore[type-arg]
     parse_errors: list[ParseError],
     estimate: WorkoutEstimate | None = None,
+    matched_activity_id: str | None = None,
 ) -> PlannedWorkoutOut:
     return PlannedWorkoutOut(
         available=True,
@@ -218,6 +223,7 @@ def _to_out(
         if row.garmin_scheduled_at
         else None,
         completed_at=row.completed_at.isoformat() if row.completed_at else None,
+        matched_activity_id=matched_activity_id,
         estimated_distance_m=estimate.distance_m if estimate is not None else None,
         estimated_load=estimate.load if estimate is not None else None,
         segments=[
@@ -261,7 +267,9 @@ def _fetch_full_out(conn: Connection, athlete_id: str, workout_id: int) -> Plann
     estimate = (
         _running_estimate(conn, athlete_id, row.sport, parsed.steps) if parsed is not None else None
     )
-    return _to_out(row, list(steps), list(parse_errors), estimate)
+    activities = activities_by_local_date(conn, athlete_id, row.local_date, row.local_date)
+    matched = matching_activity_id(activities.get(row.local_date, []), row.sport)
+    return _to_out(row, list(steps), list(parse_errors), estimate, matched)
 
 
 @router.post("/planned-workouts")
@@ -307,6 +315,8 @@ def list_planned_workouts_for_date(
         )
     ).fetchall()
 
+    activities = activities_by_local_date(conn, athlete_id, local_date, local_date)
+    activities_that_day = activities.get(local_date, [])
     out: list[PlannedWorkoutOut] = []
     for row in rows:
         steps = conn.execute(
@@ -321,7 +331,8 @@ def list_planned_workouts_for_date(
             if parsed is not None
             else None
         )
-        out.append(_to_out(row, list(steps), list(parse_errors), estimate))
+        matched = matching_activity_id(activities_that_day, row.sport)
+        out.append(_to_out(row, list(steps), list(parse_errors), estimate, matched))
     return out
 
 
@@ -437,9 +448,11 @@ def post_complete_planned_workout(
 ) -> PlannedWorkoutOut:
     """The athlete's own manual "I did this" marker -- entirely independent of push_status, so
     it works for a workout that was never pushed (or failed to push) at all: a manual session, a
-    watch that didn't record, or just checking off the plan. No link to any recorded `activity`
-    row -- this app has no automatic planned-vs-recorded matching, completion is a separate,
-    athlete-asserted fact. Idempotent: calling this again just refreshes completed_at to now."""
+    watch that didn't record, or just checking off the plan. Never linked to a recorded
+    `activity` row here -- completion stays a separate, athlete-asserted fact this column alone
+    tracks; see PlannedWorkoutOut.matched_activity_id for the read-time-only companion signal a
+    synced Garmin activity provides instead, without ever touching this column. Idempotent:
+    calling this again just refreshes completed_at to now."""
     now = datetime.now(UTC).replace(tzinfo=None)
     return _set_completed(conn, athlete_id, workout_id, now)
 

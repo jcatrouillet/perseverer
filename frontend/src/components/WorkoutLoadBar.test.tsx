@@ -21,6 +21,7 @@ const BASE: PlannedWorkoutOut = {
   garmin_workout_id: null,
   garmin_scheduled_at: null,
   completed_at: null,
+  matched_activity_id: null,
   estimated_distance_m: 3000,
   estimated_load: 42,
   segments: [

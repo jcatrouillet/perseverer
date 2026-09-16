@@ -74,16 +74,17 @@ interface SportCompliance {
 }
 
 // Compliance is deliberately count-based (completed workouts / scheduled workouts), not
-// distance- or load-weighted -- `completed_at` is this app's own explicit, athlete-asserted
-// "I did this" marker (db/schema.py::planned_workout's own docstring: there is no automatic
-// planned-vs-recorded activity matching at all, by design), and count is the one signal every
-// sport tier carries identically -- running's own estimated_distance_m/estimated_load are null
-// for yoga/bouldering/hiit/strength_training (planned_workout_stats.py is running-only), so a
-// distance- or load-weighted number couldn't be computed for four of the five sport tiers anyway.
-// Scoped to `local_date <= today`: a workout scheduled later this week hasn't happened yet, so
-// counting it as "not done" would understate a week that's still in progress rather than
-// reflect anything the athlete actually missed. A fully future week (every date > today)
-// naturally produces an empty list, needing no separate case.
+// distance- or load-weighted -- count is the one signal every sport tier carries identically --
+// running's own estimated_distance_m/estimated_load are null for yoga/bouldering/hiit/
+// strength_training (planned_workout_stats.py is running-only), so a distance- or load-weighted
+// number couldn't be computed for four of the five sport tiers anyway. "Done" is
+// `completed_at != null` (the athlete's own explicit marker) OR `matched_activity_id != null`
+// (a same-day, matching-sport recorded activity, computed server-side at read time -- see
+// PlannedWorkoutListItemOut's own docstring) -- a workout a Garmin sync already confirms counts
+// as done without a separate manual click. Scoped to `local_date <= today`: a workout scheduled
+// later this week hasn't happened yet, so counting it as "not done" would understate a week
+// that's still in progress rather than reflect anything the athlete actually missed. A fully
+// future week (every date > today) naturally produces an empty list, needing no separate case.
 function computeCompliance(
   workouts: PlannedWorkoutListItemOut[],
   today: string,
@@ -93,7 +94,7 @@ function computeCompliance(
     if (w.local_date > today) continue;
     const entry = bySport.get(w.sport) ?? { completed: 0, scheduled: 0 };
     entry.scheduled += 1;
-    if (w.completed_at != null) entry.completed += 1;
+    if (w.completed_at != null || w.matched_activity_id != null) entry.completed += 1;
     bySport.set(w.sport, entry);
   }
   return [...bySport.entries()]

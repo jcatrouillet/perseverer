@@ -58,8 +58,14 @@ from perseverer.adapters.garmin_connect import (
     RateLimiter,
     RateLimitSettings,
 )
-from perseverer.db.schema import athlete_hr_zone_config, planned_workout, planned_workout_step
+from perseverer.db.schema import (
+    activity,
+    athlete_hr_zone_config,
+    planned_workout,
+    planned_workout_step,
+)
 from perseverer.hr_zones import compute_hr_zone_boundaries, resolve_hr_zone_bpm
+from perseverer.merge.engine import sport_family
 from perseverer.workout_syntax import ParseError, parse_workout_syntax
 
 # intensity -> (StepType id, stepTypeKey, displayOrder) -- same vocabulary
@@ -899,3 +905,74 @@ def compute_recurrence_dates(
             break
         dates.append(current)
     return dates
+
+
+# --- Matching against recorded activities -- a read-time-only signal for the Week view's
+# compliance stat and the Day/Month view's own "Done" indicator, alongside (never replacing) the
+# athlete's own explicit `completed_at` marker. -----------------------------------------------
+
+
+def activity_matches_planned_sport(
+    sport: str, activity_sport: str, activity_sub_sport: str | None
+) -> bool:
+    """Whether a recorded activity's own (sport, sub_sport) plausibly satisfies a
+    planned_workout's sport tier -- not a literal sport==sport check, since several tiers are
+    recorded under FIT's generic "training" container sport with the real discipline only in
+    sub_sport (garmin_activity_summary.py's own GARMIN_ACTIVITY_TYPE_MAP: yoga -> (training,
+    yoga), strength_training -> (training, strength_training); rock_climbing/bouldering the same
+    shape). running reuses merge/engine.py's own sport_family() so a trail/treadmill/track run
+    still satisfies a plain "running" plan, the same leniency this app's own merge-matching
+    already applies. hiit/strength_training each accept two real shapes -- confirmed against
+    this project's own sport taxonomy: a literal top-level sport ("hiit", or family "strength"
+    for "strength_training") *or* the "training" container with a matching sub_sport, since
+    real activities of both shapes exist in this codebase's own data."""
+    if sport == "running":
+        return sport_family(activity_sport) == "run"
+    if sport == "yoga":
+        return activity_sport == "training" and activity_sub_sport == "yoga"
+    if sport == "bouldering":
+        return activity_sport == "rock_climbing" and activity_sub_sport == "bouldering"
+    if sport == "hiit":
+        return activity_sport == "hiit" or (
+            activity_sport == "training" and activity_sub_sport == "hiit"
+        )
+    if sport == "strength_training":
+        return sport_family(activity_sport) == "strength" or (
+            activity_sport == "training" and activity_sub_sport == "strength_training"
+        )
+    return False
+
+
+def activities_by_local_date(
+    conn: Connection, athlete_id: str, start_date: str, end_date: str
+) -> dict[str, list[tuple[str, str, str | None]]]:
+    """One query for a whole date range's worth of recorded activities -- `(activity_id, sport,
+    sub_sport)` tuples grouped by `local_date` -- so matching every planned workout in that range
+    against them costs one query total, not one per workout (the same "fetch once, match in
+    Python" precedent race_readiness.py's own weekly queries already establish)."""
+    rows = conn.execute(
+        select(activity.c.local_date, activity.c.id, activity.c.sport, activity.c.sub_sport)
+        .where(
+            activity.c.athlete_id == athlete_id,
+            activity.c.local_date >= start_date,
+            activity.c.local_date <= end_date,
+        )
+        .order_by(activity.c.start_time_utc)
+    ).fetchall()
+    by_date: dict[str, list[tuple[str, str, str | None]]] = {}
+    for row in rows:
+        by_date.setdefault(row.local_date, []).append((row.id, row.sport, row.sub_sport))
+    return by_date
+
+
+def matching_activity_id(
+    activities_that_day: list[tuple[str, str, str | None]], sport: str
+) -> str | None:
+    """The first (earliest-starting, since `activities_by_local_date` orders by start time)
+    recorded activity that day satisfying this planned workout's sport tier, or `None` -- a
+    plain yes/no signal, so which one wins when more than one plausibly matches doesn't otherwise
+    matter."""
+    for activity_id, activity_sport, activity_sub_sport in activities_that_day:
+        if activity_matches_planned_sport(sport, activity_sport, activity_sub_sport):
+            return activity_id
+    return None

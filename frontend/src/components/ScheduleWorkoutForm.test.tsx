@@ -73,6 +73,7 @@ const SCHEDULED: PlannedWorkoutOut = {
   garmin_workout_id: null,
   garmin_scheduled_at: null,
   completed_at: null,
+  matched_activity_id: null,
   estimated_distance_m: null,
   estimated_load: null,
   segments: [],
@@ -290,6 +291,22 @@ describe("ScheduleWorkoutForm", () => {
     fireEvent.click(screen.getByText("Mark as not done"));
 
     expect(mockUncomplete).toHaveBeenCalledWith(1);
+  });
+
+  it("shows a Done (via Garmin) badge for a matched activity with no manual complete", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue(
+      withOne({ ...SCHEDULED, matched_activity_id: "a1" }),
+    );
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+
+    expect(screen.getByText("Done (via Garmin)")).toBeInTheDocument();
+    // The toggle still tracks the manual marker alone -- nothing to "undo" since completed_at
+    // was never set, so it still offers "Mark as done" (to lock it in), not "Mark as not done"
+    // (which would misleadingly promise to clear a match it can't actually clear).
+    expect(screen.getByText("Mark as done")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Mark as done"));
+
+    expect(mockComplete).toHaveBeenCalledWith(1);
   });
 
   it("shows the running workout's steps as read-only text detail", () => {

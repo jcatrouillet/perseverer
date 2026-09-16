@@ -8,12 +8,14 @@ and that the push trigger runs (and fails cleanly, no token store present) end t
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 
-from perseverer.db.schema import planned_workout
+from perseverer.db.schema import activity, planned_workout
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 
 
 def _create(
@@ -26,6 +28,35 @@ def _create(
     )
     assert r.status_code == 200, r.text
     return dict(r.json())
+
+
+def _seed_activity(
+    engine: Engine,
+    *,
+    activity_id: str,
+    local_date: str,
+    sport: str,
+    sub_sport: str | None = None,
+) -> None:
+    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id=activity_id,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date=local_date,
+                sport=sport,
+                sub_sport=sub_sport,
+                duration_s=1800.0,
+                moving_duration_s=1700.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
 
 
 def test_get_by_id_404s_for_nonexistent_workout(
@@ -76,6 +107,59 @@ def test_range_list_is_empty_outside_any_scheduled_workout(
     )
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_range_list_matches_a_same_day_recorded_activity_without_a_manual_complete(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """A workout the athlete never explicitly marked done still surfaces matched_activity_id
+    when a same-day, matching-sport activity was synced in -- the Week view compliance stat's
+    own "it's already done, no manual click needed" signal."""
+    _create(client, auth_headers, "2026-09-14", sport="yoga", duration_minutes=30)
+    _seed_activity(
+        engine, activity_id="a1", local_date="2026-09-14", sport="training", sub_sport="yoga"
+    )
+
+    r = client.get(
+        "/api/v1/planned-workouts",
+        params={"start_date": "2026-09-14", "end_date": "2026-09-14"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows[0]["completed_at"] is None
+    assert rows[0]["matched_activity_id"] == "a1"
+
+
+def test_range_list_matched_activity_id_is_null_without_a_qualifying_activity(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    _create(client, auth_headers, "2026-09-14", sport="yoga", duration_minutes=30)
+    # Recorded, but the wrong sport -- must not count as a match.
+    _seed_activity(engine, activity_id="a1", local_date="2026-09-14", sport="running")
+
+    r = client.get(
+        "/api/v1/planned-workouts",
+        params={"start_date": "2026-09-14", "end_date": "2026-09-14"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert r.json()[0]["matched_activity_id"] is None
+
+
+def test_by_date_and_by_id_endpoints_also_expose_matched_activity_id(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    created = _create(client, auth_headers, "2026-09-14", sport="running", source_text="Warmup 10m")
+    _seed_activity(engine, activity_id="a1", local_date="2026-09-14", sport="trail_running")
+
+    by_date = client.get("/api/v1/planned-workouts/by-date/2026-09-14", headers=auth_headers)
+    assert by_date.status_code == 200
+    assert by_date.json()[0]["matched_activity_id"] == "a1"
+
+    by_id = client.get(f"/api/v1/planned-workouts/{created['id']}", headers=auth_headers)
+    assert by_id.status_code == 200
+    assert by_id.json()["matched_activity_id"] == "a1"
 
 
 def test_post_creates_and_parses_steps(client: TestClient, auth_headers: dict[str, str]) -> None:

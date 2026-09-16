@@ -18,6 +18,7 @@ from sqlalchemy import Engine, select
 from perseverer.adapters.garmin_connect import RateLimitSettings
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
+    activity,
     athlete,
     athlete_hr_zone_config,
     metadata,
@@ -28,8 +29,11 @@ from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.planned_workouts import (
     PlannedStepLike,
     WorkoutBuildError,
+    activities_by_local_date,
+    activity_matches_planned_sport,
     build_exercise_workout,
     build_running_workout,
+    matching_activity_id,
     push_planned_workout,
 )
 
@@ -644,3 +648,99 @@ def test_auth_failure_marks_push_failed(tmp_path: Path) -> None:
             client_factory=lambda: client,
         )
     assert not result.success
+
+
+class TestActivityMatchesPlannedSport:
+    """activity_matches_planned_sport's own per-tier rules -- see its docstring for why several
+    tiers accept more than one real recorded shape (a generic "training" container sport with
+    the real discipline in sub_sport, confirmed against garmin_activity_summary.py's own
+    GARMIN_ACTIVITY_TYPE_MAP, alongside a literal top-level sport)."""
+
+    def test_running_accepts_the_whole_run_family(self) -> None:
+        assert activity_matches_planned_sport("running", "running", None)
+        assert activity_matches_planned_sport("running", "trail_running", None)
+        assert activity_matches_planned_sport("running", "treadmill_running", None)
+        assert not activity_matches_planned_sport("running", "walking", None)
+
+    def test_yoga_requires_the_training_container_with_yoga_sub_sport(self) -> None:
+        assert activity_matches_planned_sport("yoga", "training", "yoga")
+        assert not activity_matches_planned_sport("yoga", "training", "breathing")
+        assert not activity_matches_planned_sport("yoga", "yoga", None)
+
+    def test_bouldering_requires_rock_climbing_with_bouldering_sub_sport(self) -> None:
+        assert activity_matches_planned_sport("bouldering", "rock_climbing", "bouldering")
+        assert not activity_matches_planned_sport("bouldering", "rock_climbing", None)
+        assert not activity_matches_planned_sport("bouldering", "bouldering", None)
+
+    def test_hiit_accepts_either_a_literal_hiit_sport_or_the_training_container(self) -> None:
+        assert activity_matches_planned_sport("hiit", "hiit", None)
+        assert activity_matches_planned_sport("hiit", "training", "hiit")
+        assert not activity_matches_planned_sport("hiit", "training", "strength_training")
+
+    def test_strength_training_accepts_the_strength_family_or_the_training_container(
+        self,
+    ) -> None:
+        assert activity_matches_planned_sport("strength_training", "strength_training", None)
+        assert activity_matches_planned_sport("strength_training", "training", "strength_training")
+        assert not activity_matches_planned_sport("strength_training", "training", "yoga")
+
+    def test_an_unrecognized_planned_sport_never_matches(self) -> None:
+        assert not activity_matches_planned_sport("fitness", "running", None)
+
+
+def _seed_activity(
+    engine: Engine, *, activity_id: str, local_date: str, sport: str, sub_sport: str | None = None
+) -> None:
+    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+    with engine.connect() as conn:
+        conn.execute(
+            activity.insert().values(
+                id=activity_id,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=now,
+                utc_offset_s=0,
+                local_date=local_date,
+                sport=sport,
+                sub_sport=sub_sport,
+                duration_s=1800.0,
+                moving_duration_s=1700.0,
+                primary_source="fit_folder",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+
+
+class TestActivitiesByLocalDateAndMatchingActivityId:
+    def test_matches_a_same_day_recorded_activity_of_the_right_sport(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        _seed_activity(
+            engine, activity_id="a1", local_date="2026-09-14", sport="training", sub_sport="yoga"
+        )
+
+        with engine.connect() as conn:
+            by_date = activities_by_local_date(
+                conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14"
+            )
+        assert matching_activity_id(by_date.get("2026-09-14", []), "yoga") == "a1"
+
+    def test_no_match_when_the_only_activity_that_day_is_a_different_sport(
+        self, tmp_path: Path
+    ) -> None:
+        engine = _engine(tmp_path)
+        _seed_activity(engine, activity_id="a1", local_date="2026-09-14", sport="running")
+
+        with engine.connect() as conn:
+            by_date = activities_by_local_date(
+                conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14"
+            )
+        assert matching_activity_id(by_date.get("2026-09-14", []), "yoga") is None
+
+    def test_no_match_for_a_date_with_no_recorded_activity_at_all(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            by_date = activities_by_local_date(
+                conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14"
+            )
+        assert matching_activity_id(by_date.get("2026-09-14", []), "running") is None

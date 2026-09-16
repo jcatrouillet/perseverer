@@ -99,6 +99,7 @@ const PLANNED: PlannedWorkoutListItemOut = {
   scheduled_time: null,
   push_status: "draft",
   completed_at: null,
+  matched_activity_id: null,
 };
 
 describe("MonthView day-cell planned-workout indicator", () => {

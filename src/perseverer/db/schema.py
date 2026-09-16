@@ -726,8 +726,13 @@ planned_workout = Table(
     # all: a manual session, a watch that didn't record, or the athlete just checking off a
     # plan. Null means not completed; set to the instant it was marked, not a bare boolean, for
     # the same "when did this happen" provenance instinct every other timestamp in this app
-    # already carries. No link to any `activity` row -- this app has no automatic planned-vs-
-    # recorded matching, so completion is deliberately a separate, athlete-asserted fact.
+    # already carries. No link to any `activity` row stored here -- completion stays a separate,
+    # athlete-asserted fact this column alone tracks. A same-day, matching-sport recorded
+    # activity is instead surfaced as a companion, read-time-only `matched_activity_id` on the
+    # API response (planned_workouts.py::matching_activity_id) -- never written back to this
+    # column, never overriding what the athlete explicitly set here, but enough for the Week
+    # view's compliance stat and the Day/Month view's own "Done" indicator to reflect a
+    # Garmin-synced activity without a separate manual step.
     Column("completed_at", DateTime(), nullable=True),
     # A general note for the *whole* workout, read before any step -- "easy effort, focus on
     # cadence", "cut the last block if legs are sore". Distinct from planned_workout_step.comment

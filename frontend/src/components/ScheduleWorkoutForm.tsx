@@ -158,7 +158,15 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
   const uncomplete = useUncompletePlannedWorkout();
   const duration = formatDurationMinutes(workout.estimated_duration_s);
   const [copied, setCopied] = useState(false);
-  const isDone = workout.completed_at != null;
+  // isManuallyDone drives the toggle button itself (it only ever sets/clears completed_at, so
+  // its own label must track that field alone, not the matched signal below -- otherwise "Mark
+  // as not done" would appear to promise something clicking it can't actually do, since a
+  // matched activity persists independently of completed_at). isDone (shown as the "Done" badge)
+  // is the broader, athlete-facing question: either the athlete said so, or a same-day,
+  // matching-sport recorded activity already confirms it -- see PlannedWorkoutOut.
+  // matched_activity_id's own docstring.
+  const isManuallyDone = workout.completed_at != null;
+  const isDone = isManuallyDone || workout.matched_activity_id != null;
 
   function handleCopy() {
     copyWorkoutToClipboard({
@@ -186,7 +194,16 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
           {statusLabel(workout.push_status)}
         </span>
         {isDone && (
-          <span className="planned-workout__status planned-workout__status--completed">Done</span>
+          <span
+            className="planned-workout__status planned-workout__status--completed"
+            title={
+              isManuallyDone
+                ? undefined
+                : "Matched to a recorded activity of the same sport that day"
+            }
+          >
+            {isManuallyDone ? "Done" : "Done (via Garmin)"}
+          </span>
         )}
       </div>
       {(workout.scheduled_time || duration) && (
@@ -220,10 +237,12 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
         <button
           type="button"
           className="button"
-          onClick={() => (isDone ? uncomplete.mutate(workout.id) : complete.mutate(workout.id))}
+          onClick={() =>
+            isManuallyDone ? uncomplete.mutate(workout.id) : complete.mutate(workout.id)
+          }
           disabled={complete.isPending || uncomplete.isPending}
         >
-          {isDone ? "Mark as not done" : "Mark as done"}
+          {isManuallyDone ? "Mark as not done" : "Mark as done"}
         </button>
         <button type="button" className="button" onClick={handleCopy}>
           {copied ? "Copied — paste it on another day" : "Copy"}

@@ -118,6 +118,7 @@ const RUNNING_WORKOUT: PlannedWorkoutOut = {
   garmin_workout_id: null,
   garmin_scheduled_at: null,
   completed_at: null,
+  matched_activity_id: null,
   estimated_distance_m: 2000,
   estimated_load: 30,
   segments: [{ duration_s: 600, zone: 2, intensity_factor: 0.9 }],
@@ -350,6 +351,7 @@ describe("WeekView compliance", () => {
       scheduled_time: null,
       push_status: "draft",
       completed_at: null,
+      matched_activity_id: null,
       ...overrides,
     };
   }
@@ -402,6 +404,24 @@ describe("WeekView compliance", () => {
 
     render(<WeekView date="2026-09-01" />);
     expect(screen.queryByRole("heading", { name: "Compliance" })).not.toBeInTheDocument();
+  });
+
+  it("counts a workout as done when a matching recorded activity was synced in, with no manual complete", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00"));
+    mockUsePlannedWorkoutsList.mockReturnValue({
+      data: [
+        planned({ id: 1, local_date: "2026-09-01", sport: "yoga", matched_activity_id: "a1" }),
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<WeekView date="2026-09-01" />);
+
+    expect(screen.getByText("Yoga compliance")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 done")).toBeInTheDocument();
   });
 });
 
