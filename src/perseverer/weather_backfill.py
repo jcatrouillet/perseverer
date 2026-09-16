@@ -1,9 +1,9 @@
 """One-time backfill: re-fetches an already-cached activity's Open-Meteo weather with
 force_refresh=True so the fields added alongside dew_point_2m/shortwave_radiation/cloud_cover
 (dew_point_min_c/max_c, solar_radiation_max_wm2/mean_wm2, cloud_cover_min_pct/max_pct,
-apparent_temperature_min_c/max_c, sunrise_utc/sunset_utc, and the broader hourly= request that
-also backs GET /activities/{id}/weather's own hourly[] trajectory) land for real on activities
-whose weather was cached before those variables were ever requested.
+apparent_temperature_min_c/max_c, sunrise_utc/sunset_utc, precipitation_mm, and the broader
+hourly= request that also backs GET /activities/{id}/weather's own hourly[] trajectory) land for
+real on activities whose weather was cached before those variables were ever requested.
 
 Precedent: weather_titles.py originally shipped with an identical one-time force_refresh pass (to
 backfill feels_like_c/wind onto activities cached under this project's very first five-field
@@ -12,13 +12,22 @@ non-forcing cache read. This module is that same shape, run once against a real 
 
 Idempotent and cheap to re-run, unlike a naive "force-refresh everything every time": an
 activity's own archived raw response is read back first (`read_archived_open_meteo_response`, no
-network call) and inspected for whether its `hourly` block already has a `dew_point_2m` key at
+network call) and inspected for whether its `hourly` block already has `_NEW_FIELD_MARKER` at
 all -- a structural marker for "this was fetched under the newer hourly= param set," independent
 of whether Open-Meteo actually had a non-null reading for every hour (the same reason
 `_read_cached` doesn't require the newer fields to be non-None: a real historical date can
 legitimately lack that data on Open-Meteo's own side). An activity that already carries this
 marker is skipped with zero further work, so a second run over an already-backfilled athlete
 costs one archive read per activity and no network calls at all.
+
+`_NEW_FIELD_MARKER` names whichever hourly= key was added most recently -- `precipitation`, as of
+this writing, superseding the earlier `dew_point_2m` marker (a response carrying `precipitation`
+was necessarily fetched under a request that already included `dew_point_2m` too, since both
+land in the same joint hourly= param list -- see weather.py's own request construction). Moving
+the marker forward like this means re-running this command after a field is added does one more
+real backfill pass over every activity, even ones an earlier pass already backfilled for a prior
+marker -- the correct, if slightly redundant, behavior, since there's no cheaper way to know
+which activities are missing only the newest field without checking for it directly.
 """
 
 from __future__ import annotations
@@ -35,7 +44,7 @@ from perseverer.weather import get_or_fetch_activity_weather, read_archived_open
 # The presence of this key in an archived response's own `hourly` block (not any particular
 # hour's value, which may genuinely be null) is what marks an activity as already fetched under
 # the newer hourly= request -- see this module's own docstring.
-_NEW_FIELD_MARKER = "dew_point_2m"
+_NEW_FIELD_MARKER = "precipitation"
 
 
 def _already_backfilled(

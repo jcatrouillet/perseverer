@@ -820,17 +820,19 @@ def backfill_weather_fields_cmd(
     athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
 ) -> None:
     """Re-fetches every already-cached activity's Open-Meteo weather so the fields added
-    alongside dew point/shortwave radiation/cloud cover (dew_point_min_c/max_c,
+    alongside dew point/shortwave radiation/cloud cover/precipitation (dew_point_min_c/max_c,
     solar_radiation_max_wm2/mean_wm2, cloud_cover_min_pct/max_pct,
-    apparent_temperature_min_c/max_c, sunrise_utc/sunset_utc, and GET /activities/{id}/weather's
-    own hourly[] trajectory) land for real on activities whose weather was cached before those
-    variables were ever requested from Open-Meteo -- see weather_backfill.py's own docstring.
+    apparent_temperature_min_c/max_c, sunrise_utc/sunset_utc, precipitation_mm, and GET
+    /activities/{id}/weather's own hourly[] trajectory) land for real on activities whose weather
+    was cached before those variables were ever requested from Open-Meteo -- see
+    weather_backfill.py's own docstring.
 
-    Idempotent and safe to re-run: an activity whose archived response already carries the newer
-    fields is skipped with no network call, so re-running after a first full pass only touches
-    whatever's newly ingested since. Run this once after upgrading past this change; new
-    activities from then on are fetched with the full field set from the start, no backfill
-    needed.
+    Idempotent and safe to re-run: an activity whose archived response already carries the newest
+    field (weather_backfill.py::_NEW_FIELD_MARKER) is skipped with no network call, so re-running
+    after a first full pass only touches whatever's newly ingested since, or whatever's still
+    missing a field added after that pass. Run this once after upgrading past a change that adds
+    a new field this way; new activities from then on are fetched with the full field set from
+    the start, no backfill needed.
     """
     settings = get_settings()
     engine = make_engine(settings.db_path)

@@ -1502,9 +1502,10 @@ def get_activity_weather(
     settings: Settings = Depends(get_settings),
 ) -> ActivityWeatherOut:
     """Temperature/humidity range, feels-like temperature, wind, a representative WMO weather
-    code, dew point/solar radiation/cloud cover/apparent-temperature ranges, sunrise/sunset, and
-    an hour-by-hour trajectory for this activity's own time window, sourced from Open-Meteo's
-    historical archive -- everything a consumer needs to judge conditions in bpm/pace terms
+    code, dew point/solar radiation/cloud cover/apparent-temperature ranges, total precipitation,
+    sunrise/sunset, and an hour-by-hour trajectory for this activity's own time window, sourced
+    from Open-Meteo's historical archive -- everything a consumer needs to judge conditions in
+    bpm/pace terms
     without a second call to Open-Meteo (see weather.py's own module docstring for the raw-first/
     cache-forever design, why feels-like/wind stay single start-of-run values, and why `hourly`
     is re-derived from the archive rather than stored). `available=False` -- never a fabricated
@@ -1584,6 +1585,7 @@ def get_activity_weather(
         cloud_cover_max_pct=summary.cloud_cover_max_pct,
         apparent_temperature_min_c=summary.apparent_temperature_min_c,
         apparent_temperature_max_c=summary.apparent_temperature_max_c,
+        precipitation_mm=summary.precipitation_mm,
         sunrise_utc=to_utc(summary.sunrise_utc) if summary.sunrise_utc is not None else None,
         sunset_utc=to_utc(summary.sunset_utc) if summary.sunset_utc is not None else None,
         sunset_during_run=sunset_during_run,
@@ -1598,6 +1600,7 @@ def get_activity_weather(
                 cloud_cover_pct=p.cloud_cover_pct,
                 wind_speed_mps=p.wind_speed_mps,
                 wind_direction_deg=p.wind_direction_deg,
+                precipitation_mm=p.precipitation_mm,
             )
             for p in hourly
         ],

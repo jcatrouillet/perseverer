@@ -23,6 +23,7 @@ function weather(overrides: Partial<ActivityWeatherOut> = {}): ActivityWeatherOu
     cloud_cover_max_pct: null,
     apparent_temperature_min_c: null,
     apparent_temperature_max_c: null,
+    precipitation_mm: null,
     sunrise_utc: null,
     sunset_utc: null,
     sunset_during_run: null,

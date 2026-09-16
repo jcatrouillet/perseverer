@@ -315,6 +315,7 @@ class ActivityWeatherHourlyPointOut(BaseModel):
     cloud_cover_pct: float | None = None
     wind_speed_mps: float | None = None
     wind_direction_deg: float | None = None
+    precipitation_mm: float | None = None
 
 
 class ActivityWeatherOut(BaseModel):
@@ -353,6 +354,11 @@ class ActivityWeatherOut(BaseModel):
     cloud_cover_max_pct: float | None = None
     apparent_temperature_min_c: float | None = None
     apparent_temperature_max_c: float | None = None
+    # A window SUM, not a min/max range -- "how much rain fell during the run," see weather.py's
+    # own module docstring. 0.0 is a real reading (no rain); None means Open-Meteo's response has
+    # no usable precipitation data for this window at all, including every activity cached before
+    # this field existed, until a backfill re-fetches it.
+    precipitation_mm: float | None = None
     # The daily entry matching the activity's own start date -- not itself a range.
     sunrise_utc: datetime | None = None
     sunset_utc: datetime | None = None

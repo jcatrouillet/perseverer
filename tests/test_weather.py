@@ -82,6 +82,7 @@ def _sample_response(
     dew_point: list[float | None] | None = None,
     solar: list[float | None] | None = None,
     cloud: list[float | None] | None = None,
+    precipitation: list[float | None] | None = None,
     daily_dates: list[str] | None = None,
     sunrise: list[str] | None = None,
     sunset: list[str] | None = None,
@@ -104,6 +105,8 @@ def _sample_response(
         hourly["shortwave_radiation"] = solar
     if cloud is not None:
         hourly["cloud_cover"] = cloud
+    if precipitation is not None:
+        hourly["precipitation"] = precipitation
     response: dict[str, object] = {"latitude": 37.36, "longitude": -121.97, "hourly": hourly}
     if daily_dates is not None:
         daily: dict[str, object] = {"time": daily_dates}
@@ -231,6 +234,51 @@ class TestParseOpenMeteoResponse:
         assert summary.apparent_temperature_max_c == 27.0
         assert summary.feels_like_c == 17.0
 
+    def test_precipitation_is_a_window_sum_not_a_range(self) -> None:
+        raw = _sample_response(
+            hours=["2026-08-02T07:00", "2026-08-02T08:00", "2026-08-02T09:00"],
+            temps=[18.0, 22.0, 25.0],
+            humidity=[60.0, 50.0, 40.0],
+            codes=[0, 1, 2],
+            precipitation=[0.2, 1.5, 0.0],
+        )
+        start = dt.datetime(2026, 8, 2, 7, 0, tzinfo=dt.UTC)
+        end = dt.datetime(2026, 8, 2, 9, 30, tzinfo=dt.UTC)
+
+        summary = parse_open_meteo_response(raw, start, end)
+
+        assert summary is not None
+        assert summary.precipitation_mm == 0.2 + 1.5 + 0.0
+
+    def test_precipitation_is_a_real_zero_when_every_hour_reads_no_rain(self) -> None:
+        # 0.0 is a real, meaningful reading (no rain fell) -- distinct from None (no data at
+        # all), which the next test below covers.
+        raw = _sample_response(
+            hours=["2026-08-02T07:00"], temps=[18.0], humidity=[60.0], codes=[0],
+            precipitation=[0.0],
+        )
+        start = dt.datetime(2026, 8, 2, 7, 0, tzinfo=dt.UTC)
+        end = dt.datetime(2026, 8, 2, 7, 30, tzinfo=dt.UTC)
+
+        summary = parse_open_meteo_response(raw, start, end)
+
+        assert summary is not None
+        assert summary.precipitation_mm == 0.0
+
+    def test_precipitation_is_none_when_every_overlapping_hour_reads_null(self) -> None:
+        raw = _sample_response(
+            hours=["2026-08-02T07:00", "2026-08-02T08:00"],
+            temps=[18.0, 22.0], humidity=[60.0, 50.0], codes=[0, 1],
+            precipitation=[None, None],
+        )
+        start = dt.datetime(2026, 8, 2, 7, 0, tzinfo=dt.UTC)
+        end = dt.datetime(2026, 8, 2, 8, 30, tzinfo=dt.UTC)
+
+        summary = parse_open_meteo_response(raw, start, end)
+
+        assert summary is not None
+        assert summary.precipitation_mm is None
+
     def test_new_fields_are_none_when_the_response_lacks_those_arrays_entirely(self) -> None:
         # Simulates an old archived response, fetched before dew_point_2m/shortwave_radiation/
         # cloud_cover were ever requested -- exactly what an already-cached activity has on disk.
@@ -253,6 +301,7 @@ class TestParseOpenMeteoResponse:
         assert summary.apparent_temperature_max_c is None
         assert summary.sunrise_utc is None
         assert summary.sunset_utc is None
+        assert summary.precipitation_mm is None
 
     def test_extracts_sunrise_and_sunset_for_the_activitys_own_start_date(self) -> None:
         raw = _sample_response(
@@ -297,6 +346,7 @@ class TestParseOpenMeteoHourlySeries:
             dew_point=[12.0, 14.0, 13.0],
             solar=[0.0, 400.0, 820.0],
             cloud=[80.0, 40.0, 10.0],
+            precipitation=[0.0, 1.2, 0.0],
         )
         start = dt.datetime(2026, 8, 2, 7, 30, tzinfo=dt.UTC)
         end = dt.datetime(2026, 8, 2, 9, 15, tzinfo=dt.UTC)
@@ -318,12 +368,13 @@ class TestParseOpenMeteoHourlySeries:
             cloud_cover_pct=40.0,
             wind_speed_mps=4.0,
             wind_direction_deg=100.0,
+            precipitation_mm=1.2,
         )
 
     def test_new_fields_are_none_on_every_point_for_an_old_archived_response(self) -> None:
-        # No dew_point_2m/shortwave_radiation/cloud_cover arrays at all -- the response genuinely
-        # doesn't have this data, so re-parsing it can't manufacture it. Not a crash, not a
-        # missing point -- the point still exists with those three fields None.
+        # No dew_point_2m/shortwave_radiation/cloud_cover/precipitation arrays at all -- the
+        # response genuinely doesn't have this data, so re-parsing it can't manufacture it. Not a
+        # crash, not a missing point -- the point still exists with those fields None.
         raw = _sample_response(
             hours=["2026-08-02T08:00"], temps=[20.0], humidity=[55.0], codes=[2],
             feels_like=[19.0], wind_speed=[2.0], wind_direction=[45.0],
@@ -336,6 +387,7 @@ class TestParseOpenMeteoHourlySeries:
         assert len(points) == 1
         assert points[0].dew_point_c is None
         assert points[0].shortwave_radiation_wm2 is None
+        assert points[0].precipitation_mm is None
         assert points[0].cloud_cover_pct is None
         # Fields the old response DOES carry are still populated.
         assert points[0].temperature_c == 20.0
@@ -352,6 +404,7 @@ class TestParseOpenMeteoHourlySeries:
             dew_point=[12.0, None],
             solar=[None, 300.0],
             cloud=[50.0, None],
+            precipitation=[0.4, None],
         )
         start = dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC)
         end = dt.datetime(2026, 8, 2, 9, 30, tzinfo=dt.UTC)
@@ -361,9 +414,11 @@ class TestParseOpenMeteoHourlySeries:
         assert len(points) == 2
         assert points[0].dew_point_c == 12.0
         assert points[0].shortwave_radiation_wm2 is None
+        assert points[0].precipitation_mm == 0.4
         assert points[1].dew_point_c is None
         assert points[1].shortwave_radiation_wm2 == 300.0
         assert points[1].cloud_cover_pct is None
+        assert points[1].precipitation_mm is None
 
     def test_returns_empty_list_when_hourly_block_is_missing(self) -> None:
         now = dt.datetime.now(dt.UTC)
@@ -563,8 +618,9 @@ class TestGetOrFetchActivityWeather:
         self, tmp_path: Path
     ) -> None:
         # Simulates an activity whose weather was cached before feels-like/wind (or any of the
-        # even-newer dew-point/solar/cloud/apparent-temperature/sunrise/sunset fields) existed --
-        # a second (non-forced) call must still cache-hit rather than re-fetching forever.
+        # even-newer dew-point/solar/cloud/apparent-temperature/sunrise/sunset/precipitation
+        # fields) existed -- a second (non-forced) call must still cache-hit rather than
+        # re-fetching forever.
         engine = _engine(tmp_path)
         start = dt.datetime(2026, 8, 2, 8, 20, tzinfo=dt.UTC)
         with engine.connect() as conn:
@@ -604,6 +660,7 @@ class TestGetOrFetchActivityWeather:
         assert summary.apparent_temperature_max_c is None
         assert summary.sunrise_utc is None
         assert summary.sunset_utc is None
+        assert summary.precipitation_mm is None
 
     def test_force_refresh_bypasses_the_cache_and_picks_up_new_fields(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
@@ -739,6 +796,65 @@ class TestGetOrFetchActivityWeather:
         assert cached.sunrise_utc == dt.datetime(2026, 8, 2, 6, 11)
         assert cached.sunset_utc == dt.datetime(2026, 8, 2, 20, 4)
         assert cached.dew_point_min_c == 15.0
+
+    def test_force_refresh_picks_up_precipitation(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        start = dt.datetime(2026, 8, 2, 8, 20, tzinfo=dt.UTC)
+        with engine.connect() as conn:
+            _seed_activity(conn, "a1", start)
+
+        old_raw = _sample_response(
+            hours=["2026-08-02T08:00"], temps=[25.0], humidity=[30.0], codes=[0]
+        )
+        new_raw = _sample_response(
+            hours=["2026-08-02T08:00"], temps=[25.0], humidity=[30.0], codes=[0],
+            precipitation=[2.4],
+        )
+        request_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal request_count
+            request_count += 1
+            return httpx.Response(200, json=old_raw if request_count == 1 else new_raw)
+
+        archive_root = tmp_path / "raw"
+        with engine.connect() as conn:
+            get_or_fetch_activity_weather(
+                conn, archive_root,
+                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
+                start_time_utc=start, duration_s=1800.0,
+                lat=37.3622, lon=-121.9745,
+                client=httpx.Client(transport=httpx.MockTransport(handler)),
+            )
+            conn.commit()
+
+        with engine.connect() as conn:
+            forced = get_or_fetch_activity_weather(
+                conn, archive_root,
+                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
+                start_time_utc=start, duration_s=1800.0,
+                lat=37.3622, lon=-121.9745,
+                client=httpx.Client(transport=httpx.MockTransport(handler)),
+                force_refresh=True,
+            )
+            conn.commit()
+
+        assert forced is not None
+        assert forced.precipitation_mm == 2.4
+
+        # Round-trips through storage (value_num) on a plain cache-read call, same "not just the
+        # in-memory result" proof the sibling dew-point/solar/cloud test above already applies.
+        with engine.connect() as conn:
+            cached = get_or_fetch_activity_weather(
+                conn, archive_root,
+                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
+                start_time_utc=start, duration_s=1800.0,
+                lat=37.3622, lon=-121.9745,
+                client=httpx.Client(transport=httpx.MockTransport(handler)),
+            )
+        assert request_count == 2  # the third call cache-hit -- no third network request.
+        assert cached is not None
+        assert cached.precipitation_mm == 2.4
 
 
 class TestReadArchivedOpenMeteoResponse:

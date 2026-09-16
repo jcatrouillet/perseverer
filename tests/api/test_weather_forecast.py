@@ -1,13 +1,16 @@
 """Tests for GET /weather/forecast. The actual Open-Meteo fetch/parse logic is exhaustively
 covered by tests/test_weather_forecast.py against a mocked HTTP transport -- these tests only
 check the router's own responsibilities: no-home-location "unavailable", shaping a successful
-fetch into the response schema, and the `days` query param. `fetch_forecast` is monkeypatched
-here rather than mocking HTTP a second time.
+fetch into the response schema, the `days` query param, and that `upcoming` comes from a second,
+independent fetch (`fetch_upcoming_conditions`) that can succeed/fail on its own regardless of
+`fetch_forecast`. Both fetch functions are monkeypatched here rather than mocking HTTP twice --
+`fetch_upcoming_conditions` is monkeypatched to return [] by default (an autouse fixture) so no
+test accidentally makes a real network call just by not mentioning it.
 """
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,7 +18,15 @@ from sqlalchemy import Engine
 
 from perseverer.db.schema import athlete
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
-from perseverer.weather_forecast import ForecastDay
+from perseverer.weather_forecast import ForecastDay, ForecastDayDetail, ForecastHourlyPoint
+
+
+@pytest.fixture(autouse=True)
+def _no_upcoming_conditions_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_upcoming_conditions",
+        lambda *args, **kwargs: [],
+    )
 
 
 def _set_home_location(
@@ -34,7 +45,7 @@ def test_unavailable_when_no_home_location_set(
 ) -> None:
     r = client.get("/api/v1/weather/forecast", headers=auth_headers)
     assert r.status_code == 200
-    assert r.json() == {"available": False, "days": []}
+    assert r.json() == {"available": False, "days": [], "upcoming": []}
 
 
 def test_returns_the_fetched_forecast_when_available(
@@ -71,6 +82,7 @@ def test_returns_the_fetched_forecast_when_available(
                 "temperature_max_c": 20.0,
             },
         ],
+        "upcoming": [],
     }
 
 
@@ -88,7 +100,7 @@ def test_unavailable_when_fetch_fails(
 
     r = client.get("/api/v1/weather/forecast", headers=auth_headers)
     assert r.status_code == 200
-    assert r.json() == {"available": False, "days": []}
+    assert r.json() == {"available": False, "days": [], "upcoming": []}
 
 
 def test_days_query_param_is_passed_through(
@@ -143,3 +155,121 @@ def test_days_query_param_is_bounded(client: TestClient, auth_headers: dict[str,
 
 def test_forecast_endpoint_requires_auth(client: TestClient) -> None:
     assert client.get("/api/v1/weather/forecast").status_code in (401, 403)
+
+
+def test_upcoming_is_shaped_from_the_separate_fetch(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_home_location(engine, 48.8566, 2.3522)
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast",
+        lambda *args, **kwargs: [ForecastDay(date(2026, 9, 14), 3, 18.0, 26.0)],
+    )
+    detail = ForecastDayDetail(
+        local_date=date(2026, 9, 14),
+        weather_code=3,
+        temperature_min_c=18.0,
+        temperature_max_c=26.0,
+        humidity_min_pct=40.0,
+        humidity_max_pct=70.0,
+        dew_point_min_c=10.0,
+        dew_point_max_c=14.0,
+        solar_radiation_max_wm2=800.0,
+        solar_radiation_mean_wm2=300.0,
+        cloud_cover_min_pct=10.0,
+        cloud_cover_max_pct=60.0,
+        apparent_temperature_min_c=17.0,
+        apparent_temperature_max_c=27.0,
+        precipitation_mm=0.4,
+        sunrise_local=datetime(2026, 9, 14, 6, 30),
+        sunset_local=datetime(2026, 9, 14, 19, 45),
+        hourly=(
+            ForecastHourlyPoint(
+                time_local=datetime(2026, 9, 14, 7, 0),
+                temperature_c=19.0,
+                apparent_temperature_c=18.0,
+                dew_point_c=11.0,
+                relative_humidity_pct=65.0,
+                shortwave_radiation_wm2=100.0,
+                cloud_cover_pct=50.0,
+                wind_speed_mps=3.0,
+                wind_direction_deg=90.0,
+                precipitation_mm=0.1,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_upcoming_conditions",
+        lambda *args, **kwargs: [detail],
+    )
+
+    r = client.get("/api/v1/weather/forecast", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["upcoming"]) == 1
+    day = body["upcoming"][0]
+    assert day["local_date"] == "2026-09-14"
+    assert day["humidity_min_pct"] == 40.0
+    assert day["precipitation_mm"] == 0.4
+    assert day["sunrise_local"] == "2026-09-14T06:30:00"
+    assert len(day["hourly"]) == 1
+    assert day["hourly"][0]["temperature_c"] == 19.0
+    assert day["hourly"][0]["precipitation_mm"] == 0.1
+
+
+def test_upcoming_is_empty_when_that_fetch_fails_even_though_the_coarse_forecast_succeeds(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_home_location(engine, 48.8566, 2.3522)
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast",
+        lambda *args, **kwargs: [ForecastDay(date(2026, 9, 14), 3, 18.0, 26.0)],
+    )
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_upcoming_conditions",
+        lambda *args, **kwargs: None,
+    )
+
+    r = client.get("/api/v1/weather/forecast", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert body["upcoming"] == []
+
+
+def test_upcoming_is_populated_even_when_the_coarse_forecast_is_unavailable(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The two fetches are genuinely independent -- available=False (the coarse forecast's own
+    failure) doesn't blank out a real upcoming-conditions result."""
+    _set_home_location(engine, 48.8566, 2.3522)
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast",
+        lambda *args, **kwargs: None,
+    )
+    detail = ForecastDayDetail(
+        local_date=date(2026, 9, 14),
+        weather_code=3,
+        temperature_min_c=18.0,
+        temperature_max_c=26.0,
+    )
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_upcoming_conditions",
+        lambda *args, **kwargs: [detail],
+    )
+
+    r = client.get("/api/v1/weather/forecast", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert len(body["upcoming"]) == 1
+    assert body["upcoming"][0]["local_date"] == "2026-09-14"

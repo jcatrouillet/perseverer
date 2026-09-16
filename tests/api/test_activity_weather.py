@@ -82,6 +82,7 @@ def test_returns_the_fetched_summary_when_available(
         "cloud_cover_max_pct": None,
         "apparent_temperature_min_c": None,
         "apparent_temperature_max_c": None,
+        "precipitation_mm": None,
         "sunrise_utc": None,
         "sunset_utc": None,
         "sunset_during_run": None,
@@ -126,6 +127,7 @@ def test_includes_the_new_scalar_fields_when_present(
         solar_radiation_max_wm2=820.0, solar_radiation_mean_wm2=400.0,
         cloud_cover_min_pct=10.0, cloud_cover_max_pct=80.0,
         apparent_temperature_min_c=17.0, apparent_temperature_max_c=27.0,
+        precipitation_mm=3.4,
         sunrise_utc=dt.datetime(2025, 6, 1, 6, 11),
         sunset_utc=dt.datetime(2025, 6, 1, 20, 4),
     )
@@ -145,6 +147,7 @@ def test_includes_the_new_scalar_fields_when_present(
     assert body["cloud_cover_max_pct"] == 80.0
     assert body["apparent_temperature_min_c"] == 17.0
     assert body["apparent_temperature_max_c"] == 27.0
+    assert body["precipitation_mm"] == 3.4
     assert body["sunrise_utc"] == "2025-06-01T06:11:00Z"
     assert body["sunset_utc"] == "2025-06-01T20:04:00Z"
     # Activity (seed_activity default): starts 2025-06-01T10:00:00Z, 1800s duration --
@@ -232,6 +235,7 @@ def test_includes_the_hourly_trajectory_derived_from_the_archived_raw_response(
             "cloud_cover": [40.0],
             "wind_speed_10m": [3.0],
             "wind_direction_10m": [180.0],
+            "precipitation": [0.6],
         }
     }
     monkeypatch.setattr(
@@ -253,5 +257,6 @@ def test_includes_the_hourly_trajectory_derived_from_the_archived_raw_response(
             "cloud_cover_pct": 40.0,
             "wind_speed_mps": 3.0,
             "wind_direction_deg": 180.0,
+            "precipitation_mm": 0.6,
         }
     ]

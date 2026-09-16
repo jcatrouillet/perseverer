@@ -264,6 +264,7 @@ export interface ActivityWeatherHourlyPointOut {
   cloud_cover_pct: number | null;
   wind_speed_mps: number | null;
   wind_direction_deg: number | null;
+  precipitation_mm: number | null;
 }
 
 export interface ActivityWeatherOut {
@@ -288,6 +289,9 @@ export interface ActivityWeatherOut {
   cloud_cover_max_pct: number | null;
   apparent_temperature_min_c: number | null;
   apparent_temperature_max_c: number | null;
+  // A window SUM, not a min/max range -- "how much rain fell during the run." 0.0 is a real
+  // reading (no rain); null means no usable precipitation data for this window.
+  precipitation_mm: number | null;
   sunrise_utc: string | null;
   sunset_utc: string | null;
   sunset_during_run: boolean | null;
@@ -409,9 +413,53 @@ export interface ForecastDayOut {
   temperature_max_c: number;
 }
 
+// One hourly bucket of a single upcoming day -- time_local is naive, in the athlete's own local
+// time (NOT UTC, unlike ActivityWeatherHourlyPointOut's own time_utc).
+export interface ForecastHourlyPointOut {
+  time_local: string;
+  temperature_c: number | null;
+  apparent_temperature_c: number | null;
+  dew_point_c: number | null;
+  relative_humidity_pct: number | null;
+  shortwave_radiation_wm2: number | null;
+  cloud_cover_pct: number | null;
+  wind_speed_mps: number | null;
+  wind_direction_deg: number | null;
+  precipitation_mm: number | null;
+}
+
+// The same richer field set ActivityWeatherOut collects for a past run's own window, gathered
+// instead for one of the athlete's own upcoming days (UPCOMING_DETAIL_DAYS) -- see
+// weather_forecast.py's own module docstring for why feels_like_c/wind_speed_mps/
+// wind_direction_deg have no scalar equivalent here and why every datetime field is local.
+export interface ForecastDayDetailOut {
+  local_date: string;
+  weather_code: number | null;
+  temperature_min_c: number | null;
+  temperature_max_c: number | null;
+  humidity_min_pct: number | null;
+  humidity_max_pct: number | null;
+  dew_point_min_c: number | null;
+  dew_point_max_c: number | null;
+  solar_radiation_max_wm2: number | null;
+  solar_radiation_mean_wm2: number | null;
+  cloud_cover_min_pct: number | null;
+  cloud_cover_max_pct: number | null;
+  apparent_temperature_min_c: number | null;
+  apparent_temperature_max_c: number | null;
+  precipitation_mm: number | null;
+  sunrise_local: string | null;
+  sunset_local: string | null;
+  hourly: ForecastHourlyPointOut[];
+}
+
 export interface WeatherForecastOut {
   available: boolean;
   days: ForecastDayOut[];
+  // The near-term rich-conditions detail, from a separate Open-Meteo request than `days` above
+  // -- [] whenever that second request fails or returns nothing usable, independent of
+  // `available`/`days` above.
+  upcoming: ForecastDayDetailOut[];
 }
 
 // PUT /settings/password -- self-service password change.

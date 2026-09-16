@@ -8,11 +8,11 @@ The real Open-Meteo archive API response shape was confirmed by calling it direc
 block keyed by UTC-aligned ISO timestamps (`timezone=UTC` requested explicitly, so the response
 doesn't need per-activity-timezone handling), with parallel `temperature_2m`,
 `relative_humidity_2m`, `weathercode`, `apparent_temperature`, `wind_speed_10m`,
-`wind_direction_10m`, `dew_point_2m`, `shortwave_radiation`, and `cloud_cover` arrays, plus a
-`daily` block (`sunrise`/`sunset`, one entry per calendar date in the requested range, also UTC
-since `timezone=UTC` covers the whole request). `wind_speed_unit=ms` is requested explicitly --
-Open-Meteo defaults wind speed to km/h, which would otherwise be the one non-SI value in this
-project's whole storage layer (CLAUDE.md's "SI units in storage" rule).
+`wind_direction_10m`, `dew_point_2m`, `shortwave_radiation`, `cloud_cover`, and `precipitation`
+arrays, plus a `daily` block (`sunrise`/`sunset`, one entry per calendar date in the requested
+range, also UTC since `timezone=UTC` covers the whole request). `wind_speed_unit=ms` is
+requested explicitly -- Open-Meteo defaults wind speed to km/h, which would otherwise be the one
+non-SI value in this project's whole storage layer (CLAUDE.md's "SI units in storage" rule).
 
 No API key needed (Open-Meteo's public tier, no auth). WMO weather codes are stored as-is --
 mapping a code to an icon/label is a presentation concern, done in the frontend
@@ -45,6 +45,14 @@ of its own) are the daily entry matching the activity's own start date; whether 
 fell inside the run window is deliberately NOT stored as a synthetic activity_metric row -- it's
 a pure function of already-available data (sunset_utc vs. the activity's own start/end), computed
 once at the API layer (`ActivityWeatherOut.sunset_during_run`) rather than persisted redundantly.
+
+`precipitation_mm` (added later still) is a window **sum**, not a min/max range like the fields
+above -- "how much rain fell during the run" is a total, not a range, the same way a runner would
+describe it. `0.0` is a real, meaningful value (no rain fell) and stays distinct from `None`
+(Open-Meteo's response lacks the `precipitation` array at all, or every overlapping hour's
+reading is null) -- summing an empty list would silently collapse those two very different cases
+into the same `0.0`, so the window list is checked for emptiness first, same guard the
+solar-radiation mean already uses for the identical reason.
 
 The hour-by-hour trajectory (`parse_open_meteo_hourly_series`, surfaced as `GET
 /activities/{id}/weather`'s own `hourly[]` array) is deliberately NOT stored in `activity_metric`
@@ -97,6 +105,7 @@ METRIC_APPARENT_TEMPERATURE_MIN_C = "weather.open_meteo.apparent_temperature_min
 METRIC_APPARENT_TEMPERATURE_MAX_C = "weather.open_meteo.apparent_temperature_max_c"
 METRIC_SUNRISE_UTC = "weather.open_meteo.sunrise_utc"
 METRIC_SUNSET_UTC = "weather.open_meteo.sunset_utc"
+METRIC_PRECIPITATION_MM = "weather.open_meteo.precipitation_mm"
 
 # The five original keys are the ones a cache-hit requires -- see _read_cached's own docstring
 # for why every other key (13 of them now) is deliberately excluded from that check. Adding a
@@ -125,6 +134,7 @@ _OPTIONAL_METRIC_KEYS = (
     METRIC_APPARENT_TEMPERATURE_MAX_C,
     METRIC_SUNRISE_UTC,
     METRIC_SUNSET_UTC,
+    METRIC_PRECIPITATION_MM,
 )
 
 _METRIC_META: dict[str, tuple[str, str | None]] = {
@@ -146,6 +156,7 @@ _METRIC_META: dict[str, tuple[str, str | None]] = {
     METRIC_APPARENT_TEMPERATURE_MAX_C: ("Max apparent temperature (activity window)", "degC"),
     METRIC_SUNRISE_UTC: ("Sunrise, UTC (activity's own start date)", None),
     METRIC_SUNSET_UTC: ("Sunset, UTC (activity's own start date)", None),
+    METRIC_PRECIPITATION_MM: ("Total precipitation (activity window)", "mm"),
 }
 
 
@@ -170,6 +181,10 @@ class WeatherSummary(NamedTuple):
     # API route attaches tzinfo via to_utc() when building the response, same as start_time_utc.
     sunrise_utc: datetime | None = None
     sunset_utc: datetime | None = None
+    # A window SUM, not a min/max range -- see this module's own docstring for why. `None`
+    # (never a fabricated 0.0) when Open-Meteo's response lacks the `precipitation` array
+    # entirely, or every overlapping hour's reading is null.
+    precipitation_mm: float | None = None
 
 
 class HourlyWeatherPoint(NamedTuple):
@@ -187,6 +202,7 @@ class HourlyWeatherPoint(NamedTuple):
     cloud_cover_pct: float | None
     wind_speed_mps: float | None
     wind_direction_deg: float | None
+    precipitation_mm: float | None = None
 
 
 def _value_at(arr: list[Any], index: int) -> float | None:
@@ -221,6 +237,7 @@ def parse_open_meteo_response(
     dew_point: list[float | None] = hourly.get("dew_point_2m") or []
     solar: list[float | None] = hourly.get("shortwave_radiation") or []
     cloud: list[float | None] = hourly.get("cloud_cover") or []
+    precipitation: list[float | None] = hourly.get("precipitation") or []
     if not times:
         return None
 
@@ -232,6 +249,7 @@ def parse_open_meteo_response(
     window_solar: list[float] = []
     window_cloud: list[float] = []
     window_apparent: list[float] = []
+    window_precipitation: list[float] = []
     for i, hour in enumerate(hours):
         if hour + timedelta(hours=1) < start_utc or hour > end_utc:
             continue
@@ -247,6 +265,8 @@ def parse_open_meteo_response(
             window_cloud.append(cloud[i])  # type: ignore[arg-type]
         if i < len(feels_like) and feels_like[i] is not None:
             window_apparent.append(feels_like[i])  # type: ignore[arg-type]
+        if i < len(precipitation) and precipitation[i] is not None:
+            window_precipitation.append(precipitation[i])  # type: ignore[arg-type]
 
     if not window_temps or not window_humidity:
         return None
@@ -280,6 +300,7 @@ def parse_open_meteo_response(
         apparent_temperature_max_c=max(window_apparent) if window_apparent else None,
         sunrise_utc=sunrise_utc,
         sunset_utc=sunset_utc,
+        precipitation_mm=sum(window_precipitation) if window_precipitation else None,
     )
 
 
@@ -319,8 +340,8 @@ def parse_open_meteo_hourly_series(
     every hourly bucket [hour, hour+1h) overlapping [start_utc, end_utc] contributes one point,
     in chronological order. Each field is independently `None` (never fabricated) whenever the
     response lacks that array entirely (an old archive, pre-dating dew_point_2m/
-    shortwave_radiation/cloud_cover) or that one hour's reading. Returns [] when there's no
-    hourly block at all, or no hour overlaps the window -- never a fabricated point.
+    shortwave_radiation/cloud_cover/precipitation) or that one hour's reading. Returns [] when
+    there's no hourly block at all, or no hour overlaps the window -- never a fabricated point.
     """
     hourly = raw.get("hourly")
     if not hourly:
@@ -334,6 +355,7 @@ def parse_open_meteo_hourly_series(
     cloud: list[float | None] = hourly.get("cloud_cover") or []
     wind_speed: list[float | None] = hourly.get("wind_speed_10m") or []
     wind_direction: list[float | None] = hourly.get("wind_direction_10m") or []
+    precipitation: list[float | None] = hourly.get("precipitation") or []
 
     points: list[HourlyWeatherPoint] = []
     for i, t in enumerate(times):
@@ -352,6 +374,7 @@ def parse_open_meteo_hourly_series(
                 cloud_cover_pct=_value_at(cloud, i),
                 wind_speed_mps=_value_at(wind_speed, i),
                 wind_direction_deg=_value_at(wind_direction, i),
+                precipitation_mm=_value_at(precipitation, i),
             )
         )
     return points
@@ -434,6 +457,7 @@ def _read_cached(conn: Connection, athlete_id: str, activity_id: str) -> Weather
         apparent_temperature_max_c=values.get(METRIC_APPARENT_TEMPERATURE_MAX_C),
         sunrise_utc=datetime.fromisoformat(sunrise_text) if sunrise_text else None,
         sunset_utc=datetime.fromisoformat(sunset_text) if sunset_text else None,
+        precipitation_mm=values.get(METRIC_PRECIPITATION_MM),
     )
 
 
@@ -477,6 +501,7 @@ def _store(
     _add_if_present(
         values, METRIC_APPARENT_TEMPERATURE_MAX_C, summary.apparent_temperature_max_c
     )
+    _add_if_present(values, METRIC_PRECIPITATION_MM, summary.precipitation_mm)
 
     # Sunrise/sunset are timestamps, not floats -- activity_metric.value_num is a Float column,
     # so these go in value_text as ISO strings instead (value_type="text", same precedent
@@ -585,7 +610,7 @@ def get_or_fetch_activity_weather(
         "hourly": (
             "temperature_2m,relative_humidity_2m,weathercode,"
             "apparent_temperature,wind_speed_10m,wind_direction_10m,"
-            "dew_point_2m,shortwave_radiation,cloud_cover"
+            "dew_point_2m,shortwave_radiation,cloud_cover,precipitation"
         ),
         "daily": "sunrise,sunset",
         "wind_speed_unit": "ms",

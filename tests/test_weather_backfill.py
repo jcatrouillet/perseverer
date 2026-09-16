@@ -1,8 +1,9 @@
 """Tests for weather_backfill.py: the one-time re-fetch that lands dew_point_min_c/max_c,
 solar_radiation_max_wm2/mean_wm2, cloud_cover_min_pct/max_pct, apparent_temperature_min_c/max_c,
-and sunrise_utc/sunset_utc onto activities whose weather was cached before those fields were ever
-requested from Open-Meteo. HTTP is mocked (no real Open-Meteo calls); see tests/test_weather.py
-for exhaustive coverage of the underlying fetch/archive/store pipeline itself.
+sunrise_utc/sunset_utc, and (most recently) precipitation_mm onto activities whose weather was
+cached before those fields were ever requested from Open-Meteo. HTTP is mocked (no real
+Open-Meteo calls); see tests/test_weather.py for exhaustive coverage of the underlying
+fetch/archive/store pipeline itself.
 """
 
 from __future__ import annotations
@@ -17,7 +18,11 @@ from sqlalchemy import Connection, Engine, select
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import activity, activity_metric, athlete, metadata, route_geom
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
-from perseverer.weather import METRIC_DEW_POINT_MIN_C, get_or_fetch_activity_weather
+from perseverer.weather import (
+    METRIC_DEW_POINT_MIN_C,
+    METRIC_PRECIPITATION_MM,
+    get_or_fetch_activity_weather,
+)
 from perseverer.weather_backfill import backfill_weather_fields
 
 # Captured before any test monkeypatches httpx.Client, so the fake client factories below don't
@@ -90,6 +95,23 @@ def _old_response() -> dict[str, object]:
     }
 
 
+def _dew_point_only_response() -> dict[str, object]:
+    # Has dew_point_2m/shortwave_radiation/cloud_cover but not precipitation -- exactly what an
+    # activity backfilled under the *previous* marker (before precipitation was added) has
+    # archived on disk. Superseded by _new_response() below, which _NEW_FIELD_MARKER now targets.
+    return {
+        "hourly": {
+            "time": ["2026-08-02T08:00"],
+            "temperature_2m": [20.0],
+            "relative_humidity_2m": [50.0],
+            "weathercode": [0],
+            "dew_point_2m": [12.0],
+            "shortwave_radiation": [300.0],
+            "cloud_cover": [40.0],
+        }
+    }
+
+
 def _new_response() -> dict[str, object]:
     return {
         "hourly": {
@@ -100,6 +122,7 @@ def _new_response() -> dict[str, object]:
             "dew_point_2m": [12.0],
             "shortwave_radiation": [300.0],
             "cloud_cover": [40.0],
+            "precipitation": [1.5],
         }
     }
 
@@ -152,6 +175,63 @@ class TestBackfillWeatherFields:
                 )
             ).one()
             assert row.value_num == 12.0
+            precip_row = conn.execute(
+                select(activity_metric.c.value_num).where(
+                    activity_metric.c.activity_id == "a1",
+                    activity_metric.c.metric_key == METRIC_PRECIPITATION_MM,
+                )
+            ).one()
+            assert precip_row.value_num == 1.5
+
+    def test_refetches_an_activity_backfilled_under_the_superseded_dew_point_marker(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_NEW_FIELD_MARKER moved from dew_point_2m to precipitation when that field was added --
+        an activity already backfilled under the old marker (has dew_point/solar/cloud, but not
+        precipitation) must still be re-fetched by a fresh run, exactly the "one more real pass"
+        behavior weather_backfill.py's own module docstring describes."""
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _seed_activity(conn, activity_id="a1")
+
+        dew_point_transport = httpx.MockTransport(
+            lambda r: httpx.Response(200, json=_dew_point_only_response())
+        )
+        with engine.connect() as conn:
+            get_or_fetch_activity_weather(
+                conn, tmp_path / "raw",
+                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
+                start_time_utc=dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC), duration_s=1800.0,
+                lat=37.36, lon=-121.97, client=_RealClient(transport=dew_point_transport),
+            )
+            conn.commit()
+
+        request_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal request_count
+            request_count += 1
+            return httpx.Response(200, json=_new_response())
+
+        monkeypatch.setattr(
+            httpx, "Client", lambda **kwargs: _RealClient(transport=httpx.MockTransport(handler))
+        )
+
+        with engine.connect() as conn:
+            refreshed = backfill_weather_fields(
+                conn, tmp_path / "raw", athlete_id=DEFAULT_ATHLETE_ID
+            )
+
+        assert refreshed == ["a1"]
+        assert request_count == 1
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(activity_metric.c.value_num).where(
+                    activity_metric.c.activity_id == "a1",
+                    activity_metric.c.metric_key == METRIC_PRECIPITATION_MM,
+                )
+            ).one()
+            assert row.value_num == 1.5
 
     def test_second_run_makes_no_network_calls_once_backfilled(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
