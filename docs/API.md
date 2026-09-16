@@ -823,6 +823,37 @@ above, `0.0` never omitted for a week with nothing recorded).
 `RaceReadinessWeekOut`: `week_start` (string, date, the Monday that week starts), `distance_m`
 (number).
 
+### `GET /performance/curve`
+
+The best sustained value for each of a fixed set of durations (1s through 2h), across every
+qualifying activity in the date range — the single best D-second window anywhere, not one
+activity's own average, the same idea as cycling's "Critical Power Curve"/Runalyze's "Heart Rate
+Curve." Deliberately request-time, not rollup-backed — same "bounded, occasional diagnostic
+lookup" exception `GET /performance/vo2max-analysis` above already establishes. `pace`/`gap` are
+always running-only regardless of `sports`; `heart_rate` honors `sports` since a hard bike ride
+or hiit session is a real sustained HR effort too. See `performance_curve.py`'s own module
+docstring, and `docs/DATA_DICTIONARY.md`'s "Performance Curve" section, for the sliding-window
+algorithm and its gap-disqualification rule.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `metric` | query | **required** | string | One of `pace`, `gap`, `heart_rate`. |
+| `start_date` | query | **required** | string (date) | |
+| `end_date` | query | **required** | string (date) | |
+| `sports` | query | optional | string | Comma-separated sport values. Only applies to `heart_rate` — ignored for `pace`/`gap`, which are always running-only. |
+
+**Response `200`:** `PerformanceCurveOut` — `available` (`false` — never fabricated — when no
+activity in range qualifies for this metric), `metric` (string, echoes the request), `points`
+(`PerformanceCurvePointOut[]`, one per duration bucket that has data, never every bucket padded
+with nulls), `threshold_pace_s_per_km`/`aerobic_threshold_pace_s_per_km`/`threshold_hr_bpm`/
+`aerobic_threshold_hr_bpm`/`max_hr_bpm` (all number, nullable — only the pair relevant to
+`metric` is ever non-null; these are the athlete's own already-computed reference values from
+`GET /performance`, shown alongside the curve, never blended into it).
+
+`PerformanceCurvePointOut`: `duration_s` (integer), `value` (number — bpm for `heart_rate`,
+seconds/km for `pace`/`gap`), `activity_id` (string, the activity that actually set this
+bucket's record), `local_date` (string, date, that activity's own local date).
+
 ---
 
 ## Insights

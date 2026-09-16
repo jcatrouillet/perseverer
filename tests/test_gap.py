@@ -20,6 +20,7 @@ from perseverer.gap import (
     _grade_adjusted_time_factor,
     _windowed_grade,
     compute_avg_gap_speed_mps,
+    compute_gap_adjusted_distances,
     compute_lap_gap_speeds_mps,
     refresh_avg_gap,
 )
@@ -150,6 +151,69 @@ class TestComputeAvgGapSpeedMps:
         # match, the aggregation regressed back to time-weighting.
         assert gap < old_buggy_gap
         assert (old_buggy_gap - gap) > 0.3  # m/s
+
+
+class TestComputeGapAdjustedDistances:
+    def test_length_is_one_less_than_the_stream(self) -> None:
+        distances = [i * 40.0 for i in range(11)]
+        altitudes = [100.0] * 11
+        per_interval = compute_gap_adjusted_distances(_timestamps(11), distances, altitudes)
+        assert len(per_interval) == 10
+
+    def test_flat_ground_intervals_equal_their_own_raw_distance(self) -> None:
+        # Zero grade -> _grade_adjusted_time_factor is 1.0 -> equivalent distance == raw delta.
+        distances = [i * 40.0 for i in range(11)]
+        altitudes = [100.0] * 11
+        per_interval = compute_gap_adjusted_distances(_timestamps(11), distances, altitudes)
+        assert all(abs(v - 40.0) < 1e-9 for v in per_interval)
+
+    def test_skipped_intervals_are_a_real_zero_not_none(self) -> None:
+        # Stationary throughout (below the 0.3 m/s floor) -- every interval skipped.
+        distances = [i * 1.0 for i in range(5)]
+        altitudes = [100.0] * 5
+        per_interval = compute_gap_adjusted_distances(_timestamps(5), distances, altitudes)
+        assert per_interval == [0.0, 0.0, 0.0, 0.0]
+
+    def test_missing_altitude_channel_entirely_skips_every_interval(self) -> None:
+        distances = [i * 40.0 for i in range(11)]
+        altitudes: list[float | None] = [None] * 11
+        per_interval = compute_gap_adjusted_distances(_timestamps(11), distances, altitudes)
+        assert per_interval == [0.0] * 10
+
+    def test_summed_and_divided_by_moving_time_matches_compute_avg_gap_speed_mps(self) -> None:
+        """Regression check for the refactor: compute_avg_gap_speed_mps now sums this function's
+        own per-interval output internally rather than recomputing each interval inline -- this
+        pins down that the two stay in agreement on a case with real grade variation."""
+        distances = [i * 40.0 for i in range(11)]
+        altitudes = [i * 8.0 for i in range(11)]  # 20% grade throughout
+        timestamps = _timestamps(11)
+        per_interval = compute_gap_adjusted_distances(timestamps, distances, altitudes)
+        expected = sum(per_interval) / (10 * 10.0)  # 10 intervals @ 10s each
+        actual = compute_avg_gap_speed_mps(timestamps, distances, altitudes)
+        assert actual is not None
+        assert abs(actual - expected) < 1e-9
+
+    def test_returns_empty_list_for_a_too_short_stream(self) -> None:
+        assert compute_gap_adjusted_distances(_timestamps(1), [0.0], [100.0]) == []
+
+    def test_precomputed_per_interval_param_matches_the_default_recompute(self) -> None:
+        """compute_lap_gap_speeds_mps precomputes this once and passes it into
+        compute_avg_gap_speed_mps via the internal _per_interval param, purely to avoid
+        recomputing grade for the whole stream on every lap -- confirms that path produces the
+        exact same result as the default (no _per_interval) one."""
+        distances = [i * 40.0 for i in range(11)]
+        altitudes = [i * 8.0 for i in range(11)]
+        timestamps = _timestamps(11)
+        per_interval = compute_gap_adjusted_distances(timestamps, distances, altitudes)
+
+        default = compute_avg_gap_speed_mps(
+            timestamps, distances, altitudes, start_idx=2, end_idx=8
+        )
+        reused = compute_avg_gap_speed_mps(
+            timestamps, distances, altitudes, start_idx=2, end_idx=8, _per_interval=per_interval
+        )
+        assert default is not None
+        assert reused == default
 
 
 class TestWindowedGrade:

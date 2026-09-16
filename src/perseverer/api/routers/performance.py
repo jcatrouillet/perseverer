@@ -12,14 +12,17 @@ lookup" exception /activities/needs-trim and /activities/possible-duplicates
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import Annotated
+from typing import Annotated, cast
 
+import duckdb
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Connection, select
 
-from perseverer.api.dependencies import get_conn, require_api_key
+from perseverer.api.dependencies import get_conn, get_duckdb, require_api_key
 from perseverer.api.schemas.performance import (
     ActivityRefOut,
+    PerformanceCurveOut,
+    PerformanceCurvePointOut,
     PerformanceDailyRollupOut,
     RaceReadinessOut,
     RaceReadinessPointOut,
@@ -30,7 +33,9 @@ from perseverer.api.schemas.performance import (
     Vo2maxContributorOut,
     Vo2maxFactorAnalysisOut,
 )
+from perseverer.config import Settings, get_settings
 from perseverer.db.schema import performance_daily_rollup
+from perseverer.performance_curve import CurvePoint, Metric, compute_performance_curve
 from perseverer.race_readiness import ReadinessPoint, WeekValue, compute_race_readiness
 from perseverer.threshold_analysis import (
     ActivityRef,
@@ -226,4 +231,53 @@ def get_race_readiness(
         history=[_readiness_point_out(p) for p in readiness.history],
         weekly_distance_series=[_readiness_week_out(w) for w in readiness.weekly_distance_series],
         long_run_series=[_readiness_week_out(w) for w in readiness.long_run_series],
+    )
+
+
+def _curve_point_out(p: CurvePoint) -> PerformanceCurvePointOut:
+    return PerformanceCurvePointOut(
+        duration_s=p.duration_s, value=p.value, activity_id=p.activity_id, local_date=p.local_date
+    )
+
+
+@router.get("/performance/curve")
+def get_performance_curve(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    metric: Annotated[str, Query(pattern="^(pace|gap|heart_rate)$")],
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    sports: str | None = Query(None),
+    conn: Connection = Depends(get_conn),
+    duckdb_conn: duckdb.DuckDBPyConnection = Depends(get_duckdb),
+    settings: Settings = Depends(get_settings),
+) -> PerformanceCurveOut:
+    """The best sustained average value for each of a fixed set of durations (1s-2h), across
+    every qualifying activity in `[start_date, end_date]` -- see performance_curve.py's own
+    module docstring for the full model (the sliding-window search, gap disqualification, and why
+    the athlete's own already-computed threshold pace/HR are returned alongside as reference
+    values, never blended into the curve itself). `sports` (comma-separated) scopes which sports
+    feed a `heart_rate` curve -- ignored entirely for `pace`/`gap`, which always mean running.
+    `available=False` (never a fabricated curve) when nothing in range has the stream channel(s)
+    this metric needs at all."""
+    sport_list = sports.split(",") if sports else None
+    curve = compute_performance_curve(
+        conn,
+        duckdb_conn,
+        settings.parquet_dir,
+        athlete_id=athlete_id,
+        metric=cast(Metric, metric),
+        start_date=start_date,
+        end_date=end_date,
+        sports=sport_list,
+        as_of=datetime.now(UTC).date(),
+    )
+    return PerformanceCurveOut(
+        available=bool(curve.points),
+        metric=curve.metric,
+        points=[_curve_point_out(p) for p in curve.points],
+        threshold_pace_s_per_km=curve.threshold_pace_s_per_km,
+        aerobic_threshold_pace_s_per_km=curve.aerobic_threshold_pace_s_per_km,
+        threshold_hr_bpm=curve.threshold_hr_bpm,
+        aerobic_threshold_hr_bpm=curve.aerobic_threshold_hr_bpm,
+        max_hr_bpm=curve.max_hr_bpm,
     )

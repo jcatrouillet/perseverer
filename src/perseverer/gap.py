@@ -63,6 +63,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 import pyarrow.parquet as pq
 from sqlalchemy import Connection, select
 
@@ -129,6 +130,45 @@ def _windowed_grade(
     return (a1 - a0) / span if span > 0 else None
 
 
+def _windowed_grades_batch(
+    timestamps_utc: Sequence[datetime],
+    distances_m: Sequence[float | None],
+    altitudes_m: Sequence[float | None],
+    half_window_s: float = _DEFAULT_HALF_WINDOW_S,
+) -> list[float | None]:
+    """The grade at every index at once -- the same widening-window definition `_windowed_grade`
+    computes one index at a time, found via `np.searchsorted` instead of a per-index Python
+    while-loop. Mathematically identical: for a sorted timestamp array, the widening search from
+    index `i` always converges on the same left/right boundary regardless of how it's found, so
+    this returns exactly what calling `_windowed_grade` at every index would.
+
+    Confirmed necessary, not a preemptive optimization: `compute_gap_adjusted_distances` calling
+    the scalar `_windowed_grade` once per sample is O(samples x window-width) in pure Python --
+    the dominant cost of `performance_curve.py`'s GAP curve over a real multi-year history
+    (~1,000 running activities): roughly halved the curve's own total time (about 27s -> 15s for
+    the full history) once vectorized here."""
+    n = len(timestamps_utc)
+    ts = np.fromiter(
+        ((t - timestamps_utc[0]).total_seconds() for t in timestamps_utc), dtype=np.float64,
+        count=n,
+    )
+    dist = np.fromiter((np.nan if v is None else v for v in distances_m), dtype=np.float64, count=n)
+    alt = np.fromiter((np.nan if v is None else v for v in altitudes_m), dtype=np.float64, count=n)
+
+    # Same boundary semantics as _windowed_grade's own two while-loops: the largest index <= i
+    # whose timestamp is >= half_window_s before ts[i] (or 0, if the array runs out first), and
+    # the smallest index >= i whose timestamp is >= half_window_s after ts[i] (or n - 1).
+    left = np.maximum(np.searchsorted(ts, ts - half_window_s, side="right") - 1, 0)
+    right = np.minimum(np.searchsorted(ts, ts + half_window_s, side="left"), n - 1)
+
+    d0, d1 = dist[left], dist[right]
+    a0, a1 = alt[left], alt[right]
+    span = d1 - d0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        grade = np.where(span > 0, (a1 - a0) / np.where(span > 0, span, 1.0), np.nan)
+    return [None if np.isnan(g) else float(g) for g in grade]
+
+
 def _cost_of_running(grade_fraction: float) -> float:
     """C(i) = 155.4*i^5 - 30.4*i^4 - 43.3*i^3 + 46.3*i^2 + 19.5*i + 3.6 -- energy cost of running,
     J/(kg*m), at grade `i` (fraction, e.g. 0.1 = 10% uphill). Ported from frontend/src/gap.ts's
@@ -160,6 +200,55 @@ def _grade_adjusted_time_factor(grade_fraction: float) -> float:
     return _FLAT_COST / _cost_of_running(grade_fraction)
 
 
+def compute_gap_adjusted_distances(
+    timestamps_utc: Sequence[datetime],
+    distances_m: Sequence[float | None],
+    altitudes_m: Sequence[float | None],
+) -> list[float]:
+    """Per-interval grade-adjusted-equivalent flat distance (metres) for every `[i, i+1)`
+    interval in the stream -- length `len(timestamps_utc) - 1`. This is the same per-interval
+    quantity `compute_avg_gap_speed_mps` sums internally, extracted so a caller wanting the full
+    per-interval series (`performance_curve.py`'s own sliding-window best-effort search, which
+    needs a cumulative GAP-equivalent-distance array to search over) doesn't have to re-derive
+    it. An interval contributes `0.0` -- never `None`, since a caller cumsum-ing this into a
+    running total needs a concrete number, and never a fabricated positive distance either --
+    whenever it's missing a distance/altitude reading, stationary
+    (`_STATIONARY_MPS_FLOOR`), or its own `_windowed_grade` can't be computed -- the same skip
+    conditions `compute_avg_gap_speed_mps`'s own summation loop applies below, now shared rather
+    than duplicated. A valid interval's own contribution is always strictly positive (every
+    grade-adjusted-time-factor this module computes is a positive multiplier), so `> 0.0` is an
+    exact, not approximate, stand-in for "this interval was valid" wherever a caller needs that.
+    """
+    n = len(timestamps_utc)
+    if len(distances_m) != n or len(altitudes_m) != n or n < 2:
+        return []
+    grades = _windowed_grades_batch(timestamps_utc, distances_m, altitudes_m)
+    out: list[float] = []
+    for i in range(n - 1):
+        d0, d1 = distances_m[i], distances_m[i + 1]
+        if d0 is None or d1 is None:
+            out.append(0.0)
+            continue
+        dist_delta = d1 - d0
+        if dist_delta <= 0:
+            out.append(0.0)
+            continue
+        dt_s = (timestamps_utc[i + 1] - timestamps_utc[i]).total_seconds()
+        if dt_s <= 0:
+            out.append(0.0)
+            continue
+        speed_mps = dist_delta / dt_s
+        if speed_mps < _STATIONARY_MPS_FLOOR:
+            out.append(0.0)
+            continue
+        grade = grades[i]
+        if grade is None:
+            out.append(0.0)
+            continue
+        out.append(dist_delta / _grade_adjusted_time_factor(grade))
+    return out
+
+
 def compute_avg_gap_speed_mps(
     timestamps_utc: Sequence[datetime],
     distances_m: Sequence[float | None],
@@ -167,6 +256,7 @@ def compute_avg_gap_speed_mps(
     *,
     start_idx: int = 0,
     end_idx: int | None = None,
+    _per_interval: list[float] | None = None,
 ) -> float | None:
     """Equivalent-flat-distance average grade-adjusted speed across the whole stream:
     `total equivalent-flat distance / total moving time`, the same energy-conserving definition
@@ -208,6 +298,15 @@ def compute_avg_gap_speed_mps(
     a sub-range (see `compute_lap_gap_speeds_mps`), so a point near the sub-range's own boundary
     still gets a real window on both sides instead of one truncated at that boundary.
 
+    `_per_interval`, when given, must be `compute_gap_adjusted_distances`'s own output for this
+    exact (unsliced) stream -- an internal-use-only escape hatch so a caller summing many
+    sub-ranges of the *same* stream (`compute_lap_gap_speeds_mps`, one call per lap) can compute
+    that per-interval array once and reuse it across every lap, rather than this function
+    silently recomputing the full stream's own grade for every single lap call (an O(N) ->
+    O(N x lap count) regression that would otherwise follow from a naive refactor). A whole-
+    activity caller with nothing to reuse across calls (`refresh_avg_gap`) omits it and this
+    function computes it fresh, same total cost as before this function existed.
+
     All three sequences must be the same length and share index order, as read straight off one
     Parquet table's columns. `None` when there's nothing usable to average (too few samples, or
     every interval missing a channel/stationary)."""
@@ -220,25 +319,20 @@ def compute_avg_gap_speed_mps(
     end_idx = n - 1 if end_idx is None else min(end_idx, n - 1)
     start_idx = max(0, start_idx)
 
+    per_interval = (
+        _per_interval
+        if _per_interval is not None
+        else compute_gap_adjusted_distances(timestamps_utc, distances_m, altitudes_m)
+    )
+
     total_moving_time_s = 0.0
     total_equiv_flat_m = 0.0
     for i in range(start_idx, end_idx):
-        d0, d1 = distances_m[i], distances_m[i + 1]
-        if d0 is None or d1 is None:
-            continue
-        dist_delta = d1 - d0
-        if dist_delta <= 0:
+        equiv_m = per_interval[i]
+        if equiv_m <= 0.0:
             continue
         dt_s = (timestamps_utc[i + 1] - timestamps_utc[i]).total_seconds()
-        if dt_s <= 0:
-            continue
-        speed_mps = dist_delta / dt_s
-        if speed_mps < _STATIONARY_MPS_FLOOR:
-            continue
-        grade = _windowed_grade(timestamps_utc, distances_m, altitudes_m, i)
-        if grade is None:
-            continue
-        total_equiv_flat_m += dist_delta / _grade_adjusted_time_factor(grade)
+        total_equiv_flat_m += equiv_m
         total_moving_time_s += dt_s
     if total_moving_time_s <= 0 or total_equiv_flat_m <= 0:
         return None
@@ -289,6 +383,11 @@ def compute_lap_gap_speeds_mps(
         return [None] * len(lap_start_epoch_s)
 
     timestamps_utc = [datetime.fromtimestamp(s, tz=UTC) for s in stream_epoch_s]
+    # Computed once for the whole stream and reused across every lap below -- see
+    # compute_avg_gap_speed_mps's own `_per_interval` docstring for why this matters: without it,
+    # each of a real activity's ~10-20 laps would independently recompute _windowed_grade for
+    # every sample in the *entire* stream, not just its own lap's share of it.
+    per_interval = compute_gap_adjusted_distances(timestamps_utc, distances_m, altitudes_m)
 
     results: list[float | None] = []
     for i, start_s in enumerate(lap_start_epoch_s):
@@ -302,7 +401,12 @@ def compute_lap_gap_speeds_mps(
             continue
         results.append(
             compute_avg_gap_speed_mps(
-                timestamps_utc, distances_m, altitudes_m, start_idx=start_idx, end_idx=end_idx
+                timestamps_utc,
+                distances_m,
+                altitudes_m,
+                start_idx=start_idx,
+                end_idx=end_idx,
+                _per_interval=per_interval,
             )
         )
     return results

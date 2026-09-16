@@ -20,6 +20,7 @@ import { useAllActivities } from "../api/queries";
 import { EddingtonChart } from "../components/EddingtonChart";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { PaceTrendsChart } from "../components/PaceTrendsChart";
+import { PerformanceCurveChart } from "../components/PerformanceCurveChart";
 import { RacePredictionsChart } from "../components/RacePredictionsChart";
 import { RaceReadinessChart } from "../components/RaceReadinessChart";
 import { ThresholdAnalysisChart } from "../components/ThresholdAnalysisChart";
@@ -36,6 +37,7 @@ type Tab =
   | "race-readiness"
   | "threshold-analysis"
   | "vo2max"
+  | "performance-curve"
   | "eddington";
 
 export function InsightsPage() {
@@ -103,6 +105,15 @@ export function InsightsPage() {
         <button
           type="button"
           role="tab"
+          aria-selected={tab === "performance-curve"}
+          className={tab === "performance-curve" ? "is-active" : undefined}
+          onClick={() => setTab("performance-curve")}
+        >
+          Performance Curve
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={tab === "eddington"}
           className={tab === "eddington" ? "is-active" : undefined}
           onClick={() => setTab("eddington")}
@@ -133,6 +144,7 @@ export function InsightsPage() {
           <Vo2maxFactorAnalysis />
         </>
       )}
+      {tab === "performance-curve" && <PerformanceCurveChart />}
       {tab === "eddington" && <EddingtonChart />}
     </main>
   );

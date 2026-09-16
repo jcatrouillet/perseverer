@@ -1086,6 +1086,22 @@ const SCHEMAS = [
       ["week_start","string(date)","The Monday that week starts."],
       ["distance_m","number",""],
     ] },
+  { name: "PerformanceCurveOut", note: "Returned by GET /performance/curve. The best sustained value for each duration bucket across every qualifying activity in range -- see performance_curve.py's own module docstring for the sliding-window algorithm and gap-disqualification rule.", fields: [
+      ["available","boolean","false — never fabricated — when no activity in range qualifies for this metric."],
+      ["metric","string","Echoes the request: pace, gap, or heart_rate."],
+      ["points","array<PerformanceCurvePointOut>","One entry per duration bucket that has data -- never every bucket padded with nulls."],
+      ["threshold_pace_s_per_km","number|null","The athlete's own already-computed anaerobic threshold pace (GET /performance), shown alongside the curve, never blended into it. Only set for pace/gap."],
+      ["aerobic_threshold_pace_s_per_km","number|null","As above, the aerobic threshold. Only set for pace/gap."],
+      ["threshold_hr_bpm","number|null","The athlete's own already-computed anaerobic threshold HR. Only set for heart_rate."],
+      ["aerobic_threshold_hr_bpm","number|null","As above, the aerobic threshold HR. Only set for heart_rate."],
+      ["max_hr_bpm","number|null","The athlete's own 365-day trailing max HR. Only set for heart_rate."],
+    ] },
+  { name: "PerformanceCurvePointOut", fields: [
+      ["duration_s","integer","One of the fixed duration buckets (1s through 2h)."],
+      ["value","number","bpm for heart_rate; seconds/km for pace/gap."],
+      ["activity_id","string","The activity that actually set this bucket's record."],
+      ["local_date","string(date)","That activity's own local date."],
+    ] },
   { name: "InsightOut", note: "Returned by GET /insights and GET /activities/{id}/insights.", fields: [
       ["kind","string","effort, health, load, pb, or streak."],
       ["window","string","current, 30d, 90d, 180d, 365d, or all_time, depending on kind."],
@@ -1816,6 +1832,17 @@ const GROUPS = [
       responses: [ { code: 200, ref: "RaceReadinessOut" } ],
       example: { curl: `curl https://your-perseverer-host/api/v1/performance/race-readiness \\
   -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/api/v1/performance/curve", summary: "Best sustained pace/GAP/heart rate for each duration, across every activity in a date range.",
+      description: "The single best D-second window anywhere across every qualifying activity for each of a fixed set of durations (1s through 2h) — not one activity's own average — the same idea as cycling's \"Critical Power Curve\"/Runalyze's \"Heart Rate Curve\". pace/gap are always running-only regardless of sports; heart_rate honors sports since a hard bike ride or hiit session is a real sustained HR effort too. Deliberately request-time, not rollup-backed — same exception GET /performance/vo2max-analysis above already establishes. See performance_curve.py's own module docstring for the sliding-window algorithm and its gap-disqualification rule.",
+      params: [
+        ["metric","query","req","string","—","One of pace, gap, heart_rate."],
+        ["start_date","query","req","string(date)","—",""],
+        ["end_date","query","req","string(date)","—",""],
+        ["sports","query","opt","string","all sports","Comma-separated sport values. Only applies to heart_rate — ignored for pace/gap."],
+      ],
+      responses: [ { code: 200, ref: "PerformanceCurveOut" } ],
+      example: { qs: "?metric=heart_rate&start_date=2026-06-01&end_date=2026-08-19&sports=running,cycling" }
     },
   ]},
 

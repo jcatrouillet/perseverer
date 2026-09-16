@@ -1040,6 +1040,30 @@ export interface RaceReadinessOut {
   long_run_series: RaceReadinessWeekOut[];
 }
 
+// GET /performance/curve -- the best sustained value for each of a fixed set of durations,
+// across every qualifying activity in range. See performance_curve.py's own module docstring.
+export interface PerformanceCurvePointOut {
+  duration_s: number;
+  value: number;
+  // The activity that actually set this bucket's record.
+  activity_id: string;
+  local_date: string;
+}
+
+export interface PerformanceCurveOut {
+  available: boolean;
+  metric: "pace" | "gap" | "heart_rate";
+  points: PerformanceCurvePointOut[];
+  // The athlete's own already-computed threshold pace/HR, shown alongside the curve as
+  // reference lines -- never blended into it. Only the pair relevant to `metric` is ever
+  // non-null.
+  threshold_pace_s_per_km: number | null;
+  aerobic_threshold_pace_s_per_km: number | null;
+  threshold_hr_bpm: number | null;
+  aerobic_threshold_hr_bpm: number | null;
+  max_hr_bpm: number | null;
+}
+
 export interface HealthDashboardDayOut {
   local_date: string;
   value_sum: number | null;

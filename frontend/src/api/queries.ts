@@ -63,6 +63,7 @@ import type {
   PaceBandOut,
   Page,
   PeriodCalendarResponse,
+  PerformanceCurveOut,
   PerformanceDailyRollupOut,
   PlannedRaceIn,
   PlannedRaceOut,
@@ -188,6 +189,31 @@ export function useRaceReadiness(raceId?: number, asOf?: string) {
     queryFn: () =>
       apiGet<RaceReadinessOut>(
         `/api/v1/performance/race-readiness${buildQuery({ race_id: raceId, as_of: asOf })}`,
+      ),
+  });
+}
+
+/** The Insights "Performance Curve" tab (GET /performance/curve) -- the best sustained value for
+ * each of a fixed set of durations across every qualifying activity in [startDate, endDate].
+ * `sports` (comma-joined) scopes which sports feed a "heart_rate" curve; ignored server-side for
+ * "pace"/"gap", which always mean running. See performance_curve.py's own module docstring. */
+export function usePerformanceCurve(
+  metric: "pace" | "gap" | "heart_rate",
+  startDate: string,
+  endDate: string,
+  sports?: string[],
+) {
+  const sportsParam = sports && sports.length > 0 ? sports.join(",") : undefined;
+  return useQuery({
+    queryKey: ["performance-curve", metric, startDate, endDate, sportsParam ?? "all"],
+    queryFn: () =>
+      apiGet<PerformanceCurveOut>(
+        `/api/v1/performance/curve${buildQuery({
+          metric,
+          start_date: startDate,
+          end_date: endDate,
+          sports: sportsParam,
+        })}`,
       ),
   });
 }

@@ -132,3 +132,29 @@ class RaceReadinessOut(BaseModel):
     # combined percentages.
     weekly_distance_series: list[RaceReadinessWeekOut] = []
     long_run_series: list[RaceReadinessWeekOut] = []
+
+
+class PerformanceCurvePointOut(BaseModel):
+    duration_s: int
+    value: float
+    # The activity that actually set this bucket's record -- same "driving activity" provenance
+    # instinct Vo2maxContributorOut already establishes.
+    activity_id: str
+    local_date: str
+
+
+class PerformanceCurveOut(BaseModel):
+    # False -- never a fabricated curve -- when no activity in the requested range/sport
+    # selection has the stream channel(s) this metric needs at all.
+    available: bool
+    metric: str  # "pace" | "gap" | "heart_rate"
+    points: list[PerformanceCurvePointOut] = []
+    # The athlete's own already-computed threshold pace/HR (performance_daily_rollup, the same
+    # VDOT-based model threshold_analysis.py already surfaces) -- shown alongside the curve as
+    # reference lines, never blended into it. Only the pair relevant to `metric` is ever
+    # non-null; the rest are always null, not just "unpopulated for this response."
+    threshold_pace_s_per_km: float | None = None
+    aerobic_threshold_pace_s_per_km: float | None = None
+    threshold_hr_bpm: float | None = None
+    aerobic_threshold_hr_bpm: float | None = None
+    max_hr_bpm: float | None = None

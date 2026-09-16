@@ -1515,6 +1515,99 @@ solve, only a marker name and a value the athlete is entering themselves.
   that row to a free-text `<input>` instead, with a small "Choose existing" link back, for
   anything not in either list.
 
+## Performance Curve: best sustained pace/GAP/heart rate across a date range (performance_curve.py)
+
+A Runalyze-style "Heart Rate Curve"/cycling "Critical Power Curve": for a chosen metric (pace,
+GAP, or heart rate) and a chosen date range, the single best sustained value for each of a fixed
+set of durations — the best D-second window *anywhere* across every qualifying activity, not one
+activity's own average — plotted duration (log x-axis) against best value. New algorithmic
+territory for this app: no sliding-window "best effort of duration D" primitive existed anywhere
+before this feature (`runningStats.ts::personalRecords`'s own docstring already documents this
+exact gap, working around it by taking the fastest whole *activity* instead of a real
+sub-window). `GET /performance/curve` is request-time, not rollup-backed — the same
+bounded/occasional-lookup exception `vo2max_analysis.py`/`threshold_analysis.py`/
+`race_readiness.py` already establish, since which activities qualify changes with every new
+date-range/sport-filter combination rather than accumulating against a stable rollup-row
+identity.
+
+- **Duration buckets** (`performance_curve.py::DURATION_BUCKETS_S`): `1, 5, 10, 15, 30, 60, 120,
+  180, 300, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200` seconds (1s through 2h) — a superset of
+  the reference product's own shown labels. A bucket longer than an activity's own duration is
+  simply skipped for that activity, never extrapolated.
+- **`best_window_over_stream`**: the core primitive, a two-pointer O(N)-amortized scan per
+  duration bucket over one activity's own timestamp/value stream — both the window start and end
+  only ever move forward across the whole scan, since the minimal window end needed to reach a
+  given duration is non-decreasing as the start advances. Two windowing conventions, deliberately
+  different per mode, not one shared one:
+  - `mode="mean"` (heart rate): duration D means D *samples*, the standard GoldenCheetah/
+    TrainingPeaks convention — the window is right-exclusive `[i, j)`, averaging `j - i` samples.
+    At ~1Hz sampling, a naive "smallest window whose elapsed span reaches D seconds" touches
+    D+1 samples, not D — a real off-by-one bug caught by two failing unit tests before this
+    convention was fixed.
+  - `mode="rate"` (pace/GAP): a real physical rate (distance / actual elapsed time), so no
+    sample-counting convention applies — the window stays inclusive `[i, j]`, dividing the
+    distance covered by the real elapsed span (which may exceed D within tolerance).
+  - **Gap disqualification, never silent bridging**: a candidate window is rejected if reaching
+    `duration_s` needed a span more than 10% longer (`_SPAN_TOLERANCE`) than the target, or if any
+    single inter-sample gap inside the window's actually-averaged range exceeds `_MAX_GAP_S`
+    (15.0 seconds) — checked via binary search (`bisect_left`) against a once-per-call
+    precomputed list of the stream's own gap positions, not recomputed per window. A gap under
+    the threshold is tolerated — an explicit, adjustable app policy, the same never-fabricate
+    discipline `race_readiness.py`/`weather.py` already apply elsewhere in this app. Returns
+    `None` (never a fabricated value) when no valid window exists for that duration.
+- **GAP reuse**: `gap.py::compute_gap_adjusted_distances` was extracted from
+  `compute_avg_gap_speed_mps`'s own inner loop (an efficiency-preserving refactor —
+  `compute_lap_gap_speeds_mps` now precomputes this per-interval array once and passes it into
+  each per-lap call via an internal-only `_per_interval` parameter, avoiding an
+  O(N) → O(N × lap_count) regression a naive refactor would introduce). The Performance Curve
+  module cumsums this into a GAP-equivalent cumulative-distance array and feeds it through the
+  exact same sliding-window path as plain pace.
+- **Sport scope**: `pace`/`gap` are running-only always, regardless of any `sports` query
+  param — matching this app's own established exact-`sport=="running"` convention for every
+  other pace feature (GAP's Minetti cost-of-running model has no meaning for other gaits).
+  `heart_rate` instead takes an athlete-chosen `sports` filter, since a hard bike ride or hiit
+  session is a real sustained HR effort too.
+- **One combined DuckDB query across every qualifying activity's own Parquet file**
+  (`read_parquet($1, filename=true)` bound to a Python list of paths) — a new pattern for this
+  codebase; every prior Parquet read (including `stream_query.py`) was one
+  `read_parquet(single_path)` call per query. Confirmed empirically (not assumed) that the
+  installed DuckDB version (1.5.5) accepts a bound Python list for this parameter. Rows are
+  grouped by filename in Python; `activity_trim_override` windows are honored per activity
+  (relative to that Parquet file's own first-recorded-sample epoch) before the sliding-window
+  search runs, so a trimmed-out stretch of car travel can't set a nonsensical short-duration
+  record.
+- **Verified against real data, not assumed fast**: a first, pure-Python version of both
+  `best_window_over_stream` and `gap.py::compute_gap_adjusted_distances` (a pre-existing function
+  this feature calls once per activity for GAP) measured 24-40s for the "all time" preset over
+  this app's own real multi-year history (~1,000 running activities) — past the bar this app
+  already set with the `ix_activity_metric_athlete_key` precedent above. Both were rewritten with
+  numpy: the same two-pointer/widening-window boundary logic, just found independently per index
+  via `np.searchsorted` rather than a per-index Python while-loop (mathematically identical for a
+  sorted timestamp array — verified against the existing unit tests plus a 200-trial randomized
+  property check comparing scalar and vectorized output index-by-index, not just the hand-crafted
+  cases). Real measured figures after: under 2s for "last 3/6 months", 3-4s for "last year", and
+  8-15s for "all time" (pace fastest, GAP slowest — it alone also runs the grade-smoothing pass).
+- **Reference values, shown alongside, never reconciled**: the athlete's own already-computed
+  threshold pace/HR (`performance_daily_rollup`, the same "exact `as_of`-dated row" query shape
+  `threshold_analysis.py` already uses) are returned purely for the frontend to draw as dashed
+  reference lines — never blended into the curve itself, the same posture Race Readiness's own
+  VDOT-based prognosis already establishes toward its own readiness percentage.
+- **Frontend** (`PerformanceCurveChart.tsx`, an Insights tab): metric selector (Pace/GAP/Heart
+  rate), a date-range preset dropdown (Last 3 months/6 months/Year/All time — no custom from/to
+  pickers, a deliberate v1 scope cut), HR-only sport checkboxes derived from the athlete's own
+  real activity history (`useAllActivities({})`, never a hardcoded sport catalog — the same
+  "derive from real data" precedent `buildMarkerCatalog` establishes for blood-test markers),
+  default all checked. A Recharts `ComposedChart` with a log-scale `XAxis` (duration spans 1s–2h,
+  four-plus orders of magnitude) and dashed `<ReferenceLine>`s for whichever threshold values the
+  active metric has — each passing `ifOverflow="extendDomain"`, since Recharts' own default
+  (`ifOverflow="discard"`) silently drops a reference line that falls outside the curve's own
+  auto-computed value domain, a real rendering bug this feature's own tests caught by asserting
+  an exact reference-line count rather than just "at least one." Stat tiles for the 20-min and
+  60-min best (each omitted, not zero, when that duration has no qualifying data yet), plus one
+  plain comparison sentence under them when both the 60-min value and the matching threshold
+  value exist (e.g. "Your 60-min best is 8s/km faster than your computed threshold pace") —
+  phrased as a plain observation, never a new blended metric.
+
 ## Running Eddington number, per year (eddington.ts)
 
 The largest integer E such that the athlete completed at least E runs of at least E km each in a
