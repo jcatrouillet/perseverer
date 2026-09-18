@@ -813,6 +813,82 @@ because you don't recognize it — stop, that's the bug.
   infinite loading spinner for anything but a detailed exercise, even signed in, while a detailed
   one loads its real video/steps/tips correctly; linking every exercise there regardless of tier
   was the original mistake this corrected.
+  **Revision: step-by-step instructions, and a small hand-curated set for tier 3's own generic
+  entries** — the user asked for detailed steps (plus pictures/video) for the ~1,150 tier-3
+  exercises by searching exrx.net/darebee.com, but checking both sites' actual terms live first
+  (not assumed) ruled that out at this catalog's scale: exrx.net's own
+  [Link Policy](https://exrx.net/Notes/LinkGuidelines) reserves its exercise directory content and
+  caps even bare links at under 75% of any one subdirectory's exercises, and darebee.com licenses
+  its content CC BY-NC-ND (No Derivatives) — reformatting either into this catalog's JSON isn't
+  something either site's terms permit at anywhere near this scale. What shipped instead, after
+  confirming with the user: (1) tier 2's free-exercise-db `instructions` are now kept as a real
+  `steps` array (`ExerciseLibraryEntry.steps`) instead of being flattened into one `description`
+  paragraph — free, safe, public-domain data this catalog already had; `description` stays `null`
+  for tier 2 so the same content isn't shown twice. Lowering the fuzzy-match jaccard threshold
+  below 0.7 to close more of the tier-3 gap was tried and rejected — checked against the real
+  ~1,527-exercise catalog (never tune this kind of heuristic on a few examples alone), it
+  reintroduces genuinely bad matches (e.g. "One-arm Push-up" fuzzy-matching "One Arm Chin-Up" at
+  0.6) — but the reuse cap had real headroom, since at 0.7 only 39 exercises total ever clear the
+  bar for a fuzzy match; raising `JACCARD_REUSE_CAP` from 3 to 5 rescues 3 more of those
+  already-qualifying matches with no quality cost. (2) A small, deliberately bounded
+  `HAND_CURATED_STEPS` dict in `generate_exercise_library.py` adds originally-written steps (my
+  own wording, general exercise-science knowledge, never copied from any one site) plus one
+  external `reference_url`/`reference_label` link for further reading, but ONLY for the dozen
+  tier-3 exercises that are genuinely Garmin's own generic "family" entry for a whole category
+  (name equals categoryLabel — "Row", "Battle Rope", "Lateral Raise", "Leg Raise",
+  "Hyperextension", "Chop", "Carry", "Hip Swing", "Sledge Hammer", "Sled", "Stair Stepper",
+  "Ladder" — a real single technique) — never one of the many differently-named, visually-distinct
+  variants inside that category (a decline push-up, a banded row, a single-leg hip raise), which
+  stay honest muscle-group-only entries exactly as before. A handful of other name-equals-category
+  entries exist (Cardio, Total Body, Olympic Lift, Suspension, Core, Plyo, Warm-up, etc.) but were
+  deliberately left uncurated — they're genuinely a training modality/goal, not one technique, and
+  writing steps for them would be dishonest the same way a copied description would be. A plain
+  hyperlink (unlike copying content or images) isn't something any site's terms restrict at this
+  small a scale.
+  **Revision: composed step-by-step instructions for ~800 more tier-3 exercises, from real
+  bases, with a careful pass to exclude/correct where Garmin's own categorization is wrong** —
+  after the 12-exercise pass above, asked to go further ("step by step for every exercise"). Of
+  the ~1,150 tier-3 exercises, roughly 800 turned out to be named variants inside a category
+  that already has a real base movement (tier 1's own Push-up/Squat/Plank/Crunch/Lunge/Hip
+  Raise/Pull-up/Sit-up, tier 2's own Bench Press/Calf Raise/Curl/Deadlift/Leg Curl/Shoulder
+  Press/Shrug/Triceps Extension, or one of the 12 hand-curated ones) — e.g. "Decline Push-up" is
+  a named variant of "Push-up". `generate_exercise_library.py` composes each of these from its
+  base's own real steps (`BASE_STEPS_OVERRIDE`, originally written for the tier-1 movements that
+  only had Garmin's prose description before, applied ONLY to the literal base entry itself —
+  not to every tier-1 exercise sharing that category, a real bug caught before shipping: an
+  earlier version slapped generic "hold a plank" steps onto Garmin's own correctly-described
+  "Mountain Climber," which happens to share PLANK's category) plus honest, specific notes on
+  exactly what that variant's name adds beyond the base (`MODIFIER_NOTES`, ~60 phrases like
+  "single-leg," "Swiss ball," "kneeling," each describing a real, verified technique difference,
+  never a generic "this is a variant" filler) — checked longest-phrase-first against the words
+  the variant's name adds beyond its base name. **Reading every compositional category's full
+  exercise list (not assuming from the name pattern) surfaced real Garmin miscategorization
+  that would have made composition actively wrong**: some categories are grab-bags (Lateral
+  Raise contains "Ring Muscle-up," "Weighted Rope Climb," and "Calorie Row," none of them a
+  raise), some words mean something different depending on the movement family ("reverse" means
+  step-backward for a lunge but a wholly different leg-driven exercise for a hip raise/crunch,
+  "front raise" filed under Shoulder Press is not a press at all), and some barbell moves are
+  genuinely different, technical lifts sharing a category with a basic one (several
+  Olympic-lift-derived snatches/cleans filed under Squat, where "just squat down" would actively
+  mislead). `EXCLUDE_FROM_COMPOSITION` (~30 exercises) leaves these with only the honest
+  muscle-group description, same as any exercise with no real base, rather than composing wrong
+  instructions; `SUB_BASE_OVERRIDES` (~27 exercises: reverse crunch, reverse hip raise, lat
+  pulldown, good morning, dip) gives each of these real families its own originally-written
+  base instead, since they're common enough to deserve real content, just not the category's own
+  base. The Lunge base itself needed a direct fix, not just a note: its steps said "step
+  forward," which is flatly wrong for a reverse lunge (19 exercises) — made direction-neutral
+  ("step into a lunge position") instead, with a `CATEGORY_SCOPED_NOTES["LUNGE"]` entry
+  clarifying the direction for reverse/walking/side variants specifically, since a bare
+  "reverse"/"side" note would be wrong in the other families sharing those exact words.
+  End state: 161 tier-1 + 213 tier-2 + 770 tier-3 (15 hand-curated + 755 composed) = 1,144 of
+  1,527 exercises (75%) now carry real step-by-step instructions, up from 225 (12+213) before
+  this pass; the remaining 383 tier-3 exercises are sports/cardio/mobility categories with no
+  single describable base movement (Warm-up stretches, Core, Hip/Shoulder Stability, Plyo,
+  Cardio machines, Olympic Lift, Sandbag, Total Body) and keep their honest muscle-group-only
+  description, deliberately not forced through a mismatched composer. The dynamically-imported
+  `exerciseLibrary.json` chunk grew from ~865KB to ~1.39MB gzip-uncompressed — still comfortably
+  under vite-plugin-pwa's 2MB single-file precache limit, confirmed by a real build, but worth
+  tracking if more content is added later.
 - **Share links (`share_link`, `sharing.py`, `api/routers/share.py`)**: an athlete-issued token
   granting unauthenticated, read-only access to one activity or one summary period. `GET
   /share/{token}` is public by omission, same exemption mechanism `/healthz`/`/version`/

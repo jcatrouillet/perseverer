@@ -142,6 +142,36 @@ describe("ExerciseLibraryPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders a step-by-step list when the exercise has one", async () => {
+    mockLoadExerciseLibrary.mockResolvedValue([
+      ...FIXTURES,
+      entry({
+        name: "Row",
+        category: "ROW",
+        categoryLabel: "Row",
+        exercise: "ROW",
+        garmin_url: null,
+        tier: 3,
+        image_url: null,
+        image_source: null,
+        description: "Primarily targets the lats, traps.",
+        difficulty: null,
+        steps: ["Hinge at the hips.", "Pull the weight to your ribs."],
+        reference_url: "https://www.acefitness.org/resources/everyone/exercise-library/12/bent-over-row/",
+        reference_label: "ACE Fitness",
+      }),
+    ]);
+    render(<ExerciseLibraryPage />);
+    await waitFor(() => expect(screen.getByText("Hinge at the hips.")).toBeInTheDocument());
+
+    expect(screen.getByText("Pull the weight to your ribs.")).toBeInTheDocument();
+    const link = screen.getByText("More detail (ACE Fitness)") as HTMLAnchorElement;
+    expect(link).toHaveAttribute(
+      "href",
+      "https://www.acefitness.org/resources/everyone/exercise-library/12/bent-over-row/",
+    );
+  });
+
   it("notes when a tier-2 photo belongs to a closely related exercise, not the exact variant", async () => {
     render(<ExerciseLibraryPage />);
     await waitFor(() => expect(screen.getByText("Air Squat")).toBeInTheDocument());

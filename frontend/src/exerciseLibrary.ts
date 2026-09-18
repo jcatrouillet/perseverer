@@ -28,6 +28,20 @@ export interface ExerciseLibraryEntry {
   // tier 2 only, and only worth showing when it differs from `name` -- the photo/instructions
   // belong to this closely-related exercise, not necessarily the exact named variant.
   matched_exercise_name?: string;
+  // Step-by-step instructions, when they exist as discrete steps rather than one description
+  // paragraph: tier 2's free-exercise-db match already carries its instructions as a real list
+  // (previously flattened into `description`, now kept structured), and a small hand-curated
+  // set of tier 3's own generic "family" exercises (ones whose name IS the category -- "Row",
+  // "Lateral Raise", "Battle Rope", etc. -- a real single technique, not one of many differently-
+  // named variants Garmin never photographed) get originally-written steps here too. Never
+  // present for tier 1 -- Garmin's own description is already prose, not a step list.
+  steps?: string[] | null;
+  // Only set alongside a hand-curated `steps` entry above -- a single external page/video for
+  // further reading, deliberately never a copied description or image (exrx.net/darebee.com's
+  // own terms don't permit reproducing their content at this catalog's scale; a plain hyperlink
+  // is a different, uncontroversial thing).
+  reference_url?: string | null;
+  reference_label?: string | null;
 }
 
 let libraryPromise: Promise<ExerciseLibraryEntry[]> | null = null;

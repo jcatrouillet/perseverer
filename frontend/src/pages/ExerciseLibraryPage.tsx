@@ -47,6 +47,13 @@ function ExerciseCard({
           <p className="exercise-library__muscles">{allMuscles.join(", ")}</p>
         )}
         {entry.description && <p className="exercise-library__description">{entry.description}</p>}
+        {entry.steps && entry.steps.length > 0 && (
+          <ol className="exercise-library__steps">
+            {entry.steps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        )}
         {entry.tier === 2 && entry.matched_exercise_name !== entry.name && (
           <p className="exercise-library__note">
             Photo and instructions from a closely related exercise: {entry.matched_exercise_name}
@@ -60,6 +67,16 @@ function ExerciseCard({
             rel="noopener noreferrer"
           >
             View on Garmin Connect
+          </a>
+        )}
+        {entry.reference_url && (
+          <a
+            className="exercise-library__link"
+            href={entry.reference_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            More detail{entry.reference_label ? ` (${entry.reference_label})` : ""}
           </a>
         )}
       </div>
