@@ -634,6 +634,15 @@ original unfiltered all-time-best training run when no race is marked at all --
 fired, with an explicit caveat in `missing` when it's the fallback. `profile_max_hr_bpm` is
 untouched -- a genuine max-HR effort doesn't need a race context to be real the way a
 race-calibrated pace formula does.
+**Revision**: the Zone 1/Zone 2 boundary itself was still too fast even after the race-VDOT fix
+above -- its original "90% of the aerobic threshold" figure (a generic ventilatory-threshold-zone
+convention, not tied to this app's own model) only moved the Recovery zone's upper pace bound to
+5:55/km, short of the athlete's own real recovery-run pace. Replaced with
+`ZONE1_2_VO2MAX_FRACTION = 0.59`/`ZONE1_2_HR_FRACTION = 0.65` -- the floor of Jack Daniels' own
+published "Easy" pace range (59-74% VO2max, ~65-78% HRmax), the same Daniels-Gilbert model this
+app's VDOT is already built on. Zone 2 (Basic Endurance) now runs almost exactly Daniels' own E
+pace range end to end, since the aerobic threshold (0.73) already sits right at Daniels' own 0.74
+E-pace ceiling; this moved the Recovery boundary from 5:55/km to 6:26/km on the real data.
 
 ## Live daily wellness sync via garmin_connect
 

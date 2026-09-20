@@ -67,10 +67,18 @@ study prescribes them, since the two thresholds above are the only points sport 
 measures directly:
 
 - Zone 1/Zone 2 boundary (how far below aerobic threshold counts as "recovery" rather than
-  "endurance"): 90% of the Zone 2/3 boundary's own value, on both the pace and HR side. A widely
-  used convention in ventilatory-threshold-based zone calculators (published VT1/VT2-anchored
-  run-training zone tables commonly draw the recovery/endurance line at "under 90% of VT1") rather
-  than a lab-measured breakpoint of its own -- documented here rather than silently borrowed.
+  "endurance"): `ZONE1_2_VO2MAX_FRACTION = 0.59` VO2max, `ZONE1_2_HR_FRACTION = 0.65` of max HR --
+  the *floor*, not a fraction, of Jack Daniels' own published "Easy" (E) pace range (59-74%
+  VO2max, ~65-78% HRmax, *Daniels' Running Formula*) -- the same Daniels-Gilbert model this
+  entire app's VDOT is already built on (`vdot.py`'s own docstring), so this reuses an authority
+  already load-bearing here rather than introducing a new one. Zone 2 (Basic Endurance, this
+  boundary through the aerobic threshold at 0.73/0.851) is consequently almost exactly Daniels'
+  own E pace range end to end (0.73 sits right at Daniels' own 0.74 E-pace ceiling) -- Zone 1
+  (Recovery) is genuinely *below* Daniels' own easy-pace floor, not merely "a bit under threshold."
+  An earlier version of this boundary used 90% of the Zone 2/3 value instead (a generic
+  ventilatory-threshold-zone-calculator convention with no direct tie to this app's own model) --
+  confirmed too narrow directly against the athlete's own real recovery runs, which routinely sit
+  well below that boundary's own pace, and revised to Daniels' own number instead.
 - Zone 3/Zone 4 boundary (splitting the whole aerobic-threshold-to-lactate-threshold range into
   its own "aerobic threshold" and "lactate threshold" halves): the exact midpoint between the two
   lab-measured thresholds, in the same units each side is already expressed in. This mirrors
@@ -143,12 +151,16 @@ _TANAKA_MAX_HR_AGE_COEFFICIENT = 0.7
 AEROBIC_THRESHOLD_HR_FRACTION = 0.851
 LACTATE_THRESHOLD_HR_FRACTION = 0.935
 
-ZONE1_2_VO2MAX_FRACTION = AEROBIC_THRESHOLD_VO2MAX_FRACTION * 0.90
+# Jack Daniels' own published "Easy" (E) pace range floor -- 59% VO2max, ~65% HRmax (*Daniels'
+# Running Formula*) -- reused directly rather than derived as a fraction of the aerobic threshold;
+# see the module docstring's "Zone 1/Zone 2 boundary" paragraph for why.
+ZONE1_2_VO2MAX_FRACTION = 0.59
+ZONE1_2_HR_FRACTION = 0.65
+
 ZONE2_3_VO2MAX_FRACTION = AEROBIC_THRESHOLD_VO2MAX_FRACTION
 ZONE3_4_VO2MAX_FRACTION = (AEROBIC_THRESHOLD_VO2MAX_FRACTION + THRESHOLD_VO2MAX_FRACTION) / 2
 ZONE4_5_VO2MAX_FRACTION = THRESHOLD_VO2MAX_FRACTION
 
-ZONE1_2_HR_FRACTION = AEROBIC_THRESHOLD_HR_FRACTION * 0.90
 ZONE2_3_HR_FRACTION = AEROBIC_THRESHOLD_HR_FRACTION
 ZONE3_4_HR_FRACTION = (AEROBIC_THRESHOLD_HR_FRACTION + LACTATE_THRESHOLD_HR_FRACTION) / 2
 ZONE4_5_HR_FRACTION = LACTATE_THRESHOLD_HR_FRACTION

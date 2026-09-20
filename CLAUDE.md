@@ -518,6 +518,20 @@ because you don't recognize it — stop, that's the bug.
   to VDOT/pace only — `profile_max_hr_bpm` stays the single highest heart rate across every
   activity ever recorded, any sport, unchanged, since a genuine max-HR effort doesn't need a race
   context to be real the way a race-calibrated pace formula does.
+  **Revision: the Zone 1/Zone 2 boundary itself was still too fast** — after the race-VDOT fix
+  above, the athlete reported the *direction* was right but the Recovery zone still didn't reach
+  slow enough (its own upper pace bound, "90% of the aerobic threshold," only moved to 5:55/km,
+  when their own real recovery jogging is closer to 6:30+/km). The original "90% of VT1" figure
+  was a generic ventilatory-threshold-zone-calculator convention with no direct tie to this app's
+  own model — replaced with `ZONE1_2_VO2MAX_FRACTION = 0.59`/`ZONE1_2_HR_FRACTION = 0.65`, the
+  *floor* of Jack Daniels' own published "Easy" (E) pace range (59-74% VO2max, ~65-78% HRmax,
+  *Daniels' Running Formula*) — the same Daniels-Gilbert model this app's VDOT is already built
+  on, so this reuses an authority already load-bearing here instead of a new, weaker one. A nice
+  consistency check this surfaced: Zone 2 (Basic Endurance, this boundary through the aerobic
+  threshold at 0.73) now runs almost exactly Daniels' own E-pace range end to end, since 0.73
+  already sits right at Daniels' own 0.74 E-pace ceiling — Zone 1 (Recovery) is genuinely *below*
+  easy pace, not merely a bit under threshold. On the real data this moved the Recovery boundary
+  from 5:55/km to 6:26/km.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash

@@ -258,8 +258,8 @@ def test_formula_fallback_used_below_the_minimum_sample_count(tmp_path: Path) ->
     assert zone1.qualifying_run_count == 2
     assert zone1.hr_source == "formula_fallback"
     assert zone1.hr_high_bpm is not None
-    # Zone 1's HR fraction is 0.9 * 0.851 ~= 0.766 of max HR (190 bpm here).
-    assert 140 < zone1.hr_high_bpm < 150
+    # Zone 1's HR fraction is 0.65 of max HR (190 bpm here) -- Daniels' own Easy-pace HR floor.
+    assert 118 < zone1.hr_high_bpm < 129
 
 
 def test_max_hr_prefers_empirical_over_birthdate_formula(tmp_path: Path) -> None:
