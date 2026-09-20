@@ -183,8 +183,9 @@ def get_pace_hr_zones(
     conn: Connection = Depends(get_conn),
 ) -> PaceHrZonesOut:
     """The complete 5-zone pace + heart-rate table (Recovery/Basic Endurance/Aerobic Threshold/
-    Lactate Threshold/VO2 Max), built from the athlete's entire running history -- see
-    pace_hr_zones.py's own module docstring for the model and its literature sources."""
+    Lactate Threshold/VO2 Max), built from the athlete's recent running history (see
+    pace_hr_zones.py's own "How far back" docstring section for the exact windows) -- see that
+    same module docstring for the model and its literature sources."""
     resolved_as_of = as_of if as_of is not None else datetime.now(UTC).date()
     result = compute_pace_hr_zones(conn, athlete_id=athlete_id, as_of=resolved_as_of)
     return PaceHrZonesOut(

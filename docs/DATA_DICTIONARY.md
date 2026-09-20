@@ -643,6 +643,16 @@ published "Easy" pace range (59-74% VO2max, ~65-78% HRmax), the same Daniels-Gil
 app's VDOT is already built on. Zone 2 (Basic Endurance) now runs almost exactly Daniels' own E
 pace range end to end, since the aerobic threshold (0.73) already sits right at Daniels' own 0.74
 E-pace ceiling; this moved the Recovery boundary from 5:55/km to 6:26/km on the real data.
+**Revision**: the whole feature reached too far into the athlete's past to begin with -- the
+athlete's own all-time-best race was from 2023, so the original all-time, unbounded lookback kept
+the entire table anchored to a nearly-2-year-old data point regardless of how their fitness had
+since changed, a bigger source of staleness than either fix above. Replaced with three windows
+(`pace_hr_zones.py`'s own "How far back" docstring section): `TRAINING_RUN_WINDOW_DAYS = 365` for
+training runs (frequent, so a year is already plenty and keeps the profile current) and
+`RACE_WINDOW_DAYS = 730` for races (rare -- this athlete averages roughly one every five months, so
+a one-year window would often come up empty and silently defeat the race-preference fix above) and
+for `profile_max_hr_bpm`'s own window. The per-zone empirical-HR evidence pool is capped to the
+same one-year training-run window too, not just the profile VDOT.
 
 ## Live daily wellness sync via garmin_connect
 

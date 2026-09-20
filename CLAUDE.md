@@ -532,6 +532,21 @@ because you don't recognize it — stop, that's the bug.
   already sits right at Daniels' own 0.74 E-pace ceiling — Zone 1 (Recovery) is genuinely *below*
   easy pace, not merely a bit under threshold. On the real data this moved the Recovery boundary
   from 5:55/km to 6:26/km.
+  **Revision: windowed lookback (365 days for training runs, 730 for races/max HR), not the
+  athlete's literal entire history** — the athlete then asked, reasonably, why this feature reached
+  so far into their own past at all, and proposed the fix directly: cap training runs at one year,
+  but give races a longer two-year window since they're rare (this athlete averages roughly one
+  every five months — a one-year race window would often come up empty and silently fall back to a
+  training run, undoing the race-preference fix above). `TRAINING_RUN_WINDOW_DAYS = 365`/
+  `RACE_WINDOW_DAYS = 730`/`MAX_HR_WINDOW_DAYS = 730` (`pace_hr_zones.py`, see its own "How far
+  back" docstring section) replace the original all-time, unbounded lookback across every one of
+  `_best_vdot_in_window`/`_max_hr_in_window`/`_qualifying_runs_in_window` (the last of these also
+  bounds the per-zone empirical-HR evidence pool, not just the profile VDOT itself) — the original
+  design had followed the athlete's own first request literally ("based on all the runs I have done
+  in the past"), which this revision supersedes. The real cost the unbounded version paid: the
+  athlete's own all-time-best race was from 2023, so the whole table stayed anchored to a
+  nearly-2-year-old data point regardless of how their fitness had since changed — a materially
+  bigger source of staleness than either bug fixed above.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash

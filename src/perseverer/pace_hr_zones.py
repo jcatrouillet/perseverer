@@ -4,10 +4,12 @@ plain-language "when/how to use it" -- replacing the old point-in-time "Threshol
 (two single numbers, no ranges, no supporting evidence) with something an athlete can actually
 train off of directly.
 
-Deliberately built on the athlete's ALL-TIME best running performance, not a rolling window:
-`performance_daily_rollup.rolling_vdot` exists specifically to track *current* fitness day to day
-(a 42-day trailing max, see `performance_rollup.py`'s own docstring) -- the wrong basis for a
-stable reference table an athlete keeps using for months.
+Built on the athlete's recent best running performance, not `performance_daily_rollup.
+rolling_vdot`'s own 42-day trailing max (`performance_rollup.py`'s own docstring) -- that window
+tracks *current* fitness day to day, too short and too twitchy for a stable reference table an
+athlete keeps using for months. This module still deliberately avoids an unbounded, truly all-time
+lookback, though (an earlier version used one) -- see "How far back" below for why, and for the
+three different windows involved.
 
 **`profile_vdot` prefers a marked race over any training run, and this matters in practice, not
 just in theory**: `perseverer.performance.vdot` is computed for *every* running activity
@@ -21,18 +23,40 @@ while the best VDOT among activities the athlete actually marked as races (`acti
 `garmin_activity_summary.py`'s own eventTypeId heuristic plus the athlete's own
 `PATCH /activities/{id}/race` correction) tops out at a materially lower, more physiologically
 honest 44.5 (a real 10K). Using the unfiltered all-time max there would have made every zone
-boundary run too fast. `_all_time_best_vdot` therefore tries `is_race == True` activities first
-and only falls back to the unfiltered all-time best (the original behavior) when the athlete has
-no marked race at all -- `profile_vdot_source` ("race" | "training_run" | None) records which path
-fired, the same provenance instinct `profile_max_hr_source` already established, and a
-`training_run`-sourced profile gets its own explicit caveat in `missing` pointing at the "Mark as a
-race" action (`ActivityDetailPage.tsx`) that would fix it. This is scoped to VDOT/pace only --
-`profile_max_hr_bpm` stays the single highest heart rate across every activity ever recorded, any
-sport, unchanged: `performance_rollup.py`'s own "a max-HR effort from cycling/hiit is equally
-real" reasoning already applies here too, and a genuine physiological ceiling doesn't need a race
-context to be real the way a race-calibrated pace formula does. Both `profile_vdot`/
-`profile_max_hr_bpm` report the one activity that actually set them, not a silently-averaged
-number.
+boundary run too fast. `_best_vdot_in_window` therefore tries `is_race == True` activities first
+(within `RACE_WINDOW_DAYS`) and only falls back to the athlete's best training run (within
+`TRAINING_RUN_WINDOW_DAYS`) when no race qualifies -- `profile_vdot_source` ("race" |
+"training_run" | None) records which path fired, the same provenance instinct
+`profile_max_hr_source` already established, and a `training_run`-sourced profile gets its own
+explicit caveat in `missing` pointing at the "Mark as a race" action (`ActivityDetailPage.tsx`)
+that would fix it. `profile_max_hr_bpm` uses its own window (`MAX_HR_WINDOW_DAYS`) but is otherwise
+computed the same way `performance_rollup.py` already does for a *rolling* window -- the single
+highest heart rate recorded, any sport, since a max-HR effort from cycling/hiit is equally real.
+Both `profile_vdot`/`profile_max_hr_bpm` report the one activity that actually set them, not a
+silently-averaged number.
+
+## How far back -- three different windows, not one all-time lookback
+
+An earlier version of this feature used a truly unbounded, all-time lookback for everything, on
+the athlete's own original request ("based on all the runs I have done in the past"). Revised after
+the athlete pointed out the real cost of that choice directly: their own all-time-best race was
+run in 2023, so an unbounded window kept anchoring this "current training reference" table to
+fitness from years ago, whichever direction it had since moved -- exactly the kind of staleness a
+stable-but-*current* reference table shouldn't have. Three different windows now apply, each
+matched to how often that kind of data actually shows up:
+
+- `TRAINING_RUN_WINDOW_DAYS = 365` -- training runs are frequent (hundreds/year for an active
+  athlete), so one year is already plenty of data and keeps the profile tied to current fitness.
+  Used for the training-run VDOT fallback and for every zone's own qualifying-run pool (the
+  empirical HR percentile range and the "why these numbers" sample list).
+- `RACE_WINDOW_DAYS = 730` -- races are rare (this athlete averages roughly one every five months,
+  a real number checked against their own history, not assumed); a one-year window would often
+  come up empty and silently fall back to a training run anyway, defeating the point of preferring
+  a race at all. Two years gives the race-preference logic in `profile_vdot` above a realistic
+  chance of finding one to prefer.
+- `MAX_HR_WINDOW_DAYS = 730` -- matches the race window; a genuine max-HR effort doesn't need to be
+  as fresh as a training-run pace estimate, but two years still keeps it meaningfully more current
+  than a truly unbounded all-time ceiling would.
 
 ## The five zones, and why they sit where they do
 
@@ -100,10 +124,10 @@ more times here for the extra boundaries).
 The HR side is NOT simply "fraction times profile_max_hr_bpm" by default, even though that number
 is always computed as the fallback -- consistent with `performance_rollup.py::
 compute_threshold_hr`'s own empirical-first philosophy, extended from "the two threshold points"
-to "every zone": for each zone, every one of the athlete's own qualifying running activities
-(VDOT-eligible, with a real avg HR and a GAP pace that falls inside that zone's own pace band)
-across their *entire* history contributes its own avg HR, and the zone's reported HR range is the
-25th-75th percentile of that
+to "every zone": for each zone, every one of the athlete's own qualifying running activities in the
+trailing `TRAINING_RUN_WINDOW_DAYS` (VDOT-eligible, with a real avg HR and a GAP pace that falls
+inside that zone's own pace band) contributes its own avg HR, and the zone's reported HR range is
+the 25th-75th percentile of that
 real, empirical distribution -- not a formula, and not the lab-study fraction alone -- whenever
 there's enough real data to trust (`MIN_ZONE_HR_SAMPLES`, reusing `performance_rollup.
 MIN_THRESHOLD_HR_SAMPLES`'s own bar for the same reason). Below that sample count, the zone falls
@@ -113,14 +137,14 @@ a bare fallback point isn't a "range" on its own. Every zone's own qualifying ru
 low/middle/high of the real spread all stay represented) -- this is the literal answer to "why
 these numbers," the same "list the driving/qualifying activities" instinct `vo2max_analysis.py`/
 the old `threshold_analysis.py` already established for a single point, now extended to a whole
-zone's worth of real running history.
+zone's worth of real, recent running history.
 """
 
 from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy import Connection, select
 
@@ -215,6 +239,14 @@ MAX_SAMPLE_RUNS_PER_ZONE = 12
 # usable band without overclaiming precision the fallback path doesn't actually have.
 FALLBACK_HR_HALF_WIDTH_BPM = 4.0
 
+# How far back each kind of data is allowed to count -- see the module docstring's "How far back"
+# section for why these differ. Training runs are frequent, so a shorter window keeps the profile
+# tied to current fitness; races are rare (this athlete averages roughly one every five months), so
+# a longer window gives the race-preference logic above a realistic chance of finding one at all.
+TRAINING_RUN_WINDOW_DAYS = 365
+RACE_WINDOW_DAYS = 730
+MAX_HR_WINDOW_DAYS = 730
+
 
 @dataclass
 class ActivityRef:
@@ -261,14 +293,16 @@ class PaceHrZonesResult:
     missing: list[str]
 
 
-def _all_time_best_vdot(
-    conn: Connection, *, athlete_id: str, as_of: date, races_only: bool
+def _best_vdot_in_window(
+    conn: Connection, *, athlete_id: str, as_of: date, window_days: int, races_only: bool
 ) -> tuple[float | None, ActivityRef | None]:
+    window_start = as_of - timedelta(days=window_days)
     where = [
         activity_metric.c.athlete_id == athlete_id,
         activity_metric.c.metric_key == VDOT_METRIC_KEY,
         activity.c.deleted_at.is_(None),
         activity.c.local_date <= as_of.isoformat(),
+        activity.c.local_date >= window_start.isoformat(),
     ]
     if races_only:
         where.append(activity.c.is_race.is_(True))
@@ -300,9 +334,10 @@ def _all_time_best_vdot(
     return row.value_num, ref
 
 
-def _all_time_max_hr(
-    conn: Connection, *, athlete_id: str, as_of: date
+def _max_hr_in_window(
+    conn: Connection, *, athlete_id: str, as_of: date, window_days: int
 ) -> tuple[float | None, str | None]:
+    window_start = as_of - timedelta(days=window_days)
     rows = conn.execute(
         select(
             activity_metric.c.activity_id, activity_metric.c.metric_key, activity_metric.c.value_num
@@ -313,6 +348,7 @@ def _all_time_max_hr(
             activity_metric.c.metric_key.in_(MAX_HR_METRIC_KEYS),
             activity.c.deleted_at.is_(None),
             activity.c.local_date <= as_of.isoformat(),
+            activity.c.local_date >= window_start.isoformat(),
         )
     ).fetchall()
     merged = priority_merge(
@@ -330,16 +366,16 @@ def _all_time_max_hr(
     return None, None
 
 
-def _all_qualifying_runs(
-    conn: Connection, *, athlete_id: str, as_of: date
+def _qualifying_runs_in_window(
+    conn: Connection, *, athlete_id: str, as_of: date, window_days: int
 ) -> list[tuple[str, str, str | None, str, float | None, float | None, float, float]]:
-    """Every VDOT-eligible running activity, ever, with a usable GAP pace and avg HR -- the same
-    per-row shape `performance_rollup.py::refresh_performance_rollup` builds for its own
-    `threshold_candidates`, just unbounded by any trailing window (this feature is a stable,
-    all-time profile, not a day-to-day rollup) and carrying full activity details for the
-    "why these numbers" sample list. Returns
+    """Every VDOT-eligible running activity in the trailing `window_days`, with a usable GAP pace
+    and avg HR -- the same per-row shape `performance_rollup.py::refresh_performance_rollup`
+    builds for its own `threshold_candidates`, carrying full activity details for the "why these
+    numbers" sample list. Returns
     (activity_id, local_date, name, sport, distance_m, duration_s, pace_s_per_km, avg_hr_bpm).
     """
+    window_start = as_of - timedelta(days=window_days)
     vdot_rows = conn.execute(
         select(
             activity.c.id,
@@ -355,6 +391,7 @@ def _all_qualifying_runs(
             activity_metric.c.metric_key == VDOT_METRIC_KEY,
             activity.c.deleted_at.is_(None),
             activity.c.local_date <= as_of.isoformat(),
+            activity.c.local_date >= window_start.isoformat(),
         )
     ).fetchall()
     if not vdot_rows:
@@ -419,40 +456,51 @@ def _sample_evenly(runs: list[ZoneRunSample], cap: int) -> list[ZoneRunSample]:
 
 
 def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> PaceHrZonesResult:
-    profile_vdot, vdot_activity = _all_time_best_vdot(
-        conn, athlete_id=athlete_id, as_of=as_of, races_only=True
+    profile_vdot, vdot_activity = _best_vdot_in_window(
+        conn, athlete_id=athlete_id, as_of=as_of, window_days=RACE_WINDOW_DAYS, races_only=True
     )
     profile_vdot_source: str | None = "race" if profile_vdot is not None else None
     if profile_vdot is None:
-        profile_vdot, vdot_activity = _all_time_best_vdot(
-            conn, athlete_id=athlete_id, as_of=as_of, races_only=False
+        profile_vdot, vdot_activity = _best_vdot_in_window(
+            conn,
+            athlete_id=athlete_id,
+            as_of=as_of,
+            window_days=TRAINING_RUN_WINDOW_DAYS,
+            races_only=False,
         )
         if profile_vdot is not None:
             profile_vdot_source = "training_run"
-    profile_max_hr_bpm, max_hr_source = _all_time_max_hr(conn, athlete_id=athlete_id, as_of=as_of)
+    profile_max_hr_bpm, max_hr_source = _max_hr_in_window(
+        conn, athlete_id=athlete_id, as_of=as_of, window_days=MAX_HR_WINDOW_DAYS
+    )
 
+    race_years = RACE_WINDOW_DAYS // 365
     missing: list[str] = []
     if profile_vdot is None:
         missing.append(
-            "No qualifying run yet -- pace zones need at least one run lasting roughly 11+ "
-            "minutes with distance and pace data; shorter efforts don't fit the aerobic model "
-            "this is built on."
+            f"No qualifying run in the last {TRAINING_RUN_WINDOW_DAYS // 30} months, and no "
+            f"marked race in the last {race_years} years -- pace zones need at least one recent "
+            "run lasting roughly 11+ minutes with distance and pace data; shorter efforts don't "
+            "fit the aerobic model this is built on."
         )
     elif profile_vdot_source == "training_run":
         missing.append(
-            "No activity in your history is marked as a race, so this profile is based on your "
-            "single best training effort instead -- VDOT is calibrated against real race "
-            "performances, so a short, all-out training segment can read as fitter than a race "
-            "would actually show, making every zone below run faster than it should. Use "
-            '"Mark as a race" on a past race\'s activity page to fix this.'
+            f"No activity in the last {race_years} years is marked as a race, so this profile is "
+            "based on your best training run from the last 12 months instead -- VDOT is "
+            "calibrated against real race performances, so a short, all-out training segment can "
+            "read as fitter than a race would actually show, making every zone below run faster "
+            'than it should. Use "Mark as a race" on a past race\'s activity page to fix this.'
         )
     if profile_max_hr_bpm is None:
         missing.append(
-            "No heart rate data recorded yet, and no birthdate set in Settings to fall back to "
-            "an age-based estimate -- HR ranges can't be computed without one or the other."
+            f"No heart rate data recorded in the last {race_years} years, and no birthdate set in "
+            "Settings to fall back to an age-based estimate -- HR ranges can't be computed "
+            "without one or the other."
         )
 
-    qualifying = _all_qualifying_runs(conn, athlete_id=athlete_id, as_of=as_of)
+    qualifying = _qualifying_runs_in_window(
+        conn, athlete_id=athlete_id, as_of=as_of, window_days=TRAINING_RUN_WINDOW_DAYS
+    )
 
     zones: list[PaceHrZone] = []
     for i in range(5):

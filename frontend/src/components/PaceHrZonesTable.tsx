@@ -1,12 +1,14 @@
 // Insights' "Pace/HR Zones" tab -- a complete 5-zone pace + heart-rate training table (Recovery/
 // Basic Endurance/Aerobic Threshold/Lactate Threshold/VO2 Max), replacing the old "Threshold
 // Analysis" tab's two single point-in-time numbers with something an athlete can actually train
-// off of directly. See pace_hr_zones.py's own module docstring for the model, the literature it's
-// built on, and why every number comes from the athlete's entire running history rather than a
-// rolling "current fitness" window. Each zone's own qualifying runs (the literal answer to "why
-// this range") are collapsed by default, same convention `ExerciseLibraryPage.tsx`'s categories
-// and `BloodTestsPanel.tsx`'s panels already establish -- one open by default (Zone 2, since
-// that's where most easy running actually happens) rather than all five expanded at once.
+// off of directly. See pace_hr_zones.py's own module docstring (especially its "How far back"
+// section) for the model, the literature it's built on, and why the profile behind every number
+// is windowed (two years for a race/max HR, one year for a training run) rather than the athlete's
+// literal entire history or a short rolling "current fitness" window. Each zone's own qualifying
+// runs (the literal answer to "why this range") are collapsed by default, same convention
+// `ExerciseLibraryPage.tsx`'s categories and `BloodTestsPanel.tsx`'s panels already establish --
+// one open by default (Zone 2, since that's where most easy running actually happens) rather than
+// all five expanded at once.
 import { Link } from "wouter";
 
 import { usePaceHrZones } from "../api/queries";
@@ -123,14 +125,17 @@ export function PaceHrZonesTable() {
     missing,
     zones: zoneList,
   } = zones.data;
-  const vdotOrigin = profile_vdot_source === "race" ? "your best race" : "your best training run";
+  const vdotOrigin =
+    profile_vdot_source === "race"
+      ? "your best race in the last 2 years"
+      : "your best training run in the last year";
 
   return (
     <>
       <section className="card">
         <h2>Pace &amp; heart-rate training zones</h2>
         <p className="chart-note">
-          Built from the best VDOT you've ever recorded
+          Built from the best VDOT you've recorded
           {profile_vdot != null && ` (${profile_vdot.toFixed(1)})`}, from {vdotOrigin},
           {profile_vdot_activity && (
             <>
@@ -142,10 +147,10 @@ export function PaceHrZonesTable() {
             </>
           )}
           {profile_max_hr_bpm != null &&
-            ` and your own highest recorded heart rate (${profile_max_hr_bpm.toFixed(0)} bpm)`}
+            ` and your highest recorded heart rate in the last 2 years (${profile_max_hr_bpm.toFixed(0)} bpm)`}
           {" "}
-          — a stable reference table, not a day-to-day fitness tracker. See each zone's own
-          "Why these numbers" below for the runs behind its heart-rate range.
+          — a reference table that follows your current fitness, not a day-to-day tracker. See
+          each zone's own "Why these numbers" below for the runs behind its heart-rate range.
         </p>
         {missing.length > 0 && (
           <ul className="vo2max-factors__missing">

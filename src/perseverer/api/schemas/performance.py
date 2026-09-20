@@ -76,10 +76,12 @@ class PaceHrZoneOut(BaseModel):
 
 class PaceHrZonesOut(BaseModel):
     as_of: str
-    # The single best (highest) VDOT/max HR ever recorded, not a rolling-window "current fitness"
-    # value -- see pace_hr_zones.py's own docstring for why this feature needs a stable, all-time
-    # profile instead. `profile_vdot_activity` is the one run that set it (a maximum, never
-    # averaged); max HR has no such activity when it's the Tanaka-formula fallback.
+    # The single best (highest) VDOT/max HR within their own trailing lookback window (races get
+    # RACE_WINDOW_DAYS, training runs and max HR get their own shorter/matching windows -- see
+    # pace_hr_zones.py's own "How far back" docstring section), not a rolling-window "current
+    # fitness" value like performance_daily_rollup's own 42-day rolling_vdot.
+    # `profile_vdot_activity` is the one run that set it (a maximum, never averaged); max HR has no
+    # such activity when it's the Tanaka-formula fallback.
     profile_vdot: float | None
     profile_vdot_activity: ActivityRefOut | None
     profile_vdot_source: str | None  # "race" | "training_run" | None

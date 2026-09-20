@@ -1019,14 +1019,17 @@ export interface PaceHrZoneOut {
 
 export interface PaceHrZonesOut {
   as_of: string;
-  // The single best (highest) VDOT/max HR ever recorded -- a stable, all-time profile, not a
-  // rolling-window "current fitness" value. profile_vdot_activity is the one run that set it;
-  // max HR has no such activity when it's the Tanaka-formula fallback.
+  // The single best (highest) VDOT/max HR within its own trailing lookback window (races/max HR
+  // get 2 years, a training-run fallback gets 1 year -- see pace_hr_zones.py's "How far back"
+  // docstring section), not the athlete's literal entire history and not a short rolling
+  // "current fitness" value either. profile_vdot_activity is the one run that set it; max HR has
+  // no such activity when it's the Tanaka-formula fallback.
   profile_vdot: number | null;
   profile_vdot_activity: ActivityRefOut | null;
-  // "race" when profile_vdot came from an activity marked as a race (preferred -- VDOT is
-  // calibrated against genuine race efforts); "training_run" when no race is marked at all and
-  // this fell back to the best training run instead (see the accompanying `missing` caveat).
+  // "race" when profile_vdot came from an activity marked as a race within the last 2 years
+  // (preferred -- VDOT is calibrated against genuine race efforts); "training_run" when no race
+  // qualifies and this fell back to the best training run in the last year instead (see the
+  // accompanying `missing` caveat).
   profile_vdot_source: "race" | "training_run" | null;
   profile_max_hr_bpm: number | null;
   profile_max_hr_source: "empirical" | "formula_fallback" | null;

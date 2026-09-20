@@ -1,6 +1,6 @@
-"""Tests for pace_hr_zones.compute_pace_hr_zones: the all-time (not rolling-window) VDOT/max-HR
-profile, the five zone pace boundaries derived from it, and the empirical-first/formula-fallback
-HR range per zone.
+"""Tests for pace_hr_zones.compute_pace_hr_zones: the windowed (not all-time, not
+performance_daily_rollup's own 42-day rolling) VDOT/max-HR profile, the five zone pace boundaries
+derived from it, and the empirical-first/formula-fallback HR range per zone.
 """
 
 import datetime as dt
@@ -13,8 +13,11 @@ from perseverer.db.schema import activity, activity_metric, athlete, metadata, m
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.gap import AVG_GAP_METRIC_KEY
 from perseverer.pace_hr_zones import (
+    MAX_HR_WINDOW_DAYS,
     MAX_SAMPLE_RUNS_PER_ZONE,
     MIN_ZONE_HR_SAMPLES,
+    RACE_WINDOW_DAYS,
+    TRAINING_RUN_WINDOW_DAYS,
     ZONE_LABELS,
     compute_pace_hr_zones,
 )
@@ -24,6 +27,18 @@ from perseverer.vdot import compute_threshold_pace_s_per_km
 _AVG_HR_KEY = "fit.session.avg_heart_rate"
 _MAX_HR_KEY = "fit.session.max_heart_rate"
 _AS_OF = dt.date(2026, 6, 15)
+
+
+def _days_ago(days: int) -> str:
+    return (_AS_OF - dt.timedelta(days=days)).isoformat()
+
+
+# A date safely inside every window (training run / race / max HR).
+_RECENT = _days_ago(30)
+# A date inside the race/max-HR window (730 days) but outside the training-run window (365 days).
+_MID_RANGE = _days_ago(TRAINING_RUN_WINDOW_DAYS + 30)
+# A date outside every window.
+_TOO_OLD = _days_ago(RACE_WINDOW_DAYS + 30)
 
 
 def _engine(tmp_path: Path, *, birthdate: str | None = None) -> Engine:
@@ -123,19 +138,23 @@ def test_no_data_reports_the_gap(tmp_path: Path) -> None:
     assert any("No heart rate data" in m for m in result.missing)
 
 
-def test_profile_vdot_is_the_all_time_best_not_the_most_recent(tmp_path: Path) -> None:
-    """A strong run from years ago should still win over a weaker, much more recent one -- this
-    feature is a stable profile, not `performance_daily_rollup`'s own 42-day rolling max. Neither
-    run is marked as a race here, so this also exercises the training-run fallback path."""
+def test_training_run_vdot_ignores_a_stronger_run_outside_the_training_window(
+    tmp_path: Path,
+) -> None:
+    """A strong training run older than TRAINING_RUN_WINDOW_DAYS must lose to a weaker, more
+    recent one -- this profile tracks current fitness within a bounded window, not an all-time
+    peak (an earlier version used an unbounded lookback; revised after the athlete pointed out
+    that anchoring the whole table to a years-old effort was the real problem). Neither run is
+    marked as a race, so this also exercises the training-run fallback path."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        _add_run(conn, activity_id="strong-old", local_date="2020-01-01", vdot=55.0, avg_hr=175.0)
-        _add_run(conn, activity_id="weak-recent", local_date="2026-06-01", vdot=40.0, avg_hr=140.0)
+        _add_run(conn, activity_id="strong-too-old", local_date=_TOO_OLD, vdot=55.0, avg_hr=175.0)
+        _add_run(conn, activity_id="weak-recent", local_date=_RECENT, vdot=40.0, avg_hr=140.0)
         conn.commit()
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
-    assert result.profile_vdot == 55.0
+    assert result.profile_vdot == 40.0
     assert result.profile_vdot_activity is not None
-    assert result.profile_vdot_activity.activity_id == "strong-old"
+    assert result.profile_vdot_activity.activity_id == "weak-recent"
     assert result.profile_vdot_source == "training_run"
     assert any("marked as a race" in m for m in result.missing)
 
@@ -144,14 +163,17 @@ def test_profile_vdot_prefers_a_marked_race_over_a_faster_training_run(tmp_path:
     """A real bug this fixes: an all-out training segment (a track rep, a strides set) can post a
     higher VDOT than the athlete's own best real race, since the Daniels formula is calibrated
     against genuine race efforts, not short training bursts. Once at least one race is marked, it
-    must win over any faster non-race training run, however much higher that run's own VDOT is."""
+    must win over any faster non-race training run, however much higher that run's own VDOT is --
+    even one more recent than the race, and even though the race here is old enough to have
+    already fallen outside the (shorter) training-run window, which is exactly why the race window
+    is longer."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
         _add_run(
-            conn, activity_id="hard-training-segment", local_date="2022-08-01", vdot=55.0
+            conn, activity_id="hard-training-segment", local_date=_RECENT, vdot=55.0
         )
         _add_run(
-            conn, activity_id="real-race", local_date="2023-11-23", vdot=44.5, is_race=True
+            conn, activity_id="real-race", local_date=_MID_RANGE, vdot=44.5, is_race=True
         )
         conn.commit()
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
@@ -162,12 +184,29 @@ def test_profile_vdot_prefers_a_marked_race_over_a_faster_training_run(tmp_path:
     assert not any("marked as a race" in m for m in result.missing)
 
 
+def test_race_vdot_ignores_a_race_outside_the_race_window(tmp_path: Path) -> None:
+    """A race older than RACE_WINDOW_DAYS is out of scope entirely -- the fallback path applies
+    exactly as if no race existed at all."""
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_run(
+            conn, activity_id="too-old-race", local_date=_TOO_OLD, vdot=44.5, is_race=True
+        )
+        _add_run(conn, activity_id="recent-training", local_date=_RECENT, vdot=38.0)
+        conn.commit()
+        result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
+    assert result.profile_vdot == 38.0
+    assert result.profile_vdot_activity is not None
+    assert result.profile_vdot_activity.activity_id == "recent-training"
+    assert result.profile_vdot_source == "training_run"
+
+
 def test_profile_vdot_picks_the_best_among_several_marked_races(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        _add_run(conn, activity_id="race-weak", local_date="2022-11-06", vdot=33.2, is_race=True)
-        _add_run(conn, activity_id="race-best", local_date="2023-11-23", vdot=44.5, is_race=True)
-        _add_run(conn, activity_id="race-mid", local_date="2026-05-31", vdot=42.1, is_race=True)
+        _add_run(conn, activity_id="race-weak", local_date=_MID_RANGE, vdot=33.2, is_race=True)
+        _add_run(conn, activity_id="race-best", local_date=_days_ago(400), vdot=44.5, is_race=True)
+        _add_run(conn, activity_id="race-mid", local_date=_RECENT, vdot=42.1, is_race=True)
         conn.commit()
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
     assert result.profile_vdot == 44.5
@@ -179,7 +218,7 @@ def test_profile_vdot_picks_the_best_among_several_marked_races(tmp_path: Path) 
 def test_pace_boundaries_match_vdot_module_fractions(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        _add_run(conn, activity_id="a0", local_date="2025-01-01", vdot=50.0)
+        _add_run(conn, activity_id="a0", local_date=_RECENT, vdot=50.0)
         conn.commit()
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
 
@@ -213,14 +252,16 @@ def test_empirical_hr_used_once_enough_runs_qualify_in_a_zone(tmp_path: Path) ->
     with engine.connect() as conn:
         # A strong-effort run sets a high profile VDOT, with a wide easy-pace GAP so the recovery
         # zone (well below threshold) has real, distinct runs to qualify against.
-        _add_run(conn, activity_id="best", local_date="2024-01-01", vdot=50.0, avg_hr=180.0)
+        _add_run(conn, activity_id="best", local_date=_RECENT, vdot=50.0, avg_hr=180.0)
         # Recovery-pace runs: slow GAP speed puts these in Zone 1. gap_speed_mps chosen well below
-        # the zone1/2 boundary pace for vdot=50.
+        # the zone1/2 boundary pace for vdot=50. Dated within the training-run window (unlike the
+        # profile-setting run above, these must also fall inside TRAINING_RUN_WINDOW_DAYS to be
+        # counted as qualifying evidence).
         for i, hr in enumerate([120.0, 122.0, 124.0, 126.0, 128.0]):
             _add_run(
                 conn,
                 activity_id=f"recovery{i}",
-                local_date=f"2024-02-{i + 1:02d}",
+                local_date=_days_ago(60 + i),
                 vdot=30.0,
                 gap_speed_mps=2.0,  # ~8:20/km, deep in recovery territory for a VDOT-50 athlete
                 avg_hr=hr,
@@ -239,14 +280,14 @@ def test_empirical_hr_used_once_enough_runs_qualify_in_a_zone(tmp_path: Path) ->
 def test_formula_fallback_used_below_the_minimum_sample_count(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        _add_run(conn, activity_id="best", local_date="2024-01-01", vdot=50.0, max_hr=190.0)
+        _add_run(conn, activity_id="best", local_date=_RECENT, vdot=50.0, max_hr=190.0)
         # Only two recovery-pace runs -- one short of MIN_ZONE_HR_SAMPLES.
         assert MIN_ZONE_HR_SAMPLES == 3
         for i in range(2):
             _add_run(
                 conn,
                 activity_id=f"recovery{i}",
-                local_date=f"2024-02-{i + 1:02d}",
+                local_date=_days_ago(60 + i),
                 vdot=30.0,
                 gap_speed_mps=2.0,
                 avg_hr=120.0,
@@ -265,11 +306,21 @@ def test_formula_fallback_used_below_the_minimum_sample_count(tmp_path: Path) ->
 def test_max_hr_prefers_empirical_over_birthdate_formula(tmp_path: Path) -> None:
     engine = _engine(tmp_path, birthdate="1990-01-01")
     with engine.connect() as conn:
-        _add_run(conn, activity_id="a0", local_date="2024-01-01", vdot=45.0, max_hr=195.0)
+        _add_run(conn, activity_id="a0", local_date=_MID_RANGE, vdot=45.0, max_hr=195.0)
         conn.commit()
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
     assert result.profile_max_hr_bpm == 195.0
     assert result.profile_max_hr_source == "empirical"
+
+
+def test_max_hr_ignores_an_empirical_reading_outside_its_own_window(tmp_path: Path) -> None:
+    engine = _engine(tmp_path, birthdate="1990-01-01")
+    with engine.connect() as conn:
+        too_old_for_max_hr = _days_ago(MAX_HR_WINDOW_DAYS + 30)
+        _add_run(conn, activity_id="a0", local_date=too_old_for_max_hr, vdot=45.0, max_hr=195.0)
+        conn.commit()
+        result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
+    assert result.profile_max_hr_source == "formula_fallback"
 
 
 def test_max_hr_falls_back_to_tanaka_formula_with_a_birthdate_and_no_empirical_data(
@@ -277,7 +328,7 @@ def test_max_hr_falls_back_to_tanaka_formula_with_a_birthdate_and_no_empirical_d
 ) -> None:
     engine = _engine(tmp_path, birthdate="1990-01-01")
     with engine.connect() as conn:
-        _add_run(conn, activity_id="a0", local_date="2024-01-01", vdot=45.0)
+        _add_run(conn, activity_id="a0", local_date=_RECENT, vdot=45.0)
         conn.commit()
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
     assert result.profile_max_hr_source == "formula_fallback"
@@ -288,13 +339,13 @@ def test_max_hr_falls_back_to_tanaka_formula_with_a_birthdate_and_no_empirical_d
 def test_sample_runs_capped_and_span_the_full_hr_range(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        _add_run(conn, activity_id="best", local_date="2024-01-01", vdot=50.0)
+        _add_run(conn, activity_id="best", local_date=_RECENT, vdot=50.0)
         n = MAX_SAMPLE_RUNS_PER_ZONE + 8
         for i in range(n):
             _add_run(
                 conn,
                 activity_id=f"recovery{i}",
-                local_date=f"2024-03-{(i % 28) + 1:02d}",
+                local_date=_days_ago(i + 1),
                 vdot=30.0,
                 gap_speed_mps=2.0,
                 avg_hr=100.0 + i,  # a distinct, evenly-spread HR per run
