@@ -1680,6 +1680,47 @@ didn't have yet.
   is the Eddington number itself, made visible rather than only tabulated. Only the current
   calendar year gets this chart; every year still gets its own row in the table above.
 
+## PR progress, per week (prProgress.ts)
+
+Has this year's pace actually improved on last year's, at every distance, not just the athlete's
+own named-distance PR table? A new Insights tab (`PrProgressChart.tsx`), not a new backend
+endpoint or table: computed entirely client-side over the same full running-history fetch
+(`useAllActivities({ sport: "running" })`) the Pace trends and Eddington tabs already perform,
+same "fetch once, aggregate in the browser" precedent.
+
+- **One dot per ISO week** (`prProgress.ts::prProgress`): the week's (Monday-Sunday) single
+  highest-VDOT running activity represents that week, mirroring `PaceTrendsChart.tsx`'s own "gold
+  trace" precedent of one representative effort per week rather than plotting every run. Each
+  week's winner is colored by whether it fell at least a calendar year before `today` (`yearAgo` —
+  a real calendar-year anniversary, not a fixed 365-day window, with Feb 29 clamped back to Feb 28
+  on a non-leap anniversary year rather than overflowing into March) — red for "one year or
+  older," blue for "less than one year."
+- **Two exact-distance pace frontiers**, one per color (`recordFrontier`): sort a set of weekly
+  winners by distance descending, keep a point only when its pace beats every point already kept
+  at an equal-or-longer distance — "no equally long or longer run is as fast," the same personal-
+  record concept `runningStats.ts::personalRecords` already establishes for a handful of named
+  race distances, generalized here into a continuous step frontier across every observed distance.
+  An exact pace tie prefers the *older* point (never lets an unchanged record masquerade as the
+  frontier's own newest point).
+- **Where recent actually beats old** (`improvements`) is the chart's real point, not the two
+  frontiers alone: walking every distance boundary either frontier has a point at, an interval is
+  drawn as an extra blue segment directly over the red step only where a *non-older* point on the
+  *combined* (both years pooled) frontier is strictly faster than the older-only frontier at that
+  same distance — genuinely adjacent improving intervals merge into one continuous polyline
+  (rather than two separate `<Line>` elements, which could each carry a different `best.pace` and
+  so still trace a real step within that one merged stretch) specifically so a real
+  *non*-improving gap between two improving stretches never gets bridged by a stray connecting
+  line — confirmed by its own test, "keeps disconnected improvements separate across a
+  non-improving interval." A tie is deliberately never colored as an
+  improvement (a small float-equality epsilon guards the comparison, same "don't overclaim a tie as
+  progress" instinct as `recordFrontier`'s own tie-break above). The blue line only ever
+  extrapolates back to distance 0 or forward to the next real boundary already on one of the two
+  frontiers — never beyond the longest distance the older frontier actually covers, since there is
+  no older baseline yet to compare a longer recent run against.
+- Each plotted dot is a real, keyboard-focusable `<a href="/activities/{id}">` (not hover-only),
+  surfacing that run's own name/date/distance/pace/VDOT/duration in an `aria-live` details strip
+  and linking straight to the activity.
+
 ## Weather: full conditions judgement from one endpoint (weather.py)
 
 `GET /activities/{id}/weather` originally carried just enough for a header badge (temperature/

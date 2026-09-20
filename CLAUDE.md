@@ -336,6 +336,41 @@ because you don't recognize it — stop, that's the bug.
   itself. A Recharts `ComposedChart` (`<Bar>` with per-row `<Cell>` coloring, same pattern
   `TrainingBandsChart.tsx`'s own aggregate chart already uses, plus a dashed `<Line>` for the
   diagonal — `<ReferenceLine>` only supports horizontal/vertical lines, not y=x).
+- **PR progress — has this year's pace actually improved on last year's, at every distance
+  (`prProgress.ts`, `PrProgressChart.tsx`, an Insights tab)**: a pace-vs-distance scatter plotting
+  one dot per ISO week (Monday-Sunday) — the week's single highest-VDOT running activity, same
+  "one representative effort per week" precedent `PaceTrendsChart.tsx`'s own "gold trace" already
+  established, computed client-side over the exact same full running-history fetch
+  (`useAllActivities({ sport: "running" })`) that tab and `EddingtonChart.tsx` already perform, no
+  new backend endpoint. Every dot is colored by whether its own week fell at least a year before
+  `today` (`yearAgo`, a calendar-year anniversary that clamps Feb 29 back to Feb 28 rather than
+  overflowing into March) — red for "one year or older," blue for "less than one year" — and two
+  **exact-distance pace frontiers** are drawn as red/blue step lines over those same two point
+  sets (`recordFrontier`: sort by distance descending, keep a point only when its pace beats every
+  point at an equal-or-longer distance already kept, i.e. "no equally long or longer run is as
+  fast" — the same "personal record at or beyond this distance" concept
+  `runningStats.ts::personalRecords` already establishes, just as a continuous frontier across
+  every observed distance instead of a handful of named race distances). The chart's real point
+  isn't the two frontiers alone but **where recent beats old**: `improvements` walks every
+  distance boundary either frontier has a point at and keeps only the intervals where a
+  *non-older* point on the *combined* frontier (both years pooled) is strictly faster than the
+  older-only frontier at that same distance — rendered as extra blue segments directly on top of
+  the red step exactly where a real improvement happened, genuinely adjacent improving intervals
+  merged into one continuous polyline (rather than two separate `<Line>` elements, which could
+  each carry a different `best.pace` and so still trace a real step within that one merged
+  stretch) specifically so a real *non*-improving gap between two improving stretches never gets
+  bridged by a stray connecting line — confirmed by its own test, "keeps disconnected improvements
+  separate across a non-improving interval." An
+  exact tie (recent matching, not beating, an old record) is deliberately never colored as an
+  improvement (`best.pace >= old.pace - 1e-9`, a float-equality epsilon) — same "don't overclaim
+  a tie as progress" instinct as `recordFrontier`'s own tie-break (prefers the older point on an
+  exact pace tie, so an unchanged record can never itself masquerade as the frontier's newest
+  point). Only ever extrapolates the blue improvement backward to distance 0 or up to the next
+  real boundary already on one of the two frontiers — never beyond the longest distance the older
+  frontier actually covers, since there is no older baseline to compare a longer recent run
+  against yet. Each dot is a real `<a href="/activities/{id}">` (keyboard-focusable, not just
+  hover-only) surfacing that run's own name/date/distance/pace/VDOT/duration in a `aria-live`
+  details strip and linking straight to the activity.
 - **Insights: independently-computed race predictions + threshold/max-HR**:
   `performance_daily_rollup` (`performance_rollup.py::refresh_performance_rollup`) is a second,
   separate rollup alongside `fitness_daily_rollup` — same full-history-recompute-on-every-ingest
