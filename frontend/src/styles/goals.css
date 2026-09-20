@@ -72,3 +72,19 @@
   color: var(--color-text);
   margin-bottom: 2px;
 }
+
+.goal-progress__tooltip-today {
+  max-width: 240px;
+  margin: 0 0 4px;
+  color: var(--color-text-muted);
+}
+
+.goal-progress__tooltip-ahead {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.goal-progress__tooltip-behind {
+  color: var(--color-danger);
+  font-weight: 600;
+}
