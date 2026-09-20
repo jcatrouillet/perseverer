@@ -1,0 +1,44 @@
+/* Match Pace trends' viewport-wide chart and 1680px maximum. */
+.pr-progress {
+  width: 100vw;
+  max-width: 1680px;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+}
+.pr-progress__chart {
+  margin-top: var(--space-4);
+}
+.pr-progress__dot {
+  cursor: pointer;
+  outline: none;
+}
+.pr-progress__dot:focus-visible circle:last-child {
+  stroke: var(--color-text);
+  stroke-width: 3;
+}
+.pr-progress__details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+.pr-progress__details span {
+  color: var(--color-text-muted);
+}
+.pr-progress__details a {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.pr-progress__dot:hover circle:last-child,
+.pr-progress__dot:focus-visible circle:last-child {
+  r: 6;
+  fill-opacity: 1;
+}

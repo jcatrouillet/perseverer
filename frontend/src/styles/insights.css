@@ -2,6 +2,7 @@
    indicator echoing .app-nav__links' own active-tab treatment (layout.css), sized for a
    within-page section switcher rather than the global top nav it's visually paired with. */
 .insights-tabs {
+  flex-wrap: wrap;
   display: flex;
   gap: var(--space-5);
   margin: var(--space-3) 0 var(--space-5);
@@ -9,6 +10,7 @@
 }
 
 .insights-tabs button {
+  flex-shrink: 0;
   background: none;
   border: none;
   padding: var(--space-2) 0 var(--space-3);

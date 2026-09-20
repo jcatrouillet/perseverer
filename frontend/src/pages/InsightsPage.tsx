@@ -1,4 +1,6 @@
-// Six sub-tabs, each owning its own data fetch and rendered only while active (so switching
+// PR progress reuses the running-history query: one highest-VDOT run per ISO week,
+// exact-distance pace frontiers comparing the past year with older records.
+// Insights sub-tabs, each owning its own data fetch and rendered only while active (so switching
 // tabs is also what triggers that tab's otherwise-unneeded request): Pace trends (every run's
 // VDOT plotted over its own date, see PaceTrendsChart.tsx), Training bands (share of running
 // time spent at each pace, see TrainingBandsChart.tsx), Race predictions, Pace/HR Zones,
@@ -21,6 +23,7 @@ import { useAllActivities } from "../api/queries";
 import { EddingtonChart } from "../components/EddingtonChart";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { PaceHrZonesTable } from "../components/PaceHrZonesTable";
+import { PrProgressChart } from "../components/PrProgressChart";
 import { PaceTrendsChart } from "../components/PaceTrendsChart";
 import { PerformanceCurveChart } from "../components/PerformanceCurveChart";
 import { RacePredictionsChart } from "../components/RacePredictionsChart";
@@ -31,6 +34,7 @@ import { Vo2maxFactorAnalysis } from "../components/Vo2maxFactorAnalysis";
 import "../styles/insights.css";
 
 type Tab =
+  | "pr-progress"
   | "pace-trends"
   | "training-bands"
   | "race-predictions"
@@ -65,6 +69,15 @@ export function InsightsPage() {
           onClick={() => setTab("training-bands")}
         >
           Training bands
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "pr-progress"}
+          className={tab === "pr-progress" ? "is-active" : undefined}
+          onClick={() => setTab("pr-progress")}
+        >
+          PR progress
         </button>
         <button
           type="button"
@@ -127,6 +140,13 @@ export function InsightsPage() {
           {runs.isLoading && <LoadingSpinner />}
           {runs.isError && <p role="alert">Could not load running activities.</p>}
           {runs.data && <PaceTrendsChart activities={runs.data} />}
+        </>
+      )}
+      {tab === "pr-progress" && (
+        <>
+          {runs.isLoading && <LoadingSpinner />}
+          {runs.isError && <p role="alert">Could not load running activities.</p>}
+          {runs.data && <PrProgressChart activities={runs.data} />}
         </>
       )}
       {tab === "training-bands" && <TrainingBandsChart />}
