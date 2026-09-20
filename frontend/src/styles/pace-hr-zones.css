@@ -1,0 +1,113 @@
+/* PaceHrZonesTable -- the Insights "Pace/HR Zones" tab. */
+
+.pace-hr-zones__table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-size-sm);
+}
+
+.pace-hr-zones__table th,
+.pace-hr-zones__table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  vertical-align: top;
+}
+
+.pace-hr-zones__table th {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.pace-hr-zones__table td {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  white-space: nowrap;
+}
+
+.pace-hr-zones__table td.pace-hr-zones__description {
+  white-space: normal;
+  min-width: 220px;
+  color: var(--color-text-muted);
+}
+
+.pace-hr-zones__zone-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.pace-hr-zones__evidence {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.pace-hr-zones__evidence > summary {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  font-weight: 600;
+  background: var(--color-surface-raised);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.pace-hr-zones__evidence > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pace-hr-zones__evidence > summary::before {
+  content: "▸";
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.pace-hr-zones__evidence[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.pace-hr-zones__count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.pace-hr-zones__run-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pace-hr-zones__run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.pace-hr-zones__run:hover {
+  background: var(--color-surface-raised);
+}
+
+.pace-hr-zones__run-date {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  min-width: 6.5em;
+}
+
+.pace-hr-zones__run-name {
+  font-weight: 500;
+}
+
+.pace-hr-zones__run-stats {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}

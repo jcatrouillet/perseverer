@@ -38,8 +38,8 @@ exact same sliding-window search as plain pace's own raw cumulative distance, ju
 different distance series.
 
 **Reference values, shown alongside, never reconciled**: the athlete's own already-computed
-threshold pace/HR (`performance_daily_rollup`, the same VDOT-based model `threshold_analysis.py`
-already surfaces) are returned alongside the curve so the frontend can draw them as reference
+threshold pace/HR (`performance_daily_rollup`, the same VDOT-based model `pace_hr_zones.py`
+also builds on) are returned alongside the curve so the frontend can draw them as reference
 lines the curve's own real shape can be compared against visually -- never blended into a new
 number, the same posture Race Readiness's own VDOT-based "prognosis" already establishes toward
 its own volume-adequacy readiness percentage. `None` (never fabricated) wherever that rollup
@@ -52,7 +52,7 @@ version (1.5.5) to accept a bound Python list of paths for `read_parquet(?, file
 before relying on it, per this project's own "verify against real data, don't guess" discipline.
 
 **Deliberately request-time, not rollup-backed** -- the same "bounded, occasional diagnostic
-lookup" exception `vo2max_analysis.py`/`threshold_analysis.py`/`race_readiness.py` already
+lookup" exception `vo2max_analysis.py`/`pace_hr_zones.py`/`race_readiness.py` already
 establish. Verified empirically (not assumed), not just assumed fast because the algorithm is
 O(N), against this project's own real multi-year history (~1,000 running activities): under 2s
 for the "last 3 months"/"last 6 months" presets, 3-4s for "last year", and 8-15s for "all time"
@@ -300,9 +300,8 @@ def _trim_windows(
 def _reference_values(
     conn: Connection, *, athlete_id: str, metric: Metric, as_of: date
 ) -> dict[str, float | None]:
-    """The athlete's own latest `performance_daily_rollup` row (same "read `as_of`'s own row"
-    shape `threshold_analysis.py` already uses) -- only the fields `metric` cares about are
-    non-None in the result; the rest stay None (never fabricated)."""
+    """The athlete's own latest `performance_daily_rollup` row for `as_of` -- only the fields
+    `metric` cares about are non-None in the result; the rest stay None (never fabricated)."""
     row = conn.execute(
         select(performance_daily_rollup).where(
             performance_daily_rollup.c.athlete_id == athlete_id,

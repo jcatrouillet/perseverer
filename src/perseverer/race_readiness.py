@@ -49,7 +49,7 @@ is this app's own stated policy, not a claimed universal formula; it's an ordina
 constant, easy to revisit.
 
 Deliberately request-time, not rollup-backed (CLAUDE.md's rollup mandate) -- the same "bounded,
-occasional diagnostic lookup" exception `vo2max_analysis.py`/`threshold_analysis.py` already
+occasional diagnostic lookup" exception `vo2max_analysis.py`/`pace_hr_zones.py` already
 establish. Which race this even applies to can change day to day (a new nearer race gets added,
 an old one passes), so there's no stable identity for a rollup row to accumulate against; the
 whole computation, history included, is cheap enough (two queries over each window, all

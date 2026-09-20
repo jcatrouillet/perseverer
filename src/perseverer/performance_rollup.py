@@ -79,8 +79,8 @@ reasoning:
 `ROLLING_VDOT_WINDOW_DAYS`, `MAX_HR_WINDOW_DAYS`, `THRESHOLD_HR_WINDOW_DAYS`,
 `THRESHOLD_PACE_TOLERANCE`, `MIN_THRESHOLD_HR_SAMPLES`, `MAX_HR_METRIC_KEYS`,
 `AVG_HR_METRIC_KEYS`, `priority_merge`, and `median` are exported (no leading underscore)
-specifically so `threshold_analysis.py`'s own request-time factor-analysis query reuses the exact
-same window/tolerance/merge logic this rollup does, rather than a second copy that could drift --
+specifically so `pace_hr_zones.py`'s own request-time zone-table query reuses the exact same
+window/tolerance/merge logic this rollup does, rather than a second copy that could drift --
 same reuse `vo2max_analysis.py` already established for `ROLLING_VDOT_WINDOW_DAYS`.
 """
 
@@ -166,8 +166,9 @@ def compute_threshold_hr(
     """`window` is (local_date, pace_s_per_km, avg_hr_bpm) for every VDOT-eligible run with a
     usable GAP pace and average HR in the relevant trailing window -- the same shape
     `refresh_performance_rollup`'s own `threshold_candidates` already builds, and what
-    `threshold_analysis.py` rebuilds with full activity details for its own factor breakdown.
-    One function for both the anaerobic and aerobic thresholds (called with a different
+    `pace_hr_zones.py` rebuilds (unbounded by any trailing window) with full activity details
+    for its own zone-by-zone evidence. One function for both the anaerobic and aerobic
+    thresholds (called with a different
     `reference_pace_s_per_km`/`fallback_fraction` each time) so the two can never silently drift
     onto different empirical/fallback logic.
     """

@@ -61,6 +61,7 @@ import type {
   NoteOut,
   NoteUpdate,
   PaceBandOut,
+  PaceHrZonesOut,
   Page,
   PeriodCalendarResponse,
   PerformanceCurveOut,
@@ -81,7 +82,6 @@ import type {
   SleepSessionOut,
   SplitOut,
   StreamResponse,
-  ThresholdFactorAnalysisOut,
   TrimCandidateOut,
   Vo2maxFactorAnalysisOut,
   WeatherForecastOut,
@@ -167,16 +167,14 @@ export function useVo2maxFactorAnalysis(asOf?: string) {
   });
 }
 
-/** The Insights "Threshold Analysis" tab's factor-analysis panel (GET
- * /performance/threshold-analysis) -- which workout(s) currently drive the anaerobic and aerobic
- * threshold pace/HR, and what's missing. `asOf` defaults server-side to today when omitted. */
-export function useThresholdFactorAnalysis(asOf?: string) {
+/** The Insights "Pace/HR Zones" tab (GET /performance/pace-hr-zones) -- the complete 5-zone
+ * pace + heart-rate table built from the athlete's entire running history, plus the qualifying
+ * runs behind each zone's own HR range. `asOf` defaults server-side to today when omitted. */
+export function usePaceHrZones(asOf?: string) {
   return useQuery({
-    queryKey: ["threshold-analysis", asOf ?? "today"],
+    queryKey: ["pace-hr-zones", asOf ?? "today"],
     queryFn: () =>
-      apiGet<ThresholdFactorAnalysisOut>(
-        `/api/v1/performance/threshold-analysis${buildQuery({ as_of: asOf })}`,
-      ),
+      apiGet<PaceHrZonesOut>(`/api/v1/performance/pace-hr-zones${buildQuery({ as_of: asOf })}`),
   });
 }
 

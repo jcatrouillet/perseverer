@@ -293,13 +293,13 @@ because you don't recognize it — stop, that's the bug.
   index) brought "all time" down to 8-15s and every shorter preset under 4s.
   `activity_trim_override` windows honored per activity (a trimmed-out stretch of car travel
   can't set a nonsensical short-duration record) before the per-bucket sliding-window search
-  runs. The athlete's own already-computed threshold pace/HR (`performance_daily_rollup`, same
-  "exact `as_of`-dated row" query shape `threshold_analysis.py` already uses) are returned
-  purely as reference values for the frontend to draw as dashed lines — never blended into the
-  curve itself, the same "shown alongside, never reconciled" posture Race Readiness's own
-  VDOT-based prognosis already establishes. `GET /performance/curve` is request-time, not
-  rollup-backed (the same bounded, occasional-lookup exception `vo2max_analysis.py`/
-  `threshold_analysis.py`/`race_readiness.py` already establish). Frontend:
+  runs. The athlete's own already-computed threshold pace/HR (`performance_daily_rollup`, a
+  plain "exact `as_of`-dated row" read) are returned purely as reference values for the frontend
+  to draw as dashed lines — never blended into the curve itself, the same "shown alongside,
+  never reconciled" posture Race Readiness's own VDOT-based prognosis already establishes.
+  `GET /performance/curve` is request-time, not rollup-backed (the same bounded, occasional-
+  lookup exception `vo2max_analysis.py`/`pace_hr_zones.py`/`race_readiness.py` already
+  establish). Frontend:
   `PerformanceCurveChart.tsx`, a metric selector (Pace/GAP/Heart rate), a date-range preset
   dropdown (Last 3/6 months, Year, All time — no custom pickers, a deliberate v1 scope cut), HR
   sport checkboxes derived from the athlete's own real activity history (never a hardcoded
@@ -425,7 +425,8 @@ because you don't recognize it — stop, that's the bug.
   as `ix_sleep_stage_session` earlier this project.
 - **Threshold Analysis: aerobic threshold added alongside the existing anaerobic one, plus a
   factor-analysis breakdown** (Insights tab renamed from "Threshold & Max HR", `vdot.py`,
-  `performance_rollup.py`, `threshold_analysis.py`): the athlete's own "threshold pace" had always
+  `performance_rollup.py` -- the tab and its `threshold_analysis.py` factor-analysis module were
+  since removed, see the Revision note below): the athlete's own "threshold pace" had always
   meant the anaerobic/lactate threshold ("LT2"/"VT2", `THRESHOLD_VO2MAX_FRACTION = 0.88`, unchanged
   field names `threshold_pace_s_per_km`/`threshold_hr_bpm` — every existing consumer, `hr_zones.py`
   and `running_load.py` included, keeps meaning this one). New `aerobic_threshold_pace_s_per_km`/
@@ -453,29 +454,48 @@ because you don't recognize it — stop, that's the bug.
   `priority_merge`/`median`) computes both thresholds' empirical-median-or-fallback HR so they can
   never silently drift onto different logic — same reuse instinct `vo2max_analysis.py`'s own
   `ROLLING_VDOT_WINDOW_DAYS` reuse already established.
-  **Factor analysis** (`GET /performance/threshold-analysis`, `threshold_analysis.py`, the
-  request-time exception to the rollup mandate `vo2max_analysis.py` already established): both
-  threshold PACES are pure functions of the same `rolling_vdot` VO2max already uses, so "which
-  workout led to the current threshold pace" is exactly `vo2max_analysis.py`'s own driving-activity
-  answer, embedded here rather than re-derived (`ThresholdFactorAnalysisOut.vo2max`). Threshold HR
-  is answered differently per source: the empirical path recomputes, at request time, every
-  qualifying run near that day's threshold pace (same window/tolerance the rollup itself used) and
-  flags which run(s) the stored median actually came from (`is_median` — one run when the
-  qualifying count is odd, two when even and the median averages them); the fallback path instead
-  identifies whichever activity (any sport) set `max_hr_bpm` within its own 365-day window, or
-  notes a formula-derived max HR has no activity behind it at all. Frontend:
-  `ThresholdAnalysisChart.tsx` (renamed from `ThresholdMaxHrChart.tsx`) plots both thresholds
-  together rather than as four separate charts: one "Threshold pace" chart carries both the
-  anaerobic and aerobic pace series on a shared axis (both seconds/km, directly comparable —
-  aerobic always the slower/larger value), and one "Threshold & max HR" chart carries all three
-  HR series (max, anaerobic threshold, aerobic threshold) on a shared axis (all bpm, aerobic <
-  anaerobic < max by construction) — by explicit request, after an initial version shipped these
-  as four independent single/paired-series charts. `ThresholdFactorAnalysis.tsx` renders the
-  shared VO2max-driving-workout
-  card plus both threshold-HR breakdowns (each qualifying run as its own activity-linked card, the
-  median one badged, or the max-HR-driving activity when on the fallback path), on the same
-  "Threshold Analysis" tab as the chart, same "chart above, breakdown below" pairing `Vo2maxChart.
-  tsx`/`Vo2maxFactorAnalysis.tsx` already established for VO2max.
+  **Revision: the "Threshold Analysis" tab (a factor-analysis breakdown of these same two
+  point-in-time numbers) was replaced entirely by a complete 5-zone Pace/HR table** — asked for
+  "recovery/basic endurance/aerobic threshold/lactate threshold/VO2max," each a real pace range
+  and HR range with a plain-language "when/how to use it," computed from the athlete's *entire*
+  running history rather than a day-to-day snapshot, plus the actual runs behind each range.
+  `threshold_analysis.py`, `ThresholdAnalysisChart.tsx`, and `ThresholdFactorAnalysis.tsx` are
+  gone (nothing else depended on them — confirmed by grep before deleting; `performance_rollup.
+  py`'s own `threshold_pace_s_per_km`/`aerobic_threshold_pace_s_per_km`/HR fields stay exactly as
+  documented above, since `PerformanceCurveChart.tsx`'s reference lines still read them straight
+  from `performance_daily_rollup` via `GET /performance`/`GET /performance/curve`, independent of
+  the removed factor-analysis endpoint). See `pace_hr_zones.py`'s own module docstring for the
+  full model and every citation; summarized: the two hard boundaries (Zone 2/3 = aerobic
+  threshold, Zone 4/5 = lactate threshold) reuse `vdot.AEROBIC_THRESHOLD_VO2MAX_FRACTION`/
+  `THRESHOLD_VO2MAX_FRACTION` exactly (0.73/0.88 VO2max, unchanged) plus, on the HR side,
+  Esteve-Lanao et al.'s own directly-measured VT1/VT2 heart rates (85.1%/93.5% of HRpeak) — a
+  first-time use of the more precise VT2 figure, since this new feature has no installed-base
+  fallback to preserve the way `performance_rollup.py`'s own 0.88 anaerobic-HR fallback does. The
+  other two boundaries (Zone 1/2, Zone 3/4) are coaching judgment calls stated plainly as such —
+  90% of the aerobic threshold, and the exact midpoint between the two thresholds — mirroring
+  Seiler's own three-zone polarized-training skeleton (Seiler & Kjerland 2006; Seiler 2010)
+  subdivided once more on each end rather than a different model. Deliberately built on the
+  athlete's ALL-TIME best VDOT and ALL-TIME max HR (each with the one activity that set it), not
+  `performance_daily_rollup`'s own 42-day/365-day rolling windows — this is a stable reference
+  table an athlete keeps using for months, the wrong job for a "current fitness" tracker; same
+  "best of the period, not a moving trend" reasoning `runningStats.ts::bestVdot` already
+  established, just extended to unbounded history. Each zone's own HR range is empirical-first,
+  formula-fallback-second, extending `performance_rollup.py::compute_threshold_hr`'s philosophy
+  from "the two threshold points" to all five zones: every qualifying run (VDOT-eligible, real
+  avg HR, GAP pace inside that zone's band) across the athlete's whole history contributes its
+  own avg HR, and the reported range is the real 25th-75th percentile of that distribution once
+  there are enough of them (`MIN_ZONE_HR_SAMPLES`, reusing the rollup's own bar) — a formula
+  fraction of max HR, widened into a small band, only below that. `GET /performance/pace-hr-zones`
+  is the same "bounded, occasional diagnostic lookup" exception `vo2max_analysis.py` already
+  establishes. Frontend: `PaceHrZonesTable.tsx` — one table (zone/pace/HR/description) plus one
+  collapsed-by-default "Why these numbers" `<details>` per zone (Zone 2 open by default, since
+  that's where most easy running actually happens) listing the real qualifying runs, each linked
+  to its own activity page, evenly sampled down to a cap when there are many so the low/middle/
+  high of the real spread all stay visible rather than an arbitrary slice. A real bug caught by
+  its own component test before shipping: the open-ended zones (Zone 1 has no pace floor, Zone 5
+  no pace ceiling) initially rendered "Faster than"/"Slower than" backwards — Zone 1's one defined
+  edge is its *fastest* allowed pace (the zone extends slower, unbounded), so the correct wording
+  is "slower than" that edge, not "faster than," and symmetrically for Zone 5.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash
@@ -1220,7 +1240,7 @@ because you don't recognize it — stop, that's the bug.
   bases, and combining them into one new number would overclaim precision this app has no
   grounds for; `None` for a non-standard race distance, same as `planned_race`'s own prediction.
   Deliberately request-time, not rollup-backed (the same "bounded, occasional diagnostic lookup"
-  exception `vo2max_analysis.py`/`threshold_analysis.py` already establish) — which race this
+  exception `vo2max_analysis.py`/`pace_hr_zones.py` already establish) — which race this
   even applies to can change day to day (a nearer race gets added, an old one passes), so there's
   no stable rollup-row identity to accumulate against. `GET /performance/race-readiness`
   defaults to the athlete's own nearest upcoming running race (`race_id` targets a specific one);
@@ -1311,7 +1331,7 @@ because you don't recognize it — stop, that's the bug.
   vendor, and a forecast has no such permanent-record concept, since it's superseded by reality
   as the date approaches — archiving it would only accumulate useless bytes with zero
   re-derivation benefit. This is the same "bounded, occasional live lookup" exception
-  `vo2max_analysis.py`/`threshold_analysis.py` already establish for a request-time-only
+  `vo2max_analysis.py`/`pace_hr_zones.py` already establish for a request-time-only
   computation, not a new precedent. `available: false` (never a fabricated forecast) when the
   athlete hasn't set a home location or the fetch fails, matching `ActivityWeatherOut`/
   `ActivityLocationOut`'s own convention. Frontend: `WeekView.tsx` fetches the whole week's

@@ -56,40 +56,36 @@ class ActivityRefOut(BaseModel):
     duration_s: float | None
 
 
-class ThresholdHrContributorOut(ActivityRefOut):
+class ZoneRunSampleOut(ActivityRefOut):
     pace_s_per_km: float
     avg_hr_bpm: float
-    # True for the run(s) whose own avg_hr_bpm defines the empirical median (one run when the
-    # qualifying count is odd, two when it's even and the median averages them).
-    is_median: bool
 
 
-class ThresholdHrBreakdownOut(BaseModel):
-    threshold_hr_bpm: float | None
-    threshold_hr_source: str | None
-    reference_pace_s_per_km: float | None
-    # Every qualifying run near reference_pace_s_per_km in the trailing window, sorted by
-    # avg_hr_bpm ascending -- populated when threshold_hr_source == "empirical"; empty otherwise.
-    contributors: list[ThresholdHrContributorOut]
-    # The activity that set max_hr_bpm (only when threshold_hr_source == "fallback" and the max
-    # HR itself came from a real observation, not the Tanaka formula -- a formula has no activity
-    # behind it).
-    max_hr_driving_activity: ActivityRefOut | None
-    missing: list[str]
+class PaceHrZoneOut(BaseModel):
+    number: int
+    label: str
+    description: str
+    pace_fast_s_per_km: float | None
+    pace_slow_s_per_km: float | None
+    hr_low_bpm: int | None
+    hr_high_bpm: int | None
+    hr_source: str | None  # "empirical" | "formula_fallback" | None
+    qualifying_run_count: int
+    sample_runs: list[ZoneRunSampleOut]
 
 
-class ThresholdFactorAnalysisOut(BaseModel):
+class PaceHrZonesOut(BaseModel):
     as_of: str
-    # The same VO2max factor analysis GET /performance/vo2max-analysis returns -- both threshold
-    # paces below are pure functions of this same rolling_vdot, so "which workout led to the
-    # current threshold pace" is exactly "which workout is driving VO2max," not a second answer.
-    vo2max: Vo2maxFactorAnalysisOut
-    anaerobic_threshold_pace_s_per_km: float | None
-    aerobic_threshold_pace_s_per_km: float | None
-    anaerobic_threshold_hr: ThresholdHrBreakdownOut
-    aerobic_threshold_hr: ThresholdHrBreakdownOut
-    max_hr_bpm: float | None
-    max_hr_source: str | None
+    # The single best (highest) VDOT/max HR ever recorded, not a rolling-window "current fitness"
+    # value -- see pace_hr_zones.py's own docstring for why this feature needs a stable, all-time
+    # profile instead. `profile_vdot_activity` is the one run that set it (a maximum, never
+    # averaged); max HR has no such activity when it's the Tanaka-formula fallback.
+    profile_vdot: float | None
+    profile_vdot_activity: ActivityRefOut | None
+    profile_max_hr_bpm: float | None
+    profile_max_hr_source: str | None  # "empirical" | "formula_fallback" | None
+    zones: list[PaceHrZoneOut]
+    missing: list[str]
 
 
 class RaceReadinessPointOut(BaseModel):
@@ -150,7 +146,7 @@ class PerformanceCurveOut(BaseModel):
     metric: str  # "pace" | "gap" | "heart_rate"
     points: list[PerformanceCurvePointOut] = []
     # The athlete's own already-computed threshold pace/HR (performance_daily_rollup, the same
-    # VDOT-based model threshold_analysis.py already surfaces) -- shown alongside the curve as
+    # VDOT-based model pace_hr_zones.py also builds on) -- shown alongside the curve as
     # reference lines, never blended into it. Only the pair relevant to `metric` is ever
     # non-null; the rest are always null, not just "unpopulated for this response."
     threshold_pace_s_per_km: float | None = None

@@ -611,14 +611,16 @@ endpoint's window queries need. Confirmed live via `EXPLAIN QUERY PLAN` and dire
 cold on real ~1,400-day history (a full per-athlete scan across every metric ever recorded) down
 to 0.002s after adding `ix_activity_metric_athlete_key` (`athlete_id`, `metric_key`) — the same
 missing-index failure mode, and the same verify-first methodology, as `ix_sleep_stage_session`.
-`ThresholdAnalysisChart.tsx`'s own tab additionally pairs with `ThresholdFactorAnalysis.tsx`
-(`GET /performance/threshold-analysis`, `threshold_analysis.py`) -- reuses `vo2max_analysis.py`'s
-own driving-activity answer for "which workout led to the current threshold pace" (both threshold
-paces are pure functions of the same `rolling_vdot`, so this is the identical answer, not a second
-one), then separately resolves "which workout(s) led to the current threshold HR" per source: the
-empirical path re-derives, at request time, which qualifying run(s) the stored median actually
-came from (flagged `is_median`); the fallback path identifies whichever activity set `max_hr_bpm`
-(or notes a formula-derived max HR has no activity behind it).
+**Revision**: the "Threshold Analysis" tab this section originally described (`ThresholdAnalysisChart.tsx`/`ThresholdFactorAnalysis.tsx`, `GET /performance/threshold-analysis`,
+`threshold_analysis.py`) was removed entirely and replaced by a complete 5-zone Pace/HR table --
+see `pace_hr_zones.py`'s own module docstring and `GET /performance/pace-hr-zones` in
+`docs/API.md` for the full model (recovery/basic endurance/aerobic threshold/lactate threshold/
+VO2max, each a real pace + HR range built from the athlete's entire running history, not a
+point-in-time snapshot, plus the actual qualifying runs behind each range). The rollup fields
+this paragraph's own threshold-pace/HR values came from (`performance_daily_rollup.
+threshold_pace_s_per_km`/`aerobic_threshold_pace_s_per_km`/HR fields, described earlier in this
+section) are unaffected -- `PerformanceCurveChart.tsx`'s reference lines still read them via
+`GET /performance`/`GET /performance/curve`.
 
 ## Live daily wellness sync via garmin_connect
 
@@ -1412,7 +1414,7 @@ into a new number.
   `race_id` query param targets a specific one instead. `available: false` (never fabricated)
   when there's no upcoming running race at all, or `race_id` doesn't belong to the caller.
 - **Deliberately request-time, not rollup-backed** (CLAUDE.md's rollup mandate) — the same
-  "bounded, occasional diagnostic lookup" exception `vo2max_analysis.py`/`threshold_analysis.py`
+  "bounded, occasional diagnostic lookup" exception `vo2max_analysis.py`/`pace_hr_zones.py`
   already establish. Which race this even applies to can change day to day (a nearer race gets
   added, an old one passes), so there's no stable rollup-row identity to accumulate against; the
   whole computation, history included, is cheap enough (two queries total — running distance and
@@ -1525,7 +1527,7 @@ territory for this app: no sliding-window "best effort of duration D" primitive 
 before this feature (`runningStats.ts::personalRecords`'s own docstring already documents this
 exact gap, working around it by taking the fastest whole *activity* instead of a real
 sub-window). `GET /performance/curve` is request-time, not rollup-backed — the same
-bounded/occasional-lookup exception `vo2max_analysis.py`/`threshold_analysis.py`/
+bounded/occasional-lookup exception `vo2max_analysis.py`/`pace_hr_zones.py`/
 `race_readiness.py` already establish, since which activities qualify changes with every new
 date-range/sport-filter combination rather than accumulating against a stable rollup-row
 identity.
@@ -1588,10 +1590,10 @@ identity.
   cases). Real measured figures after: under 2s for "last 3/6 months", 3-4s for "last year", and
   8-15s for "all time" (pace fastest, GAP slowest — it alone also runs the grade-smoothing pass).
 - **Reference values, shown alongside, never reconciled**: the athlete's own already-computed
-  threshold pace/HR (`performance_daily_rollup`, the same "exact `as_of`-dated row" query shape
-  `threshold_analysis.py` already uses) are returned purely for the frontend to draw as dashed
-  reference lines — never blended into the curve itself, the same posture Race Readiness's own
-  VDOT-based prognosis already establishes toward its own readiness percentage.
+  threshold pace/HR (`performance_daily_rollup`, a plain "exact `as_of`-dated row" read) are
+  returned purely for the frontend to draw as dashed reference lines — never blended into the
+  curve itself, the same posture Race Readiness's own VDOT-based prognosis already establishes
+  toward its own readiness percentage.
 - **Frontend** (`PerformanceCurveChart.tsx`, an Insights tab): metric selector (Pace/GAP/Heart
   rate), a date-range preset dropdown (Last 3 months/6 months/Year/All time — no custom from/to
   pickers, a deliberate v1 scope cut), HR-only sport checkboxes derived from the athlete's own
@@ -1756,7 +1758,7 @@ full reasoning; this section is the schema/API-shape reference.
   recontacting a vendor. A forecast has no permanent-record concept: it's superseded by reality
   as the date approaches, so archiving it would only accumulate useless bytes with zero
   re-derivation benefit. This mirrors the "request-time exception to the rollup mandate"
-  `vo2max_analysis.py`/`threshold_analysis.py` already establish for a bounded, occasional live
+  `vo2max_analysis.py`/`pace_hr_zones.py` already establish for a bounded, occasional live
   lookup, not a new precedent.
 - **Open-Meteo's *forecast* API** (`api.open-meteo.com/v1/forecast`), a distinct endpoint from
   the historical archive API `weather.py` calls. `forecast_days` is hard-capped to 0-16,

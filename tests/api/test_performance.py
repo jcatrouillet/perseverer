@@ -1,8 +1,8 @@
 """Tests for GET /performance -- reads performance_daily_rollup directly (seeded here, isolating
 the API-layer test from the rollup computation itself, which tests/test_performance_rollup.py
-already covers). Also GET /performance/vo2max-analysis -- the request-time factor-analysis
-endpoint, isolating the route/schema wiring from the actual window logic
-tests/test_vo2max_analysis.py already covers.
+already covers). Also GET /performance/vo2max-analysis and GET /performance/pace-hr-zones -- the
+request-time factor-analysis endpoints, isolating the route/schema wiring from the actual window
+logic tests/test_vo2max_analysis.py/tests/test_pace_hr_zones.py already cover.
 """
 
 import datetime as dt
@@ -14,7 +14,6 @@ from perseverer.db.schema import activity, activity_metric, performance_daily_ro
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.metrics.registry import get_or_register_metric
 from perseverer.performance import VDOT_METRIC_KEY
-from perseverer.performance_rollup import refresh_performance_rollup
 
 
 def test_performance_returns_rows_in_range_ordered_by_date_with_full_field_round_trip(
@@ -179,44 +178,43 @@ def test_vo2max_analysis_defaults_as_of_to_today_when_omitted(
     assert any("No qualifying run yet" in m for m in body["missing"])
 
 
-def test_threshold_analysis_shares_the_vo2max_driving_activity_for_both_paces(
+def test_pace_hr_zones_returns_five_zones_from_the_all_time_best_run(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
     with engine.connect() as conn:
         _add_run_with_vdot(
-            conn, activity_id="tempo", local_date="2025-06-05", name="Tempo run", vdot=50.0
+            conn, activity_id="best", local_date="2025-06-05", name="Tempo run", vdot=50.0
         )
-        refresh_performance_rollup(conn, athlete_id=DEFAULT_ATHLETE_ID)
         conn.commit()
 
-    r = client.get(
-        "/api/v1/performance/threshold-analysis?as_of=2025-06-10", headers=auth_headers
-    )
+    r = client.get("/api/v1/performance/pace-hr-zones?as_of=2025-06-10", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
-    assert body["vo2max"]["driving_activity"]["activity_id"] == "tempo"
-    assert body["anaerobic_threshold_pace_s_per_km"] is not None
-    assert body["aerobic_threshold_pace_s_per_km"] is not None
-    # Aerobic is always the slower (larger seconds/km) of the two at the same VDOT.
-    assert body["aerobic_threshold_pace_s_per_km"] > body["anaerobic_threshold_pace_s_per_km"]
-    assert body["anaerobic_threshold_hr"]["reference_pace_s_per_km"] == (
-        body["anaerobic_threshold_pace_s_per_km"]
-    )
-    assert body["aerobic_threshold_hr"]["reference_pace_s_per_km"] == (
-        body["aerobic_threshold_pace_s_per_km"]
-    )
+    assert body["profile_vdot"] == 50.0
+    assert body["profile_vdot_activity"]["activity_id"] == "best"
+    assert [z["label"] for z in body["zones"]] == [
+        "Recovery",
+        "Basic Endurance",
+        "Aerobic Threshold",
+        "Lactate Threshold",
+        "VO2 Max",
+    ]
+    # Zone 2's fast edge is Zone 3's slow edge (the aerobic threshold) -- one shared boundary.
+    zone2, zone3 = body["zones"][1], body["zones"][2]
+    assert zone2["pace_fast_s_per_km"] == zone3["pace_slow_s_per_km"]
+    assert zone2["pace_fast_s_per_km"] is not None
 
 
-def test_threshold_analysis_defaults_as_of_to_today_when_omitted(
+def test_pace_hr_zones_defaults_as_of_to_today_when_omitted(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
-    r = client.get("/api/v1/performance/threshold-analysis", headers=auth_headers)
+    r = client.get("/api/v1/performance/pace-hr-zones", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["as_of"] == dt.datetime.now(dt.UTC).date().isoformat()
-    assert body["vo2max"]["driving_activity"] is None
-    assert body["anaerobic_threshold_pace_s_per_km"] is None
-    assert body["anaerobic_threshold_hr"]["threshold_hr_bpm"] is None
+    assert body["profile_vdot"] is None
+    assert body["profile_vdot_activity"] is None
+    assert any("No qualifying run" in m for m in body["missing"])
 
 
 def test_race_readiness_unavailable_without_an_upcoming_race(

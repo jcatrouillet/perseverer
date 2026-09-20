@@ -1,9 +1,9 @@
 """GET /performance -- reads performance_daily_rollup only, no request-time computation
 (CLAUDE.md's rollup mandate). See performance_rollup.py's own docstring for the model.
 
-GET /performance/vo2max-analysis, GET /performance/threshold-analysis, and GET
+GET /performance/vo2max-analysis, GET /performance/pace-hr-zones, and GET
 /performance/race-readiness are the deliberate exceptions in this file -- see
-vo2max_analysis.py's/threshold_analysis.py's/race_readiness.py's own docstrings for why a tiny,
+vo2max_analysis.py's/pace_hr_zones.py's/race_readiness.py's own docstrings for why a tiny,
 occasional diagnostic lookup doesn't fall under that mandate, the same "bounded, occasional
 lookup" exception /activities/needs-trim and /activities/possible-duplicates
 (api/routers/activities.py) already establish.
@@ -21,27 +21,23 @@ from sqlalchemy import Connection, select
 from perseverer.api.dependencies import get_conn, get_duckdb, require_api_key
 from perseverer.api.schemas.performance import (
     ActivityRefOut,
+    PaceHrZoneOut,
+    PaceHrZonesOut,
     PerformanceCurveOut,
     PerformanceCurvePointOut,
     PerformanceDailyRollupOut,
     RaceReadinessOut,
     RaceReadinessPointOut,
     RaceReadinessWeekOut,
-    ThresholdFactorAnalysisOut,
-    ThresholdHrBreakdownOut,
-    ThresholdHrContributorOut,
     Vo2maxContributorOut,
     Vo2maxFactorAnalysisOut,
+    ZoneRunSampleOut,
 )
 from perseverer.config import Settings, get_settings
 from perseverer.db.schema import performance_daily_rollup
+from perseverer.pace_hr_zones import ActivityRef, PaceHrZone, compute_pace_hr_zones
 from perseverer.performance_curve import CurvePoint, Metric, compute_performance_curve
 from perseverer.race_readiness import ReadinessPoint, WeekValue, compute_race_readiness
-from perseverer.threshold_analysis import (
-    ActivityRef,
-    ThresholdHrBreakdown,
-    compute_threshold_factor_analysis,
-)
 from perseverer.vo2max_analysis import (
     Vo2maxContributor,
     Vo2maxFactorAnalysis,
@@ -105,31 +101,30 @@ def _activity_ref_out(a: ActivityRef) -> ActivityRefOut:
     )
 
 
-def _threshold_hr_out(b: ThresholdHrBreakdown) -> ThresholdHrBreakdownOut:
-    return ThresholdHrBreakdownOut(
-        threshold_hr_bpm=b.threshold_hr_bpm,
-        threshold_hr_source=b.threshold_hr_source,
-        reference_pace_s_per_km=b.reference_pace_s_per_km,
-        contributors=[
-            ThresholdHrContributorOut(
-                activity_id=c.activity_id,
-                local_date=c.local_date,
-                name=c.name,
-                sport=c.sport,
-                distance_m=c.distance_m,
-                duration_s=c.duration_s,
-                pace_s_per_km=c.pace_s_per_km,
-                avg_hr_bpm=c.avg_hr_bpm,
-                is_median=c.is_median,
+def _zone_out(z: PaceHrZone) -> PaceHrZoneOut:
+    return PaceHrZoneOut(
+        number=z.number,
+        label=z.label,
+        description=z.description,
+        pace_fast_s_per_km=z.pace_fast_s_per_km,
+        pace_slow_s_per_km=z.pace_slow_s_per_km,
+        hr_low_bpm=z.hr_low_bpm,
+        hr_high_bpm=z.hr_high_bpm,
+        hr_source=z.hr_source,
+        qualifying_run_count=z.qualifying_run_count,
+        sample_runs=[
+            ZoneRunSampleOut(
+                activity_id=r.activity_id,
+                local_date=r.local_date,
+                name=r.name,
+                sport=r.sport,
+                distance_m=r.distance_m,
+                duration_s=r.duration_s,
+                pace_s_per_km=r.pace_s_per_km,
+                avg_hr_bpm=r.avg_hr_bpm,
             )
-            for c in b.contributors
+            for r in z.sample_runs
         ],
-        max_hr_driving_activity=(
-            _activity_ref_out(b.max_hr_driving_activity)
-            if b.max_hr_driving_activity is not None
-            else None
-        ),
-        missing=b.missing,
     )
 
 
@@ -181,23 +176,29 @@ def get_vo2max_factor_analysis(
     return _vo2max_out(analysis)
 
 
-@router.get("/performance/threshold-analysis")
-def get_threshold_factor_analysis(
+@router.get("/performance/pace-hr-zones")
+def get_pace_hr_zones(
     athlete_id: Annotated[str, Depends(require_api_key)],
     as_of: date | None = Query(None),
     conn: Connection = Depends(get_conn),
-) -> ThresholdFactorAnalysisOut:
+) -> PaceHrZonesOut:
+    """The complete 5-zone pace + heart-rate table (Recovery/Basic Endurance/Aerobic Threshold/
+    Lactate Threshold/VO2 Max), built from the athlete's entire running history -- see
+    pace_hr_zones.py's own module docstring for the model and its literature sources."""
     resolved_as_of = as_of if as_of is not None else datetime.now(UTC).date()
-    analysis = compute_threshold_factor_analysis(conn, athlete_id=athlete_id, as_of=resolved_as_of)
-    return ThresholdFactorAnalysisOut(
-        as_of=analysis.as_of,
-        vo2max=_vo2max_out(analysis.vo2max),
-        anaerobic_threshold_pace_s_per_km=analysis.anaerobic_threshold_pace_s_per_km,
-        aerobic_threshold_pace_s_per_km=analysis.aerobic_threshold_pace_s_per_km,
-        anaerobic_threshold_hr=_threshold_hr_out(analysis.anaerobic_threshold_hr),
-        aerobic_threshold_hr=_threshold_hr_out(analysis.aerobic_threshold_hr),
-        max_hr_bpm=analysis.max_hr_bpm,
-        max_hr_source=analysis.max_hr_source,
+    result = compute_pace_hr_zones(conn, athlete_id=athlete_id, as_of=resolved_as_of)
+    return PaceHrZonesOut(
+        as_of=result.as_of,
+        profile_vdot=result.profile_vdot,
+        profile_vdot_activity=(
+            _activity_ref_out(result.profile_vdot_activity)
+            if result.profile_vdot_activity is not None
+            else None
+        ),
+        profile_max_hr_bpm=result.profile_max_hr_bpm,
+        profile_max_hr_source=result.profile_max_hr_source,
+        zones=[_zone_out(z) for z in result.zones],
+        missing=result.missing,
     )
 
 

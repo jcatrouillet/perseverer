@@ -771,22 +771,29 @@ this API follows, the same exception `GET /activities/needs-trim` already establ
 
 **Response `200`:** `Vo2maxFactorAnalysisOut`.
 
-### `GET /performance/threshold-analysis`
+### `GET /performance/pace-hr-zones`
 
-Point-in-time factor analysis for the current anaerobic and aerobic threshold pace/HR. Both
-threshold paces are pure functions of the same `rolling_vdot`, so "which workout led to the
-current threshold pace" is exactly `GET /performance/vo2max-analysis`'s own driving-activity
-answer, embedded here rather than re-derived. Threshold HR is answered per source: the empirical
-path lists every qualifying run near that day's threshold pace and flags which run(s) the stored
-median actually came from; the fallback path identifies whichever activity set `max_hr_bpm`, or
-notes that a formula-derived max HR has no activity behind it. Deliberately request-time, not
-rollup-backed — same exception as `GET /performance/vo2max-analysis` above.
+The complete 5-zone pace + heart-rate training table (Recovery / Basic Endurance / Aerobic
+Threshold / Lactate Threshold / VO2 Max), each a real pace range and HR range plus a
+plain-language "when/how to use it," built from the athlete's *entire* running history — not a
+rolling "current fitness" snapshot, since this is a stable reference table an athlete keeps using
+for months. `profile_vdot`/`profile_max_hr_bpm` are the single best (highest) values ever
+recorded, each with the one activity that set them. Every zone's own HR range is empirical-first
+(the real 25th-75th percentile among the athlete's own qualifying runs at that pace, once there
+are enough of them) and formula-fallback-second (a fraction of max HR, from the same VT1/VT2
+literature `vdot.py` already cites) — see `pace_hr_zones.py`'s own module docstring for the full
+model, every zone boundary's reasoning, and its sources. `sample_runs` per zone are the literal
+answer to "why these numbers," evenly sampled down to a cap when there are many. Deliberately
+request-time, not rollup-backed — same exception as `GET /performance/vo2max-analysis` above.
+Replaces the old `GET /performance/threshold-analysis` (a factor-analysis breakdown of two
+point-in-time numbers, no ranges) — `performance_daily_rollup`'s own `threshold_pace_s_per_km`/
+`aerobic_threshold_pace_s_per_km`/HR fields are unaffected and still served by `GET /performance`.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
 | `as_of` | query | optional | string (date) | Defaults to today. |
 
-**Response `200`:** `ThresholdFactorAnalysisOut`.
+**Response `200`:** `PaceHrZonesOut`.
 
 ### `GET /performance/race-readiness`
 
@@ -2131,33 +2138,34 @@ nullable).
 `activity_id`, `local_date`, `name` (string, nullable), `sport`, `distance_m` (number, nullable),
 `duration_s` (number, nullable — moving time), `vdot` (number).
 
-### ThresholdFactorAnalysisOut
+### PaceHrZonesOut
 
 | Field | Type | Description |
 |---|---|---|
 | `as_of` | string (date) | |
-| `vo2max` | `Vo2maxFactorAnalysisOut` | Both threshold paces below are pure functions of this same `rolling_vdot`, so "which workout led to the current threshold pace" is exactly this VO2max analysis's own `driving_activity` — embedded here, not answered twice. |
-| `anaerobic_threshold_pace_s_per_km`, `aerobic_threshold_pace_s_per_km` | number, nullable | Same values `GET /performance` would return for `as_of`. |
-| `anaerobic_threshold_hr`, `aerobic_threshold_hr` | `ThresholdHrBreakdownOut` | |
-| `max_hr_bpm` | number, nullable | |
-| `max_hr_source` | `"empirical"` \| `"formula_fallback"` \| null | |
+| `profile_vdot` | number, nullable | The single best (highest) VDOT ever recorded — a stable all-time profile, not `GET /performance`'s own 42-day rolling `rolling_vdot`. |
+| `profile_vdot_activity` | `ActivityRefOut`, nullable | The one run that set `profile_vdot`. |
+| `profile_max_hr_bpm` | number, nullable | The single highest heart rate ever recorded, any sport. |
+| `profile_max_hr_source` | `"empirical"` \| `"formula_fallback"` \| null | `"formula_fallback"` when there's no empirical max-HR reading at all yet and the athlete has a birthdate set (Tanaka formula) — same convention `PerformanceDailyRollupOut.max_hr_source` uses. |
+| `zones` | `array<PaceHrZoneOut>` | Always exactly 5, Zone 1 (Recovery) through Zone 5 (VO2 Max). |
+| `missing` | `array<string>` | Human-readable gap diagnostics (no qualifying run yet, no HR data and no birthdate), if any. |
 
-### ThresholdHrBreakdownOut
+### PaceHrZoneOut
 
 | Field | Type | Description |
 |---|---|---|
-| `threshold_hr_bpm` | number, nullable | |
-| `threshold_hr_source` | `"empirical"` \| `"fallback"` \| null | |
-| `reference_pace_s_per_km` | number, nullable | The threshold pace this HR was computed against. |
-| `contributors` | `array<ThresholdHrContributorOut>` | Every qualifying run near `reference_pace_s_per_km` in the trailing window, sorted by `avg_hr_bpm` ascending. Populated only when `threshold_hr_source` is `"empirical"`. |
-| `max_hr_driving_activity` | `ActivityRefOut`, nullable | The activity that set `max_hr_bpm` — set only when `threshold_hr_source` is `"fallback"` and the max HR itself came from a real observation, not the Tanaka formula (a formula has no activity behind it). |
-| `missing` | `array<string>` | Human-readable gap diagnostics, if any. |
+| `number` | integer | 1-5. |
+| `label` | string | e.g. `"Aerobic Threshold"`. |
+| `description` | string | Plain-language "when and how to use this zone." |
+| `pace_fast_s_per_km`, `pace_slow_s_per_km` | number, nullable | The fast/slow edges of the zone's pace band — `pace_fast` is always numerically smaller (a faster pace) than `pace_slow`. Zone 1 has no `pace_slow` (unbounded easy); Zone 5 has no `pace_fast` (unbounded fast). |
+| `hr_low_bpm`, `hr_high_bpm` | integer, nullable | The zone's heart-rate range. |
+| `hr_source` | `"empirical"` \| `"formula_fallback"` \| null | `"empirical"` when the range is the real 25th-75th percentile among the athlete's own qualifying runs at this pace; `"formula_fallback"` when there weren't enough of them yet. |
+| `qualifying_run_count` | integer | Every one of the athlete's own runs (ever) whose pace falls in this zone's band — not just the `sample_runs` shown below. |
+| `sample_runs` | `array<ZoneRunSampleOut>` | The literal "why these numbers" evidence — evenly sampled down to a cap when `qualifying_run_count` is large, so the low/middle/high of the real spread stay represented. |
 
-### ThresholdHrContributorOut
+### ZoneRunSampleOut
 
-`ActivityRefOut`'s own fields, plus `pace_s_per_km` (number), `avg_hr_bpm` (number), and
-`is_median` (boolean — true for the run(s) whose own `avg_hr_bpm` defines the empirical median:
-one run when the qualifying count is odd, two when it's even and the median averages them).
+`ActivityRefOut`'s own fields, plus `pace_s_per_km` (number) and `avg_hr_bpm` (number).
 
 ### ActivityRefOut
 

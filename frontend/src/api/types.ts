@@ -993,38 +993,41 @@ export interface ActivityRefOut {
   duration_s: number | null;
 }
 
-export interface ThresholdHrContributorOut extends ActivityRefOut {
+export interface ZoneRunSampleOut extends ActivityRefOut {
   pace_s_per_km: number;
   avg_hr_bpm: number;
-  // True for the run(s) whose own avg_hr_bpm defines the empirical median (one when the
-  // qualifying count is odd, two when it's even and the median averages them).
-  is_median: boolean;
 }
 
-export interface ThresholdHrBreakdownOut {
-  threshold_hr_bpm: number | null;
-  threshold_hr_source: "empirical" | "fallback" | null;
-  reference_pace_s_per_km: number | null;
-  // Every qualifying run near reference_pace_s_per_km, sorted by avg_hr_bpm ascending --
-  // populated when threshold_hr_source is "empirical", empty otherwise.
-  contributors: ThresholdHrContributorOut[];
-  // Set only when threshold_hr_source is "fallback" and max HR itself came from a real
-  // observation, not the Tanaka formula (a formula has no activity behind it).
-  max_hr_driving_activity: ActivityRefOut | null;
-  missing: string[];
+export interface PaceHrZoneOut {
+  number: number;
+  label: string;
+  description: string;
+  // Faster/slower edges of the pace band (seconds/km) -- "fast" is always <= "slow" numerically.
+  // Either can be null at the two open ends (zone 1 has no slow-side floor, zone 5 no fast-side
+  // ceiling).
+  pace_fast_s_per_km: number | null;
+  pace_slow_s_per_km: number | null;
+  hr_low_bpm: number | null;
+  hr_high_bpm: number | null;
+  hr_source: "empirical" | "formula_fallback" | null;
+  qualifying_run_count: number;
+  // Every qualifying run's own avg HR (evenly sampled down to a cap when there are many),
+  // sorted ascending by avg_hr_bpm -- the "why these numbers" evidence, same instinct
+  // Vo2maxFactorAnalysisOut's own contributor lists already establish for a single point.
+  sample_runs: ZoneRunSampleOut[];
 }
 
-export interface ThresholdFactorAnalysisOut {
+export interface PaceHrZonesOut {
   as_of: string;
-  // Both threshold paces are pure functions of this same rolling_vdot, so "which workout led to
-  // the current threshold pace" is exactly this VO2max analysis's own driving_activity.
-  vo2max: Vo2maxFactorAnalysisOut;
-  anaerobic_threshold_pace_s_per_km: number | null;
-  aerobic_threshold_pace_s_per_km: number | null;
-  anaerobic_threshold_hr: ThresholdHrBreakdownOut;
-  aerobic_threshold_hr: ThresholdHrBreakdownOut;
-  max_hr_bpm: number | null;
-  max_hr_source: "empirical" | "formula_fallback" | null;
+  // The single best (highest) VDOT/max HR ever recorded -- a stable, all-time profile, not a
+  // rolling-window "current fitness" value. profile_vdot_activity is the one run that set it;
+  // max HR has no such activity when it's the Tanaka-formula fallback.
+  profile_vdot: number | null;
+  profile_vdot_activity: ActivityRefOut | null;
+  profile_max_hr_bpm: number | null;
+  profile_max_hr_source: "empirical" | "formula_fallback" | null;
+  zones: PaceHrZoneOut[];
+  missing: string[];
 }
 
 // GET /performance/race-readiness -- see race_readiness.py's own module docstring for the full

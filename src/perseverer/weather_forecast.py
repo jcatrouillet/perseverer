@@ -23,7 +23,7 @@ Deliberately NOT archived raw and NOT cached, unlike every other vendor fetch in
 archive without recontacting a vendor -- a forecast has no such permanent-record concept, since
 it's superseded by reality as the date approaches, so archiving it would only accumulate useless
 bytes with zero re-derivation benefit). This mirrors the "request-time exception to the rollup
-mandate" precedent `vo2max_analysis.py`/`threshold_analysis.py` already establish for a bounded,
+mandate" precedent `vo2max_analysis.py`/`pace_hr_zones.py` already establish for a bounded,
 occasional live lookup, not a new one.
 
 No API key needed (Open-Meteo's public tier). Weather-code-to-icon mapping stays a frontend

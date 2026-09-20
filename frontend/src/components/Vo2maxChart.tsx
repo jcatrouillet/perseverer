@@ -3,7 +3,7 @@
 // docstring) is a 42-day trailing maximum of VDOT under the Daniels-Gilbert model (Daniels &
 // Gilbert, "Oxygen Power", 1979) -- under that model VDOT already *is* the VO2max estimate, in
 // the same ml/kg/min units clinical VO2max is measured in, not a separate figure needing its own
-// conversion. Only one metric exists here, unlike RacePredictionsChart.tsx/ThresholdAnalysisChart.tsx
+// conversion. Only one metric exists here, unlike RacePredictionsChart.tsx
 // (4 races; threshold pace + threshold/max HR), so this skips MetricExplorer's list+detail shell
 // entirely -- a picker with nothing to pick between would just be clutter -- but reuses the exact
 // TrendControls/trendWindow.ts week/month/year/all-time/custom wiring those two (and FitnessPage.tsx

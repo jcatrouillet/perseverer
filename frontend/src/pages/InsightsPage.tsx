@@ -1,30 +1,30 @@
 // Six sub-tabs, each owning its own data fetch and rendered only while active (so switching
 // tabs is also what triggers that tab's otherwise-unneeded request): Pace trends (every run's
 // VDOT plotted over its own date, see PaceTrendsChart.tsx), Training bands (share of running
-// time spent at each pace, see TrainingBandsChart.tsx), Race predictions, Threshold Analysis,
-// VO2max (all three independently computed, never Garmin's own precomputed equivalents -- see
-// performance_rollup.py's own docstring for the model, RacePredictionsChart.tsx/
-// ThresholdAnalysisChart.tsx/Vo2maxChart.tsx for the charts), and Eddington Number (a per-year
-// running Eddington number, EddingtonChart.tsx -- computed client-side, no new backend endpoint,
-// since it's a pure aggregate over the same full running-history fetch this page's own Pace
-// trends tab already performs). Threshold Analysis (renamed from "Threshold & Max HR" once it
-// grew to cover both the anaerobic and the aerobic threshold, plus the factor-analysis panel
-// below) and VO2max both pair their trend chart with a factor-analysis panel -- which workout(s)
-// currently drive the value, what else qualified, what's missing -- on the same tab, since chart
-// and breakdown are read together. The athlete-wide window/kind view that used to live here now
-// lives per-activity instead (see ActivityInsightsPanel.tsx / rules_activity.py) -- this page is
-// being rebuilt one category at a time.
+// time spent at each pace, see TrainingBandsChart.tsx), Race predictions, Pace/HR Zones,
+// VO2max (independently computed, never Garmin's own precomputed equivalents -- see
+// performance_rollup.py's own docstring for the model, RacePredictionsChart.tsx/Vo2maxChart.tsx
+// for the charts), and Eddington Number (a per-year running Eddington number, EddingtonChart.tsx
+// -- computed client-side, no new backend endpoint, since it's a pure aggregate over the same
+// full running-history fetch this page's own Pace trends tab already performs). Pace/HR Zones
+// (replaced the old "Threshold Analysis" tab -- two point-in-time numbers with no ranges and no
+// supporting evidence -- with a complete 5-zone pace+HR table built from the athlete's entire
+// running history; see PaceHrZonesTable.tsx/pace_hr_zones.py). VO2max pairs its trend chart with
+// a factor-analysis panel -- which workout(s) currently drive the value, what else qualified,
+// what's missing -- on the same tab, since chart and breakdown are read together. The
+// athlete-wide window/kind view that used to live here now lives per-activity instead (see
+// ActivityInsightsPanel.tsx / rules_activity.py) -- this page is being rebuilt one category at a
+// time.
 import { useState } from "react";
 
 import { useAllActivities } from "../api/queries";
 import { EddingtonChart } from "../components/EddingtonChart";
 import { LoadingSpinner } from "../components/LoadingSpinner";
+import { PaceHrZonesTable } from "../components/PaceHrZonesTable";
 import { PaceTrendsChart } from "../components/PaceTrendsChart";
 import { PerformanceCurveChart } from "../components/PerformanceCurveChart";
 import { RacePredictionsChart } from "../components/RacePredictionsChart";
 import { RaceReadinessChart } from "../components/RaceReadinessChart";
-import { ThresholdAnalysisChart } from "../components/ThresholdAnalysisChart";
-import { ThresholdFactorAnalysis } from "../components/ThresholdFactorAnalysis";
 import { TrainingBandsChart } from "../components/TrainingBandsChart";
 import { Vo2maxChart } from "../components/Vo2maxChart";
 import { Vo2maxFactorAnalysis } from "../components/Vo2maxFactorAnalysis";
@@ -35,7 +35,7 @@ type Tab =
   | "training-bands"
   | "race-predictions"
   | "race-readiness"
-  | "threshold-analysis"
+  | "pace-hr-zones"
   | "vo2max"
   | "performance-curve"
   | "eddington";
@@ -87,11 +87,11 @@ export function InsightsPage() {
         <button
           type="button"
           role="tab"
-          aria-selected={tab === "threshold-analysis"}
-          className={tab === "threshold-analysis" ? "is-active" : undefined}
-          onClick={() => setTab("threshold-analysis")}
+          aria-selected={tab === "pace-hr-zones"}
+          className={tab === "pace-hr-zones" ? "is-active" : undefined}
+          onClick={() => setTab("pace-hr-zones")}
         >
-          Threshold Analysis
+          Pace/HR Zones
         </button>
         <button
           type="button"
@@ -132,12 +132,7 @@ export function InsightsPage() {
       {tab === "training-bands" && <TrainingBandsChart />}
       {tab === "race-predictions" && <RacePredictionsChart />}
       {tab === "race-readiness" && <RaceReadinessChart />}
-      {tab === "threshold-analysis" && (
-        <>
-          <ThresholdAnalysisChart />
-          <ThresholdFactorAnalysis />
-        </>
-      )}
+      {tab === "pace-hr-zones" && <PaceHrZonesTable />}
       {tab === "vo2max" && (
         <>
           <Vo2maxChart />
