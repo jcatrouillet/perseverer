@@ -7,14 +7,32 @@ train off of directly.
 Deliberately built on the athlete's ALL-TIME best running performance, not a rolling window:
 `performance_daily_rollup.rolling_vdot` exists specifically to track *current* fitness day to day
 (a 42-day trailing max, see `performance_rollup.py`'s own docstring) -- the wrong basis for a
-stable reference table an athlete keeps using for months. `profile_vdot` below is the single
-highest VDOT (`perseverer.performance.vdot`) among every running activity ever recorded -- the
-same "best of the period, not a moving trend" reasoning `frontend/src/runningStats.ts::bestVdot`
-already documents, just extended from one chart's date window to the athlete's entire history.
-`profile_max_hr_bpm` is the single highest heart rate across every activity ever recorded, any
-sport -- matching `performance_rollup.py`'s own "a max-HR effort from cycling/hiit is equally
-real" reasoning, again just unbounded rather than a 365-day window. Both report the one activity
-that actually set them, not a silently-averaged number.
+stable reference table an athlete keeps using for months.
+
+**`profile_vdot` prefers a marked race over any training run, and this matters in practice, not
+just in theory**: `perseverer.performance.vdot` is computed for *every* running activity
+(`performance.py::refresh_vdot`), with no minimum-duration floor, and the Daniels VDOT formula is
+calibrated against genuine race performances -- a short, all-out training segment (a hard strides
+set, a track rep with the recovery jog trimmed off the recorded "moving" time) can post a VDOT well
+above anything the athlete could hold for a real race distance. Confirmed against this app's own
+real history, not a hypothetical: the single highest VDOT across every activity ever recorded
+(47.7) came from a 12.6-minute, ~3.1 km segment named "Santa Clara Other" -- not a race at all --
+while the best VDOT among activities the athlete actually marked as races (`activity.is_race`,
+`garmin_activity_summary.py`'s own eventTypeId heuristic plus the athlete's own
+`PATCH /activities/{id}/race` correction) tops out at a materially lower, more physiologically
+honest 44.5 (a real 10K). Using the unfiltered all-time max there would have made every zone
+boundary run too fast. `_all_time_best_vdot` therefore tries `is_race == True` activities first
+and only falls back to the unfiltered all-time best (the original behavior) when the athlete has
+no marked race at all -- `profile_vdot_source` ("race" | "training_run" | None) records which path
+fired, the same provenance instinct `profile_max_hr_source` already established, and a
+`training_run`-sourced profile gets its own explicit caveat in `missing` pointing at the "Mark as a
+race" action (`ActivityDetailPage.tsx`) that would fix it. This is scoped to VDOT/pace only --
+`profile_max_hr_bpm` stays the single highest heart rate across every activity ever recorded, any
+sport, unchanged: `performance_rollup.py`'s own "a max-HR effort from cycling/hiit is equally
+real" reasoning already applies here too, and a genuine physiological ceiling doesn't need a race
+context to be real the way a race-calibrated pace formula does. Both `profile_vdot`/
+`profile_max_hr_bpm` report the one activity that actually set them, not a silently-averaged
+number.
 
 ## The five zones, and why they sit where they do
 
@@ -224,6 +242,7 @@ class PaceHrZonesResult:
     as_of: str
     profile_vdot: float | None
     profile_vdot_activity: ActivityRef | None
+    profile_vdot_source: str | None  # "race" | "training_run" | None
     profile_max_hr_bpm: float | None
     profile_max_hr_source: str | None  # "empirical" | "formula_fallback" | None
     zones: list[PaceHrZone]
@@ -231,8 +250,16 @@ class PaceHrZonesResult:
 
 
 def _all_time_best_vdot(
-    conn: Connection, *, athlete_id: str, as_of: date
+    conn: Connection, *, athlete_id: str, as_of: date, races_only: bool
 ) -> tuple[float | None, ActivityRef | None]:
+    where = [
+        activity_metric.c.athlete_id == athlete_id,
+        activity_metric.c.metric_key == VDOT_METRIC_KEY,
+        activity.c.deleted_at.is_(None),
+        activity.c.local_date <= as_of.isoformat(),
+    ]
+    if races_only:
+        where.append(activity.c.is_race.is_(True))
     row = conn.execute(
         select(
             activity.c.id,
@@ -244,12 +271,7 @@ def _all_time_best_vdot(
             activity_metric.c.value_num,
         )
         .select_from(activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id))
-        .where(
-            activity_metric.c.athlete_id == athlete_id,
-            activity_metric.c.metric_key == VDOT_METRIC_KEY,
-            activity.c.deleted_at.is_(None),
-            activity.c.local_date <= as_of.isoformat(),
-        )
+        .where(*where)
         .order_by(activity_metric.c.value_num.desc())
         .limit(1)
     ).fetchone()
@@ -385,7 +407,16 @@ def _sample_evenly(runs: list[ZoneRunSample], cap: int) -> list[ZoneRunSample]:
 
 
 def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> PaceHrZonesResult:
-    profile_vdot, vdot_activity = _all_time_best_vdot(conn, athlete_id=athlete_id, as_of=as_of)
+    profile_vdot, vdot_activity = _all_time_best_vdot(
+        conn, athlete_id=athlete_id, as_of=as_of, races_only=True
+    )
+    profile_vdot_source: str | None = "race" if profile_vdot is not None else None
+    if profile_vdot is None:
+        profile_vdot, vdot_activity = _all_time_best_vdot(
+            conn, athlete_id=athlete_id, as_of=as_of, races_only=False
+        )
+        if profile_vdot is not None:
+            profile_vdot_source = "training_run"
     profile_max_hr_bpm, max_hr_source = _all_time_max_hr(conn, athlete_id=athlete_id, as_of=as_of)
 
     missing: list[str] = []
@@ -394,6 +425,14 @@ def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> 
             "No qualifying run yet -- pace zones need at least one run lasting roughly 11+ "
             "minutes with distance and pace data; shorter efforts don't fit the aerobic model "
             "this is built on."
+        )
+    elif profile_vdot_source == "training_run":
+        missing.append(
+            "No activity in your history is marked as a race, so this profile is based on your "
+            "single best training effort instead -- VDOT is calibrated against real race "
+            "performances, so a short, all-out training segment can read as fitter than a race "
+            "would actually show, making every zone below run faster than it should. Use "
+            '"Mark as a race" on a past race\'s activity page to fix this.'
         )
     if profile_max_hr_bpm is None:
         missing.append(
@@ -487,6 +526,7 @@ def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> 
         as_of=as_of.isoformat(),
         profile_vdot=profile_vdot,
         profile_vdot_activity=vdot_activity,
+        profile_vdot_source=profile_vdot_source,
         profile_max_hr_bpm=profile_max_hr_bpm,
         profile_max_hr_source=max_hr_source,
         zones=zones,

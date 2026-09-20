@@ -496,6 +496,28 @@ because you don't recognize it — stop, that's the bug.
   no pace ceiling) initially rendered "Faster than"/"Slower than" backwards — Zone 1's one defined
   edge is its *fastest* allowed pace (the zone extends slower, unbounded), so the correct wording
   is "slower than" that edge, not "faster than," and symmetrically for Zone 5.
+  **Revision: `profile_vdot` prefers a marked race over any training run** — the athlete reported
+  the table's paces as unrealistically fast, and pointed at the fix: `activity.is_race` already
+  marks which activities were real races (`garmin_activity_summary.py`'s own eventTypeId
+  heuristic plus the athlete's own `PATCH /activities/{id}/race` correction, see the sport_override
+  bullet below). Checked against this app's own real history, not a hypothetical: the single
+  highest VDOT across *any* running activity ever recorded (47.7) came from a 12.6-minute, ~3.1 km
+  segment named "Santa Clara Other" — not a race, and almost certainly a hard training
+  effort/interval whose "moving duration" undercounts recovery time — while the best VDOT among
+  activities actually marked as races tops out at a materially lower, more honest 44.5 (a real
+  10K). `perseverer.performance.vdot` (`performance.py::refresh_vdot`) is computed for every
+  running activity with no minimum-duration floor, but the Daniels VDOT formula is calibrated
+  against genuine race performances — a short, all-out training segment can post a VDOT well above
+  anything the athlete could actually hold for a real race distance, and the original "single
+  highest VDOT ever, from any activity" design had no defense against that. `_all_time_best_vdot`
+  now tries `is_race == True` activities first and only falls back to the original unfiltered
+  all-time-best behavior when the athlete has no marked race at all; `profile_vdot_source`
+  (`"race"`/`"training_run"`/`null`) records which path fired, mirroring `profile_max_hr_source`'s
+  own provenance instinct, and a `training_run`-sourced profile gets an explicit `missing` caveat
+  pointing at the "Mark as a race" action on that activity's own detail page. Deliberately scoped
+  to VDOT/pace only — `profile_max_hr_bpm` stays the single highest heart rate across every
+  activity ever recorded, any sport, unchanged, since a genuine max-HR effort doesn't need a race
+  context to be real the way a race-calibrated pace formula does.
 - **Adapters** implement one `SourceAdapter` protocol (`health_check`, `authenticate`,
   `list_changed`, `fetch_raw`, `parse` — see `adapters/base.py`). Five exist now:
   - `fit_folder` (`adapters/fit_folder.py`) — polling directory importer, content-hash

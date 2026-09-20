@@ -621,6 +621,19 @@ this paragraph's own threshold-pace/HR values came from (`performance_daily_roll
 threshold_pace_s_per_km`/`aerobic_threshold_pace_s_per_km`/HR fields, described earlier in this
 section) are unaffected -- `PerformanceCurveChart.tsx`'s reference lines still read them via
 `GET /performance`/`GET /performance/curve`.
+**Revision**: the athlete reported the zone table's paces as unrealistically fast; the real cause,
+confirmed against this app's own history, was that `profile_vdot` picked the single highest VDOT
+across *any* running activity ever recorded, and that maximum came from a 12.6-minute training
+segment, not a race -- the Daniels VDOT formula is calibrated against genuine race efforts, so a
+short, all-out training burst can post a VDOT well above what the athlete could hold for a real
+race distance. `_all_time_best_vdot` (`pace_hr_zones.py`) now prefers an activity marked as a race
+(`activity.is_race`, the same field `garmin_activity_summary.py`'s eventTypeId heuristic and the
+athlete's own `PATCH /activities/{id}/race` correction populate) and only falls back to the
+original unfiltered all-time-best training run when no race is marked at all --
+`profile_vdot_source` (`"race"`/`"training_run"`/`null`, `PaceHrZonesOut`) records which path
+fired, with an explicit caveat in `missing` when it's the fallback. `profile_max_hr_bpm` is
+untouched -- a genuine max-HR effort doesn't need a race context to be real the way a
+race-calibrated pace formula does.
 
 ## Live daily wellness sync via garmin_connect
 

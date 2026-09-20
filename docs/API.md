@@ -778,7 +778,12 @@ Threshold / Lactate Threshold / VO2 Max), each a real pace range and HR range pl
 plain-language "when/how to use it," built from the athlete's *entire* running history — not a
 rolling "current fitness" snapshot, since this is a stable reference table an athlete keeps using
 for months. `profile_vdot`/`profile_max_hr_bpm` are the single best (highest) values ever
-recorded, each with the one activity that set them. Every zone's own HR range is empirical-first
+recorded, each with the one activity that set them — `profile_vdot` prefers an activity marked as
+a race (`activity.is_race`) over any training run, since VDOT is calibrated against genuine race
+performances and a short, all-out training segment can post an inflated value; `profile_vdot_source`
+(`"race"`/`"training_run"`/`null`) records which one fired, falling back to the athlete's best
+training run (with an explicit `missing` caveat) only when no race is marked at all. Every zone's
+own HR range is empirical-first
 (the real 25th-75th percentile among the athlete's own qualifying runs at that pace, once there
 are enough of them) and formula-fallback-second (a fraction of max HR, from the same VT1/VT2
 literature `vdot.py` already cites) — see `pace_hr_zones.py`'s own module docstring for the full
@@ -2143,8 +2148,9 @@ nullable).
 | Field | Type | Description |
 |---|---|---|
 | `as_of` | string (date) | |
-| `profile_vdot` | number, nullable | The single best (highest) VDOT ever recorded — a stable all-time profile, not `GET /performance`'s own 42-day rolling `rolling_vdot`. |
+| `profile_vdot` | number, nullable | The single best (highest) VDOT ever recorded — a stable all-time profile, not `GET /performance`'s own 42-day rolling `rolling_vdot`. Prefers an activity marked as a race over any training run (see `profile_vdot_source`). |
 | `profile_vdot_activity` | `ActivityRefOut`, nullable | The one run that set `profile_vdot`. |
+| `profile_vdot_source` | `"race"` \| `"training_run"` \| null | `"race"` when `profile_vdot` came from an activity marked as a race (`activity.is_race`) — preferred, since VDOT is calibrated against genuine race efforts. `"training_run"` when the athlete has no marked race at all and this fell back to their best training run instead (a short, all-out training segment can post an inflated VDOT); the response's `missing` list carries an explicit caveat in that case. |
 | `profile_max_hr_bpm` | number, nullable | The single highest heart rate ever recorded, any sport. |
 | `profile_max_hr_source` | `"empirical"` \| `"formula_fallback"` \| null | `"formula_fallback"` when there's no empirical max-HR reading at all yet and the athlete has a birthdate set (Tanaka formula) — same convention `PerformanceDailyRollupOut.max_hr_source` uses. |
 | `zones` | `array<PaceHrZoneOut>` | Always exactly 5, Zone 1 (Recovery) through Zone 5 (VO2 Max). |

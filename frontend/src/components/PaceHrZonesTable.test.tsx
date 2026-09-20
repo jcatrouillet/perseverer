@@ -49,6 +49,7 @@ function zones(overrides: Partial<PaceHrZonesOut> = {}): PaceHrZonesOut {
     as_of: "2026-09-19",
     profile_vdot: 50.0,
     profile_vdot_activity: activityRef({ activity_id: "best", local_date: "2025-06-01" }),
+    profile_vdot_source: "race",
     profile_max_hr_bpm: 190,
     profile_max_hr_source: "empirical",
     zones: [
@@ -162,6 +163,21 @@ describe("PaceHrZonesTable", () => {
     render(<PaceHrZonesTable />);
     expect(screen.getByText(/50\.0/)).toBeInTheDocument();
     expect(screen.getByText("2025-06-01")).toBeInTheDocument();
+  });
+
+  it("credits a marked race as the source of the profile VDOT", () => {
+    mockUsePaceHrZones.mockReturnValue({ ...EMPTY, data: zones({ profile_vdot_source: "race" }) });
+    render(<PaceHrZonesTable />);
+    expect(screen.getByText(/your best race/)).toBeInTheDocument();
+  });
+
+  it("credits a training run as the source when no race is marked", () => {
+    mockUsePaceHrZones.mockReturnValue({
+      ...EMPTY,
+      data: zones({ profile_vdot_source: "training_run" }),
+    });
+    render(<PaceHrZonesTable />);
+    expect(screen.getByText(/your best training run/)).toBeInTheDocument();
   });
 
   it("renders missing/gap messages", () => {

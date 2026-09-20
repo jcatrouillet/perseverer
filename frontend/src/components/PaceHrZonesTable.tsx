@@ -115,8 +115,15 @@ export function PaceHrZonesTable() {
   if (zones.isError) return <p role="alert">Could not load pace/HR zones.</p>;
   if (!zones.data) return null;
 
-  const { profile_vdot, profile_vdot_activity, profile_max_hr_bpm, missing, zones: zoneList } =
-    zones.data;
+  const {
+    profile_vdot,
+    profile_vdot_activity,
+    profile_vdot_source,
+    profile_max_hr_bpm,
+    missing,
+    zones: zoneList,
+  } = zones.data;
+  const vdotOrigin = profile_vdot_source === "race" ? "your best race" : "your best training run";
 
   return (
     <>
@@ -124,7 +131,7 @@ export function PaceHrZonesTable() {
         <h2>Pace &amp; heart-rate training zones</h2>
         <p className="chart-note">
           Built from the best VDOT you've ever recorded
-          {profile_vdot != null && ` (${profile_vdot.toFixed(1)})`}
+          {profile_vdot != null && ` (${profile_vdot.toFixed(1)})`}, from {vdotOrigin},
           {profile_vdot_activity && (
             <>
               {" "}

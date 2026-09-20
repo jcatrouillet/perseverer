@@ -66,6 +66,7 @@ def _add_run(
     avg_hr: float | None = None,
     max_hr: float | None = None,
     sport: str = "running",
+    is_race: bool = False,
 ) -> None:
     now = dt.datetime.now(dt.UTC)
     conn.execute(
@@ -77,6 +78,7 @@ def _add_run(
             local_date=local_date,
             name="Run",
             sport=sport,
+            is_race=is_race,
             duration_s=1800.0,
             moving_duration_s=1700.0,
             distance_m=5000.0,
@@ -112,6 +114,7 @@ def test_no_data_reports_the_gap(tmp_path: Path) -> None:
     with engine.connect() as conn:
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
     assert result.profile_vdot is None
+    assert result.profile_vdot_source is None
     assert result.profile_max_hr_bpm is None
     assert len(result.zones) == 5
     assert [z.label for z in result.zones] == list(ZONE_LABELS)
@@ -122,7 +125,8 @@ def test_no_data_reports_the_gap(tmp_path: Path) -> None:
 
 def test_profile_vdot_is_the_all_time_best_not_the_most_recent(tmp_path: Path) -> None:
     """A strong run from years ago should still win over a weaker, much more recent one -- this
-    feature is a stable profile, not `performance_daily_rollup`'s own 42-day rolling max."""
+    feature is a stable profile, not `performance_daily_rollup`'s own 42-day rolling max. Neither
+    run is marked as a race here, so this also exercises the training-run fallback path."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
         _add_run(conn, activity_id="strong-old", local_date="2020-01-01", vdot=55.0, avg_hr=175.0)
@@ -132,6 +136,44 @@ def test_profile_vdot_is_the_all_time_best_not_the_most_recent(tmp_path: Path) -
     assert result.profile_vdot == 55.0
     assert result.profile_vdot_activity is not None
     assert result.profile_vdot_activity.activity_id == "strong-old"
+    assert result.profile_vdot_source == "training_run"
+    assert any("marked as a race" in m for m in result.missing)
+
+
+def test_profile_vdot_prefers_a_marked_race_over_a_faster_training_run(tmp_path: Path) -> None:
+    """A real bug this fixes: an all-out training segment (a track rep, a strides set) can post a
+    higher VDOT than the athlete's own best real race, since the Daniels formula is calibrated
+    against genuine race efforts, not short training bursts. Once at least one race is marked, it
+    must win over any faster non-race training run, however much higher that run's own VDOT is."""
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_run(
+            conn, activity_id="hard-training-segment", local_date="2022-08-01", vdot=55.0
+        )
+        _add_run(
+            conn, activity_id="real-race", local_date="2023-11-23", vdot=44.5, is_race=True
+        )
+        conn.commit()
+        result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
+    assert result.profile_vdot == 44.5
+    assert result.profile_vdot_activity is not None
+    assert result.profile_vdot_activity.activity_id == "real-race"
+    assert result.profile_vdot_source == "race"
+    assert not any("marked as a race" in m for m in result.missing)
+
+
+def test_profile_vdot_picks_the_best_among_several_marked_races(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_run(conn, activity_id="race-weak", local_date="2022-11-06", vdot=33.2, is_race=True)
+        _add_run(conn, activity_id="race-best", local_date="2023-11-23", vdot=44.5, is_race=True)
+        _add_run(conn, activity_id="race-mid", local_date="2026-05-31", vdot=42.1, is_race=True)
+        conn.commit()
+        result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
+    assert result.profile_vdot == 44.5
+    assert result.profile_vdot_activity is not None
+    assert result.profile_vdot_activity.activity_id == "race-best"
+    assert result.profile_vdot_source == "race"
 
 
 def test_pace_boundaries_match_vdot_module_fractions(tmp_path: Path) -> None:

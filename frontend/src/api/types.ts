@@ -1024,6 +1024,10 @@ export interface PaceHrZonesOut {
   // max HR has no such activity when it's the Tanaka-formula fallback.
   profile_vdot: number | null;
   profile_vdot_activity: ActivityRefOut | null;
+  // "race" when profile_vdot came from an activity marked as a race (preferred -- VDOT is
+  // calibrated against genuine race efforts); "training_run" when no race is marked at all and
+  // this fell back to the best training run instead (see the accompanying `missing` caveat).
+  profile_vdot_source: "race" | "training_run" | null;
   profile_max_hr_bpm: number | null;
   profile_max_hr_source: "empirical" | "formula_fallback" | null;
   zones: PaceHrZoneOut[];

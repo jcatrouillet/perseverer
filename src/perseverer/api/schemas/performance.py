@@ -82,6 +82,7 @@ class PaceHrZonesOut(BaseModel):
     # averaged); max HR has no such activity when it's the Tanaka-formula fallback.
     profile_vdot: float | None
     profile_vdot_activity: ActivityRefOut | None
+    profile_vdot_source: str | None  # "race" | "training_run" | None
     profile_max_hr_bpm: float | None
     profile_max_hr_source: str | None  # "empirical" | "formula_fallback" | None
     zones: list[PaceHrZoneOut]

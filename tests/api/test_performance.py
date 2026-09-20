@@ -101,7 +101,13 @@ def test_performance_returns_rows_in_range_ordered_by_date_with_full_field_round
 
 
 def _add_run_with_vdot(
-    conn: Connection, *, activity_id: str, local_date: str, name: str, vdot: float
+    conn: Connection,
+    *,
+    activity_id: str,
+    local_date: str,
+    name: str,
+    vdot: float,
+    is_race: bool = False,
 ) -> None:
     now = dt.datetime(2025, 6, 1, 10, 0, 0)
     conn.execute(
@@ -113,6 +119,7 @@ def _add_run_with_vdot(
             local_date=local_date,
             name=name,
             sport="running",
+            is_race=is_race,
             duration_s=1800.0,
             moving_duration_s=1700.0,
             distance_m=5000.0,
@@ -192,6 +199,9 @@ def test_pace_hr_zones_returns_five_zones_from_the_all_time_best_run(
     body = r.json()
     assert body["profile_vdot"] == 50.0
     assert body["profile_vdot_activity"]["activity_id"] == "best"
+    # Not marked as a race -- falls back to the best training run, with an explicit caveat.
+    assert body["profile_vdot_source"] == "training_run"
+    assert any("marked as a race" in m for m in body["missing"])
     assert [z["label"] for z in body["zones"]] == [
         "Recovery",
         "Basic Endurance",
@@ -205,6 +215,39 @@ def test_pace_hr_zones_returns_five_zones_from_the_all_time_best_run(
     assert zone2["pace_fast_s_per_km"] is not None
 
 
+def test_pace_hr_zones_prefers_a_marked_race_over_a_faster_training_run(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """A real bug this fixes: an all-out training segment can post a higher VDOT than the
+    athlete's own best real race (the Daniels formula assumes a genuine race effort), which made
+    every zone in the table run too fast. Once a race is marked, it wins regardless."""
+    with engine.connect() as conn:
+        _add_run_with_vdot(
+            conn,
+            activity_id="hard-segment",
+            local_date="2025-06-01",
+            name="Hard segment",
+            vdot=55.0,
+        )
+        _add_run_with_vdot(
+            conn,
+            activity_id="race",
+            local_date="2025-06-05",
+            name="10K",
+            vdot=44.5,
+            is_race=True,
+        )
+        conn.commit()
+
+    r = client.get("/api/v1/performance/pace-hr-zones?as_of=2025-06-10", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["profile_vdot"] == 44.5
+    assert body["profile_vdot_activity"]["activity_id"] == "race"
+    assert body["profile_vdot_source"] == "race"
+    assert not any("marked as a race" in m for m in body["missing"])
+
+
 def test_pace_hr_zones_defaults_as_of_to_today_when_omitted(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
@@ -214,6 +257,7 @@ def test_pace_hr_zones_defaults_as_of_to_today_when_omitted(
     assert body["as_of"] == dt.datetime.now(dt.UTC).date().isoformat()
     assert body["profile_vdot"] is None
     assert body["profile_vdot_activity"] is None
+    assert body["profile_vdot_source"] is None
     assert any("No qualifying run" in m for m in body["missing"])
 
 

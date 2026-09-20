@@ -195,6 +195,7 @@ def get_pace_hr_zones(
             if result.profile_vdot_activity is not None
             else None
         ),
+        profile_vdot_source=result.profile_vdot_source,
         profile_max_hr_bpm=result.profile_max_hr_bpm,
         profile_max_hr_source=result.profile_max_hr_source,
         zones=[_zone_out(z) for z in result.zones],
