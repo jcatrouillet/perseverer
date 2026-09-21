@@ -2,12 +2,14 @@ import { lazy, Suspense } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 
 import { AuthGate } from "./components/AuthGate";
+import { GearAlertBanner } from "./components/GearAlertBanner";
 import { Icon, type IconName } from "./components/Icon";
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import { LogoutButton } from "./components/LogoutButton";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { isoDate } from "./dateUtils";
 import { usePersonalize, PersonalizeProvider } from "./PersonalizeContext";
+import "./styles/gear.css";
 import { MonthView } from "./pages/calendar/MonthView";
 // Statically imported (not lazy) despite being routed elsewhere: MonthView/AllTimeView/YearView
 // already import CORE_METRICS/HRV_METRIC/WEIGHT_METRIC from here, so it's pulled into the main
@@ -51,6 +53,7 @@ const FitnessPage = lazy(() =>
 const InsightsPage = lazy(() =>
   import("./pages/InsightsPage").then((m) => ({ default: m.InsightsPage })),
 );
+const GearPage = lazy(() => import("./pages/GearPage").then((m) => ({ default: m.GearPage })));
 const MapExplorerPage = lazy(() =>
   import("./pages/MapExplorerPage").then((m) => ({ default: m.MapExplorerPage })),
 );
@@ -131,6 +134,9 @@ export function App() {
             <NavLink href="/insights" icon="bolt">
               Insights
             </NavLink>
+            <NavLink href="/gear" icon="shoe">
+              Gear
+            </NavLink>
             <NavLink href="/exercises" icon="dumbbell">
               Exercises
             </NavLink>
@@ -143,6 +149,7 @@ export function App() {
             <LogoutButton />
           </div>
         </nav>
+        <GearAlertBanner />
         <div className="app-main">
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <Switch>
@@ -154,6 +161,7 @@ export function App() {
               <Route path="/health" component={HealthPage} />
               <Route path="/map" component={MapExplorerPage} />
               <Route path="/insights" component={InsightsPage} />
+              <Route path="/gear" component={GearPage} />
               <Route path="/exercises" component={ExerciseLibraryPage} />
               <Route path="/settings" component={SettingsPage} />
               <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>

@@ -37,6 +37,7 @@ from perseverer.db.schema import athlete as athlete_table
 from perseverer.db.schema import planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.email_reports import ReportKind, athletes_opted_in, send_report_email
+from perseverer.gear import send_over_limit_alerts
 from perseverer.planned_workouts import push_planned_workout
 from perseverer.staleness import check_staleness, notify_webhook
 
@@ -123,7 +124,7 @@ def run_daily_sync() -> None:
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
         athletes = conn.execute(
-            select(athlete_table.c.id, athlete_table.c.display_name)
+            select(athlete_table.c.id, athlete_table.c.display_name, athlete_table.c.email)
         ).fetchall()
         for row in athletes:
             try:
@@ -136,6 +137,13 @@ def run_daily_sync() -> None:
                     row.display_name,
                     row.id,
                 )
+            try:
+                sent = send_over_limit_alerts(conn, settings, row.id, row.email)
+                if sent:
+                    logger.info("sent %d gear replacement alert(s) for athlete %s", sent, row.id)
+            except Exception:
+                conn.rollback()
+                logger.exception("gear alert email failed for athlete %s", row.id)
 
 
 def run_daily_backup() -> None:

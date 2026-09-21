@@ -451,7 +451,7 @@
 
     <section class="doc-section" id="overview">
       <h2>Overview</h2>
-      <p>The API is organized around thirteen resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Blood Tests</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Performance</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Planned Workouts</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
+      <p>The API is organized around fourteen resources: <strong>Activities</strong>, <strong>Health</strong>, <strong>Blood Tests</strong>, <strong>Sleep</strong>, <strong>Calendar</strong>, <strong>Fitness</strong>, <strong>Performance</strong>, <strong>Gear</strong>, <strong>Insights</strong>, <strong>Notes</strong>, <strong>Goals</strong>, <strong>Planned Workouts</strong>, <strong>Settings</strong>, and <strong>Auth</strong>. Every route is prefixed <code>/api/v1</code>. Requests and responses are JSON; request bodies on <code>POST</code>/<code>PUT</code>/<code>PATCH</code> must be sent with <code>Content-Type: application/json</code>.</p>
       <p>There is exactly one athlete per deployment credential — every endpoint is implicitly scoped to the athlete resolved from your auth credential, so there is never an <code>athlete_id</code> parameter to pass yourself.</p>
       <div class="callout"><strong>Base URL is deployment-specific.</strong> This API has no public multi-tenant host — you run it yourself (Docker/Podman), and the origin depends on how you've exposed it (a reverse-proxy hostname, a local port, a Tailscale address). Substitute your own origin for <code>https://your-perseverer-host</code> in every example on this page.</div>
     </section>
@@ -1852,6 +1852,32 @@ const GROUPS = [
       ],
       responses: [ { code: 200, ref: "PerformanceCurveOut" } ],
       example: { qs: "?metric=heart_rate&start_date=2026-06-01&end_date=2026-08-19&sports=running,cycling" }
+    },
+  ]},
+
+  { id: "gear", title: "Gear", endpoints: [
+    { method: "GET", path: "/api/v1/gear/shoes", summary: "List active or all shoe pairs with live mileage.",
+      description: "Mileage combines the pair's initial distance with explicitly assigned activities and dated sport-default fallbacks. Retired pairs are hidden unless include_retired=true.",
+      params: [ ["include_retired","query","opt","boolean","false","Include retired pairs."] ],
+      responses: [ { code: 200, note: "An array of shoe records with distance_km, optional max_distance_km/remaining_km, over_limit, retired, and default_sports." } ], example: {}
+    },
+    { method: "POST", path: "/api/v1/gear/shoes", summary: "Add a pair of shoes.",
+      description: "initial_distance_km records use before Perseverer. max_distance_km defaults to 800; send null for no limit.",
+      body: { fields: [["brand","string","req","",""],["model","string","req","",""],["size","string|null","opt","null",""],["comments","string|null","opt","null",""],["initial_distance_km","number","opt","0",""],["max_distance_km","number|null","opt","800","Null disables limit alerts."]] },
+      responses: [ { code: 201, note: "The created shoe record." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/defaults/{sport}", summary: "Set one pair as the default for a sport.",
+      body: { fields: [["shoe_id","string","req","","Must be an active pair owned by the athlete."]] }, responses: [ { code: 200, note: "The updated shoe record." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/shoes/{shoe_id}/retire", summary: "Retire a pair while preserving its history.",
+      description: "Retirement removes the pair from sport defaults and stops limit alerts. It remains available through include_retired=true.", responses: [ { code: 200, note: "The retired shoe record." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/gear/activities/{activity_id}/shoe", summary: "Read the pair explicitly assigned to an activity.", responses: [ { code: 200, note: "shoe_id is a string or null." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/activities/{activity_id}/shoe", summary: "Set or clear the pair for a distance activity.",
+      body: { fields: [["shoe_id","string|null","req","","Null clears the explicit choice."]] }, responses: [ { code: 200, note: "The saved shoe_id." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/gear/alerts", summary: "List active pairs that reached their mileage limit.", responses: [ { code: 200, note: "An array of over-limit shoe alerts." } ], example: {}
     },
   ]},
 

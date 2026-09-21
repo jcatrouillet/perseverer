@@ -1184,3 +1184,34 @@ export interface GoalProgressOut {
   ahead_behind_m: number | null;
   pct_complete: number | null;
 }
+
+export interface ShoeIn {
+  brand: string;
+  model: string;
+  size?: string | null;
+  comments?: string | null;
+  initial_distance_km: number;
+  max_distance_km: number | null;
+}
+
+export interface ShoeOut extends ShoeIn {
+  id: string;
+  distance_km: number;
+  remaining_km: number | null;
+  over_limit: boolean;
+  retired: boolean;
+  default_sports: string[];
+  created_at: string;
+}
+
+export interface GearAlertOut {
+  shoe_id: string;
+  brand: string;
+  model: string;
+  distance_km: number;
+  max_distance_km: number;
+}
+
+export interface ActivityShoeOut {
+  shoe_id: string | null;
+}

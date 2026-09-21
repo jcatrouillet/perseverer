@@ -1,0 +1,313 @@
+.gear-page {
+  max-width: 960px;
+}
+
+.gear-page__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.gear-page__heading h1 {
+  margin-bottom: 2px;
+}
+
+.gear-page__intro,
+.gear-card__description {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.gear-card__description {
+  margin-top: calc(-1 * var(--space-2));
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-sm);
+}
+
+.gear-form {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.gear-form > .field {
+  grid-column: span 4;
+}
+
+.gear-form > .gear-form__size {
+  grid-column: span 2;
+}
+
+.gear-form .input {
+  width: 100%;
+  min-width: 0;
+}
+
+.gear-form textarea.input {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.gear-form__comments,
+.gear-form__sports,
+.gear-form__actions,
+.gear-form > .form-error {
+  grid-column: 1 / -1;
+}
+
+.gear-form__hint {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.gear-form__sports {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.gear-form__sports legend {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.gear-sport-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.gear-sport-option {
+  position: relative;
+  cursor: pointer;
+}
+
+.gear-sport-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gear-sport-option span {
+  display: inline-flex;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-transform: capitalize;
+  transition: 120ms ease;
+}
+
+.gear-sport-option:hover span {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.gear-sport-option.is-selected span {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.gear-sport-option input:focus-visible + span {
+  outline: 3px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+
+.gear-form__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.gear-defaults__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-5);
+}
+
+.gear-default-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) minmax(11rem, 1.5fr);
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.gear-default-row .input {
+  width: 100%;
+}
+
+.gear-inventory {
+  margin-top: var(--space-5);
+}
+
+.gear-inventory__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.gear-inventory__heading h2 {
+  margin: 0;
+}
+
+.gear-show-retired {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.gear-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.gear-shoe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.gear-shoe--limit {
+  border-color: var(--color-danger);
+}
+
+.gear-shoe__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.gear-shoe h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.gear-shoe__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  text-transform: capitalize;
+}
+
+.gear-shoe__mileage {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+}
+
+.gear-shoe__mileage strong {
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.gear-shoe__mileage span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.gear-shoe__mileage progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 7px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  accent-color: var(--color-accent);
+}
+
+.gear-shoe__comments {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.gear-shoe > .button {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.gear-empty {
+  color: var(--color-text-muted);
+}
+
+.gear-inventory > .gear-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.gear-inventory > .gear-empty h3,
+.gear-inventory > .gear-empty p {
+  margin: 0;
+}
+
+.gear-alert {
+  max-width: 1080px;
+  margin: var(--space-3) auto 0;
+  padding: var(--space-3) var(--space-5);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-danger) 14%, var(--color-surface));
+}
+
+.activity-shoe p {
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 760px) {
+  .gear-form > .field,
+  .gear-form > .gear-form__size {
+    grid-column: span 6;
+  }
+
+  .gear-defaults__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .gear-page__heading {
+    align-items: flex-start;
+  }
+
+  .gear-form > .field,
+  .gear-form > .gear-form__size {
+    grid-column: 1 / -1;
+  }
+
+  .gear-default-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .gear-inventory__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .gear-alert {
+    margin: var(--space-3) var(--space-3) 0;
+    padding: var(--space-3);
+  }
+}

@@ -871,6 +871,55 @@ bucket's record), `local_date` (string, date, that activity's own local date).
 
 ---
 
+## Gear
+
+Shoes are athlete-owned gear. Mileage is calculated from distance-bearing activities, never kept
+as a mutable counter: an activity's selected pair takes precedence; otherwise the sport default
+applies from the moment it was assigned. `initial_distance_km` adds kilometres already used before
+the pair was entered in Perseverer.
+
+### `GET /gear/shoes`
+
+Returns `array<ShoeOut>`. `ShoeOut` includes `brand`, `model`, optional `size` and `comments`,
+`initial_distance_km`, `max_distance_km`, live `distance_km`, `remaining_km`, `over_limit`, and
+`default_sports`.
+
+### `POST /gear/shoes`
+
+Creates a pair. Request body: `brand` and `model` (required strings); `size` and `comments`
+(optional strings); `initial_distance_km` (number, default `0`, non-negative); and
+`max_distance_km` (positive number, default `800`, or `null` for no mileage limit). Returns the
+created `ShoeOut` (`201`).
+
+### `PUT /gear/defaults/{sport}`
+
+Sets the athlete's default pair for a sport. Request body: `{ "shoe_id": "…" }`. A changed
+default starts a new mileage boundary, so prior activities are not reassigned.
+
+### `PUT /gear/shoes/{shoe_id}/retire`
+
+Retires a pair while preserving its history. Retired pairs are excluded from normal Gear lists,
+cannot be selected as a default, and no longer create mileage alerts. Add
+`include_retired=true` to `GET /gear/shoes` to include them.
+
+### `GET /gear/activities/{activity_id}/shoe`
+
+Returns `{ "shoe_id": string | null }`, the pair explicitly selected for this activity.
+
+### `PUT /gear/activities/{activity_id}/shoe`
+
+Sets or clears the pair for one distance-bearing activity. Request body:
+`{ "shoe_id": string | null }`. The shoe must belong to the authenticated athlete; use `null`
+to remove the explicit choice and resume the dated sport-default fallback.
+
+### `GET /gear/alerts`
+
+Returns each pair whose calculated mileage, including its initial distance, has reached its
+configured maximum. The app uses this for its persistent banner. The worker sends one email per
+pair when SMTP and an athlete email address are configured.
+
+---
+
 ## Insights
 
 ### `GET /insights`

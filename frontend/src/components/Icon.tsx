@@ -69,6 +69,7 @@ export type IconName =
   | "list"
   | "map"
   | "settings"
+  | "shoe"
   // Route playback
   | "play"
   | "pause"
@@ -173,6 +174,10 @@ export function IconSprite() {
         <symbol viewBox="0 0 24 24" id="i-settings">
           <circle cx="12" cy="12" r="3.2" />
           <path d="M12 3.4v2.4M12 18.2v2.4M20.6 12h-2.4M5.8 12H3.4M17.8 6.2l-1.7 1.7M7.9 16.1l-1.7 1.7M17.8 17.8l-1.7-1.7M7.9 7.9 6.2 6.2" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-shoe">
+          <path d="M4 14.5c2.8.1 4.8-1.2 6-4.7l1.8.8c1.4 2.8 3.7 4.6 7.1 5.2 1.1.2 1.8 1.1 1.8 2.2v1.2H4v-4.7Z" />
+          <path d="M7.2 17.1h2.4M12.1 17.1h2.4" />
         </symbol>
         <symbol viewBox="0 0 24 24" id="i-play">
           <path d="M6.5 4.2v15.6l13.2-7.8L6.5 4.2Z" />

@@ -16,6 +16,7 @@ import type {
   ActivityPaceBandsOut,
   ActivityRouteOut,
   ActivitySourcesOut,
+  ActivityShoeOut,
   ActivitySplitOut,
   ActivityRaceOverrideOut,
   ActivitySportOverrideOut,
@@ -48,6 +49,7 @@ import type {
   GarminLoginOut,
   GoalOut,
   GoalProgressOut,
+  GearAlertOut,
   HealthDashboardOut,
   HealthObservationOut,
   HealthStreamResponse,
@@ -80,6 +82,8 @@ import type {
   RunningLoadConfigOut,
   ShareLinkOut,
   SleepSessionOut,
+  ShoeIn,
+  ShoeOut,
   SplitOut,
   StreamResponse,
   TrimCandidateOut,
@@ -321,6 +325,54 @@ export function useActivity(activityId: string) {
   return useQuery({
     queryKey: ["activity", activityId],
     queryFn: () => apiGet<ActivityDetail>(`/api/v1/activities/${activityId}`),
+  });
+}
+
+export function useShoes(includeRetired = false) {
+  return useQuery({ queryKey: ["gear-shoes", includeRetired], queryFn: () => apiGet<ShoeOut[]>(`/api/v1/gear/shoes?include_retired=${includeRetired}`) });
+}
+
+export function useGearAlerts() {
+  return useQuery({ queryKey: ["gear-alerts"], queryFn: () => apiGet<GearAlertOut[]>("/api/v1/gear/alerts") });
+}
+
+export function useCreateShoe() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ShoeIn) => apiPost<ShoeOut>("/api/v1/gear/shoes", body),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["gear-shoes"] }),
+  });
+}
+
+export function useSetDefaultShoe() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sport, shoeId }: { sport: string; shoeId: string }) => apiPut<ShoeOut>(`/api/v1/gear/defaults/${encodeURIComponent(sport)}`, { shoe_id: shoeId }),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["gear-shoes"] }),
+  });
+}
+
+export function useRetireShoe() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (shoeId: string) => apiPut<ShoeOut>(`/api/v1/gear/shoes/${shoeId}/retire`, {}),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["gear-shoes"] }),
+  });
+}
+
+export function useActivityShoe(activityId: string, enabled: boolean) {
+  return useQuery({ queryKey: ["activity-shoe", activityId], queryFn: () => apiGet<ActivityShoeOut>(`/api/v1/gear/activities/${activityId}/shoe`), enabled });
+}
+
+export function useSetActivityShoe(activityId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (shoeId: string | null) => apiPut<ActivityShoeOut>(`/api/v1/gear/activities/${activityId}/shoe`, { shoe_id: shoeId }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ["activity-shoe", activityId] });
+      client.invalidateQueries({ queryKey: ["gear-shoes"] });
+      client.invalidateQueries({ queryKey: ["gear-alerts"] });
+    },
   });
 }
 

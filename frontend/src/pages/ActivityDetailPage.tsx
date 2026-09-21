@@ -41,6 +41,7 @@ import { ActivityMergePanel } from "../components/ActivityMergePanel";
 import { ActivityNameCorrection } from "../components/ActivityNameCorrection";
 import { ActivityRoute, buildRouteData } from "../components/ActivityRoute";
 import { ActivitySourcesPanel } from "../components/ActivitySourcesPanel";
+import { ActivityShoePicker } from "../components/ActivityShoePicker";
 import { ActivitySportCorrection } from "../components/ActivitySportCorrection";
 import { ActivityShareButton } from "../components/ShareButton";
 import {
@@ -284,6 +285,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
           a.device.manufacturer &&
           ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
       </p>
+      <ActivityShoePicker activityId={id} hasDistance={(a.distance_m ?? 0) > 0} />
       {((weather.data && weather.data.available) || paceVariability) && (
         <div className="activity-detail__weather-pace-row">
           {weather.data && <ActivityWeather weather={weather.data} />}

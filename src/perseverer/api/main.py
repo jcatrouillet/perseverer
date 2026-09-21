@@ -32,6 +32,7 @@ from perseverer.api.routers import (
     calendar,
     calendar_feed,
     fitness,
+    gear,
     goals,
     health,
     insights,
@@ -76,6 +77,7 @@ app.include_router(blood_tests.router, prefix="/api/v1")
 app.include_router(sleep.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(fitness.router, prefix="/api/v1")
+app.include_router(gear.router, prefix="/api/v1")
 app.include_router(performance.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")

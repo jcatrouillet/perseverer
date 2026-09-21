@@ -167,6 +167,43 @@ athlete_email_report_config = Table(
     Column("updated_at", DateTime(), nullable=False),
 )
 
+# Gear begins with shoes.  A pair is intentionally a separate object from its sport assignment:
+# one pair can be used for more than one sport, while each sport has at most one active default.
+# `assigned_at` is the start of the mileage ledger.  We never infer a past shoe assignment from
+# an imported activity, so creating a pair today cannot quietly charge years of old runs to it.
+shoe = Table(
+    "shoe",
+    metadata,
+    Column("id", String(26), primary_key=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("brand", String, nullable=False),
+    Column("model", String, nullable=False),
+    Column("size", String, nullable=True),
+    Column("comments", Text, nullable=True),
+    # Existing mileage entered when a pair is first added.  Activity-derived mileage is added
+    # to this rather than replacing it, so an already-used pair can be tracked accurately.
+    Column("initial_distance_m", Float, nullable=False, default=0.0),
+    Column("max_distance_m", Float, nullable=True, default=800_000.0),
+    # Set once an alert email has been successfully sent.  Banner visibility is computed from
+    # live mileage, so the athlete is still reminded until they replace/change the pair; this
+    # field only prevents a daily worker run becoming a daily inbox reminder.
+    Column("alert_emailed_at", DateTime(), nullable=True),
+    Column("retired_at", DateTime(), nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    Index("ix_shoe_athlete", "athlete_id"),
+)
+
+athlete_default_shoe = Table(
+    "athlete_default_shoe",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("sport", String, primary_key=True),
+    Column("shoe_id", String(26), ForeignKey("shoe.id"), nullable=False),
+    Column("assigned_at", DateTime(), nullable=False),
+    Index("ix_default_shoe_athlete_shoe", "athlete_id", "shoe_id"),
+)
+
 # A distance goal for a whole calendar year or month, one per (athlete, period_type,
 # period_start) -- not a growing history of past goals, just "what's the target for this
 # period", upserted like athlete_hr_zone_config above. `sport=NULL` means every sport combined;
@@ -331,6 +368,9 @@ activity = Table(
     Column("duration_s", Float, nullable=True),
     Column("moving_duration_s", Float, nullable=True),
     Column("distance_m", Float, nullable=True),
+    # Athlete-selected pair for this activity.  Null uses the sport default as a read-time
+    # fallback in gear.py, so existing activities are never silently assigned.
+    Column("shoe_id", String(26), ForeignKey("shoe.id"), nullable=True),
     Column("elevation_gain_m", Float, nullable=True),
     # Peak altitude reached, not cumulative ascent (elevation_gain_m above) -- a hike with modest
     # total climb can still summit a very high point starting from an already-high trailhead, and
