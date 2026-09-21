@@ -130,7 +130,36 @@ def _step_type_dict(intensity: str | None) -> dict[str, Any]:
     return {"stepTypeId": step_type_id, "stepTypeKey": key, "displayOrder": display_order}
 
 
-def _end_condition(step: PlannedStepLike) -> tuple[dict[str, Any], float]:
+# Garmin's own end-condition id for "advance when the athlete presses the lap button", from
+# /workout-service/workout/types -- 1 in the garminconnect release this project pins
+# (`ConditionType.LAP_BUTTON`, verified by reading the installed package, same discipline as ADR
+# 0015's "vendor facts verified directly" section).
+#
+# Read via `getattr` rather than as a plain attribute because this library renumbers this class
+# between releases: 0.3.2 has no LAP_BUTTON at all AND numbers DISTANCE=1/HEART_RATE=3, where the
+# pinned release numbers LAP_BUTTON=1/DISTANCE=3/HEART_RATE=6. 0.3.2 is below pyproject's own
+# `garminconnect>=0.3.5` floor, so it is not a version this project would install -- the point is
+# only that the churn is real and undocumented, so a future bump dropping or renaming the member
+# should degrade to the known-good wire id instead of raising AttributeError mid-push.
+LAP_BUTTON_CONDITION_ID = getattr(ConditionType, "LAP_BUTTON", 1)
+
+
+def _end_condition(step: PlannedStepLike) -> tuple[dict[str, Any], float | None]:
+    if step.duration_type == "lap_button":
+        # `endConditionValue` is deliberately None, not 0.0: a lap-button step has no threshold
+        # to compare against, and `ExecutableStep.endConditionValue` is already `float | None`.
+        # The step's own duration_time_s/duration_distance_m, if set, are Perseverer-side
+        # estimates for the calendar (see workout_syntax.LAP_BUTTON_WORD) and must NOT leak into
+        # the Garmin payload, or the watch would advance on them.
+        return (
+            {
+                "conditionTypeId": LAP_BUTTON_CONDITION_ID,
+                "conditionTypeKey": "lap.button",
+                "displayOrder": 1,
+                "displayable": True,
+            },
+            None,
+        )
     if step.duration_type == "distance" and step.duration_distance_m is not None:
         return (
             {

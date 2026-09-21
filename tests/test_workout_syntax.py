@@ -97,6 +97,28 @@ class TestStepsToSourceText:
         assert reparsed.steps[1].target_high == pytest.approx(3.3333333333333335)
         assert reparsed.steps[2].intensity == "cooldown"
 
+    def test_lap_button_step_round_trips_with_its_estimate(self) -> None:
+        recorded = [
+            RecordedStepLike(0, "lap_button", None, 5000, None, None, None, None, None, None),
+        ]
+        text = steps_to_source_text(recorded)
+        assert text.strip() == "lap 5km"
+        reparsed = parse_workout_syntax(text)
+        assert reparsed.errors == []
+        assert reparsed.steps[0].duration_type == "lap_button"
+        assert reparsed.steps[0].duration_distance_m == pytest.approx(5000)
+
+    def test_bare_lap_button_step_round_trips(self) -> None:
+        recorded = [
+            RecordedStepLike(0, "lap_button", None, None, None, None, None, "warmup", None, None),
+        ]
+        text = steps_to_source_text(recorded)
+        assert text.strip() == "Warmup lap"
+        reparsed = parse_workout_syntax(text)
+        assert reparsed.errors == []
+        assert reparsed.steps[0].duration_type == "lap_button"
+        assert reparsed.steps[0].intensity == "warmup"
+
     def test_repeat_block_round_trips(self) -> None:
         recorded = [
             RecordedStepLike(0, "time", 600, None, None, None, None, "warmup", None, None),

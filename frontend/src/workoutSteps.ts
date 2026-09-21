@@ -199,6 +199,26 @@ export function formatStepDurationLabel(step: DurationStepLike): string | null {
   if (step.duration_type === "reps" && step.duration_reps != null) {
     return `${step.duration_reps} reps`;
   }
+  if (step.duration_type === "lap_button") {
+    // The step ends on the button, so the label leads with that; any duration/distance on the
+    // step is only Perseverer's own estimate (see workout_syntax.py) and is shown as such rather
+    // than as a duration the watch will actually advance on.
+    if (step.duration_distance_m != null) {
+      const km = step.duration_distance_m / 1000;
+      return `Lap button (~${Number.isInteger(km) ? km : km.toFixed(2)}km)`;
+    }
+    if (step.duration_time_s != null) {
+      // Same exact-minutes-or-raw-seconds convention the plain "time" branch below uses, not a
+      // bespoke rounded-minutes-only format -- a "lap 90s" estimate should read "~90s", not the
+      // less accurate "~2m".
+      const label =
+        step.duration_time_s % 60 === 0
+          ? `${step.duration_time_s / 60}m`
+          : `${Math.round(step.duration_time_s)}s`;
+      return `Lap button (~${label})`;
+    }
+    return "Lap button";
+  }
   if (step.duration_type === "distance" && step.duration_distance_m != null) {
     const km = step.duration_distance_m / 1000;
     return `${Number.isInteger(km) ? km : km.toFixed(2)}km`;

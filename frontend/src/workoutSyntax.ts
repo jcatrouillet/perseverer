@@ -34,12 +34,18 @@ const HR_RANGE_RE = /^(\d+)-(\d+)$/;
 const HR_SINGLE_RE = /^(\d+)$/;
 const CADENCE_RE = /^(\d+)(?:-(\d+))?spm$/i;
 
+/** The duration keyword that ends a step on the watch's lap button instead of time/distance --
+ * mirrors workout_syntax.LAP_BUTTON_WORD. */
+const LAP_BUTTON_WORD = "lap";
+
 const MILE_IN_METERS = 1609.34;
 const DEFAULT_ASSUMED_SPEED_MPS = 3.0;
 
 export interface ParsedStep {
   stepIndex: number;
-  durationType: "time" | "distance" | "repeat_until_steps_cmplt" | null;
+  /** A "lap_button" step may still carry durationTimeS/durationDistanceM -- an estimate only,
+   * never an end condition. See workout_syntax.py's docstring. */
+  durationType: "time" | "distance" | "lap_button" | "repeat_until_steps_cmplt" | null;
   durationTimeS: number | null;
   durationDistanceM: number | null;
   targetType: "pace" | "heart_rate" | null;
@@ -84,6 +90,9 @@ function emptyStep(stepIndex: number): ParsedStep {
   };
 }
 
+/** Does NOT handle the `lap` keyword: a lap-button step's optional trailing estimate is an
+ * ordinary duration token, so parseStepLine calls this function for that estimate after already
+ * consuming "lap" itself -- mirrors workout_syntax.py::_parse_duration's own docstring note. */
 function parseDuration(
   token: string,
 ): { type: "time" | "distance"; timeS: number | null; distanceM: number | null } | null {
@@ -130,18 +139,35 @@ function parseStepLine(line: string, lineNo: number, errors: ParseError[]): Pars
     errors.push({ lineNo, message: `missing duration: ${JSON.stringify(line)}` });
     return null;
   }
-  const duration = parseDuration(tokens[i]);
-  if (duration === null) {
-    errors.push({ lineNo, message: `unrecognized duration: ${JSON.stringify(tokens[i])}` });
-    return null;
-  }
-  i += 1;
-
   const step = emptyStep(-1);
-  step.durationType = duration.type;
-  step.durationTimeS = duration.timeS;
-  step.durationDistanceM = duration.distanceM;
   step.intensity = intensity;
+
+  if (tokens[i].toLowerCase() === LAP_BUTTON_WORD) {
+    // "lap" ends the step on the watch's lap button. An ordinary duration token may follow as an
+    // estimate for the calendar's planned-duration/load figures only -- deliberately NOT an end
+    // condition, so a step that overruns its estimate still waits for the button rather than
+    // advancing and swapping targets mid-effort.
+    step.durationType = "lap_button";
+    i += 1;
+    if (i < tokens.length) {
+      const estimate = parseDuration(tokens[i]);
+      if (estimate !== null) {
+        step.durationTimeS = estimate.timeS;
+        step.durationDistanceM = estimate.distanceM;
+        i += 1;
+      }
+    }
+  } else {
+    const duration = parseDuration(tokens[i]);
+    if (duration === null) {
+      errors.push({ lineNo, message: `unrecognized duration: ${JSON.stringify(tokens[i])}` });
+      return null;
+    }
+    step.durationType = duration.type;
+    step.durationTimeS = duration.timeS;
+    step.durationDistanceM = duration.distanceM;
+    i += 1;
+  }
 
   while (i < tokens.length) {
     const tok = tokens[i];
@@ -350,6 +376,18 @@ function formatDurationToken(
       return `${text}km`;
     }
     return `${Math.round(distanceM)}mtr`;
+  }
+  if (durationType === "lap_button") {
+    // Round-trips back to the same line the athlete typed: "lap", plus the estimate token if one
+    // was given. Recursing with "time"/"distance" reuses the formatting above rather than
+    // repeating it -- the estimate is an ordinary duration token by construction.
+    const estimate =
+      timeS !== null
+        ? formatDurationToken("time", timeS, null)
+        : distanceM !== null
+          ? formatDurationToken("distance", null, distanceM)
+          : null;
+    return estimate === null ? LAP_BUTTON_WORD : `${LAP_BUTTON_WORD} ${estimate}`;
   }
   return null;
 }

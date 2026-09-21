@@ -28,7 +28,11 @@ date-granular, so there's no finer grain to support yet.
 **The text syntax** (`workout_syntax.py`/`workoutSyntax.ts`): a real subset of intervals.icu's own
 workout-builder syntax — duration (time or distance), a pace or heart-rate target (an absolute
 range, a single value, or a `Z<n>` zone resolved against the athlete's own configured
-`athlete_hr_zone_config`), trailing running cadence, and a simple `Nx` repeat block. Implemented
+`athlete_hr_zone_config`), trailing running cadence, and a simple `Nx` repeat block.
+
+**Addendum — the `lap` duration (see decision 13)**: a step's duration may instead be the keyword
+`lap`, ending it on Garmin's own `ConditionType.LAP_BUTTON` rather than a time or distance, with
+an optional trailing duration token kept purely as a calendar-side estimate. Implemented
 twice, deliberately (same precedent as `gap.ts`/`gap.py`): an authoritative Python parse run
 server-side on every save, and a TS twin for instant client-side preview as the athlete types.
 Both are exercised against one shared JSON fixture table
@@ -399,10 +403,49 @@ schema evolution), so this is a frontend-only removal; a workout saved under "fi
 this change still renders correctly (`PUSHABLE_SPORTS` simply hides the push button for any
 unrecognized sport, same as it always has).
 
+### 13. The `lap` duration: end a step on the lap button, with an estimate that never reaches Garmin
+
+The athlete's own request, from a concrete failure: his four downhill long runs are out-and-backs
+on the Los Gatos Creek Trail whose turnaround is a dam, not a distance. Authored as `5km` steps
+they advance on GPS distance — which is not accurate enough on that trail — so the watch would
+swap from the climb's HR target to the descent's pace target while he was still climbing, the
+exact error the session's 128 bpm climb cap exists to prevent. "I will use the button to switch."
+
+Garmin has supported this all along (`ConditionType.LAP_BUTTON`); Perseverer's own `_end_condition`
+simply had no branch for it and fell through to `time`. Three notes on the shape chosen:
+
+- **The keyword takes an optional estimate** (`lap 5km`, `lap 40m`) rather than being bare-only.
+  Without one, a lap step contributes nothing to `estimated_duration_s`/`estimate_step_distance_m`
+  and a 32 km long run reads as ~2 km of warmup and cooldown, which quietly wrecks the calendar's
+  planned-duration and load figures. The estimate lives in the existing
+  `duration_time_s`/`duration_distance_m` columns, so **no migration was needed** — `duration_type`
+  was already a free string, and both estimate helpers already read those two fields without
+  branching on it.
+- **The estimate is emphatically not an end condition.** `_end_condition` returns
+  `endConditionValue: None` for a lap step and drops the estimate entirely; two tests in
+  `test_planned_workouts.py` assert the estimate never appears in the pushed payload. If it
+  leaked, the step would advance at 5 km and the whole feature would be pointless.
+- **`LAP_BUTTON_CONDITION_ID` is read via `getattr`, not as a plain attribute.** This library
+  renumbers `ConditionType` between releases — 0.3.2 has no `LAP_BUTTON` at all and numbers
+  `DISTANCE=1`/`HEART_RATE=3`, where the pinned release numbers `LAP_BUTTON=1`/`DISTANCE=3`/
+  `HEART_RATE=6`. 0.3.2 is below pyproject's own `garminconnect>=0.3.5` floor so it is not a
+  version this project installs, but the churn is real and undocumented, and this is the same
+  hazard the "vendor facts verified directly" section above already calls out.
+
 ## Verification
 
 `uv run pytest -q` (927 passed), `uv run ruff check .`, `uv run mypy` (clean), `cd frontend && npm
 run typecheck && npm run build` (clean), `npx vitest run` (556 passed) — all green.
+
+**Decision 13 (`lap` duration) was verified only partially**, in a Linux container that cannot run
+this project's own toolchain: `pytest tests/test_workout_syntax.py` (31 passed, including 8 new
+shared fixture cases and 2 round-trip cases) and `npx vitest run src/workoutSyntax.test.ts
+src/workoutSteps.test.ts` (54 passed — the TS twin agreeing with Python on the same fixtures is
+the parity guarantee), plus `_end_condition` exercised directly against its own AST-extracted
+source. **Not run there**: the rest of `pytest`, `ruff`, `mypy` (the container has Python 3.10;
+`api/schemas/common.py` uses PEP 695 `class Page[T]`, so the package will not even import) and
+`tsc --noEmit` (node_modules was installed on Windows, so `@typescript/typescript-linux-x64` is
+absent). Re-run the full gate list above on a real dev machine before merging.
 
 **Live push, with the user's explicit go-ahead (2026-09-03)**: scheduled a real running workout
 ("CLAUDE TEST — safe to delete", 2026-09-05) against the author's own Garmin account —

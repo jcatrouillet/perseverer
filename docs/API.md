@@ -1073,6 +1073,12 @@ only, v1 — a non-running `sport` saves and lists fine but `POST .../push` fail
 from yet. See `docs/adr/0015-scheduled-workouts.md` and the workout-syntax text format described
 there (duration, a pace/HR/zone target, cadence, a simple `Nx` repeat block).
 
+A step's duration may also be the keyword `lap`, which ends the step on the watch's lap button
+instead of a time or distance — for terrain whose real boundary is a landmark rather than an
+exact distance. `lap` may be followed by an ordinary duration token (`lap 5km`, `lap 40m`) used
+solely as an estimate for the calendar's own duration/load figures; it is never sent to Garmin,
+so the step waits for the button however far it actually runs.
+
 A day can hold any number of independently-addressed workouts — every workout is identified by
 its own `id`, never by date alone.
 
@@ -2372,8 +2378,8 @@ always addressed by id rather than by date:
 | Field | Type | Description |
 |---|---|---|
 | `step_index` | integer | |
-| `duration_type` | string, nullable | `time` / `distance` / `repeat_until_steps_cmplt`. |
-| `duration_time_s`, `duration_distance_m` | number, nullable | |
+| `duration_type` | string, nullable | `time` / `distance` / `lap_button` / `repeat_until_steps_cmplt`. |
+| `duration_time_s`, `duration_distance_m` | number, nullable | For `lap_button`, these are an **estimate only** — used for the calendar's planned-duration and load figures, never pushed to Garmin as an end condition. |
 | `target_type` | string, nullable | `pace` / `heart_rate`. |
 | `target_low`, `target_high` | number, nullable | m/s for `pace`, bpm for `heart_rate`. |
 | `target_hr_zone` | integer, nullable | Alternative to `target_low`/`target_high` — resolved against the athlete's own configured HR zones at push time. |

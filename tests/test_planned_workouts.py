@@ -51,6 +51,38 @@ class TestBuildRunningWorkout:
         assert step.model_dump()["targetValueTwo"] == 3.5
         assert step.targetType["workoutTargetTypeKey"] == "pace.zone"
 
+    def test_lap_button_step_ends_on_the_button_with_a_null_condition_value(self) -> None:
+        steps = [
+            PlannedStepLike(
+                0, "lap_button", None, None, "heart_rate", 118.0, 128.0, None, None, None, None,
+                None, None
+            )
+        ]
+        workout = build_running_workout("Run", steps, 600, hr_boundaries=None, max_hr_bpm=None)
+        step = workout.workoutSegments[0].workoutSteps[0]
+        assert step.endCondition["conditionTypeKey"] == "lap.button"
+        assert step.endConditionValue is None
+        # The HR target still rides on the step -- only the END condition changes.
+        assert step.targetType["workoutTargetTypeKey"] == "heart.rate.zone"
+        assert step.model_dump()["targetValueOne"] == 118.0
+        assert step.model_dump()["targetValueTwo"] == 128.0
+
+    def test_lap_button_estimate_never_leaks_into_the_garmin_end_condition(self) -> None:
+        # A 5km estimate is Perseverer's own calendar-side figure (see workout_syntax.py). If it
+        # reached Garmin as an end condition the watch would advance at 5km and swap the step's
+        # targets mid-climb -- the exact failure the lap keyword exists to prevent.
+        steps = [
+            PlannedStepLike(
+                0, "lap_button", None, 5000, "heart_rate", 118.0, 128.0, None, None, None, None,
+                None, None
+            )
+        ]
+        workout = build_running_workout("Run", steps, 600, hr_boundaries=None, max_hr_bpm=None)
+        step = workout.workoutSegments[0].workoutSteps[0]
+        assert step.endCondition["conditionTypeKey"] == "lap.button"
+        assert step.endConditionValue is None
+        assert "5000" not in str(step.model_dump())
+
     def test_hr_zone_target_resolves_against_athlete_zones(self) -> None:
         steps = [
             PlannedStepLike(

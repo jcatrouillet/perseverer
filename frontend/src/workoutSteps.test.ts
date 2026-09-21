@@ -195,6 +195,25 @@ describe("formatStepDurationLabel", () => {
     expect(formatStepDurationLabel(INTERVAL)).toBe("1km");
   });
 
+  it("labels a bare lap-button step by the button, not a duration", () => {
+    expect(formatStepDurationLabel(plannedStep({ duration_type: "lap_button" }))).toBe(
+      "Lap button",
+    );
+  });
+
+  it("marks a lap-button step's distance/time as an estimate, since the watch never advances on it", () => {
+    expect(
+      formatStepDurationLabel(
+        plannedStep({ duration_type: "lap_button", duration_distance_m: 5000 }),
+      ),
+    ).toBe("Lap button (~5km)");
+    expect(
+      formatStepDurationLabel(
+        plannedStep({ duration_type: "lap_button", duration_time_s: 2400 }),
+      ),
+    ).toBe("Lap button (~40m)");
+  });
+
   it("returns null for a step with neither a time nor a distance duration", () => {
     expect(formatStepDurationLabel(REPEAT)).toBeNull();
   });

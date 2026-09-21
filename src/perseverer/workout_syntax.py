@@ -12,9 +12,10 @@ Perseverer tracks or onto Garmin's own workout-step model for this use case.
 Duplicated in `frontend/src/workoutSyntax.ts` for instant client-side preview as the athlete
 types, same cross-language-duplication precedent as `gap.ts`/`gap.py`
 (`frontend/src/gap.ts`/`src/perseverer/gap.py`) and `weatherCode.ts`/`weather_code.py` -- kept in
-sync via a shared fixture table (`tests/workout_syntax_fixtures.py`, mirrored by
-`frontend/src/workoutSyntax.fixtures.ts`) exercised by both languages' test suites rather than
-trusted to agree by inspection. This module is the *authoritative* parse (run server-side on
+sync via a shared fixture table (`tests/fixtures/workout_syntax_cases.json`, consumed by both
+`tests/test_workout_syntax.py` and `frontend/src/workoutSyntax.test.ts`) exercised by both
+languages' test suites rather than trusted to agree by inspection. This module is the
+*authoritative* parse (run server-side on
 every save, feeding both `planned_workout_step` storage and the Garmin workout JSON builder in
 `adapters/garmin_connect.py`); the TS copy is a preview only.
 
@@ -53,7 +54,15 @@ case-insensitive:
   intensity label" (a plain interval/main-set step).
 - `duration` (required): `10m` / `5m30s` / `90s` (time) or `2km` / `800mtr` / `1mi` (distance) --
   bare `m` means *minutes*, `mtr` means *meters* (matching intervals.icu's own convention
-  exactly, to avoid a real ambiguity trap between the two).
+  exactly, to avoid a real ambiguity trap between the two). Or `lap`: the step runs until the
+  athlete presses the watch's lap button, with no automatic advance at all (Garmin's own
+  `ConditionType.LAP_BUTTON`). `lap` may be followed by an ordinary time or distance token --
+  `lap 5km`, `lap 40m` -- which is used *only* as a duration/distance ESTIMATE for the calendar's
+  own planned-duration and load figures, never as an end condition. Without one, a `lap` step
+  contributes nothing to those estimates, which is honest but makes the workout's total read
+  low. This exists for terrain the athlete knows better than GPS does: an out-and-back whose
+  turnaround is a real landmark (a dam, a trailhead) rather than an exact distance, where a
+  distance-ended step would advance early or late and swap the step's targets mid-climb.
 - `target` (optional): a pace value/range immediately followed by the word `Pace`
   (`5:10/km Pace` or `5:00-5:20/km Pace`), or a heart-rate value/range/zone immediately followed
   by the word `HR` (`150 HR`, `140-150 HR`, or `Z2 HR`).
@@ -82,6 +91,9 @@ from dataclasses import dataclass
 # Same vocabulary activity_workout_step.intensity already uses.
 INTENSITY_WORDS = frozenset({"warmup", "cooldown", "recovery", "rest", "active"})
 
+# The duration keyword that ends a step on the watch's lap button instead of time/distance.
+LAP_BUTTON_WORD = "lap"
+
 _REPEAT_MARKER_RE = re.compile(r"^(\d+)\s*[xX]$")
 
 _DIST_KM_RE = re.compile(r"^(\d+(?:\.\d+)?)km$", re.IGNORECASE)
@@ -108,7 +120,9 @@ DEFAULT_ASSUMED_SPEED_MPS = 3.0
 @dataclass
 class ParsedStep:
     step_index: int
-    duration_type: str | None = None  # "time" | "distance" | "repeat_until_steps_cmplt"
+    # "time" | "distance" | "lap_button" | "repeat_until_steps_cmplt". A "lap_button" step may
+    # still carry duration_time_s/duration_distance_m -- an estimate only, never an end condition.
+    duration_type: str | None = None
     duration_time_s: float | None = None
     duration_distance_m: float | None = None
     target_type: str | None = None  # "pace" | "heart_rate"
@@ -139,7 +153,9 @@ class ParsedWorkout:
 def _parse_duration(token: str) -> tuple[str, float | None, float | None] | None:
     """Returns (duration_type, duration_time_s, duration_distance_m) -- exactly one of the two
     values is non-None, matching duration_type ("time" or "distance"). `None` if `token` isn't a
-    recognized duration."""
+    recognized duration. Does NOT handle the `lap` keyword: a lap-button step's optional
+    trailing estimate is an ordinary duration token, so `_parse_step_line` calls this function
+    for that estimate and would otherwise recurse on its own keyword."""
     if m := _DIST_KM_RE.match(token):
         return ("distance", None, float(m.group(1)) * 1000.0)
     if m := _DIST_MTR_RE.match(token):
@@ -183,14 +199,30 @@ def _parse_step_line(line: str, *, line_no: int, errors: list[ParseError]) -> Pa
     if i >= len(tokens):
         errors.append(ParseError(line_no=line_no, message=f"missing duration: {line!r}"))
         return None
-    duration = _parse_duration(tokens[i])
-    if duration is None:
-        errors.append(
-            ParseError(line_no=line_no, message=f"unrecognized duration: {tokens[i]!r}")
-        )
-        return None
-    duration_type, duration_time_s, duration_distance_m = duration
-    i += 1
+
+    duration_type: str
+    duration_time_s: float | None
+    duration_distance_m: float | None
+
+    if tokens[i].lower() == LAP_BUTTON_WORD:
+        # "lap" ends the step on the watch's lap button. An ordinary duration token may follow
+        # as an estimate for the calendar's planned-duration/load figures only -- it is
+        # deliberately NOT an end condition, so a step that overruns its estimate still waits
+        # for the button rather than advancing and swapping targets mid-effort.
+        duration_type, duration_time_s, duration_distance_m = "lap_button", None, None
+        i += 1
+        if i < len(tokens) and (estimate := _parse_duration(tokens[i])) is not None:
+            _, duration_time_s, duration_distance_m = estimate
+            i += 1
+    else:
+        duration = _parse_duration(tokens[i])
+        if duration is None:
+            errors.append(
+                ParseError(line_no=line_no, message=f"unrecognized duration: {tokens[i]!r}")
+            )
+            return None
+        duration_type, duration_time_s, duration_distance_m = duration
+        i += 1
 
     target_type: str | None = None
     target_low: float | None = None
@@ -445,6 +477,18 @@ def _format_duration_token(
             return f"{text}km"
         text = f"{distance_m:.0f}"
         return f"{text}mtr"
+    if duration_type == "lap_button":
+        # Round-trips back to the same line the athlete typed: "lap", plus the estimate token
+        # if one was given. Recursing with "time"/"distance" reuses the formatting above rather
+        # than repeating it -- the estimate is an ordinary duration token by construction.
+        estimate = (
+            _format_duration_token("time", time_s, None)
+            if time_s is not None
+            else _format_duration_token("distance", None, distance_m)
+            if distance_m is not None
+            else None
+        )
+        return LAP_BUTTON_WORD if estimate is None else f"{LAP_BUTTON_WORD} {estimate}"
     return None
 
 
