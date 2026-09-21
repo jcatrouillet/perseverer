@@ -1,6 +1,6 @@
 """Auto-registering metric catalog. Every field a parser sees gets a `metric_definition` row
 on first sighting — this is how new watches/fields are supported for free, and it's the
-mechanism behind "never drop an unknown field" (CLAUDE.md).
+mechanism behind "never drop an unknown field" (AGENTS.md).
 """
 
 from datetime import UTC, datetime

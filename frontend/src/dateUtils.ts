@@ -5,7 +5,7 @@
 // monthGridWeeks (read from PersonalizeContext by their callers) is purely a *frontend display*
 // preference layered on top: Week/Month view and client-side weekly charts can start their own
 // visible grid on Sunday instead, but every stored weekly total/rollup/note/report stays
-// Monday-anchored regardless -- see CLAUDE.md's own Personalize bullet for the full reasoning.
+// Monday-anchored regardless -- see AGENTS.md's own Personalize bullet for the full reasoning.
 
 import type { DayRollupOut } from "./api/types";
 

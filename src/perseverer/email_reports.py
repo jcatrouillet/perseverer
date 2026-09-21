@@ -308,7 +308,7 @@ def _running_distance_by_day(
     conn: Connection, athlete_id: str, start: str, end: str
 ) -> list[DailyMetricPoint]:
     # Exact sport == "running" match, not sport_family() -- this project's own established
-    # precedent for running-specific stats (RunningStats.tsx, CLAUDE.md), deliberately excluding
+    # precedent for running-specific stats (RunningStats.tsx, AGENTS.md), deliberately excluding
     # trail_running/track_running.
     rows = conn.execute(
         select(activity.c.local_date, func.sum(activity.c.distance_m))
@@ -1025,7 +1025,7 @@ def _coming_day_rows(
 ) -> str:
     """One row per day of the coming week (always all seven, `start`..`end` inclusive) -- a day
     with nothing scheduled still gets a row so its own weather (when available) has somewhere to
-    show; a day with more than one workout (the multi-workout-per-day precedent, see CLAUDE.md's
+    show; a day with more than one workout (the multi-workout-per-day precedent, see AGENTS.md's
     own "Scheduled workouts" section) lists each in turn under the same day. Falls back to the
     original single "Nothing scheduled yet." row only when the whole week is bare -- no workouts
     anywhere in it and no forecast at all (e.g. no home location set) -- so an athlete who hasn't

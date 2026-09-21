@@ -3,7 +3,7 @@ this project uses DuckDB (see docs/adr/0006-phase-3-read-api-and-rollups.md deci
 
 Behavior below was verified directly against the installed `duckdb` package (ATTACH syntax,
 `.cursor()` semantics, the timestamp-CAST and extension-network gotchas) rather than recalled
-from training data, per CLAUDE.md's own standing instruction for fast-moving vendor libraries.
+from training data, per AGENTS.md's own standing instruction for fast-moving vendor libraries.
 """
 
 from __future__ import annotations

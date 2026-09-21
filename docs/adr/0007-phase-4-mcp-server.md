@@ -4,11 +4,11 @@
 
 Accepted. Core mounting/lifespan/security mechanics verified by direct introspection and a
 live `TestClient` round-trip against the installed `mcp` package before writing any production
-code, per CLAUDE.md's standing instruction for fast-moving vendor libraries.
+code, per AGENTS.md's standing instruction for fast-moving vendor libraries.
 
 ## Context
 
-CLAUDE.md's own mission statement is "a REST/JSON API an AI agent can write notes through."
+AGENTS.md's own mission statement is "a REST/JSON API an AI agent can write notes through."
 Phase 3 built that API; Phase 4 makes an AI agent's access to it a first-class MCP (Model
 Context Protocol) tool surface instead of raw HTTP a human has to proxy. ADR 0001 (Phase 0)
 speculated this "most likely gets its own Dockerfile" — a guess made before Streamable HTTP's

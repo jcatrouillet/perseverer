@@ -50,7 +50,7 @@ def test_no_percentile_with_no_comparable_activities(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
     """A first-of-its-kind effort has nothing to rank against -- percentile_rank must be null,
-    not 0 or 100 (CLAUDE.md's "never invent a plausible-looking number")."""
+    not 0 or 100 (AGENTS.md's "never invent a plausible-looking number")."""
     with engine.connect() as conn:
         seed_activity(conn, activity_id="a1", sport="running", distance_m=5000.0, duration_s=1500.0)
 

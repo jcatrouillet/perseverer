@@ -1,5 +1,5 @@
 """GET /calendar -- reads day_rollup/health_metric_daily_rollup only, no DuckDB, no
-request-time scan (CLAUDE.md's rollup mandate). See
+request-time scan (AGENTS.md's rollup mandate). See
 docs/adr/0006-phase-3-read-api-and-rollups.md.
 """
 

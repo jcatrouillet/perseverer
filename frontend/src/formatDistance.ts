@@ -17,7 +17,7 @@ export function metersToDisplayDistance(meters: number, unit: UnitPreference): n
 
 /** Inverse of `metersToDisplayDistance` -- for an entry form taking a value already in the
  * display unit (km or miles) and needing to store it as meters (this app's own SI-storage
- * convention, CLAUDE.md principle 6). */
+ * convention, AGENTS.md principle 6). */
 export function displayDistanceToMeters(value: number, unit: UnitPreference): number {
   return unit === "imperial" ? value * METERS_PER_MILE : value * 1000;
 }

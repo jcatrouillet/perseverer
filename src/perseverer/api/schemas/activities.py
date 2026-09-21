@@ -29,7 +29,7 @@ class LapOut(BaseModel):
     avg_hr: float | None
     max_hr: float | None
     avg_speed_mps: float | None
-    # m/s, SI storage convention (CLAUDE.md principle 6) -- see module docstring above and
+    # m/s, SI storage convention (AGENTS.md principle 6) -- see module docstring above and
     # gap.py::compute_lap_gap_speeds_mps.
     avg_gap_speed_mps: float | None
 
@@ -196,7 +196,7 @@ class ActivityDetail(ActivitySummary):
     # Computed on-demand from this activity's own Parquet stream (see transport_mix.py) --
     # None whenever the sport isn't hiking/walking or no sustained fast segment touches either
     # boundary. Detail-page-only (not on ActivitySummary): scanning every activity's own Parquet
-    # file for a list view would violate this app's precomputed-rollups discipline (CLAUDE.md).
+    # file for a list view would violate this app's precomputed-rollups discipline (AGENTS.md).
     transport_mix_flag: TransportMixFlagOut | None
     # True once an activity_trim_override row exists for this activity -- lets the frontend show
     # "Adjust trim"/"Undo trim" instead of the initial flag banner.
@@ -245,7 +245,7 @@ class ActivityComparisonRowOut(BaseModel):
     # Moving-preferred effective duration, same convention as ActivityContextRecentOut.duration_s.
     duration_s: float
     vdot: float | None
-    # m/s, SI storage convention (CLAUDE.md principle 6) -- see gap.py. The presentation layer
+    # m/s, SI storage convention (AGENTS.md principle 6) -- see gap.py. The presentation layer
     # converts to a min/km "grade adjusted pace" the same way it already does for plain pace.
     avg_gap_speed_mps: float | None
     avg_hr_bpm: float | None
@@ -321,7 +321,7 @@ class ActivityWeatherHourlyPointOut(BaseModel):
 class ActivityWeatherOut(BaseModel):
     # False whenever there's nothing to show -- no GPS start point to query against, or the
     # Open-Meteo fetch failed/returned no usable data for this activity's time window. Never a
-    # fabricated range (CLAUDE.md's raw-first rule): every non-null field below came from a real
+    # fabricated range (AGENTS.md's raw-first rule): every non-null field below came from a real
     # archived Open-Meteo response.
     available: bool
     temperature_min_c: float | None = None

@@ -2,7 +2,7 @@
 # garmin_connect incremental sync + staleness check the `worker` container's APScheduler job
 # does (see src/perseverer/worker/main.py), but via a plain OS scheduler instead of a
 # container. Podman on Windows is known to corrupt this project's SQLite WAL file (see
-# CLAUDE.md), so the `worker` container is a NAS-deployment thing, not a Windows-dev thing --
+# AGENTS.md), so the `worker` container is a NAS-deployment thing, not a Windows-dev thing --
 # this is the Windows-native equivalent, following the same proven pattern as the sibling
 # eufy-health-sync project's own setup_scheduler.ps1.
 #

@@ -1138,7 +1138,7 @@ insight = Table(
     Index("ix_insight_athlete_kind_window", "athlete_id", "kind", "window"),
 )
 
-# --- Notes (Phase 3): the write path CLAUDE.md's mission statement calls for -- one
+# --- Notes (Phase 3): the write path AGENTS.md's mission statement calls for -- one
 # polymorphic table rather than per-entity note tables, matching the project's existing
 # preference for additively-extensible shapes. Scoped to activities/days/weeks for now; a new
 # entity_type is a data-only addition, not a schema change. See ADR 0006 decision 7. ---------

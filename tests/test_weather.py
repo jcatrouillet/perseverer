@@ -1,5 +1,5 @@
 """Tests for weather.py: the pure Open-Meteo response parser, and the read-through-cache
-fetch/archive/store orchestration (mocked HTTP, no real network calls). See CLAUDE.md's
+fetch/archive/store orchestration (mocked HTTP, no real network calls). See AGENTS.md's
 "raw first, always" rule -- every fetched response must be archived before being parsed, and
 re-fetching the same activity's weather must never happen once it's cached.
 """

@@ -181,7 +181,7 @@ documented bug (`containers/podman#20439`) where it silently forced `--read-only
 instead of inheriting that same default — meaning a Quadlet unit with only `ReadOnly=true` could
 end up with a *fully* read-only `/tmp` on an affected Podman version, not the usual writable-
 tmpfs behavior. Checked directly against Podman's current documentation (not recalled from
-training data, per CLAUDE.md's own standing instruction to verify fast-moving vendor behavior):
+training data, per AGENTS.md's own standing instruction to verify fast-moving vendor behavior):
 `ReadOnlyTmpfs=` now defaults to `true` in current Podman/Quadlet, so the historical bug is
 fixed — but both Quadlet units set `ReadOnlyTmpfs=true` explicitly anyway, so this unit's own
 intent doesn't quietly depend on whichever default a future Podman version ships. Not yet

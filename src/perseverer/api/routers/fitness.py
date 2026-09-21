@@ -1,4 +1,4 @@
-"""GET /fitness -- reads fitness_daily_rollup only, no request-time computation (CLAUDE.md's
+"""GET /fitness -- reads fitness_daily_rollup only, no request-time computation (AGENTS.md's
 rollup mandate). See docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
 """
 

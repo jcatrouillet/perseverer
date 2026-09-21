@@ -69,7 +69,7 @@ class ForecastDayDetailOut(BaseModel):
 class WeatherForecastOut(BaseModel):
     # False whenever there's nothing to show -- the athlete hasn't set a home location yet, or
     # the Open-Meteo fetch failed/returned no usable data. Never a fabricated forecast
-    # (CLAUDE.md's raw-first rule), matching ActivityWeatherOut/ActivityLocationOut's own
+    # (AGENTS.md's raw-first rule), matching ActivityWeatherOut/ActivityLocationOut's own
     # available-boolean convention.
     available: bool
     days: list[ForecastDayOut] = []

@@ -43,7 +43,7 @@ module's current assumption, sourced from Strava's own published post) and "inte
 maybe Strava) is closer to pure Minetti after all" -- both hypotheses fit the same flat data
 equally well. Left unchanged pending a real descent-heavy activity to actually tell them apart.
 
-Storage is SI throughout (project convention, CLAUDE.md principle 6): average grade-adjusted
+Storage is SI throughout (project convention, AGENTS.md principle 6): average grade-adjusted
 *speed* in m/s, not a pre-formatted "min/km" pace string -- the presentation layer (API schema /
 frontend) converts, the same way an activity's own instantaneous speed stream is stored in m/s
 and only ever formatted to pace at read time.

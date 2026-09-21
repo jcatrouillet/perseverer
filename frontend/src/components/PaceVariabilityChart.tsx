@@ -5,7 +5,7 @@
 // itself.
 // Hand-rolled SVG rather than Recharts: this shape (bars radiating outward from a circle at
 // arbitrary angles) has no clean Recharts primitive, the same reasoning that keeps the stream
-// chart hand-rolled too (see CLAUDE.md).
+// chart hand-rolled too (see AGENTS.md).
 import type { PaceVariabilityResult } from "../paceVariability";
 import { formatMinPerKm } from "../runningStats";
 import "../styles/pace-variability.css";

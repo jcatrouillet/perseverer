@@ -90,7 +90,7 @@ class GarminActivitySummaryEntry:
     name: str | None
     activity_type: str | None
     event_type_id: int | None
-    # Naive, implicitly UTC -- matches every other DateTime in this codebase (CLAUDE.md decision
+    # Naive, implicitly UTC -- matches every other DateTime in this codebase (AGENTS.md decision
     # 10), so it compares directly against `activity.start_time_utc` with no tzinfo juggling.
     begin_timestamp_utc: datetime
 

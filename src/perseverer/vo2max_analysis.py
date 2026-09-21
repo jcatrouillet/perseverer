@@ -6,7 +6,7 @@ run about to age out with nothing to replace it, or a long gap since the last qu
 
 Deliberately request-time, not rollup-backed, unlike `GET /performance` itself: the window this
 scans is tiny (`ROLLING_VDOT_WINDOW_DAYS` of the athlete's own running activities -- typically a
-handful of rows), a world apart from the multi-year aggregates the rollup mandate (CLAUDE.md)
+handful of rows), a world apart from the multi-year aggregates the rollup mandate (AGENTS.md)
 exists for. `GET /activities/needs-trim` and `GET /activities/possible-duplicates`
 (`api/routers/activities.py`) already establish this same "bounded, occasional diagnostic lookup"
 exception -- this isn't a new precedent, just the same one applied to VO2max.

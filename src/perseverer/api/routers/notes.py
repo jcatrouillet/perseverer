@@ -1,4 +1,4 @@
-"""POST/GET/PUT/DELETE /notes -- the agent-writable write path CLAUDE.md's mission statement
+"""POST/GET/PUT/DELETE /notes -- the agent-writable write path AGENTS.md's mission statement
 calls for. Scoped to activities, days, and weeks. See docs/adr/0006-phase-3-read-api-and-rollups.md
 decision 7.
 """

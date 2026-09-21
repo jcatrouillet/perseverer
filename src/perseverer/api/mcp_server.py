@@ -1,5 +1,5 @@
 """MCP (Model Context Protocol) server exposing the read API + notes as tools -- the write
-path CLAUDE.md's mission statement calls for ("a REST/JSON API an AI agent can write notes
+path AGENTS.md's mission statement calls for ("a REST/JSON API an AI agent can write notes
 through"), now a first-class tool surface instead of raw HTTP a human has to proxy. Mounted
 into the same FastAPI app as the REST API (api/main.py), not a separate container/process --
 see docs/adr/0007-phase-4-mcp-server.md.

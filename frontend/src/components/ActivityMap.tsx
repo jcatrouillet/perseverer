@@ -21,7 +21,7 @@
 // `contextLost: true` while the rest didn't. Raster tiles are plain `<img>` elements with no such
 // per-page ceiling, so this is the one map surface in the app that stays on them for real
 // architectural reasons, not just historical inertia -- see CartoBasemapLayer.tsx's own
-// docstring and CLAUDE.md's Frontend bullet for the fuller picture across all three map surfaces.
+// docstring and AGENTS.md's Frontend bullet for the fuller picture across all three map surfaces.
 import "leaflet/dist/leaflet.css";
 import type { LatLngBoundsExpression } from "leaflet";
 import { MapContainer, Polyline, TileLayer } from "react-leaflet";

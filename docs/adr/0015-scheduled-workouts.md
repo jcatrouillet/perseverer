@@ -73,7 +73,7 @@ Full test coverage: 927 backend tests (workout-syntax fixture parity, adapter pu
 ## Vendor facts verified directly (not assumed)
 
 Confirmed by reading the installed `garminconnect` package's own source
-(`.venv/Lib/site-packages/garminconnect/`), not recalled from memory — CLAUDE.md's own warning
+(`.venv/Lib/site-packages/garminconnect/`), not recalled from memory — AGENTS.md's own warning
 about this exact class of fast-moving vendor library, and true here: PyPI is already several
 patch releases ahead of whatever's locked at any given time.
 
@@ -104,7 +104,7 @@ The user's own choice, from two explicit options offered: implement running full
 every part of the design — calendar UI, the text parser, the Garmin push path) before yoga/
 bouldering/fitness, which are simpler and will reuse the same plumbing. The schema
 (`planned_workout.sport` is an open string, not an enum) needs zero migration to add a 5th sport
-later — matching CLAUDE.md's own additive-schema-evolution principle.
+later — matching AGENTS.md's own additive-schema-evolution principle.
 
 ### 2. Push trigger: automatic within the coming week, plus a manual override
 

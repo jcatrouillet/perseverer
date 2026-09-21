@@ -1,5 +1,5 @@
 """Open-Meteo historical weather enrichment, per activity -- fetched lazily on first request for
-a GPS-bearing activity, archived raw (CLAUDE.md's "raw first, always" rule applies to Open-Meteo
+a GPS-bearing activity, archived raw (AGENTS.md's "raw first, always" rule applies to Open-Meteo
 the same as any other vendor: every byte fetched is archived verbatim before anything is parsed),
 then cached forever in `activity_metric` so no activity's weather is ever fetched twice.
 
@@ -12,7 +12,7 @@ doesn't need per-activity-timezone handling), with parallel `temperature_2m`,
 arrays, plus a `daily` block (`sunrise`/`sunset`, one entry per calendar date in the requested
 range, also UTC since `timezone=UTC` covers the whole request). `wind_speed_unit=ms` is
 requested explicitly -- Open-Meteo defaults wind speed to km/h, which would otherwise be the one
-non-SI value in this project's whole storage layer (CLAUDE.md's "SI units in storage" rule).
+non-SI value in this project's whole storage layer (AGENTS.md's "SI units in storage" rule).
 
 No API key needed (Open-Meteo's public tier, no auth). WMO weather codes are stored as-is --
 mapping a code to an icon/label is a presentation concern, done in the frontend
@@ -385,7 +385,7 @@ def read_archived_open_meteo_response(
 ) -> dict[str, Any] | None:
     """Reads back the most recently archived Open-Meteo response for this activity -- a free,
     no-network re-derivation of the hour-by-hour trajectory from bytes already on disk, per
-    CLAUDE.md's raw-first rule ("if we discover a field we ignored today, we must be able to
+    AGENTS.md's raw-first rule ("if we discover a field we ignored today, we must be able to
     re-derive [it] without re-contacting any vendor"). Picks the newest archived response by
     `fetched_at` when more than one exists for this activity: a `force_refresh=True` backfill
     (see `weather_backfill.py`) archives a second, newer, content-addressed blob alongside the
@@ -484,7 +484,7 @@ def _store(
         METRIC_WEATHER_CODE: float(summary.weather_code),
     }
     # Optional numeric fields only get a row when Open-Meteo actually had one -- never a
-    # fabricated 0, matching CLAUDE.md's raw-first rule exactly as strictly as the required
+    # fabricated 0, matching AGENTS.md's raw-first rule exactly as strictly as the required
     # fields above.
     _add_if_present(values, METRIC_FEELS_LIKE_C, summary.feels_like_c)
     _add_if_present(values, METRIC_WIND_SPEED_MPS, summary.wind_speed_mps)

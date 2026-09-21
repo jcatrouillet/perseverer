@@ -19,7 +19,7 @@ would misalign by one day for roughly a third of the globe, exactly the kind of 
 at the wrong time" bug an athlete would actually notice.
 
 Deliberately NOT archived raw and NOT cached, unlike every other vendor fetch in this codebase
-(CLAUDE.md's "raw first, always" rule exists so a permanent record can be re-derived from an
+(AGENTS.md's "raw first, always" rule exists so a permanent record can be re-derived from an
 archive without recontacting a vendor -- a forecast has no such permanent-record concept, since
 it's superseded by reality as the date approaches, so archiving it would only accumulate useless
 bytes with zero re-derivation benefit). This mirrors the "request-time exception to the rollup

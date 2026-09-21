@@ -31,7 +31,7 @@ HealthTimeout=5s
 HealthRetries=3
 HealthStartPeriod=10s
 # Was 512m, a leftover from the DS1019+'s 8GB-shared-with-DSM budget -- bercy's 32GB makes that
-# stale (see CLAUDE.md's platform-constraints section), and it's not just theoretical: a real
+# stale (see AGENTS.md's platform-constraints section), and it's not just theoretical: a real
 # bulk-export backfill (adapters/apple_health_export.py, which reads an entire multi-GB
 # export.xml into memory before archiving it) got OOM-killed under the old limit. 2g covers that
 # with headroom without meaningfully denting bercy's real budget.

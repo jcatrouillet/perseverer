@@ -1,7 +1,7 @@
 // A small icon + temperature/humidity range badge for the activity detail header -- the
 // "weather at the time and location of the activity" ask. Renders nothing whenever there's
 // nothing real to show (no GPS start point, or the Open-Meteo fetch/parse came back empty) --
-// never a fabricated range, matching CLAUDE.md's raw-first rule.
+// never a fabricated range, matching AGENTS.md's raw-first rule.
 import type { ActivityWeatherOut } from "../api/types";
 import { compassDirection, weatherCodeInfo } from "../weatherCode";
 import { Icon } from "./Icon";

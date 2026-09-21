@@ -1,6 +1,6 @@
 """Per-activity stream storage: full-resolution time-series as Parquet, never as SQLite rows.
 
-See CLAUDE.md: "SQLite holds what you filter and join on, Parquet holds what you plot."
+See AGENTS.md: "SQLite holds what you filter and join on, Parquet holds what you plot."
 Downsampling into low/medium/high tiers is deferred to Phase 3 (serving concern, not an
 ingestion one) — this writes the single full-resolution file those tiers would derive from.
 """

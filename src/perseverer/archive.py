@@ -1,5 +1,5 @@
 """Content-addressed raw archive: every byte fetched from any source is stored verbatim,
-gzip-compressed, before anything is parsed. See CLAUDE.md's "raw first" rule.
+gzip-compressed, before anything is parsed. See AGENTS.md's "raw first" rule.
 
 `raw_object`'s row in SQLite is itself just a cache of metadata that also lives in a JSON
 sidecar next to each blob (`<sha256>.json` alongside `<sha256>.gz`). This is deliberate: the

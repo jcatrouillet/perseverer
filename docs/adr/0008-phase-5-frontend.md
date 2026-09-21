@@ -27,7 +27,7 @@ shared secret typed into a browser prompt.**
 ### 1. Per-athlete credentials: a password (→ JWT) or a standing API key, either athlete-scoped
 
 `athlete` gained four nullable columns (`username`, `password_hash`, `api_key_hash`,
-`api_key_created_at`) — additive, matching CLAUDE.md's schema-evolution principle. An athlete
+`api_key_created_at`) — additive, matching AGENTS.md's schema-evolution principle. An athlete
 may have neither, either, or both credential types. Password hashing is stdlib PBKDF2-HMAC-
 SHA256 (`auth/passwords.py`) — not `bcrypt`/`passlib` — deliberately: this is a single-operator,
 low-QPS login endpoint, and a new dependency isn't worth it for that. API keys use a plain
@@ -43,7 +43,7 @@ same "never store the plaintext" property while allowing an O(1) indexed lookup
 `pyjwt` was already in `uv.lock` as a transitive dependency of `mcp` (Phase 4) — promoted to an
 explicit `pyproject.toml` entry since it's now directly imported. Verified against the actual
 installed `pyjwt` 2.13.0 API (`jwt.encode`/`decode` signatures, `ExpiredSignatureError`
-subclassing `InvalidTokenError`) by direct introspection, not memory, per CLAUDE.md's standing
+subclassing `InvalidTokenError`) by direct introspection, not memory, per AGENTS.md's standing
 rule for vendor libraries.
 
 ### 3. `require_api_key` now resolves *which* athlete authenticated, from any of three credentials

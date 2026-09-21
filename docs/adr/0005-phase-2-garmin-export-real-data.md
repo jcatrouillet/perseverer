@@ -64,7 +64,7 @@ exactly this "no reliable filename id" case, no change needed there.
 
 Given the volume and diversity of report kinds, hand-modeling each one (a dedicated
 `TrainingReadinessDTO` table, a dedicated `HillScore` table, etc.) would be a large, open-ended
-effort disproportionate to value and contrary to CLAUDE.md's "additive schema evolution"
+effort disproportionate to value and contrary to AGENTS.md's "additive schema evolution"
 principle — a new report kind should need zero code changes, not a new bespoke parser. Instead,
 one generic function (`parse_garmin_export_json`) treats every recognized file as a list of
 dated records and flattens top-level scalars into `health_observation` rows keyed

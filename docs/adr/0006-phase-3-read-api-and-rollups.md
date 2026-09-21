@@ -8,14 +8,14 @@ real activity and health data, 1250 activities, 288,939 health observations).
 ## Context
 
 Phase 2 finished ingestion but nothing could read it back — `api/main.py` had only
-`/healthz`/`/version`. Two CLAUDE.md commitments had to actually be delivered in this phase,
+`/healthz`/`/version`. Two AGENTS.md commitments had to actually be delivered in this phase,
 not just referenced: precomputed rollups ("the Celeron cannot aggregate a decade of activities
 per request... every dashboard/calendar/recap view reads a `*_rollup` table... never scans at
 request time") and DuckDB attached read-only over SQLite+Parquet ("arrives with the read API
 in Phase 3"). Direct exploration confirmed neither existed yet — `duckdb>=1.1` had been an
 unused dependency since Phase 0, and no `*_rollup` table existed anywhere in the schema.
 
-The user chose to infer Phase 3's endpoint scope from CLAUDE.md's hints, include the notes
+The user chose to infer Phase 3's endpoint scope from AGENTS.md's hints, include the notes
 write path now (not deferred to a later phase), scope notes to activities and days only, and
 add a shared API key rather than defer auth.
 
@@ -62,7 +62,7 @@ derived table, and both rollup tables joined `_REBUILDABLE_TABLES`.
 
 ### 4. DuckDB: verified by direct testing against the installed package, not recalled
 
-Per CLAUDE.md's own standing instruction ("verify a vendor library's API by introspecting the
+Per AGENTS.md's own standing instruction ("verify a vendor library's API by introspecting the
 installed package, not from memory"), DuckDB's actual behavior was tested directly rather than
 assumed, surfacing two real gotchas:
 
@@ -130,7 +130,7 @@ follow-up rather than folded into this phase's core scope.
 ## Consequences
 
 - The calendar/dashboard endpoint is genuinely rollup-backed from day one, not a placeholder
-  that scans `activity`/`health_observation` directly — the platform constraint CLAUDE.md
+  that scans `activity`/`health_observation` directly — the platform constraint AGENTS.md
   states is now actually enforced by the code, not just documented.
 - Any future ingest path (a hypothetical Strava adapter, say) must remember to report which
   local_dates it touched and call `refresh_daily_rollup` — this is now a real contract new

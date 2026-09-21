@@ -1,6 +1,6 @@
 """Pure FIT parsing: `parse_fit(raw_bytes) -> CanonicalBatch`.
 
-No I/O, no database, no network — a pure function over bytes, per CLAUDE.md's "raw first"
+No I/O, no database, no network — a pure function over bytes, per AGENTS.md's "raw first"
 rule. Uses the official `garmin_fit_sdk` for correct profile/message decoding.
 
 ## Handling unknown data (never drop a field)
@@ -159,7 +159,7 @@ def _climb_fields(
     raw_result = row.get(71)
     grade = raw_grade - 1 if isinstance(raw_grade, int) else None
     if isinstance(raw_result, int):
-        # An unrecognized raw value is stored, not dropped (CLAUDE.md's "never drop an unknown
+        # An unrecognized raw value is stored, not dropped (AGENTS.md's "never drop an unknown
         # field") -- only 2 and 3 have ever been confirmed, so a third value is real signal that
         # this reverse-engineered mapping is incomplete, not something to silently discard.
         result = _CLIMB_RESULT_BY_RAW_VALUE.get(raw_result, f"unknown_{raw_result}")

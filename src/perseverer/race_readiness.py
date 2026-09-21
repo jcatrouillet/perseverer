@@ -48,7 +48,7 @@ specificity factor) -- hence weighted toward weekly distance. Like the target an
 is this app's own stated policy, not a claimed universal formula; it's an ordinary module-level
 constant, easy to revisit.
 
-Deliberately request-time, not rollup-backed (CLAUDE.md's rollup mandate) -- the same "bounded,
+Deliberately request-time, not rollup-backed (AGENTS.md's rollup mandate) -- the same "bounded,
 occasional diagnostic lookup" exception `vo2max_analysis.py`/`pace_hr_zones.py` already
 establish. Which race this even applies to can change day to day (a new nearer race gets added,
 an old one passes), so there's no stable identity for a rollup row to accumulate against; the

@@ -1,5 +1,5 @@
 """GET /performance -- reads performance_daily_rollup only, no request-time computation
-(CLAUDE.md's rollup mandate). See performance_rollup.py's own docstring for the model.
+(AGENTS.md's rollup mandate). See performance_rollup.py's own docstring for the model.
 
 GET /performance/vo2max-analysis, GET /performance/pace-hr-zones, and GET
 /performance/race-readiness are the deliberate exceptions in this file -- see

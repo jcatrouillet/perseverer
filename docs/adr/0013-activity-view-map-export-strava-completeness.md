@@ -6,7 +6,7 @@ All four milestones (Strava/GPX/TCX data completeness, activity-detail map/chart
 route exports, day-view animation + recap click-through) are shipped, tested, and verified against
 the real archive and the real dev build in a browser — not just unit tests. This work is UX/feature
 polish requested ad hoc, not tied to the project brief's phase table, so it does not bump
-`CLAUDE.md`'s "Current phase" line.
+`AGENTS.md`'s "Current phase" line.
 
 **Milestone A verification**: `sync rebuild` was run against the real production database (real
 archive, ~2,270 Strava CSV rows, 483 GPX + 42 TCX + 266 FIT files under `strava_export`) after

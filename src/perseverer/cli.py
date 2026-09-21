@@ -115,7 +115,7 @@ def watch_fit_folder(
     folder: FolderArg,
     interval: Annotated[int, typer.Option(help="Seconds between polls")] = 30,
 ) -> None:
-    """Continuously poll FOLDER every INTERVAL seconds. Polls, not inotify - see CLAUDE.md."""
+    """Continuously poll FOLDER every INTERVAL seconds. Polls, not inotify - see AGENTS.md."""
     settings = get_settings()
     engine = make_engine(settings.db_path)
     typer.echo(f"Watching {folder} every {interval}s (Ctrl+C to stop)")
@@ -305,7 +305,7 @@ def daily_sync_cmd() -> None:
     """One shot of the exact same work the `worker` container's daily APScheduler job does
     (garmin_connect incremental sync + staleness check/webhook) -- see worker/main.py's own
     `run_daily_sync`. Exists so a platform that can't run the `worker` container (e.g. Windows,
-    where Podman is known to corrupt this project's SQLite WAL file -- see CLAUDE.md) can still
+    where Podman is known to corrupt this project's SQLite WAL file -- see AGENTS.md) can still
     get the daily sync via a plain OS scheduler (Windows Task Scheduler, cron) invoking this
     command once a day instead.
     """

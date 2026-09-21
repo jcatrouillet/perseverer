@@ -1,7 +1,7 @@
 // The small set/edit form shown inside the Goals popup -- either in place of the chart (no
 // goal set yet) or revealed above it (editing an existing one). Target is entered in the
 // athlete's own Personalize distance unit (km or miles) and converted to metres at submit time,
-// matching CLAUDE.md's SI-in-storage rule.
+// matching AGENTS.md's SI-in-storage rule.
 import { useState } from "react";
 
 import type { GoalOut } from "../api/types";

@@ -12,7 +12,7 @@
 // real-distance-covered statistic, not an effort-adjusted one. Exact `sport === "running"`
 // (via the API filter the caller already applies), matching this app's own established
 // precedent of exact-match over `sport_family()` for Running-specific stats (see
-// `RunningStats.tsx`/`CLAUDE.md`'s own note on why trail_running/track_running are excluded).
+// `RunningStats.tsx`/`AGENTS.md`'s own note on why trail_running/track_running are excluded).
 import type { ActivitySummary, UnitPreference } from "./api/types";
 import { metersToDisplayDistance } from "./formatDistance";
 

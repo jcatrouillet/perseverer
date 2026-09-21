@@ -4,7 +4,7 @@ The source of truth for integrating with the Perseverer REST API — every
 endpoint, parameter (required/optional, default), and response shape. Generated from the live
 OpenAPI schema (`GET /openapi.json`) and cross-checked against router source for the details
 OpenAPI doesn't capture (auth semantics, error codes, enumerable string fields). Grows every
-phase, alongside `CLAUDE.md` and `DATA_DICTIONARY.md`, per the project's "ways of working" rule.
+phase, alongside `AGENTS.md` and `DATA_DICTIONARY.md`, per the project's "ways of working" rule.
 
 A polished, navigable HTML version of this same reference (search, click-through schema links,
 copyable curl examples) is served by the frontend container at `/api-docs.html`

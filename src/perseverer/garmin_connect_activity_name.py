@@ -4,7 +4,7 @@ already archived raw as `garmin_connect_json` at ingest time (`garmin_connect.py
 happens to it), just never parsed out of that JSON until now.
 
 Real, confirmed need (not hypothetical): verified live against this athlete's own Garmin Connect
-account (never assumed -- see CLAUDE.md's "verify against live third-party data" discipline) that
+account (never assumed -- see AGENTS.md's "verify against live third-party data" discipline) that
 Garmin's own `activityName` can be genuinely richer than anything this project derives itself.
 One real example: a FIT file's own on-device name was just "Running" (the generic default), and
 `activity_workout.name` (the FIT workout message's own name) was "W12 Fri . [Consolidation]

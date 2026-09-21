@@ -126,7 +126,7 @@ def find_extreme(
 ) -> list[Insight]:
     """One Insight per sport family present, for a sport-scoped dimension; at most one Insight
     overall for a non-sport-scoped dimension. Never fabricates an extreme when nothing in the
-    window has a value for this dimension (CLAUDE.md's never-invent-a-number rule) -- returns an
+    window has a value for this dimension (AGENTS.md's never-invent-a-number rule) -- returns an
     empty list, not a zero/null placeholder row.
     """
     results: list[Insight] = []

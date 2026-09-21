@@ -88,7 +88,7 @@ class ParsedWorkoutStep:
     duration_distance_m: float | None
     target_type: str | None
     # Only populated for target_type == "speed" (this project's only real-data-confirmed case;
-    # see module docstring) -- m/s, SI per CLAUDE.md. Other target types (heart_rate, cadence,
+    # see module docstring) -- m/s, SI per AGENTS.md. Other target types (heart_rate, cadence,
     # power, open) are recognized but their target range isn't extracted here, since nothing
     # consumes it yet; the raw workout_step_mesgs row is still fully archived regardless.
     target_low_mps: float | None

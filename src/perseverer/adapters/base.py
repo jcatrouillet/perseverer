@@ -1,6 +1,6 @@
 """One interface, many implementations. `fit_folder` is the first (this phase);
 `garmin_connect`, `garmin_export`, `strava_export`, `manual` follow in later phases. When a
-vendor breaks, the fix stays inside one adapter file — see CLAUDE.md.
+vendor breaks, the fix stays inside one adapter file — see AGENTS.md.
 """
 
 from __future__ import annotations

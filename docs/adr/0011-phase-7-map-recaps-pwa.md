@@ -54,7 +54,7 @@ mobile browser" bar is fully met — tracked as a real, open gap, not silently w
 
 ## Context
 
-The project brief (kept outside this repo per `CLAUDE.md`) scopes Phase 7 as:
+The project brief (kept outside this repo per `AGENTS.md`) scopes Phase 7 as:
 
 > **7** | Map explorer, recaps, PWA/offline | Full-history start-point map renders in under 1s
 
@@ -126,7 +126,7 @@ itself was made available mid-session) rather than silently picked either direct
 > via `@maplibre/maplibre-gl-leaflet` mounting a MapLibre GL layer *inside* the same Leaflet
 > `MapContainer` this decision set up — Leaflet itself, `react-leaflet`, and every
 > marker/polyline/popup component below are all unchanged; only the tile layer swapped. See
-> `CartoBasemapLayer.tsx` and `mapBasemap.ts`, and CLAUDE.md's Frontend bullet. The zero-API-key
+> `CartoBasemapLayer.tsx` and `mapBasemap.ts`, and AGENTS.md's Frontend bullet. The zero-API-key
 > reasoning below no longer holds now that a key exists, but the rest of this decision's
 > reasoning (Leaflet + react-leaflet over a full MapLibre-native rewrite) still does.
 

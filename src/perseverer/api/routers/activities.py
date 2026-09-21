@@ -183,7 +183,7 @@ def _workout_rpe_from_raw(raw: float | None) -> float | None:
 # Garmin's estimated sweat loss isn't a FIT session field at all -- it's logged to the athlete's
 # daily hydration log (`garmin.export.HydrationLogFile.estimatedSweatLossInML`, a
 # `health_observation`, not an `activity_metric`) with no activity_id of its own. Verified
-# directly against the real archive before building this (per CLAUDE.md's verify-don't-assume
+# directly against the real archive before building this (per AGENTS.md's verify-don't-assume
 # rule): every one of 13 real activities spanning a week each had exactly one hydration-log entry
 # landing within about a minute after the activity's own end time (`start_time_utc + duration_s`)
 # -- e.g. an activity ending at 18:26:00 paired with a log entry at 18:26:53. The 30-minute window
@@ -943,7 +943,7 @@ def get_activity_context(
 ) -> ActivityContextOut:
     """A deliberately small, honest comparison view -- not a reproduction of Garmin/intervals.icu's
     proprietary Performance Condition/SPI models, which this project has no way to replicate (see
-    CLAUDE.md's "never invent a plausible-looking number" rule).
+    AGENTS.md's "never invent a plausible-looking number" rule).
 
     `percentile_rank`: the share of this athlete's *other* same-sport activities within +/-15% of
     this one's distance that this activity was faster than or equal to (by effective pace,
@@ -1113,7 +1113,7 @@ def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Great-circle distance in metres -- same formula as gpx/parser.py's own `_haversine_m`,
     duplicated rather than imported since that one is GPX-parsing-private and takes a different
     argument shape (lat/lon tuples); not worth a new shared module for one small function (see
-    CLAUDE.md's cross-language/cross-module small-algorithm duplication precedent)."""
+    AGENTS.md's cross-language/cross-module small-algorithm duplication precedent)."""
     p1, p2 = radians(lat1), radians(lat2)
     dlat = p2 - p1
     dlng = radians(lng2) - radians(lng1)

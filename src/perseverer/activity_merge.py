@@ -65,7 +65,7 @@ MERGEABLE_SCALAR_FIELDS = (
     "calories",
 )
 # Copying the *whole* activity_metric row (value + its own `source`) when a metric field is
-# chosen from the other side preserves provenance per field (CLAUDE.md principle 4), not just
+# chosen from the other side preserves provenance per field (AGENTS.md principle 4), not just
 # the number.
 MERGEABLE_METRIC_FIELDS: dict[str, tuple[str, ...]] = {
     "avg_hr_bpm": _AVG_HR_METRIC_KEYS,
@@ -151,7 +151,7 @@ def find_all_duplicate_pairs(
 ) -> list[tuple[DuplicateCandidate, DuplicateCandidate]]:
     """The Settings page's list-wide duplicate scan -- a deliberate, occasional-visit-only
     exception to this app's usual never-scan-list-wide rule (every other list/calendar view
-    stays rollup-backed, see CLAUDE.md). Reuses `find_duplicate_candidates` per activity rather
+    stays rollup-backed, see AGENTS.md). Reuses `find_duplicate_candidates` per activity rather
     than reimplementing the matching query, so the two entry points (single-activity-detail-page
     banner, Settings list) can never disagree about what counts as a duplicate. Benchmarked at
     ~0.5s over this athlete's full ~1800-activity archive -- each call is the same indexed

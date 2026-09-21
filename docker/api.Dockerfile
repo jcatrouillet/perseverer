@@ -2,7 +2,7 @@
 FROM python:3.12-slim AS builder
 
 # x86-64-v2 no longer matters for the current deploy target (bercy's i5-6260U has AVX2) but is
-# kept anyway -- see docs/DEPLOY.md's environments table and CLAUDE.md's platform-constraints
+# kept anyway -- see docs/DEPLOY.md's environments table and AGENTS.md's platform-constraints
 # section for why this wasn't ripped out opportunistically. Originally: the DS1019+ (Celeron
 # J3455 / Goldmont) has no AVX/AVX2 — only up to SSE4.2. This only matters if a dependency has
 # no manylinux wheel for this platform and pip/uv falls back to a source build;
@@ -26,7 +26,7 @@ RUN uv sync --frozen --no-dev --no-editable
 
 # Bakes DuckDB's "sqlite" extension in at build time, using the same duckdb version `uv sync`
 # just installed. `INSTALL` fetches over the network on first use, and the NAS container has
-# no reason to have outbound internet and images are never built there (see CLAUDE.md) — this
+# no reason to have outbound internet and images are never built there (see AGENTS.md) — this
 # must happen here, not on first request in production. See
 # docs/adr/0006-phase-3-read-api-and-rollups.md decision 4.
 RUN /app/.venv/bin/python -c "\

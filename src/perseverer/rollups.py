@@ -1,5 +1,5 @@
 """Precomputed daily and period (week/month) rollups — the platform's only sanctioned way for
-calendar/dashboard views to read aggregate data. CLAUDE.md, non-negotiable: "the Celeron cannot
+calendar/dashboard views to read aggregate data. AGENTS.md, non-negotiable: "the Celeron cannot
 aggregate a decade of activities per request — every dashboard/calendar/recap view reads a
 `*_rollup` table refreshed on ingest, never scans at request time."
 

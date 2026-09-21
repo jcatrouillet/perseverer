@@ -1,7 +1,7 @@
 # Data Dictionary
 
 The source of truth for what every stored field means, its unit, and where it came from.
-Grows every phase — updated at the end of each phase alongside `CLAUDE.md`, per the project's
+Grows every phase — updated at the end of each phase alongside `AGENTS.md`, per the project's
 "ways of working" rule.
 
 ## Conventions
@@ -267,7 +267,7 @@ totals for exactly those fields (decision 2).
 
 Precomputed, derived caches — never written to directly by adapters, only by
 `rollups.refresh_daily_rollup`, called once per distinct `local_date` an ingest run touched.
-This is what makes the platform constraint in CLAUDE.md real: "every dashboard/calendar/recap
+This is what makes the platform constraint in AGENTS.md real: "every dashboard/calendar/recap
 view reads a `*_rollup` table refreshed on ingest, never scans at request time." See
 `docs/adr/0006-phase-3-read-api-and-rollups.md`.
 
@@ -304,7 +304,7 @@ Both tables are wiped and recomputed like every other entry in `rebuild.py`'s
 
 ### Notes (Phase 3)
 
-- **`note`** — the write path CLAUDE.md's mission statement calls for ("a REST/JSON API an AI
+- **`note`** — the write path AGENTS.md's mission statement calls for ("a REST/JSON API an AI
   agent can write notes through"). One polymorphic table: `entity_type` (`"activity"` |
   `"day"` | `"week"`), `entity_id` (an activity ULID, an ISO `local_date`, or — for `"week"` —
   that week's own Monday `local_date`, matching `rollups.py`'s Monday-start week convention).
@@ -702,7 +702,7 @@ batch`'s idempotent upsert to make a repeat run of already-seen readings a cheap
 ## Whole-activity average Grade Adjusted Pace, and the activity-comparisons endpoint
 
 New `activity_metric` key `perseverer.performance.avg_gap_speed_mps` (`source="perseverer"`,
-m/s — SI storage per CLAUDE.md principle 6) — a single whole-activity average grade-adjusted
+m/s — SI storage per AGENTS.md principle 6) — a single whole-activity average grade-adjusted
 speed, computed for every `sport == "running"` activity whose Parquet stream has both
 `altitude_m` and `distance_m` channels (`gap.py::compute_avg_gap_speed_mps`). The Minetti
 energy-cost-of-running polynomial is duplicated from `frontend/src/gap.ts` (same cross-module
@@ -1166,7 +1166,7 @@ match itself, a promise the click couldn't keep.
 calendar, so it can be subscribed to from Google Calendar (Settings > Add calendar > From URL) or
 any other .ics-reading client. Deliberately a parallel mechanism to `share_link`
 (`sharing.py`/`api/routers/share.py`), not a third `target_type` grafted onto it -- see
-CLAUDE.md's own bullet for the full reasoning. Two new nullable columns on `athlete`:
+AGENTS.md's own bullet for the full reasoning. Two new nullable columns on `athlete`:
 `calendar_feed_token_hash`, `calendar_feed_created_at` -- mirroring `athlete.api_key_hash`/
 `api_key_created_at`'s exact shape (one standing secret, replace-on-rotate, `NULL` = not
 published), not a growing history of tokens.
@@ -1445,7 +1445,7 @@ into a new number.
   `sport == "running"` race (`local_date >= as_of`); `GET /performance/race-readiness`'s own
   `race_id` query param targets a specific one instead. `available: false` (never fabricated)
   when there's no upcoming running race at all, or `race_id` doesn't belong to the caller.
-- **Deliberately request-time, not rollup-backed** (CLAUDE.md's rollup mandate) — the same
+- **Deliberately request-time, not rollup-backed** (AGENTS.md's rollup mandate) — the same
   "bounded, occasional diagnostic lookup" exception `vo2max_analysis.py`/`pace_hr_zones.py`
   already establish. Which race this even applies to can change day to day (a nearer race gets
   added, an old one passes), so there's no stable rollup-row identity to accumulate against; the
@@ -1658,7 +1658,7 @@ didn't have yet.
   value (1-indexed) is itself `>= N`. Raw `distance_m`, not GAP-adjusted — Eddington number is
   traditionally a real-distance-covered statistic, not an effort-adjusted one. Exact
   `sport === "running"` via the same API filter `useAllActivities` already applies for this page's
-  other tabs, matching this app's own established precedent (`RunningStats.tsx`, `CLAUDE.md`'s
+  other tabs, matching this app's own established precedent (`RunningStats.tsx`, `AGENTS.md`'s
   own note on the Running section above) of exact-sport matching over `sport_family()` for
   running-specific stats — trail_running/track_running are real, deliberate exclusions, not an
   oversight.
@@ -1827,7 +1827,7 @@ full reasoning; this section is the schema/API-shape reference.
 - **No archiving, no caching** -- the one deliberate exception to this project's own raw-first
   rule for a live vendor fetch. Every other Open-Meteo/vendor call in this codebase archives the
   raw response and caches the derived value forever (`weather.py`'s own `activity_metric` cache),
-  because CLAUDE.md's raw-first rule exists so a permanent record can be re-derived without
+  because AGENTS.md's raw-first rule exists so a permanent record can be re-derived without
   recontacting a vendor. A forecast has no permanent-record concept: it's superseded by reality
   as the date approaches, so archiving it would only accumulate useless bytes with zero
   re-derivation benefit. This mirrors the "request-time exception to the rollup mandate"
@@ -1993,7 +1993,7 @@ exists.
   prop split rather than one combined string) and `displayDistanceToMeters` (the inverse, for an
   entry form's own round-trip — `GoalForm.tsx`'s goal-distance field and `PlannedRaceForm.tsx`'s
   custom-race-distance field both take input in the athlete's own display unit and convert to
-  meters at submit, matching CLAUDE.md's SI-in-storage rule). `formatClock`/`formatHHMM`/
+  meters at submit, matching AGENTS.md's SI-in-storage rule). `formatClock`/`formatHHMM`/
   `formatTimeOfDay` for time. Each has a `useDistanceFormat()`/`useTimeFormat()` hook pre-bound to
   the athlete's own current setting via `usePersonalize()`, so a call site just does
   `formatDistance(activity.distance_m)`. Pace composes with the **existing**

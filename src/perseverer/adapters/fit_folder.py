@@ -3,7 +3,7 @@
 Used for the Garmin export archive, the Strava export ZIP's FIT/TCX files (later phases),
 manual repair, and offline testing of every other adapter against real files without
 touching the network. Polls a directory rather than relying on inotify — files arriving via
-SMB/rsync/Drive don't reliably fire inotify events inside a container (see CLAUDE.md).
+SMB/rsync/Drive don't reliably fire inotify events inside a container (see AGENTS.md).
 """
 
 from __future__ import annotations
