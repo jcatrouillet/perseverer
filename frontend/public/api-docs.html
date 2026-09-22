@@ -1874,7 +1874,8 @@ const GROUPS = [
     },
     { method: "GET", path: "/api/v1/gear/activities/{activity_id}/shoe", summary: "Read the pair explicitly assigned to an activity.", responses: [ { code: 200, note: "shoe_id is a string or null." } ], example: {}
     },
-    { method: "PUT", path: "/api/v1/gear/activities/{activity_id}/shoe", summary: "Set or clear the pair for a distance activity.",
+    { method: "PUT", path: "/api/v1/gear/activities/{activity_id}/shoe", summary: "Set, replace, or clear the pair for a distance activity.",
+      description: "Mileage is derived from the current assignment. Replacing a pair moves the activity distance from the old pair to the replacement.",
       body: { fields: [["shoe_id","string|null","req","","Null clears the explicit choice."]] }, responses: [ { code: 200, note: "The saved shoe_id." } ], example: {}
     },
     { method: "GET", path: "/api/v1/gear/alerts", summary: "List active pairs that reached their mileage limit.", responses: [ { code: 200, note: "An array of over-limit shoe alerts." } ], example: {}

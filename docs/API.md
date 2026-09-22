@@ -908,9 +908,11 @@ Returns `{ "shoe_id": string | null }`, the pair explicitly selected for this ac
 
 ### `PUT /gear/activities/{activity_id}/shoe`
 
-Sets or clears the pair for one distance-bearing activity. Request body:
+Sets, replaces, or clears the pair for one distance-bearing activity. Request body:
 `{ "shoe_id": string | null }`. The shoe must belong to the authenticated athlete; use `null`
-to remove the explicit choice and resume the dated sport-default fallback.
+to remove the explicit choice and resume the dated sport-default fallback. Mileage is derived from
+the current assignment, so replacing a pair removes that activity's distance from the old pair
+and adds it to the replacement.
 
 ### `GET /gear/alerts`
 
