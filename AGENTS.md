@@ -1035,6 +1035,25 @@ environment:
   duration-type dropdown — its "Time or distance?" selector only offered minutes/seconds/km/
   meters and *required* a numeric value, so `lap` could only be authored by typing the syntax by
   hand until fixed. See `docs/adr/0015-scheduled-workouts.md` decision 13 for the full reasoning.
+  **Revision: the Intervals table and the Pace-panel workout overlay now tolerate a device's own
+  autolap setting splitting one planned step into several recorded laps** — a real reported bug:
+  a watch's distance-based autolap (independent of the pushed workout's own step boundaries) split
+  a planned 10-minute step into a 6:10 lap plus a 3:50 lap, and both `ActivityDetailPage.tsx`'s
+  Intervals table and `ActivityCharts.tsx`'s `workoutBands` overlay had always assumed a strict
+  `laps[i] <-> expandedSteps[i]` positional zip (one lap per executed step, confirmed against a
+  real structured-workout FIT file, which normally holds) — the extra lap silently shifted every
+  following lap's expected-step association by one for the rest of the activity.
+  `workoutSteps.ts::alignLapsToWorkoutSteps` replaces the raw positional lookup in both places:
+  it greedily accumulates consecutive laps' own duration/distance against the *current* expected
+  step's own target until 90% of it is reached (generous enough to absorb ordinary GPS/timer noise
+  on a genuine one-lap-per-step match, strict enough that a lap barely a third of the way into a
+  step never advances early) before moving to the next step — so two or more laps that together
+  complete one step are both correctly matched to it. A step with no time/distance target to
+  measure against (an open step, or `lap_button`, which by definition ends exactly on a lap
+  boundary already) always advances after exactly one lap, preserving the original assumption for
+  those. The chart overlay additionally merges consecutive laps aligned to the same step back into
+  one band spanning all of them, rather than drawing a separate (and now-misaligned) band per raw
+  lap.
 - **Exercise library page (`/exercises`, `ExerciseLibraryPage.tsx`)**: a browsable reference for
   every exercise the hiit/strength_training picker's catalog supports — 47 categories collapsed
   by default (native `<details>`, same convention as `ActivitySourcesPanel.tsx`'s own "Why these

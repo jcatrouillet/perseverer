@@ -34,7 +34,11 @@ import {
   rejectSpeedOutliers,
   streamSpeedValue,
 } from "../runningStats";
-import { expandWorkoutSteps, targetPaceRangeMinPerKm } from "../workoutSteps";
+import {
+  alignLapsToWorkoutSteps,
+  expandWorkoutSteps,
+  targetPaceRangeMinPerKm,
+} from "../workoutSteps";
 import { Icon } from "./Icon";
 
 interface Panel {
@@ -201,10 +205,11 @@ export function ActivityCharts({
    * hover-highlight pattern for per-km splits. */
   highlightLapIndex?: number | null;
   /** The pre-planned workout structure, if this activity has one -- rendered as target pace
-   * bands on the Pace panel, aligned to `laps` by position: the device creates one lap per
-   * executed workout step (confirmed against a real structured-workout FIT file), so expanded
-   * step i's target range applies to lap i's own actual time range. Omitted/null skips the
-   * overlay entirely, same as any other optional panel feature. */
+   * bands on the Pace panel, aligned to `laps` via alignLapsToWorkoutSteps (see its own
+   * docstring: the device normally creates one lap per executed workout step, confirmed against
+   * a real structured-workout FIT file, but an autolap setting can split one step into several
+   * laps, so this isn't a plain positional zip). Omitted/null skips the overlay entirely, same as
+   * any other optional panel feature. */
   workout?: ActivityWorkoutOut | null;
 }) {
   if (stream.timestamps.length === 0) {
@@ -244,24 +249,32 @@ export function ActivityCharts({
   }));
 
   // The planned workout's target pace per step, positioned onto the same elapsed-seconds
-  // boundaries as lapBands -- zipped by position with `laps` (not by any id/time match), since
-  // a workout step has no timestamp of its own, only the recorded lap it produced does. Zipped
-  // only up to whichever list is shorter: a device's own trailing "stop" lap (confirmed real --
-  // 13 recorded laps for 12 expanded steps on a real file) has no corresponding step, and an
-  // activity stopped early could in principle have fewer laps than planned steps. `slowMinPerKm`
-  // (the target range's slower/higher-number bound) is the overlay's threshold line: at or
-  // faster than it is shaded grey, slower than it is left white -- see the rendering below for
-  // why only one edge, not the full range, is drawn.
-  const workoutBands =
-    workout != null
-      ? expandWorkoutSteps(workout.steps)
-          .map((step, i) => {
-            const range = targetPaceRangeMinPerKm(step, sport);
-            if (range == null || i >= lapBoundaries.length - 1) return null;
-            return { start: lapBoundaries[i]!, end: lapBoundaries[i + 1]!, slowMinPerKm: range[1] };
-          })
-          .filter((b): b is { start: number; end: number; slowMinPerKm: number } => b != null)
-      : [];
+  // boundaries as lapBands -- aligned to `laps` via alignLapsToWorkoutSteps (not a raw positional
+  // zip, and not by any id/time match, since a workout step has no timestamp of its own, only the
+  // recorded lap(s) it produced do). A device's own autolap setting can split one planned step
+  // into several consecutive laps (confirmed real -- see alignLapsToWorkoutSteps' own docstring),
+  // so consecutive laps aligned to the *same* step are merged back into one band spanning all of
+  // them; a device's own trailing "stop" lap (confirmed real -- 13 recorded laps for 12 expanded
+  // steps on a real file) has no corresponding step and is skipped. `slowMinPerKm` (the target
+  // range's slower/higher-number bound) is the overlay's threshold line: at or faster than it is
+  // shaded grey, slower than it is left white -- see the rendering below for why only one edge,
+  // not the full range, is drawn.
+  const workoutBands: { start: number; end: number; slowMinPerKm: number }[] = [];
+  if (workout != null) {
+    const alignedSteps = alignLapsToWorkoutSteps(laps, expandWorkoutSteps(workout.steps));
+    let i = 0;
+    while (i < alignedSteps.length) {
+      const step = alignedSteps[i];
+      let j = i;
+      while (j + 1 < alignedSteps.length && alignedSteps[j + 1] === step) j += 1;
+      const range = step != null ? targetPaceRangeMinPerKm(step, sport) : null;
+      if (range != null && i < lapBoundaries.length - 1) {
+        const end = lapBoundaries[Math.min(j + 1, lapBoundaries.length - 1)]!;
+        workoutBands.push({ start: lapBoundaries[i]!, end, slowMinPerKm: range[1] });
+      }
+      i = j + 1;
+    }
+  }
 
   // The hovered Intervals-table row's own time range, in the same elapsed-seconds terms as
   // lapBands above -- `laps` and `lapBoundaries` are built from the same ordered list, so the

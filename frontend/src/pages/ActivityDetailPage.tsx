@@ -80,6 +80,7 @@ import {
 } from "../runningStats";
 import { computeSplitsAtInterval } from "../splits";
 import {
+  alignLapsToWorkoutSteps,
   expandWorkoutSteps,
   formatStepDurationLabel,
   labelForIntensity,
@@ -137,9 +138,11 @@ export function ActivityDetailPage({ id }: { id: string }) {
     [activity.data?.laps],
   );
   const context = useActivityContext(id, activity.data != null && activity.data.sport !== "hiking");
-  const runInsights = useActivityInsights(
+  const activityInsights = useActivityInsights(
     id,
-    activity.data != null && isRunningSport(activity.data.sport),
+    activity.data != null &&
+      (isRunningSport(activity.data.sport) ||
+        isBoulderingActivity(activity.data.sport, activity.data.sub_sport)),
   );
   const comparisons = useActivityComparisons(
     id,
@@ -175,6 +178,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
 
   const a = activity.data;
+  const isBouldering = isBoulderingActivity(a.sport, a.sub_sport);
   const sport = displaySport(a);
   const style = sportStyle(sport);
   const paceSport = isPaceSport(sport);
@@ -221,6 +225,11 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const expandedWorkoutSteps =
     workout.data != null && paceSport ? expandWorkoutSteps(workout.data.steps) : [];
   const showExpectedColumns = expandedWorkoutSteps.length > 0;
+  // Aligned by accumulated duration/distance, not raw position -- a device's own autolap setting
+  // can split one planned step into two or more recorded laps (see alignLapsToWorkoutSteps' own
+  // docstring), which a plain expandedWorkoutSteps[i] lookup would silently shift out of sync for
+  // every lap after the split.
+  const alignedLapSteps = alignLapsToWorkoutSteps(a.laps, expandedWorkoutSteps);
   // Shared with ActivityCard (yearStats.ts::displayActivityName) so the list/day-view cards and
   // this page's own header always agree on when to show the FIT session's own name vs. fall back
   // to Garmin's structured Workout Builder name (a.workout_name) vs. show nothing at all.
@@ -325,9 +334,12 @@ export function ActivityDetailPage({ id }: { id: string }) {
         <div className="activity-detail__main-col">
           <ActivityStatsGridPrimary activity={a} />
         </div>
-        {runInsights.data && runInsights.data.length > 0 && (
+        {activityInsights.data && activityInsights.data.length > 0 && (
           <div className="activity-detail__insights-col">
-            <ActivityInsightsPanel insights={runInsights.data} />
+            <ActivityInsightsPanel
+              insights={activityInsights.data}
+              heading={isBouldering ? "Bouldering insights" : "Run insights"}
+            />
           </div>
         )}
       </div>
@@ -461,11 +473,12 @@ export function ActivityDetailPage({ id }: { id: string }) {
                   // ~15min pause. Falls back to duration_s for laps backfilled before this field
                   // existed (or a source, like TCX, with no separate pause-excluded field at all).
                   const effectiveLapDuration = lap.moving_duration_s ?? lap.duration_s;
-                  // The device creates one lap per executed workout step, aligned by position
-                  // (see ActivityCharts.tsx's own workoutBands for the same convention, confirmed
-                  // against a real structured-workout FIT file) -- expandedWorkoutSteps[i] is this
-                  // lap's own planned step, if the activity has a workout at all.
-                  const expectedStep = expandedWorkoutSteps[i];
+                  // The device normally creates one lap per executed workout step (confirmed
+                  // against a real structured-workout FIT file), but an autolap setting can split
+                  // one step into several recorded laps -- alignedLapSteps accounts for that (see
+                  // alignLapsToWorkoutSteps' own docstring), unlike a raw expandedWorkoutSteps[i]
+                  // positional lookup.
+                  const expectedStep = alignedLapSteps[i];
                   // formatStepDurationLabel already fills in whichever the step's own planned
                   // constraint actually is -- "15m"/"75s" for a time-based step, "1km" for a
                   // distance-based one (see its own docstring) -- so one column covers both

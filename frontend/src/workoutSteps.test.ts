@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { ActivityWorkoutStepOut, PlannedWorkoutStepOut } from "./api/types";
+import type { ActivityWorkoutStepOut, LapOut, PlannedWorkoutStepOut } from "./api/types";
 import {
+  alignLapsToWorkoutSteps,
   estimatedStepDistanceM,
   expandWorkoutSteps,
   formatStepDistanceKm,
@@ -102,9 +103,7 @@ const WORKOUT_STEPS = [WARMUP, INTERVAL, RECOVERY, REPEAT, COOLDOWN];
 describe("expandWorkoutSteps", () => {
   it("replaces the repeat block with repeat_count copies of its children, in order", () => {
     const expanded = expandWorkoutSteps(WORKOUT_STEPS);
-    expect(expanded.map((s) => s.step_index)).toEqual([
-      0, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 4,
-    ]);
+    expect(expanded.map((s) => s.step_index)).toEqual([0, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 4]);
     // 12 expanded steps -- matches the real activity's 13 recorded laps minus the device's own
     // trailing auto-generated "stop" lap.
     expect(expanded).toHaveLength(12);
@@ -208,9 +207,7 @@ describe("formatStepDurationLabel", () => {
       ),
     ).toBe("Lap button (~5km)");
     expect(
-      formatStepDurationLabel(
-        plannedStep({ duration_type: "lap_button", duration_time_s: 2400 }),
-      ),
+      formatStepDurationLabel(plannedStep({ duration_type: "lap_button", duration_time_s: 2400 })),
     ).toBe("Lap button (~40m)");
   });
 
@@ -219,9 +216,9 @@ describe("formatStepDurationLabel", () => {
   });
 
   it("shows a hiit/strength_training reps-based step's own rep count", () => {
-    expect(
-      formatStepDurationLabel(plannedStep({ duration_type: "reps", duration_reps: 10 })),
-    ).toBe("10 reps");
+    expect(formatStepDurationLabel(plannedStep({ duration_type: "reps", duration_reps: 10 }))).toBe(
+      "10 reps",
+    );
   });
 
   it("returns null for a reps-type step missing its own duration_reps", () => {
@@ -250,5 +247,72 @@ describe("plannedExerciseLabel", () => {
 
   it("falls back to a generic 'Exercise' label when nothing at all is set", () => {
     expect(plannedExerciseLabel(plannedStep({}))).toBe("Exercise");
+  });
+});
+
+function lap(overrides: Partial<LapOut>): LapOut {
+  return {
+    lap_index: 0,
+    start_time_utc: "2026-01-01T00:00:00Z",
+    duration_s: null,
+    moving_duration_s: null,
+    distance_m: null,
+    avg_hr: null,
+    max_hr: null,
+    avg_speed_mps: null,
+    avg_gap_speed_mps: null,
+    ...overrides,
+  };
+}
+
+describe("alignLapsToWorkoutSteps", () => {
+  it("maps one lap per step in the ordinary one-lap-per-step case", () => {
+    const steps = [
+      step({ step_index: 0, duration_type: "time", duration_time_s: 900 }),
+      step({ step_index: 1, duration_type: "distance", duration_distance_m: 1000 }),
+    ];
+    const laps = [lap({ moving_duration_s: 898 }), lap({ distance_m: 1002 })];
+    expect(alignLapsToWorkoutSteps(laps, steps)).toEqual([steps[0], steps[1]]);
+  });
+
+  it("merges two laps split by an autolap mid-step back onto the same step", () => {
+    // The reported bug: a 10-minute step, but the watch's own 1km autolap fires mid-step,
+    // splitting the recorded laps into a 6:10 lap and a 3:50 lap (totaling the planned 10:00)
+    // before the real next step's own lap.
+    const tenMinuteStep = step({ step_index: 0, duration_type: "time", duration_time_s: 600 });
+    const nextStep = step({ step_index: 1, duration_type: "time", duration_time_s: 300 });
+    const laps = [
+      lap({ moving_duration_s: 6 * 60 + 10 }),
+      lap({ moving_duration_s: 3 * 60 + 50 }),
+      lap({ moving_duration_s: 300 }),
+    ];
+    expect(alignLapsToWorkoutSteps(laps, [tenMinuteStep, nextStep])).toEqual([
+      tenMinuteStep,
+      tenMinuteStep,
+      nextStep,
+    ]);
+  });
+
+  it("merges an autolap split on a distance-based step the same way", () => {
+    const oneKmStep = step({ step_index: 0, duration_type: "distance", duration_distance_m: 2000 });
+    const laps = [lap({ distance_m: 1000 }), lap({ distance_m: 1005 })];
+    expect(alignLapsToWorkoutSteps(laps, [oneKmStep])).toEqual([oneKmStep, oneKmStep]);
+  });
+
+  it("maps every lap past the last step to null, e.g. a device's own trailing stop lap", () => {
+    const onlyStep = step({ step_index: 0, duration_type: "time", duration_time_s: 600 });
+    const laps = [lap({ moving_duration_s: 600 }), lap({ moving_duration_s: 5 })];
+    expect(alignLapsToWorkoutSteps(laps, [onlyStep])).toEqual([onlyStep, null]);
+  });
+
+  it("advances after exactly one lap for a step with no time/distance target", () => {
+    const openStep = step({ step_index: 0, duration_type: null });
+    const nextStep = step({ step_index: 1, duration_type: null });
+    const laps = [lap({ moving_duration_s: 60 }), lap({ moving_duration_s: 60 })];
+    expect(alignLapsToWorkoutSteps(laps, [openStep, nextStep])).toEqual([openStep, nextStep]);
+  });
+
+  it("returns an empty array for laps when there are no expected steps at all", () => {
+    expect(alignLapsToWorkoutSteps([lap({})], [])).toEqual([null]);
   });
 });

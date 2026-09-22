@@ -74,6 +74,66 @@ export function expandWorkoutSteps<T extends WorkoutStepLike>(steps: T[]): T[] {
   return expanded;
 }
 
+interface LapLike {
+  duration_s: number | null;
+  moving_duration_s: number | null;
+  distance_m: number | null;
+}
+
+// A lap's own recorded duration/distance is deemed to have "completed" its matched step once it
+// reaches this fraction of the step's own target -- generous enough to absorb ordinary GPS/timer
+// noise on a genuine one-lap-per-step match, strict enough that a lap barely a third of the way
+// into a step (the 6:10-of-10:00 example below) never triggers an early advance.
+const STEP_COMPLETE_FRACTION = 0.9;
+
+/** Maps each recorded lap to its own planned/recorded workout step, tolerant of a device
+ * inserting an extra lap mid-step -- confirmed against a real activity where the watch's own
+ * distance-based autolap setting (independent of the pushed workout's step boundaries) split a
+ * planned 10-minute step into a 6:10 lap plus a 3:50 lap, which silently shifted every following
+ * lap's positional index against `expandWorkoutSteps` by one (the Intervals table's "Expected"
+ * columns, and ActivityCharts.tsx's workoutBands overlay, both used to assume `laps[i] <->
+ * expandedSteps[i]` positionally -- see each call site's own comment before this function
+ * existed). Greedily accumulates consecutive laps' duration/distance against the *current*
+ * expected step's own target until `STEP_COMPLETE_FRACTION` of it is reached, only then advancing
+ * to the next step -- so two (or more) laps that together complete one step are both correctly
+ * matched to that same step, instead of the second one being matched to the step after it. A step
+ * with no time/distance target to measure against (an open step, or `lap_button`, which by
+ * definition ends exactly on a lap boundary already) always advances after exactly one lap,
+ * preserving the original one-lap-per-step assumption for those. Returns `null` for a lap once
+ * every expected step is accounted for -- the device's own trailing "stop" lap, or the athlete
+ * continuing past the plan. */
+export function alignLapsToWorkoutSteps<T extends WorkoutStepLike & DurationStepLike>(
+  laps: LapLike[],
+  expandedSteps: T[],
+): (T | null)[] {
+  const result: (T | null)[] = [];
+  let stepIdx = 0;
+  let accumulatedDuration = 0;
+  let accumulatedDistance = 0;
+  for (const lap of laps) {
+    if (stepIdx >= expandedSteps.length) {
+      result.push(null);
+      continue;
+    }
+    const step = expandedSteps[stepIdx]!;
+    result.push(step);
+    accumulatedDuration += lap.moving_duration_s ?? lap.duration_s ?? 0;
+    accumulatedDistance += lap.distance_m ?? 0;
+    const reached =
+      step.duration_type === "time" && step.duration_time_s != null
+        ? accumulatedDuration >= step.duration_time_s * STEP_COMPLETE_FRACTION
+        : step.duration_type === "distance" && step.duration_distance_m != null
+          ? accumulatedDistance >= step.duration_distance_m * STEP_COMPLETE_FRACTION
+          : true;
+    if (reached) {
+      stepIdx += 1;
+      accumulatedDuration = 0;
+      accumulatedDistance = 0;
+    }
+  }
+  return result;
+}
+
 export interface WorkoutDisplayGroup<T extends WorkoutStepLike> {
   // "Warmup" / "Cooldown" / "5x" / a capitalized intensity -- always a real label, never blank,
   // so the text panel never renders an unheaded bullet.
@@ -111,7 +171,11 @@ export function groupWorkoutStepsForDisplay<T extends WorkoutStepLike>(
       const children = sorted.filter(
         (s) => s.step_index >= step.repeat_from_step! && s.step_index < step.step_index,
       );
-      groups.push({ label: `${step.repeat_count}x`, repeatCount: step.repeat_count, steps: children });
+      groups.push({
+        label: `${step.repeat_count}x`,
+        repeatCount: step.repeat_count,
+        steps: children,
+      });
     } else {
       groups.push({ label: labelForIntensity(step.intensity), repeatCount: null, steps: [step] });
     }
@@ -144,10 +208,7 @@ export function targetPaceRangeMinPerKm(
 
 /** "6:25-6:50" -- faster (higher speed) pace first, matching how a target range naturally
  * reads. */
-export function targetPaceRangeLabel(
-  step: ActivityWorkoutStepOut,
-  sport: string,
-): string | null {
+export function targetPaceRangeLabel(step: ActivityWorkoutStepOut, sport: string): string | null {
   const range = targetPaceRangeMinPerKm(step, sport);
   if (range == null) return null;
   return `${formatMinPerKm(range[0])}-${formatMinPerKm(range[1])}`;
