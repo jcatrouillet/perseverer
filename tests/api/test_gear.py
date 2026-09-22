@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, func, select
 
 from perseverer.db.schema import athlete_default_shoe
+from tests.api.conftest import seed_activity
 
 
 def _create_shoe(
@@ -69,3 +70,33 @@ def test_shoe_can_have_no_mileage_limit(
     assert created["remaining_km"] is None
     assert created["over_limit"] is False
     assert client.get("/api/v1/gear/alerts", headers=auth_headers).json() == []
+
+
+def test_replacing_an_activity_pair_recalculates_both_shoe_mileages(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    first_shoe = _create_shoe(client, auth_headers)
+    second_shoe = _create_shoe(client, auth_headers)
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="run-1", distance_m=5000)
+
+    assigned = client.put(
+        "/api/v1/gear/activities/run-1/shoe",
+        headers=auth_headers,
+        json={"shoe_id": first_shoe["id"]},
+    )
+    assert assigned.status_code == 200
+
+    replaced = client.put(
+        "/api/v1/gear/activities/run-1/shoe",
+        headers=auth_headers,
+        json={"shoe_id": second_shoe["id"]},
+    )
+    assert replaced.status_code == 200
+    assert replaced.json() == {"shoe_id": second_shoe["id"]}
+
+    pairs = client.get("/api/v1/gear/shoes", headers=auth_headers)
+    assert pairs.status_code == 200
+    mileage_by_id = {pair["id"]: pair["distance_km"] for pair in pairs.json()}
+    assert mileage_by_id[first_shoe["id"]] == 24.7
+    assert mileage_by_id[second_shoe["id"]] == 29.7

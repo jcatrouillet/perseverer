@@ -271,10 +271,6 @@
   background: color-mix(in srgb, var(--color-danger) 14%, var(--color-surface));
 }
 
-.activity-shoe p {
-  color: var(--color-text-muted);
-}
-
 @media (max-width: 760px) {
   .gear-form > .field,
   .gear-form > .gear-form__size {

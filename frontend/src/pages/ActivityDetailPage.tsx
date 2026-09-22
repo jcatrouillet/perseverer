@@ -60,7 +60,11 @@ import { LoadingSpinner } from "../components/LoadingSpinner";
 import { NotesPanel } from "../components/NotesPanel";
 import { PaceVariabilityChart } from "../components/PaceVariabilityChart";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
-import { boulderingRoutes, gradeBreakdownFromRoutes, isBoulderingActivity } from "../boulderingRoutes";
+import {
+  boulderingRoutes,
+  gradeBreakdownFromRoutes,
+  isBoulderingActivity,
+} from "../boulderingRoutes";
 import { useDistanceFormat } from "../formatDistance";
 import { useTimeFormat } from "../formatTime";
 import { sportStyle } from "../metricStyle";
@@ -132,10 +136,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
       ),
     [activity.data?.laps],
   );
-  const context = useActivityContext(
-    id,
-    activity.data != null && activity.data.sport !== "hiking",
-  );
+  const context = useActivityContext(id, activity.data != null && activity.data.sport !== "hiking");
   const runInsights = useActivityInsights(
     id,
     activity.data != null && isRunningSport(activity.data.sport),
@@ -163,7 +164,11 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const deleteClimbRoute = useDeleteClimbRoute(id);
   const trimActivity = useTrimActivity(id);
   const clearActivityTrim = useClearActivityTrim(id);
-  const mergePreview = useActivityMergePreview(id, mergeCandidateId ?? "", mergeCandidateId != null);
+  const mergePreview = useActivityMergePreview(
+    id,
+    mergeCandidateId ?? "",
+    mergeCandidateId != null,
+  );
   const mergeActivity = useMergeActivity(id);
 
   if (activity.isLoading) return <LoadingSpinner size="lg" />;
@@ -284,8 +289,8 @@ export function ActivityDetailPage({ id }: { id: string }) {
         {a.device &&
           a.device.manufacturer &&
           ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
+        <ActivityShoePicker activityId={id} hasDistance={(a.distance_m ?? 0) > 0} />
       </p>
-      <ActivityShoePicker activityId={id} hasDistance={(a.distance_m ?? 0) > 0} />
       {((weather.data && weather.data.available) || paceVariability) && (
         <div className="activity-detail__weather-pace-row">
           {weather.data && <ActivityWeather weather={weather.data} />}
@@ -354,11 +359,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
         <section className="card activity-trim-banner">
           <p className="activity-trim-banner__text">This recording has been trimmed.</p>
           <div className="activity-trim-banner__actions">
-            <button
-              type="button"
-              className="button"
-              onClick={() => setIsTrimming(true)}
-            >
+            <button type="button" className="button" onClick={() => setIsTrimming(true)}>
               Adjust trim
             </button>
             <button
@@ -510,9 +511,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
                           : "—"}
                       </td>
                       {paceSport && (
-                        <td>
-                          {lapGaps[i] != null ? `${formatMinPerKm(lapGaps[i]!)} /km` : "—"}
-                        </td>
+                        <td>{lapGaps[i] != null ? `${formatMinPerKm(lapGaps[i]!)} /km` : "—"}</td>
                       )}
                       {showExpectedColumns && <td>{expectedPace}</td>}
                       <td>{lap.avg_hr != null ? Math.round(lap.avg_hr) : "—"}</td>
@@ -531,14 +530,14 @@ export function ActivityDetailPage({ id }: { id: string }) {
           {a.splits.length > 0 && (
             <section className="card">
               <h2>Routes Climbed</h2>
-              <ClimbGradeChart gradeBreakdown={gradeBreakdownFromRoutes(boulderingRoutes(a.splits))} />
+              <ClimbGradeChart
+                gradeBreakdown={gradeBreakdownFromRoutes(boulderingRoutes(a.splits))}
+              />
             </section>
           )}
           <BoulderingRoutesTable
             splits={a.splits}
-            onSetStatus={(splitIndex, result) =>
-              setClimbRouteStatus.mutate({ splitIndex, result })
-            }
+            onSetStatus={(splitIndex, result) => setClimbRouteStatus.mutate({ splitIndex, result })}
             onSetGrade={(splitIndex, grade) => setClimbRouteStatus.mutate({ splitIndex, grade })}
             onAddRoute={(grade, result) => addClimbRoute.mutate({ grade, result })}
             onDeleteRoute={(splitIndex) => deleteClimbRoute.mutate(splitIndex)}
@@ -575,11 +574,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
       )}
 
       {comparisons.data && (
-        <ActivityComparisonTable
-          activity={a}
-          comparisons={comparisons.data}
-          sport={sport}
-        />
+        <ActivityComparisonTable activity={a} comparisons={comparisons.data} sport={sport} />
       )}
 
       <section className="card">
