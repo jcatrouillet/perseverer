@@ -1160,6 +1160,27 @@ ever reads `completed_at` alone: basing its own label on the combined signal wou
 matched-only workout's button read "Mark as not done" while actually being unable to clear the
 match itself, a promise the click couldn't keep.
 
+**Revision: the `lap` duration keyword** -- a running step's duration may be the keyword `lap`
+instead of a time or distance, ending it on Garmin's own `ConditionType.LAP_BUTTON` (the watch
+advances only when the athlete physically presses the lap button) rather than any GPS-derived
+threshold. The athlete's own concrete failure: four downhill long runs are out-and-backs whose
+turnaround is a real landmark (a dam), not an exact distance, and GPS on that trail isn't accurate
+enough -- authored as `5km` steps, the watch would swap from the climb's HR target to the
+descent's pace target while still climbing, exactly what the climb's own HR cap exists to prevent.
+`lap` may be followed by an ordinary duration token (`lap 5km`, `lap 40m`) kept purely as a
+calendar-side estimate (`duration_time_s`/`duration_distance_m`, no schema change -- both existing
+estimate helpers already read those fields without branching on `duration_type`) and **never**
+forwarded to Garmin as an end condition (`endConditionValue` stays `None` for a `lap_button` step)
+-- if it were, the step would advance at 5 km and the whole feature would be pointless.
+`LAP_BUTTON_CONDITION_ID` is read via `getattr`, not a plain attribute: the installed
+`garminconnect` renumbers `ConditionType` between releases (an older release had no `LAP_BUTTON`
+member at all and numbered `DISTANCE`/`HEART_RATE` differently), so a future bump that drops or
+renames the member degrades to the known wire id instead of raising `AttributeError` mid-push. A
+real gap this left behind, caught only once the athlete tried to use the feature: `StepBuilderModal.tsx`
+(the "Add step" GUI wizard) never got a matching "Lap button" option in its duration-type
+dropdown, so the keyword could only be authored by typing the syntax by hand until that was fixed.
+See `docs/adr/0015-scheduled-workouts.md` decision 13 for the full reasoning.
+
 ## Calendar feed: publishing planned_workout to Google Calendar
 
 `calendar_feed.py` builds a public iCalendar (RFC 5545) feed of the athlete's own `planned_workout`

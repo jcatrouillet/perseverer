@@ -912,6 +912,28 @@ environment:
   `completed_at` alone, deliberately — basing it on the combined signal would let a matched-only
   workout's button read "Mark as not done" while actually being unable to clear the match, a
   promise the click can't keep.
+  **Revision: the `lap` duration keyword** — a running step's duration may be `lap` instead of a
+  time or distance, ending it on Garmin's own `ConditionType.LAP_BUTTON` when the athlete
+  physically presses the watch's lap button, rather than any GPS-derived threshold. The athlete's
+  own concrete failure: four downhill long runs are out-and-backs whose turnaround is a real
+  landmark (a dam), not an exact distance, and GPS on that trail isn't accurate enough — authored
+  as `5km` steps, the watch swapped from the climb's HR target to the descent's pace target while
+  still climbing, exactly what the climb's own HR cap exists to prevent. `lap` may be followed by
+  an ordinary duration token (`lap 5km`, `lap 40m`) kept purely as a calendar-side estimate — no
+  migration needed, since `duration_type` was already a free string and both existing estimate
+  helpers already read `duration_time_s`/`duration_distance_m` without branching on it — and
+  **never** forwarded to Garmin as an end condition (`endConditionValue` stays `None` for a
+  `lap_button` step; if it leaked through, the step would advance at 5 km and the whole feature
+  would be pointless). `LAP_BUTTON_CONDITION_ID` is read via `getattr`, not a plain attribute: the
+  installed `garminconnect` renumbers `ConditionType` between releases (an older release had no
+  `LAP_BUTTON` member at all and numbered `DISTANCE`/`HEART_RATE` differently), so a future bump
+  that drops or renames the member degrades to the known wire id instead of raising
+  `AttributeError` mid-push. A real gap this left behind, caught only once the athlete tried to
+  use the feature ("you did not add it to the step options"): `StepBuilderModal.tsx` (the "Add
+  step" GUI wizard, decision 5 of the ADR) never got a matching "Lap button" option in its
+  duration-type dropdown — its "Time or distance?" selector only offered minutes/seconds/km/
+  meters and *required* a numeric value, so `lap` could only be authored by typing the syntax by
+  hand until fixed. See `docs/adr/0015-scheduled-workouts.md` decision 13 for the full reasoning.
 - **Exercise library page (`/exercises`, `ExerciseLibraryPage.tsx`)**: a browsable reference for
   every exercise the hiit/strength_training picker's catalog supports — 47 categories collapsed
   by default (native `<details>`, same convention as `ActivitySourcesPanel.tsx`'s own "Why these

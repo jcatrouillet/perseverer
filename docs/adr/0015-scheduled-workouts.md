@@ -432,20 +432,38 @@ simply had no branch for it and fell through to `time`. Three notes on the shape
   version this project installs, but the churn is real and undocumented, and this is the same
   hazard the "vendor facts verified directly" section above already calls out.
 
+**A real user-reported gap this same decision left behind**: the draft above updated the
+authoritative parser, its TS twin, the Garmin push builder, and the read-only duration label
+(`formatStepDurationLabel`) — but not `StepBuilderModal.tsx`, the "Add step" GUI wizard that
+generates syntax text instead of the athlete typing it by hand (decision 5). Its "Time or
+distance?" dropdown only offered minutes/seconds/km/meters and *required* a numeric value, so a
+`lap` step could not be built through the GUI at all — caught only once the athlete actually
+tried to use the feature ("you did not add it to the step options"), the same category of gap
+decision 8's own `ScheduleWorkoutForm`/`DayViewPage.tsx` miss was. Fixed by adding a "Duration
+type" selector (Time or distance / Lap button) ahead of the existing duration row; choosing "Lap
+button" repurposes the same value+unit fields as the optional estimate (never required, since a
+bare `lap` is already a complete step) and shows an inline note that the estimate never reaches
+the watch as a real end condition.
+
 ## Verification
 
 `uv run pytest -q` (927 passed), `uv run ruff check .`, `uv run mypy` (clean), `cd frontend && npm
 run typecheck && npm run build` (clean), `npx vitest run` (556 passed) — all green.
 
-**Decision 13 (`lap` duration) was verified only partially**, in a Linux container that cannot run
-this project's own toolchain: `pytest tests/test_workout_syntax.py` (31 passed, including 8 new
-shared fixture cases and 2 round-trip cases) and `npx vitest run src/workoutSyntax.test.ts
-src/workoutSteps.test.ts` (54 passed — the TS twin agreeing with Python on the same fixtures is
-the parity guarantee), plus `_end_condition` exercised directly against its own AST-extracted
-source. **Not run there**: the rest of `pytest`, `ruff`, `mypy` (the container has Python 3.10;
-`api/schemas/common.py` uses PEP 695 `class Page[T]`, so the package will not even import) and
-`tsc --noEmit` (node_modules was installed on Windows, so `@typescript/typescript-linux-x64` is
-absent). Re-run the full gate list above on a real dev machine before merging.
+**Decision 13 (`lap` duration)**: the draft above was written in a Linux container that couldn't
+run this project's own toolchain, so only a partial slice ran there (`pytest
+tests/test_workout_syntax.py`, 31 passed; `npx vitest run src/workoutSyntax.test.ts
+src/workoutSteps.test.ts`, 54 passed; `_end_condition` exercised directly against its own
+AST-extracted source). The full gate was subsequently run for real on the actual dev machine
+before merging: `uv run pytest -q` (1413 passed), `ruff check .`/`mypy` clean, `npm run
+typecheck`/`npm run build` clean, `npx vitest run` (910 passed) — plus an end-to-end check against
+the exact acceptance scenario (a 1km warmup, a `3x` block of two 5km lap-button climb/descent
+steps, a 1km cooldown): parses with no errors, estimates exactly 32 km total, and the built Garmin
+payload shows `conditionTypeKey: "lap.button"` with `endConditionValue: null` on both steps while
+the climb step keeps its 118-128 heart-rate-zone target and carries no trace of either step's
+5000 m estimate. The `StepBuilderModal.tsx` fix above was verified with its own 10 tests plus the
+same full gate re-run (`pytest` 1401 passed at that point, `vitest` 917 passed) once the shoe/gear
+feature had also landed on `main` alongside it.
 
 **Live push, with the user's explicit go-ahead (2026-09-03)**: scheduled a real running workout
 ("CLAUDE TEST — safe to delete", 2026-09-05) against the author's own Garmin account —
