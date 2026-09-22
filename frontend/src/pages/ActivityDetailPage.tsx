@@ -178,7 +178,6 @@ export function ActivityDetailPage({ id }: { id: string }) {
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
 
   const a = activity.data;
-  const isBouldering = isBoulderingActivity(a.sport, a.sub_sport);
   const sport = displaySport(a);
   const style = sportStyle(sport);
   const paceSport = isPaceSport(sport);
@@ -336,10 +335,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
         </div>
         {activityInsights.data && activityInsights.data.length > 0 && (
           <div className="activity-detail__insights-col">
-            <ActivityInsightsPanel
-              insights={activityInsights.data}
-              heading={isBouldering ? "Bouldering insights" : "Run insights"}
-            />
+            <ActivityInsightsPanel insights={activityInsights.data} />
           </div>
         )}
       </div>
