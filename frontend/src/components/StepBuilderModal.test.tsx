@@ -78,4 +78,57 @@ describe("StepBuilderModal", () => {
     fireEvent.click(screen.getByText("Generate"));
     expect(onGenerate).not.toHaveBeenCalled();
   });
+
+  it("generates a bare lap-button step with no estimate", () => {
+    const onGenerate = vi.fn();
+    render(<StepBuilderModal open onClose={vi.fn()} onGenerate={onGenerate} />);
+
+    fireEvent.change(screen.getByLabelText("Duration type"), { target: { value: "lap" } });
+    fireEvent.click(screen.getByText("Generate"));
+
+    expect(onGenerate).toHaveBeenCalledWith("lap");
+  });
+
+  it("generates a lap-button step with an HR target, and never requires the estimate", () => {
+    const onGenerate = vi.fn();
+    render(<StepBuilderModal open onClose={vi.fn()} onGenerate={onGenerate} />);
+
+    fireEvent.change(screen.getByLabelText("Duration type"), { target: { value: "lap" } });
+    fireEvent.click(screen.getByLabelText("Heart rate"));
+    fireEvent.click(screen.getByText("Range?", { selector: "label" }));
+    fireEvent.change(screen.getByPlaceholderText("140"), { target: { value: "118" } });
+    fireEvent.change(screen.getByPlaceholderText("150"), { target: { value: "128" } });
+    fireEvent.click(screen.getByText("Generate"));
+
+    expect(onGenerate).toHaveBeenCalledWith("lap 118-128 HR");
+  });
+
+  it("generates a lap-button step with a distance estimate, kept separate from the duration unit", () => {
+    const onGenerate = vi.fn();
+    render(<StepBuilderModal open onClose={vi.fn()} onGenerate={onGenerate} />);
+
+    fireEvent.change(screen.getByLabelText("Intensity"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Duration type"), { target: { value: "lap" } });
+    fireEvent.change(screen.getByLabelText("Estimate (optional)"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("Unit"), { target: { value: "km" } });
+    fireEvent.click(screen.getByLabelText("Pace"));
+    fireEvent.change(screen.getByPlaceholderText("5:00"), { target: { value: "5:45" } });
+    fireEvent.click(screen.getByText("Range?", { selector: "label" }));
+    fireEvent.change(screen.getByPlaceholderText("5:20"), { target: { value: "6:15" } });
+    fireEvent.click(screen.getByText("Generate"));
+
+    expect(onGenerate).toHaveBeenCalledWith("lap 5km 5:45-6:15/km Pace");
+  });
+
+  it("switching back to Time or distance drops the lap keyword", () => {
+    const onGenerate = vi.fn();
+    render(<StepBuilderModal open onClose={vi.fn()} onGenerate={onGenerate} />);
+
+    fireEvent.change(screen.getByLabelText("Duration type"), { target: { value: "lap" } });
+    fireEvent.change(screen.getByLabelText("Duration type"), { target: { value: "duration" } });
+    fireEvent.change(screen.getByLabelText("Duration"), { target: { value: "10" } });
+    fireEvent.click(screen.getByText("Generate"));
+
+    expect(onGenerate).toHaveBeenCalledWith("10m");
+  });
 });

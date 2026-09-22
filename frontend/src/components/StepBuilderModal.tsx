@@ -5,7 +5,9 @@
 // could drift from the textarea -- the textarea/parsed preview stays the single source of truth,
 // same "text is canonical" principle the rest of this feature follows.
 //
-// Flow: (1) time or distance duration, (2) which target(s) -- pace/HR/cadence, multi-select,
+// Flow: (1) a time/distance duration, OR "Lap button" (ends on the watch's own lap button --
+// workout_syntax.py's `lap` keyword -- with the same duration/unit fields repurposed as an
+// optional calendar-only estimate), (2) which target(s) -- pace/HR/cadence, multi-select,
 // (3) is each target a range or a single value, (4) an optional repeat count, which lets the
 // athlete build a second (and further) step into the same block before generating -- the common
 // "interval + recovery, x N" shape -- (5) Generate renders the line(s) (with a blank-line-
@@ -16,10 +18,15 @@ import { Modal } from "./Modal";
 import "../styles/stepBuilder.css";
 
 type DurationUnit = "m" | "s" | "km" | "mtr";
+// "duration" = an ordinary time/distance value; "lap" = ends on the watch's lap button
+// (workout_syntax.py's `lap` keyword), with durationValue/durationUnit below repurposed as an
+// *optional estimate* for the calendar's own totals only -- never sent to Garmin as a threshold.
+type DurationKind = "duration" | "lap";
 type TargetKind = "pace" | "hr" | "cadence";
 
 interface StepDraft {
   intensity: string; // "" = none
+  durationKind: DurationKind;
   durationUnit: DurationUnit;
   durationValue: string;
   targets: Set<TargetKind>;
@@ -39,6 +46,7 @@ interface StepDraft {
 function emptyStepDraft(): StepDraft {
   return {
     intensity: "",
+    durationKind: "duration",
     durationUnit: "m",
     durationValue: "",
     targets: new Set(),
@@ -59,10 +67,19 @@ function emptyStepDraft(): StepDraft {
 const INTENSITIES = ["", "warmup", "cooldown", "recovery", "rest", "active"];
 
 function buildStepLine(draft: StepDraft): string | null {
-  if (!draft.durationValue.trim()) return null;
+  if (draft.durationKind === "duration" && !draft.durationValue.trim()) return null;
   const parts: string[] = [];
   if (draft.intensity) parts.push(draft.intensity.charAt(0).toUpperCase() + draft.intensity.slice(1));
-  parts.push(`${draft.durationValue.trim()}${draft.durationUnit}`);
+  if (draft.durationKind === "lap") {
+    // The estimate is optional (a bare "lap" is a complete, valid step on its own) and is only
+    // ever the calendar's own duration/load figure -- see workout_syntax.py's own docstring for
+    // why it must never reach Garmin as a real end condition.
+    parts.push(
+      draft.durationValue.trim() ? `lap ${draft.durationValue.trim()}${draft.durationUnit}` : "lap",
+    );
+  } else {
+    parts.push(`${draft.durationValue.trim()}${draft.durationUnit}`);
+  }
 
   if (draft.targets.has("pace")) {
     if (draft.paceRange) {
@@ -125,32 +142,81 @@ function StepFields({
         </select>
       </label>
 
-      <div className="step-builder__row">
-        <label className="field">
-          Duration
-          <input
-            className="input"
-            type="number"
-            min="0"
-            step="any"
-            value={draft.durationValue}
-            onChange={(e) => onChange({ ...draft, durationValue: e.target.value })}
-          />
-        </label>
-        <label className="field">
-          Time or distance?
-          <select
-            className="input"
-            value={draft.durationUnit}
-            onChange={(e) => onChange({ ...draft, durationUnit: e.target.value as DurationUnit })}
-          >
-            <option value="m">minutes</option>
-            <option value="s">seconds</option>
-            <option value="km">kilometers</option>
-            <option value="mtr">meters</option>
-          </select>
-        </label>
-      </div>
+      <label className="field">
+        Duration type
+        <select
+          className="input"
+          value={draft.durationKind}
+          onChange={(e) => onChange({ ...draft, durationKind: e.target.value as DurationKind })}
+        >
+          <option value="duration">Time or distance</option>
+          <option value="lap">Lap button (press to end)</option>
+        </select>
+      </label>
+
+      {draft.durationKind === "duration" ? (
+        <div className="step-builder__row">
+          <label className="field">
+            Duration
+            <input
+              className="input"
+              type="number"
+              min="0"
+              step="any"
+              value={draft.durationValue}
+              onChange={(e) => onChange({ ...draft, durationValue: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            Time or distance?
+            <select
+              className="input"
+              value={draft.durationUnit}
+              onChange={(e) => onChange({ ...draft, durationUnit: e.target.value as DurationUnit })}
+            >
+              <option value="m">minutes</option>
+              <option value="s">seconds</option>
+              <option value="km">kilometers</option>
+              <option value="mtr">meters</option>
+            </select>
+          </label>
+        </div>
+      ) : (
+        <div className="step-builder__row">
+          <label className="field">
+            Estimate (optional)
+            <input
+              className="input"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 5"
+              value={draft.durationValue}
+              onChange={(e) => onChange({ ...draft, durationValue: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            Unit
+            <select
+              className="input"
+              value={draft.durationUnit}
+              onChange={(e) => onChange({ ...draft, durationUnit: e.target.value as DurationUnit })}
+            >
+              <option value="m">minutes</option>
+              <option value="s">seconds</option>
+              <option value="km">kilometers</option>
+              <option value="mtr">meters</option>
+            </select>
+          </label>
+        </div>
+      )}
+      {draft.durationKind === "lap" && (
+        <p className="chart-note">
+          Ends when you press the watch&apos;s lap button, not on a time or distance. The estimate
+          above (if any) only feeds this calendar&apos;s own duration/load totals -- it&apos;s
+          never sent to the watch as a threshold.
+        </p>
+      )}
 
       <div className="field">
         Target
