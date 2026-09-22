@@ -331,10 +331,13 @@ next ingest/rebuild regardless.
 
 ### `GET /activities/{activity_id}/insights`
 
-Point-in-time insights for one activity (e.g. "your fastest 10 km to date"), computed fresh at
-request time — unlike `GET /insights`, which reads a precomputed table. Always bounded to
-activities at or before this one's own `local_date`: browsing an old activity never leaks
-knowledge of activities that hadn't happened yet.
+Point-in-time insights for one activity, computed fresh at request time — unlike `GET /insights`,
+which reads a precomputed table. Running activities can return pace and distance records;
+bouldering activities can return records for route count, highest attempted/completed V-grade,
+active climb time, and high/low average and peak heart rate. Each claim uses the last 30 days,
+last 90 days, calendar year, or all history, and only compares activities that happened no later
+than the displayed activity (including its timestamp when two activities share a date), so an old
+activity never learns about a later performance.
 
 **Responses:** `200` → `array<InsightOut>`. `404`.
 
@@ -1197,6 +1200,35 @@ that status lives on the workout row itself, not a generic job log.
 
 **Responses:** `200` → `JobTriggerOut`. `404` → `detail: "planned workout not found"`.
 
+### `POST /planned-workouts/{workout_id}/complete`
+
+The athlete's own manual "I did this" marker — entirely independent of `push_status` (works for a
+workout that was never pushed, or failed to push, at all) and never linked to a recorded
+`activity` row here; see `PlannedWorkoutOut.matched_activity_id` for the separate, read-time-only
+signal a synced Garmin activity provides instead, without ever touching this column. Idempotent —
+calling it again just refreshes `completed_at` to now.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `workout_id` | path | **required** | integer | From `PlannedWorkoutOut.id`. |
+
+**Responses:** `200` → `PlannedWorkoutOut` (with `completed_at` now set). `404` → `detail:
+"planned workout not found"`.
+
+### `POST /planned-workouts/{workout_id}/uncomplete`
+
+Clears the manual `completed_at` marker. Never clears `matched_activity_id` — a day the watch
+already confirms as done via a synced activity still reads as done on `GET /planned-workouts`
+even right after this call; see `db/schema.py::planned_workout`'s own docstring for why the two
+signals are deliberately independent.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `workout_id` | path | **required** | integer | From `PlannedWorkoutOut.id`. |
+
+**Responses:** `200` → `PlannedWorkoutOut` (with `completed_at` now `null`). `404` → `detail:
+"planned workout not found"`.
+
 ### `POST /planned-workouts/recurring`
 
 Creates one independent `planned_workout` row per occurrence date — not a recurring-rule object;
@@ -1512,6 +1544,31 @@ when the athlete has no password set yet (nothing to verify against). Never chan
 **Response `200`:** `ChangePasswordOut` — `{"success": true}`. **`400`** — incorrect current
 password, or no username configured yet. **`401`** — too many recent attempts, try again later.
 **`422`** — `new_password` is too short.
+
+### `GET /settings/api-key`
+
+Self-service counterpart of `sync athlete create-key` — the Settings page's own per-athlete
+`X-API-Key` (`athlete.api_key_hash`), same "one standing secret, replace on rotate" shape as the
+calendar feed above, not a growing history of one-off keys.
+
+**Response `200`:** `ApiKeyStatusOut` — `{"enabled": bool, "created_at": string | null}`. Never
+includes the key itself — only whether one is currently active.
+
+### `POST /settings/api-key`
+
+Generates (if none exists) or rotates (if one already does) the athlete's API key, always minting
+a fresh value — the old key's hash is overwritten, not appended to a list, so any client still
+using it starts getting `401`s immediately.
+
+**Response `200`:** `ApiKeyOut` — `{"api_key": string}`. The raw key is only ever returned here;
+only its SHA-256 hash is stored, and it cannot be recovered later — losing it means rotating to a
+new one.
+
+### `DELETE /settings/api-key`
+
+Revokes the athlete's API key (any client using it starts getting `401`s immediately).
+
+**Response `200`:** `ApiKeyStatusOut` — `{"enabled": false, "created_at": null}`.
 
 ### `GET /settings/eufy/status`
 

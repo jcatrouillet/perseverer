@@ -103,6 +103,25 @@ Grows every phase — updated at the end of each phase alongside `AGENTS.md`, pe
   rebuild`, and immediately once when a correction is first set. Deliberately not one of
   `rebuild.py`'s `_REBUILDABLE_TABLES`. See `sport_override.py`'s own docstring for why
   carbohydrates_g/sodium_mg are pure user input rather than a correction of anything derived.
+  **Revision**: `garmin_connect_activity_name.py::backfill_garmin_activity_names` (`sync
+  backfill-garmin-activity-names`) writes to this same table's `name` column automatically,
+  using Garmin Connect's own cloud-side `activityName` field (already archived raw as
+  `garmin_connect_json` at ingest, just never parsed out before this) -- live-verified against
+  the athlete's own account that it can be genuinely richer than anything this project derives
+  itself (a FIT file's own on-device name "Running" vs. Garmin's own "Santa Clara - W12 Fri .
+  [Consolidation] Easy" for the same activity). Deliberately narrow, unlike an earlier reverted
+  attempt (see `garmin_activity_summary.py`'s own docstring) that blindly overwrote every
+  activity's name and mass-replaced 396 real custom titles with a generic auto-template: this
+  only ever replaces a name that's still the sport's own generic device default
+  (`_GENERIC_DEFAULT_NAME_BY_SPORT`, mirroring `frontend/src/yearStats.ts::
+  GENERIC_DEFAULT_NAME_BY_SPORT` exactly) -- a real custom title is never touched.
+  `weather_titles.py::strip_leading_emoji` sees past an emoji the weather-title feature may have
+  already prepended, so an activity already touched by that feature doesn't look like it already
+  has a real custom title. A real gap this audit itself found: `training` (yoga/strength_training/
+  breathing) had no generic-default entry at all, so 3 real yoga activities stayed stuck on the
+  bare "Yoga" placeholder while Garmin's own name was genuinely richer ("Foundation Yoga",
+  "Flow") -- `_GENERIC_DEFAULT_NAME_BY_SPORT_SUB_SPORT` adds only the specifically-confirmed
+  `(training, yoga)` case, not strength_training/breathing speculatively.
 - **`activity_source_link`** — links one `activity` to every raw file/record that contributes
   to it. `external_id` is the adapter's idempotency key: for `fit_folder`, derived from the FIT
   file's device serial + start time (falling back to the file's sha256), deliberately never the
@@ -495,6 +514,32 @@ already calls the same `insights.engine.refresh_insights` automatically. The fro
 `InsightsPage` (grouped by kind, filtered to one window at a time — see ADR 0012 decision 4 for
 why `garmin_connect`'s existing daily cadence is what keeps a "last 30 days"-style window
 correct even with zero new activities). See `docs/adr/0012-phase-8-strava-merge-insights.md`.
+
+**Revision: manual, per-field cross-source merge (`activity_merge_override`, `activity_merge.py`)**
+-- for a duplicate `_find_merge_match` failed to catch at ingest time (real, confirmed need: an
+activity recorded by both a Garmin device and synced to Strava, imported independently, that
+never merged -- sometimes because a sport correction landed *after* the other source was already
+imported, since merge-matching only ever runs once at ingest for the incoming candidate;
+sometimes because the two platforms genuinely computed a different value only the athlete can
+resolve). Unlike `_find_merge_match`'s own automatic merge (whichever source ingests first wins
+every field silently), this lets the athlete pick *per field* which side survives --
+`MERGEABLE_SCALAR_FIELDS` (distance/duration/elevation/etc.), `MERGEABLE_METRIC_FIELDS` (avg/max
+HR, training load -- copies the whole `activity_metric` row, value plus its own `source`,
+preserving provenance per field rather than just the number, AGENTS.md principle 4), and
+`MERGEABLE_COLLECTION_FIELDS` (route/laps/splits/stream -- whole-collection swaps only).
+`GET /activities/possible-duplicates` (the Settings page's list-wide scan, ~0.5s over this
+athlete's full ~1,800-activity archive -- a deliberate occasional-visit-only exception to the
+usual never-scan-list-wide rule) and `GET /activities/{id}/merge-preview/{other_id}` (the
+per-field comparison the athlete picks from) both reuse the exact same `find_duplicate_candidates`
+query the single-activity-detail-page banner already uses, so the two entry points can never
+disagree about what counts as a duplicate. `POST /activities/{id}/merge` applies the choice;
+`activity_merge_override` (never wiped by `rebuild.py`) is the durable record, keyed by
+`(source, external_id)` pairs on each side -- not `activity.id` (a fresh ULID every rebuild) and
+not `start_time_utc` alone (two merged activities share it *by definition*, so it alone can't
+tell "kept" from "absorbed" apart once a rebuild re-splits them back into two
+identically-timestamped rows) -- reapplied by `apply_activity_merge_overrides` at the end of every
+rebuild, the same pass `apply_bouldering_route_overrides`/`apply_activity_trim_overrides` already
+run.
 
 ## Activity view/map/export UX pass, Strava data completeness fix
 
@@ -1017,6 +1062,33 @@ Frontend: `boulderingRoutes.ts` turns the flat `SplitOut[]` into one row per rou
 `BoulderingRoutesTable.tsx` renders it as a new "Routes" section on the activity detail page,
 right after Intervals and before Charts -- self-gating (renders nothing) for any activity with
 no climb splits, so no explicit sport check is needed at the page level.
+
+**Revision: manual corrections to route status/grade, and adding a route the device never
+tracked at all (`bouldering_route_status_override`, `bouldering_manual_route`,
+`bouldering_overrides.py`)** -- the reverse-engineered `climb_result`/`climb_grade` decode above
+gets it wrong occasionally (a hard-to-read device screen, a genuinely ambiguous send/attempt),
+and a route climbed after the watch was stopped (or one it never started tracking for) has no
+FIT-derived split at all. Same durable-override shape as `sport_override.py`'s own sport/race/
+name/fueling corrections, for the same reason: `sync rebuild` wipes and re-derives both
+`activity` and `split` from raw bytes on every run, minting a fresh `activity.id` and
+re-deriving every `split` row from scratch, so a bare `UPDATE split SET climb_result = ...`
+would silently vanish on the next rebuild. Keyed by `(athlete_id, activity_start_time_utc,
+split_index)` for a status/grade override -- not `activity.id` (unstable across a rebuild), but
+`start_time_utc` (parsed straight out of the same archived bytes every time) and a FIT-derived
+split's own `split_index` (its position in file order, equally stable) both are. A
+manually-added route has no FIT-derived `split_index` to key off of at all, so it gets its own
+independent `manual_order` sequence instead (assigned once at creation, never changed) --
+`bouldering_manual_route` keeps a synced copy of its own *live* `split_index` (recomputed fresh
+after every rebuild), updated every time its own `split` row is (re-)inserted, so a later
+delete/grade-edit can find that row directly rather than guessing. `apply_bouldering_route_
+overrides` re-applies every correction and re-inserts every manual route at the end of every
+`sync rebuild`, mirroring `apply_sport_overrides` exactly -- only the columns actually recorded
+on a given override row are written, so a grade-only correction never overwrites a
+separately-recorded status back to null and vice versa. `PATCH /activities/{id}/climb-routes/
+{split_index}` (status and/or grade), `POST /activities/{id}/climb-routes` (add a manual route),
+`DELETE /activities/{id}/climb-routes/{split_index}` (remove a manually-added one only -- a
+FIT-derived route is never deletable this way, since the next ingest/rebuild would just
+re-derive it regardless).
 
 ## Backup + restore automation, login lockout, dependency scanning (Phase 9)
 
@@ -1741,6 +1813,91 @@ same "fetch once, aggregate in the browser" precedent.
 - Each plotted dot is a real, keyboard-focusable `<a href="/activities/{id}">` (not hover-only),
   surfacing that run's own name/date/distance/pace/VDOT/duration in an `aria-live` details strip
   and linking straight to the activity.
+
+## Distance goals, per year or month (goal, goals.py)
+
+A target distance for a whole calendar year or month, optionally scoped to one sport (`sport =
+null` means every sport combined). `goal` (`db/schema.py`) has one row per `(athlete_id,
+period_type, period_start)` (`uq_goal_identity`) — `sport` is not part of that identity, so
+setting a new sport on an existing period's goal replaces it rather than creating a second goal
+for the same period. `PUT /goals` upserts on that identity; `GET /goals?period_type=&period_start=`
+returns `{"available": false}` with every other field omitted when nothing is set for that
+period — never a fabricated zero-progress row.
+
+- **Progress is computed fresh on every read**, not cached in a rollup (`goals.py::
+  compute_progress`) — the same "bounded, occasional diagnostic lookup" exception
+  `vo2max_analysis.py`/`pace_hr_zones.py` already establish, and a goal's own period is at most a
+  year (≤366 days) of one athlete's activities, cheap enough to sum fresh every time. Builds a
+  day-by-day cumulative-distance line from `activity.distance_m` (`daily`, one `DailyPoint` per
+  calendar day since the period started, gap-filled to the same running total on a day with no
+  matching activity — so `daily` always has exactly one entry per day, never a gap) plus a
+  straight-line "target as of today" figure: `target_per_day_m = target_distance_m / total_days`,
+  `target_distance_as_of_today_m = target_per_day_m * days_elapsed` — the same "SPI/Strava goal
+  widget" framing the athlete pointed at as a reference. `ahead_behind_m = current_distance_m -
+  target_distance_as_of_today_m`, positive meaning ahead of pace.
+- **Frontend**: `GoalButton.tsx` (rendered next to `MonthView.tsx`/`YearView.tsx`'s own `<h1>`) is
+  deliberately the *only* place `GoalProgressChart.tsx` itself ever renders — never inline on the
+  calendar page — with a summary tile row (current distance, ahead/behind pace) reading the same
+  two API fields (`current_distance_m`, `ahead_behind_m`) the chart's own "today" tooltip point
+  does, so the two can never drift from each other. `GoalForm.tsx` enters the target in the
+  athlete's own Personalize distance unit (km or miles) and converts to metres at submit time
+  (SI-in-storage, the same "convert at the presentation layer" principle every other distance
+  entry in this app follows).
+- **Revision: the chart's tooltip shows the real ahead/behind-goal difference at *any* hovered
+  point, not just today.** The original tooltip just listed each series' own raw value (`Target:
+  X` / `Actual: Y`) with no computed difference — unlike the reference widget, which shows the
+  gap at every point. `actualData` (`GoalProgressChart.tsx`) now precomputes each day's own
+  interpolated target by reusing the identity that index `i` in `progress.daily` already equals
+  `days_elapsed`, the exact quantity `target_distance_as_of_today_m`/`ahead_behind_m` are built
+  from — so this chart's own per-day target can never drift from the summary tile above it, which
+  reads those two fields for today's point specifically. Today's own point additionally gets the
+  reference widget's richer "the N km you ran today puts you M km ahead/behind your goal for
+  today" sentence; a historical point just shows the plain Target/Current/Ahead-or-Behind
+  breakdown. `GoalTooltip` is exported specifically so it can be unit-tested directly with a
+  fabricated payload — driving it through a real Recharts mouse-hover would need a
+  ResizeObserver/layout engine jsdom doesn't provide.
+
+## Gear: shoe mileage tracking and replacement alerts (shoe, athlete_default_shoe, gear.py)
+
+Athlete-owned shoe pairs, tracked for accumulated distance against a configurable replacement
+limit. `shoe`: `brand`/`model` (required), optional `size`/`comments`, `initial_distance_m`
+(mileage already on the pair before it was entered into Perseverer, added to rather than
+replaced by activity-derived mileage), `max_distance_m` (nullable — no limit at all is a real,
+common preference, see the Revision below), `alert_emailed_at` (nullable, set once a
+replacement email has actually sent), `retired_at` (nullable — retiring preserves history rather
+than deleting, this app's own "never destructive" principle). `athlete_default_shoe`: one row
+per `(athlete_id, sport)`, `shoe_id` + `assigned_at`.
+
+- **Mileage is computed live on every read, never a stored counter** (`gear.py::shoe_mileages`):
+  sums `activity.distance_m` for every non-deleted activity whose `shoe_id` explicitly names a
+  pair, plus — for a sport's own dated default — every matching-sport activity with no explicit
+  `shoe_id` whose `start_time_utc` falls on or after that default's own `assigned_at`. Correcting
+  an activity's sport or distance therefore immediately corrects every affected pair's total,
+  with nothing to keep in sync; **assignment time is the ledger boundary**, so a newly-set
+  default never retroactively claims past activities.
+- **Two ways a shoe attaches to an activity, in priority order**: an explicit per-activity choice
+  (`activity.shoe_id`, nullable — `PUT /gear/activities/{id}/shoe`, rejects an activity with no
+  real distance, `422`) takes precedence over the sport's own dated default when both could
+  apply.
+- `PUT /gear/shoes/{id}/retire` clears the pair as anyone's current sport default and excludes it
+  from `GET /gear/shoes`'s normal list (`include_retired=true` to still see it) and from further
+  alerts, but never deletes it — its own historical mileage stays queryable.
+- `GET /gear/alerts` (`over_limit_shoes`) surfaces every non-retired pair whose live mileage
+  (`initial_distance_m` + accrued) has reached its own `max_distance_m`; the frontend banner
+  (`GearAlertBanner.tsx`, rendered globally alongside the top nav, not scoped to one page) shows
+  the first such pair plus a count if more than one. `send_over_limit_alerts` additionally emails
+  once per pair the first time it crosses the limit (setting `alert_emailed_at` only on a
+  successful send) — the banner itself stays live and recomputed fresh regardless of whether an
+  email ever went out, so the athlete keeps seeing it until they actually retire or replace the
+  pair; the emailed flag exists only to stop a daily worker run from becoming a daily inbox
+  reminder. Folded into the existing daily-sync worker job per athlete (`run_daily_sync`) rather
+  than a separate schedule.
+- **Revision: the shoe limit became optional, and retirement was added.** The original
+  `max_distance_m` was `NOT NULL` with no way to retire a pair at all; a follow-up migration
+  (`b7c4d8e9f102`, "make shoe limit optional and support retirement") made the column nullable
+  and added `retired_at` — its own `downgrade()` deliberately leaves retired-pair data intact
+  rather than reverting it, since retiring a pair is persistent user history the schema keeps
+  even if this migration were ever rolled back.
 
 ## Weather: full conditions judgement from one endpoint (weather.py)
 

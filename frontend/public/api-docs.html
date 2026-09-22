@@ -1264,6 +1264,13 @@ const SCHEMAS = [
   { name: "RevokeShareOut", note: "Returned by POST /share/{id}/revoke.", fields: [
       ["revoked","boolean","False (not an error) if the id doesn't exist or isn't owned by the authenticated athlete — never leaks which."],
     ] },
+  { name: "ApiKeyStatusOut", note: "Returned by GET and DELETE /settings/api-key.", fields: [
+      ["enabled","boolean","Whether a self-service API key is currently active."],
+      ["created_at","string(date-time)|null","When the current key was created/rotated — null when none is active."],
+    ] },
+  { name: "ApiKeyOut", note: "Returned by POST /settings/api-key.", fields: [
+      ["api_key","string","The raw key. Only ever returned here — only its SHA-256 hash is stored, and it cannot be recovered later."],
+    ] },
   { name: "CalendarFeedStatusOut", note: "Returned by GET and DELETE /settings/calendar-feed.", fields: [
       ["enabled","boolean","Whether a calendar feed is currently published."],
       ["created_at","string(date-time)|null","When the current token was created/rotated — null when not published."],
@@ -1519,7 +1526,7 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "GET", path: "/api/v1/activities/{activity_id}/insights", summary: "Point-in-time insights for one activity.",
-      description: "e.g. \"your fastest 10 km to date.\" Computed fresh at request time (unlike GET /insights, which reads a precomputed table), and always bounded to activities at or before this one's own local_date — viewing an old activity never leaks knowledge of activities that hadn't happened yet.",
+      description: "Computed fresh at request time (unlike GET /insights, which reads a precomputed table). Running activities can return pace and distance records; bouldering activities can return route-count, attempted/completed V-grade, active climb-time, and high/low average and peak-heart-rate records. Every claim uses the last 30 days, last 90 days, calendar year, or all history, and only compares activities no later than the displayed activity (including its timestamp when two activities share a date).",
       params: [ ["activity_id","path","req","string","—",""] ],
       responses: [ { code: 200, ref: "array&lt;InsightOut&gt;" }, { code: 404, note: "" } ],
       example: {}
@@ -2060,6 +2067,20 @@ const GROUPS = [
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID}/push \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
+    { method: "POST", path: "/api/v1/planned-workouts/{workout_id}/complete", summary: "Mark a workout as done (the athlete's own manual marker).",
+      description: "Entirely independent of push_status — works for a workout that was never pushed, or failed to push, at all. Never linked to a recorded activity row here; see PlannedWorkoutOut.matched_activity_id for the separate, read-time-only signal a synced Garmin activity provides instead. Idempotent — calling it again just refreshes completed_at to now.",
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."] ],
+      responses: [ { code: 200, ref: "PlannedWorkoutOut", note: "completed_at now set." }, { code: 404, note: 'detail: "planned workout not found"' } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID}/complete \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/planned-workouts/{workout_id}/uncomplete", summary: "Clear the manual \"done\" marker.",
+      description: "Never clears matched_activity_id — a day the watch already confirms as done via a synced activity still reads as done on GET /planned-workouts right after this call; the two signals are deliberately independent (db/schema.py::planned_workout).",
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."] ],
+      responses: [ { code: 200, ref: "PlannedWorkoutOut", note: "completed_at now null." }, { code: 404, note: 'detail: "planned workout not found"' } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID}/uncomplete \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
     { method: "POST", path: "/api/v1/planned-workouts/recurring", summary: "Schedule the same workout on a repeating set of dates.",
       description: "Creates one independent planned_workout row per occurrence date — not a recurring-rule object; each row can be edited or deleted independently afterward. Always creates, even on a date that already has a workout scheduled — a day can hold more than one.",
       body: { schema: "RecurringWorkoutIn", fields: [
@@ -2247,6 +2268,24 @@ const GROUPS = [
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/password \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"current_password": "old", "new_password": "a-new-longer-password"}'` }
+    },
+    { method: "GET", path: "/api/v1/settings/api-key", summary: "Whether the athlete has a self-service API key active.",
+      description: "The self-service counterpart of `sync athlete create-key` -- one standing secret (athlete.api_key_hash), same shape as the calendar feed, not a growing list of one-off keys. Never returns the key itself.",
+      responses: [ { code: 200, ref: "ApiKeyStatusOut" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/settings/api-key \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/settings/api-key", summary: "Generate (or rotate) the athlete's API key.",
+      description: "Always mints a fresh key, whether this is the first generation or a rotation -- the old key's hash is overwritten, not appended to a list, so any client still using it starts getting 401s immediately.",
+      responses: [ { code: 200, ref: "ApiKeyOut" } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/api-key \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "DELETE", path: "/api/v1/settings/api-key", summary: "Revoke the athlete's API key.",
+      description: "Any client using it starts getting 401s immediately.",
+      responses: [ { code: 200, ref: "ApiKeyStatusOut" } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/settings/api-key \\
+  -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "GET", path: "/api/v1/settings/eufy/status", summary: "Whether the athlete has a Eufy scale account connected.",
       description: "Never carries the password -- only the configured email, so the athlete can confirm which account is linked.",
