@@ -11,7 +11,7 @@ import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricChip } from "../components/StatTile";
 import { isoDate } from "../dateUtils";
 import { valueForDate } from "../healthStats";
-import { healthMetricStyle } from "../metricStyle";
+import { healthMetricStyle, KNOWN_SPORTS } from "../metricStyle";
 import { groupByLocalDate } from "../yearStats";
 import "../styles/activity-list.css";
 
@@ -45,7 +45,10 @@ export function ActivityListPage() {
       .filter((r) => r.simplified_polyline != null)
       .map((r) => [r.id, r.simplified_polyline!]),
   );
-  const sortedDates = groups.map((g) => g.localDate).slice().sort();
+  const sortedDates = groups
+    .map((g) => g.localDate)
+    .slice()
+    .sort();
   const today = isoDate(new Date());
   const rangeStart = sortedDates[0] ?? today;
   const rangeEnd = sortedDates[sortedDates.length - 1] ?? today;
@@ -64,16 +67,21 @@ export function ActivityListPage() {
       <form className="activity-filter">
         <label className="field">
           Sport
-          <input
+          <select
             className="input"
-            type="text"
             value={sport}
             onChange={(e) => {
               setSport(e.target.value);
               setOffset(0);
             }}
-            placeholder="e.g. running"
-          />
+          >
+            <option value="">All sports</option>
+            {KNOWN_SPORTS.map((s) => (
+              <option key={s} value={s}>
+                {s.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
         </label>
       </form>
 

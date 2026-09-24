@@ -144,7 +144,18 @@ environment:
 - **Activity list, with a per-day wellness strip (`ActivityListPage.tsx`, Phase 6.1 Milestone B)**:
   activities grouped by `local_date`, each day getting a slim strip (sleep, resting HR, steps)
   above that day's `ActivityCard`s — reuses `GET /health/dashboard`/`GET /sleep` (already fetched
-  for the Health page), no new endpoint.
+  for the Health page), no new endpoint. **Revision: the sport filter is a `<select>` over
+  `metricStyle.ts::KNOWN_SPORTS`, not free text** — the original filter took a raw string, giving
+  no clue which value actually matches (`GET /activities?sport=` is an exact match, so a typo or
+  the wrong casing silently returns nothing rather than erroring). `KNOWN_SPORTS` is the same
+  fixed 14-sport catalog `ActivitySportCorrection.tsx`'s own picker already uses, not sports
+  derived from the athlete's real activity history the way `MapExplorerPage.tsx`'s sport dropdown
+  is — that page already holds its *entire* unpaginated activity history in memory for its own
+  map-rendering needs, but this page's list is server-paginated (`useActivities`'s own
+  `limit`/`offset`), and `useAllActivities`'s own docstring already warns against paging through
+  the whole archive just to read one field off each row (a real, previously-hit performance
+  problem, not a hypothetical one) — a closed, fixed catalog is the honest option here, not a
+  hardcoded stand-in for real data that's simply too expensive to fetch for this purpose.
 - **Weekly/monthly rollups + Fitness & Form (Phase 6)**: `period_rollup`/
   `health_metric_period_rollup` are a rollup OF `day_rollup`/`health_metric_daily_rollup`
   (sum-of-sums, weighted averages), not of raw tables — `period_type` (`"week"`|`"month"`)
