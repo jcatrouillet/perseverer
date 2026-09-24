@@ -907,7 +907,11 @@ cannot be selected as a default, and no longer create mileage alerts. Add
 
 ### `GET /gear/activities/{activity_id}/shoe`
 
-Returns `{ "shoe_id": string | null }`, the pair explicitly selected for this activity.
+Returns `{ "shoe_id": string | null, "is_default": boolean }` — the pair that actually applies to
+this activity, resolved the same way mileage totals are: this activity's own explicit choice if
+one was made, otherwise the athlete's dated sport default when the activity falls on or after
+that default's own assignment date. `is_default` is `true` when `shoe_id` came from that
+fallback rather than an explicit per-activity pick; `shoe_id` is `null` only when neither applies.
 
 ### `PUT /gear/activities/{activity_id}/shoe`
 
@@ -915,7 +919,8 @@ Sets, replaces, or clears the pair for one distance-bearing activity. Request bo
 `{ "shoe_id": string | null }`. The shoe must belong to the authenticated athlete; use `null`
 to remove the explicit choice and resume the dated sport-default fallback. Mileage is derived from
 the current assignment, so replacing a pair removes that activity's distance from the old pair
-and adds it to the replacement.
+and adds it to the replacement. Returns the same resolved shape as the `GET` above (clearing an
+explicit choice with `null` immediately resolves back to the sport default, if one applies).
 
 ### `GET /gear/alerts`
 

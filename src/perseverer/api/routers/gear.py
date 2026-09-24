@@ -19,7 +19,7 @@ from perseverer.api.schemas.gear import (
     ShoeOut,
 )
 from perseverer.db.schema import activity, athlete_default_shoe, shoe
-from perseverer.gear import over_limit_shoes, shoe_mileages
+from perseverer.gear import over_limit_shoes, resolve_activity_shoe, shoe_mileages
 
 router = APIRouter()
 
@@ -183,7 +183,7 @@ def get_activity_shoe(
     conn: Connection = Depends(get_conn),
 ) -> ActivityShoeOut:
     row = conn.execute(
-        select(activity.c.shoe_id).where(
+        select(activity.c.shoe_id, activity.c.sport, activity.c.start_time_utc).where(
             activity.c.id == activity_id,
             activity.c.athlete_id == athlete_id,
             activity.c.deleted_at.is_(None),
@@ -191,7 +191,10 @@ def get_activity_shoe(
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="Activity not found")
-    return ActivityShoeOut(shoe_id=row.shoe_id)
+    shoe_id, is_default = resolve_activity_shoe(
+        conn, athlete_id, row.sport, row.start_time_utc, row.shoe_id
+    )
+    return ActivityShoeOut(shoe_id=shoe_id, is_default=is_default)
 
 
 @router.put("/gear/activities/{activity_id}/shoe", response_model=ActivityShoeOut)
@@ -202,7 +205,7 @@ def set_activity_shoe(
     conn: Connection = Depends(get_conn),
 ) -> ActivityShoeOut:
     target = conn.execute(
-        select(activity.c.distance_m).where(
+        select(activity.c.distance_m, activity.c.sport, activity.c.start_time_utc).where(
             activity.c.id == activity_id,
             activity.c.athlete_id == athlete_id,
             activity.c.deleted_at.is_(None),
@@ -232,4 +235,10 @@ def set_activity_shoe(
         .values(shoe_id=payload.shoe_id, updated_at=datetime.now(UTC).replace(tzinfo=None))
     )
     conn.commit()
-    return ActivityShoeOut(shoe_id=payload.shoe_id)
+    # Clearing an explicit choice (payload.shoe_id is None) falls back to whatever the sport
+    # default resolves to, same as a never-set activity -- the athlete shouldn't have to reload
+    # the page to see the default reapply.
+    shoe_id, is_default = resolve_activity_shoe(
+        conn, athlete_id, target.sport, target.start_time_utc, payload.shoe_id
+    )
+    return ActivityShoeOut(shoe_id=shoe_id, is_default=is_default)

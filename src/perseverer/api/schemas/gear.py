@@ -36,6 +36,11 @@ class ActivityShoeIn(BaseModel):
 
 class ActivityShoeOut(BaseModel):
     shoe_id: str | None
+    # True when `shoe_id` came from the athlete's dated sport default, not an explicit per-activity
+    # choice -- see gear.py::resolve_activity_shoe. Lets a consumer distinguish "this activity was
+    # never assigned a shoe of its own" from "it was, it's just the same one the default already
+    # points at" without a second lookup.
+    is_default: bool
 
 
 class GearAlertOut(BaseModel):

@@ -1898,6 +1898,16 @@ per `(athlete_id, sport)`, `shoe_id` + `assigned_at`.
   and added `retired_at` — its own `downgrade()` deliberately leaves retired-pair data intact
   rather than reverting it, since retiring a pair is persistent user history the schema keeps
   even if this migration were ever rolled back.
+- **Revision: `GET`/`PUT /gear/activities/{id}/shoe` resolve the effective shoe, not the raw
+  column.** Both previously returned `activity.shoe_id` verbatim (`null` for anything never
+  explicitly assigned), so a freshly-imported activity already covered by a sport default for
+  mileage purposes showed no shoe at all on its own detail page. `gear.py::resolve_activity_shoe`
+  applies the identical ledger-boundary check `shoe_mileages` already does in aggregate —
+  explicit choice first, else the sport default if `assigned_at <= activity.start_time_utc` — to
+  one activity at a time, and both endpoints now return that resolved value plus a new
+  `is_default` boolean (`true` when it came from the fallback, for provenance) instead of the bare
+  column. `PUT ... {"shoe_id": null}` (clearing an explicit choice) resolves and returns the
+  now-applicable default in the same response, rather than a bare `null`.
 
 ## Weather: full conditions judgement from one endpoint (weather.py)
 

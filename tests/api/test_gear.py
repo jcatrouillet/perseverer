@@ -1,9 +1,11 @@
+import datetime as dt
 from typing import cast
 
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, func, select
 
 from perseverer.db.schema import athlete_default_shoe
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from tests.api.conftest import seed_activity
 
 
@@ -93,10 +95,92 @@ def test_replacing_an_activity_pair_recalculates_both_shoe_mileages(
         json={"shoe_id": second_shoe["id"]},
     )
     assert replaced.status_code == 200
-    assert replaced.json() == {"shoe_id": second_shoe["id"]}
+    assert replaced.json() == {"shoe_id": second_shoe["id"], "is_default": False}
 
     pairs = client.get("/api/v1/gear/shoes", headers=auth_headers)
     assert pairs.status_code == 200
     mileage_by_id = {pair["id"]: pair["distance_km"] for pair in pairs.json()}
     assert mileage_by_id[first_shoe["id"]] == 24.7
     assert mileage_by_id[second_shoe["id"]] == 29.7
+
+
+def _seed_default(
+    engine: Engine, *, sport: str, shoe_id: str, assigned_at: dt.datetime
+) -> None:
+    """Inserts an `athlete_default_shoe` row with an explicit `assigned_at`, rather than going
+    through `PUT /gear/defaults/{sport}` (which always stamps the real wall-clock "now" -- later
+    than `seed_activity`'s fixed 2025-06-01 test date, the wrong direction for a test that needs
+    to place the default's own assignment date *before* the activity it should cover)."""
+    with engine.connect() as conn:
+        conn.execute(
+            athlete_default_shoe.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                sport=sport,
+                shoe_id=shoe_id,
+                assigned_at=assigned_at,
+            )
+        )
+        conn.commit()
+
+
+def test_activity_shoe_resolves_the_sport_default_when_none_explicit(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """A freshly-imported activity has no explicit `shoe_id` of its own -- the shoe endpoint
+    should still resolve to the athlete's own dated sport default, matching what the mileage
+    totals already attribute to it, rather than leaving the athlete to discover that only on the
+    Gear page."""
+    shoe = _create_shoe(client, auth_headers)
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="run-1", distance_m=5000)  # start_time_utc 2025-06-01
+    _seed_default(
+        engine, sport="running", shoe_id=cast(str, shoe["id"]), assigned_at=dt.datetime(2025, 1, 1)
+    )
+
+    resolved = client.get("/api/v1/gear/activities/run-1/shoe", headers=auth_headers)
+    assert resolved.status_code == 200
+    assert resolved.json() == {"shoe_id": shoe["id"], "is_default": True}
+
+
+def test_activity_shoe_ignores_a_default_assigned_after_the_activity(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """Assignment time is the ledger boundary (gear.py's own docstring): a default set after an
+    activity happened must never reach back and claim it, for display any more than for
+    mileage."""
+    shoe = _create_shoe(client, auth_headers)
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="run-1", distance_m=5000)  # start_time_utc 2025-06-01
+    _seed_default(
+        engine, sport="running", shoe_id=cast(str, shoe["id"]), assigned_at=dt.datetime(2025, 6, 2)
+    )
+
+    resolved = client.get("/api/v1/gear/activities/run-1/shoe", headers=auth_headers)
+    assert resolved.status_code == 200
+    assert resolved.json() == {"shoe_id": None, "is_default": False}
+
+
+def test_clearing_an_explicit_choice_falls_back_to_the_resolved_default(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    default_shoe = _create_shoe(client, auth_headers)
+    override_shoe = _create_shoe(client, auth_headers)
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="run-1", distance_m=5000)  # start_time_utc 2025-06-01
+    _seed_default(
+        engine,
+        sport="running",
+        shoe_id=cast(str, default_shoe["id"]),
+        assigned_at=dt.datetime(2025, 1, 1),
+    )
+    client.put(
+        "/api/v1/gear/activities/run-1/shoe",
+        headers=auth_headers,
+        json={"shoe_id": override_shoe["id"]},
+    )
+
+    cleared = client.put(
+        "/api/v1/gear/activities/run-1/shoe", headers=auth_headers, json={"shoe_id": None}
+    )
+    assert cleared.status_code == 200
+    assert cleared.json() == {"shoe_id": default_shoe["id"], "is_default": True}

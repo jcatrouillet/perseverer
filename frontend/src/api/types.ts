@@ -1214,4 +1214,7 @@ export interface GearAlertOut {
 
 export interface ActivityShoeOut {
   shoe_id: string | null;
+  // True when shoe_id came from the athlete's dated sport default, not an explicit per-activity
+  // choice -- see gear.py::resolve_activity_shoe.
+  is_default: boolean;
 }

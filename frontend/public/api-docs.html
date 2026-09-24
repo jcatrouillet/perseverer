@@ -1879,11 +1879,13 @@ const GROUPS = [
     { method: "PUT", path: "/api/v1/gear/shoes/{shoe_id}/retire", summary: "Retire a pair while preserving its history.",
       description: "Retirement removes the pair from sport defaults and stops limit alerts. It remains available through include_retired=true.", responses: [ { code: 200, note: "The retired shoe record." } ], example: {}
     },
-    { method: "GET", path: "/api/v1/gear/activities/{activity_id}/shoe", summary: "Read the pair explicitly assigned to an activity.", responses: [ { code: 200, note: "shoe_id is a string or null." } ], example: {}
+    { method: "GET", path: "/api/v1/gear/activities/{activity_id}/shoe", summary: "Read the pair that applies to an activity.",
+      description: "Resolves the same way mileage totals do: this activity's own explicit choice if set, otherwise the athlete's dated sport default when the activity falls on or after that default's own assignment date.",
+      responses: [ { code: 200, note: "shoe_id is a string or null; is_default is true when it came from the sport default rather than an explicit choice." } ], example: {}
     },
     { method: "PUT", path: "/api/v1/gear/activities/{activity_id}/shoe", summary: "Set, replace, or clear the pair for a distance activity.",
-      description: "Mileage is derived from the current assignment. Replacing a pair moves the activity distance from the old pair to the replacement.",
-      body: { fields: [["shoe_id","string|null","req","","Null clears the explicit choice."]] }, responses: [ { code: 200, note: "The saved shoe_id." } ], example: {}
+      description: "Mileage is derived from the current assignment. Replacing a pair moves the activity distance from the old pair to the replacement. Clearing with null immediately resolves back to the sport default, if one applies.",
+      body: { fields: [["shoe_id","string|null","req","","Null clears the explicit choice."]] }, responses: [ { code: 200, note: "The resolved shoe_id/is_default, same shape as the GET above." } ], example: {}
     },
     { method: "GET", path: "/api/v1/gear/alerts", summary: "List active pairs that reached their mileage limit.", responses: [ { code: 200, note: "An array of over-limit shoe alerts." } ], example: {}
     },

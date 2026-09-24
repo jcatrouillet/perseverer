@@ -308,6 +308,24 @@ environment:
   limit at all is a real, common preference) and added `retired_at`, deliberately never
   backdating a downgrade — retiring a pair is persistent user history the schema keeps even if
   this migration were ever rolled back.
+  **Revision: the activity-detail shoe picker resolves and shows the sport default, not a blank
+  "Add" prompt** — reported directly: a freshly-imported run already counted toward the default
+  pair's mileage total on the Gear page, but `GET /gear/activities/{id}/shoe` only ever returned
+  the raw `activity.shoe_id` column (`null` for anything never explicitly assigned), so the same
+  activity's own picker showed a bare "Shoes · Add" as if nothing applied at all. `gear.py::
+  resolve_activity_shoe` centralizes the resolution both the `GET` and `PUT` endpoints now share:
+  an activity's own explicit choice if set, else the athlete's dated sport default when the
+  activity falls on or after that default's own `assigned_at` — the identical ledger-boundary
+  check `shoe_mileages` already enforces in aggregate, just resolved for one activity instead of
+  summed across all of them. `ActivityShoeOut` gains `is_default` (`true` when `shoe_id` came from
+  the fallback rather than an explicit pick) for provenance, though the picker itself shows the
+  resolved shoe's real name either way, per the athlete's own ask — never the word "default" as a
+  placeholder — and stays just as overridable: opening the picker pre-selects whatever's currently
+  resolved (the default's own pair, if that's what's showing), and picking a different one (or
+  explicitly clearing back to `null`) always saves as a real per-activity choice, exactly as
+  before. Clearing an explicit choice via `PUT ... {"shoe_id": null}` now also returns the
+  newly-resolved default (if one applies) in the same response, rather than a bare `null`, so the
+  UI reflects the fallback immediately without a second round-trip.
 - **Performance Curve — best sustained pace/GAP/heart rate across a whole date range
   (`performance_curve.py`, an Insights tab)**: a Runalyze-style "Heart Rate Curve"/cycling
   "Critical Power Curve" — for a chosen metric and date range, the single best D-second window

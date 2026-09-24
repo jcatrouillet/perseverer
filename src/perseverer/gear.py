@@ -76,6 +76,33 @@ def shoe_mileages(conn: Connection, athlete_id: str) -> dict[str, ShoeMileage]:
     return by_shoe
 
 
+def resolve_activity_shoe(
+    conn: Connection,
+    athlete_id: str,
+    sport: str,
+    start_time_utc: datetime,
+    explicit_shoe_id: str | None,
+) -> tuple[str | None, bool]:
+    """The shoe that actually applies to one activity: its own explicit choice if set, else the
+    athlete's dated sport default when the activity falls on or after that default's own
+    `assigned_at` -- the same ledger boundary `shoe_mileages` already enforces in aggregate,
+    resolved here for a single activity instead of summed across all of them. Returns
+    `(shoe_id, is_default)` so a caller (the activity-detail page's own shoe picker) can show the
+    resolved shoe either way -- an athlete shouldn't have to open the picker to discover a default
+    is already covering an activity -- while still knowing whether saving as-is would merely
+    confirm the existing default or actually write a new explicit choice."""
+    if explicit_shoe_id is not None:
+        return explicit_shoe_id, False
+    row = conn.execute(
+        select(athlete_default_shoe.c.shoe_id).where(
+            athlete_default_shoe.c.athlete_id == athlete_id,
+            athlete_default_shoe.c.sport == sport,
+            athlete_default_shoe.c.assigned_at <= start_time_utc,
+        )
+    ).fetchone()
+    return (row.shoe_id, True) if row is not None else (None, False)
+
+
 def default_shoes(conn: Connection, athlete_id: str) -> dict[str, str]:
     return {
         str(row.sport): str(row.shoe_id)
