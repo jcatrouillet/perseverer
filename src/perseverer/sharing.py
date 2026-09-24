@@ -579,7 +579,12 @@ def _svg_series_chart(
     labeled with `unit`, and the whole thing is wrapped for the shared hover script
     (`_CHART_HOVER_SCRIPT`) to read a value + elapsed time off any point via mouse/touch --
     `values`/`elapsed_s` are embedded verbatim as a sibling JSON blob for that script to read,
-    not recomputed from the SVG's own drawn geometry."""
+    not recomputed from the SVG's own drawn geometry.
+
+    `pace_format` also flips the y-axis: pace is min/km, where a *lower* number is the *faster*
+    effort, so a plain ascending axis (every other channel here) would put slow at the top and
+    fast at the bottom -- backwards from how every other channel reads and from Garmin Connect's
+    own pace chart. Mirrors `ActivityCharts.tsx`'s own `reversed={panel.unit === "/km"}`."""
     n = len(values)
     pts = [(i, v) for i, v in enumerate(values) if v is not None]
     if len(pts) < 2 or n < 2:
@@ -593,7 +598,10 @@ def _svg_series_chart(
         return pad + i / (n - 1) * (width - 2 * pad)
 
     def y_at(v: float) -> float:
-        return height - pad - (v - lo) / span * (height - 2 * pad)
+        frac = (v - lo) / span
+        if pace_format:
+            frac = 1 - frac
+        return height - pad - frac * (height - 2 * pad)
 
     def _fmt(v: float) -> str:
         return _format_axis_pace(v) if pace_format else _format_axis_number(v, decimals=decimals)
@@ -609,11 +617,12 @@ def _svg_series_chart(
             f'{floor_x1:.1f},{height - pad}" fill="{color}" fill-opacity="0.15" stroke="none"/>'
         )
     aria = f' aria-label="{escape(label)}"' if label else ""
+    top_label, bottom_label = (lo, hi) if pace_format else (hi, lo)
     axis_labels = (
         f'<text x="{width - pad}" y="{pad + 8}" font-size="9" text-anchor="end" '
-        f'class="chart-axis-label">{escape(fmt(hi))}{escape(unit)}</text>'
+        f'class="chart-axis-label">{escape(fmt(top_label))}{escape(unit)}</text>'
         f'<text x="{width - pad}" y="{height - pad - 2}" font-size="9" text-anchor="end" '
-        f'class="chart-axis-label">{escape(fmt(lo))}{escape(unit)}</text>'
+        f'class="chart-axis-label">{escape(fmt(bottom_label))}{escape(unit)}</text>'
     )
     svg = (
         f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" '

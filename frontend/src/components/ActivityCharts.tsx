@@ -479,6 +479,13 @@ export function ActivityCharts({
                       fontSize={11}
                       width={40}
                       domain={["auto", "auto"]}
+                      // Pace/GAP are min/km, where a *lower* number is the *faster* effort -- a
+                      // plain ascending axis would put slow at the top and fast at the bottom,
+                      // backwards from how every other panel here reads (higher = more/better) and
+                      // from Garmin Connect's own pace chart. Reversed so faster sits up top,
+                      // matching the workout-target overlay's own pre-existing assumption just
+                      // below (`domainMin`, the fastest recorded pace, as "the top edge").
+                      reversed={panel.unit === "/km"}
                     />
                     {lapBands
                       .filter((b) => b.shaded)

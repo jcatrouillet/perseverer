@@ -1065,6 +1065,23 @@ environment:
   those. The chart overlay additionally merges consecutive laps aligned to the same step back into
   one band spanning all of them, rather than drawing a separate (and now-misaligned) band per raw
   lap.
+  **Revision: the Pace and GAP panels' Y-axis is reversed, faster on top** — reported directly:
+  the per-second Pace/GAP charts plotted a plain ascending axis (the default for every other
+  panel here — higher HR/cadence/power at the top reads naturally), but pace/GAP are min/km,
+  where a *lower* number is the *faster* effort, so the un-reversed axis put the slowest pace at
+  the top and the fastest at the bottom — backwards from how a runner reads a pace chart, and from
+  Garmin Connect's own convention. `ActivityCharts.tsx`'s Y-axis gets `reversed={panel.unit ===
+  "/km"}` (true for exactly the Pace and GAP panels, both denominated in min/km — every other
+  panel's own unit is untouched) — this also makes the pre-existing `workoutBands` target overlay
+  (the grey step-fill shading "at or faster than the prescribed pace") finally match its own
+  long-standing code comment, which had always described `domainMin` (the fastest recorded pace)
+  as sitting at "the top edge" even though nothing had actually reversed the axis to make that
+  true until now. The public share page's own hand-rolled SVG pace chart
+  (`sharing.py::_svg_series_chart`, `pace_format=True`) had the identical un-reversed default and
+  got the identical fix (`y_at`'s own fraction inverted, and the two axis min/max labels swapped
+  to match) — this page exists specifically to mirror the authenticated app's own activity-detail
+  charts, so leaving its pace chart's own orientation stale would have reintroduced the same bug
+  on the one surface this project explicitly built to avoid a second, drifting implementation.
 - **Exercise library page (`/exercises`, `ExerciseLibraryPage.tsx`)**: a browsable reference for
   every exercise the hiit/strength_training picker's catalog supports — 47 categories collapsed
   by default (native `<details>`, same convention as `ActivitySourcesPanel.tsx`'s own "Why these
