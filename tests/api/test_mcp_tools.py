@@ -18,8 +18,20 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
 from perseverer.api.mcp_server import (
+    complete_planned_workout,
+    create_blood_test_panel,
+    create_blood_test_result,
     create_note,
+    create_planned_race,
+    create_planned_workout,
+    create_recurring_planned_workout,
+    create_shoe,
+    delete_blood_test_panel,
+    delete_blood_test_result,
+    delete_goal,
     delete_note,
+    delete_planned_race,
+    delete_planned_workout,
     get_activity,
     get_activity_climb_comparisons,
     get_activity_comparisons,
@@ -57,7 +69,20 @@ from perseverer.api.mcp_server import (
     list_planned_workouts,
     list_shoes,
     list_sleep,
+    push_planned_workout,
+    retire_shoe,
+    set_activity_fueling,
+    set_activity_name,
+    set_activity_race,
+    set_activity_shoe,
+    set_activity_sport,
+    set_default_shoe,
+    set_goal,
+    uncomplete_planned_workout,
+    update_blood_test_result,
     update_note,
+    update_planned_race,
+    update_planned_workout,
 )
 from perseverer.config import get_settings
 from perseverer.db.schema import (
@@ -468,3 +493,137 @@ async def test_list_planned_races_empty(client: TestClient) -> None:
 async def test_list_shoes_and_gear_alerts_empty(client: TestClient) -> None:
     assert await list_shoes() == []
     assert await get_gear_alerts() == []
+
+
+async def test_training_plan_round_trip_create_update_complete_delete(
+    client: TestClient,
+) -> None:
+    created = await create_planned_workout(
+        local_date="2026-10-05",
+        sport="running",
+        name="Tempo",
+        source_text="Warmup 10m\n\n3x\n  5m 4:30-4:45/km Pace\n  recovery 2m\n\nCooldown 10m",
+        scheduled_time="18:30",
+    )
+    assert created["parse_errors"] == []
+    assert created["push_status"] == "draft"
+    workout_id = created["id"]
+
+    listed = await list_planned_workouts(start_date="2026-10-01", end_date="2026-10-31")
+    assert [w["id"] for w in listed] == [workout_id]
+
+    updated = await update_planned_workout(
+        workout_id, sport="running", name="Easy", source_text="Active 30m"
+    )
+    assert updated["name"] == "Easy"
+
+    done = await complete_planned_workout(workout_id)
+    assert done["completed_at"] is not None
+    assert (await uncomplete_planned_workout(workout_id))["completed_at"] is None
+
+    await delete_planned_workout(workout_id)
+    assert await get_planned_workouts_for_date("2026-10-05") == []
+
+
+async def test_create_planned_workout_reports_parse_errors_instead_of_rejecting(
+    client: TestClient,
+) -> None:
+    created = await create_planned_workout(
+        local_date="2026-10-05", sport="running", source_text="10m nonsense-token"
+    )
+    assert created["parse_errors"]
+
+
+async def test_create_strength_workout_from_structured_steps(client: TestClient) -> None:
+    created = await create_planned_workout(
+        local_date="2026-10-06",
+        sport="strength_training",
+        name="Upper",
+        steps=[
+            {
+                "step_index": 0,
+                "duration_type": "reps",
+                "duration_reps": 10,
+                "intensity": "active",
+                "exercise_category": "BENCH_PRESS",
+                "exercise_name": "",
+                "weight_kg": 40,
+            }
+        ],
+    )
+    assert created["steps"][0]["exercise_category"] == "BENCH_PRESS"
+
+
+async def test_create_recurring_planned_workout_weekly(client: TestClient) -> None:
+    result = await create_recurring_planned_workout(
+        local_date="2026-10-05",
+        sport="yoga",
+        frequency="weekly",
+        name="Flow",
+        duration_minutes=45,
+        count=3,
+    )
+    assert result["created_dates"] == ["2026-10-05", "2026-10-12", "2026-10-19"]
+
+
+async def test_push_planned_workout_404_for_unknown_workout(client: TestClient) -> None:
+    with pytest.raises(httpx.HTTPStatusError, match="404"):
+        await push_planned_workout(99999)
+
+
+async def test_planned_race_crud(client: TestClient) -> None:
+    race = await create_planned_race(
+        local_date="2026-12-06", name="CIM", distance_m=42195, target_duration_s=14400
+    )
+    updated = await update_planned_race(
+        race["id"], local_date="2026-12-06", name="CIM 2026", distance_m=42195
+    )
+    assert updated["name"] == "CIM 2026"
+    assert len(await list_planned_races(start_date="2026-12-01", end_date="2026-12-31")) == 1
+    await delete_planned_race(race["id"])
+    assert await list_planned_races(start_date="2026-12-01", end_date="2026-12-31") == []
+
+
+async def test_set_and_delete_goal(client: TestClient) -> None:
+    goal = await set_goal("year", "2026", 2_000_000, sport="running")
+    assert goal["target_distance_m"] == 2_000_000
+    assert (await get_goal_progress("year", "2026"))["available"] is True
+    await delete_goal(goal["id"])
+    assert (await get_goal_progress("year", "2026"))["available"] is False
+
+
+async def test_blood_test_write_tools(client: TestClient) -> None:
+    single = await create_blood_test_result("2026-09-01", "HbA1c", 5.2, unit="%")
+    panel = await create_blood_test_panel(
+        "2026-09-02", [{"marker": "LDL", "value_num": 90, "unit": "mg/dL"}], lab_name="Quest"
+    )
+    assert len(panel) == 1
+    updated = await update_blood_test_result(
+        single["id"], "2026-09-01", "HbA1c", 5.4, unit="%"
+    )
+    assert updated["value_num"] == 5.4
+    await delete_blood_test_result(single["id"])
+    await delete_blood_test_panel("2026-09-02")
+    assert await list_blood_tests("2026-09-01", "2026-09-30") == []
+
+
+async def test_gear_write_tools(client: TestClient, engine: Engine) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    shoe = await create_shoe("Brooks", "Ghost", max_distance_km=None)
+    assigned = await set_activity_shoe("a1", shoe["id"])
+    assert assigned == {"shoe_id": shoe["id"], "is_default": False}
+    default = await set_default_shoe("running", shoe["id"])
+    assert default["default_sports"] == ["running"]
+    retired = await retire_shoe(shoe["id"])
+    assert retired["retired"] is True
+
+
+async def test_activity_correction_tools(client: TestClient, engine: Engine) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+    assert (await set_activity_sport("a1", "hiking"))["sport"] == "hiking"
+    assert (await set_activity_race("a1", True))["is_race"] is True
+    assert (await set_activity_name("a1", "Big day"))["name"] == "Big day"
+    fueling = await set_activity_fueling("a1", carbohydrates_g=60, sodium_mg=500)
+    assert fueling["carbohydrates_g"] == 60

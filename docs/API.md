@@ -1817,12 +1817,14 @@ Most read endpoints above, plus the full Notes CRUD (`create_note`/`list_notes`/
 `delete_note`), are also exposed as MCP (Model Context Protocol) tools for AI agents, mounted at
 `/mcp` on the same host and gated by the same `X-API-Key` credential described in Authentication.
 Each tool is a thin wrapper that calls its REST counterpart in-process — the shapes documented
-above apply there too. Deliberately not exposed: every `settings/*` endpoint (credentials and
-operational actions), `auth/login`, the public `share`/`calendar` feed pages, and every mutating
-endpoint outside notes — activity corrections, trim/merge, gear defaults/retirement, blood-test
-entry, goal writes, and planned-workout/planned-race writes (a push there can reach the athlete's
-actual Garmin device) all stay human-initiated only. See `docs/adr/0007-phase-4-mcp-server.md`
-decision 8 for the full reasoning.
+above apply there too. Write tools are also exposed: planned workouts (create/update/delete/
+complete/uncomplete/push/recurring — the create tools' descriptions carry the full running
+workout syntax, so an agent can author a training plan; a saved workout is a draft until the
+daily job or `push_planned_workout` sends it to the athlete's Garmin), planned races, goals, blood
+tests, gear, and per-activity sport/race/name/fueling corrections. Deliberately not exposed: every
+`settings/*` endpoint (credentials and operational actions), `auth/login`, the public
+`share`/`calendar` feed pages, and trim/merge/split/climb-route edits. See
+`docs/adr/0007-phase-4-mcp-server.md` decisions 8-9.
 
 ---
 

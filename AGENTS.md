@@ -115,18 +115,29 @@ environment:
   deliberately bounded to **read-only informational tools, plus completing the Notes CRUD**
   (`update_note`/`delete_note`, alongside the pre-existing `create_note`/`list_notes` — the one
   concrete gap in this project's own "an AI agent can write notes through" mission statement,
-  since only half the CRUD existed). Deliberately excluded, none of it an oversight: every
-  `settings/*` endpoint (Garmin/Eufy login, API keys, password, rebuild, bulk import — all
-  operational/credential actions, never appropriate for an agent to trigger); `auth/login`,
-  `share.py`, `calendar_feed.py` (not agent-relevant); and every *other* mutating endpoint
-  (activity sport/race/name/fueling corrections, trim/merge/split, gear defaults/retirement,
-  blood-test entry, goal writes, and — most deliberately — planned-workout/planned-race
-  writes, since `POST/PUT .../push` can put a workout on the athlete's actual Garmin device
-  within days; the scheduled-workouts bullet above already treats every write path there as
-  strictly human-initiated, and this scope decision keeps that invariant intact rather than
-  quietly opening a side door to it through the agent surface). If write access to any of these
-  is ever wanted, it needs its own explicit decision, not a default inherited from "the read
-  tools were easy to add."
+  since only half the CRUD existed). That first pass deliberately withheld every other write.
+  **Revision: write access added (41 → 65 tools), on the owner's explicit request** — "I want
+  agents to be able to create a training plan." Now exposed: planned workouts (`create_/update_/
+  delete_planned_workout`, `complete_/uncomplete_planned_workout`, `push_planned_workout`,
+  `create_recurring_planned_workout`), planned races (create/update/delete), distance goals
+  (`set_goal`/`delete_goal`), blood tests (single/panel create, update, delete), gear
+  (`create_shoe`, `set_default_shoe`, `retire_shoe`, `set_activity_shoe`), and per-activity
+  corrections (`set_activity_sport`/`_race`/`_name`/`_fueling`). The one place this app writes
+  to a third-party account is now reachable by an agent, so know the mechanics: creating/
+  updating a workout only saves a **draft** (`push_status="draft"`); the existing daily job
+  pushes anything due within `PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS` (default 7) to the
+  athlete's Garmin automatically, and `push_planned_workout` pushes one immediately. The
+  `create_planned_workout`/`create_recurring_planned_workout` tool *descriptions* embed the full
+  running text-syntax grammar (`_WORKOUT_SYNTAX_HELP`), the yoga/bouldering and hiit/
+  strength_training shapes, and the blank-line-ends-a-repeat-block rule, since an agent has no
+  other way to learn them — registered via `@mcp.tool(description=...)`, not by mutating
+  `__doc__` after decoration (FastMCP snapshots the docstring at decoration time). A malformed
+  line does not reject the workout: it comes back in `parse_errors`, which the agent must check.
+  The syntax help's own example is verified to parse cleanly (a test caught that an earlier draft
+  had intensity *after* the duration; the grammar is `[intensity] duration ...`, e.g. `recovery
+  90s`). Still deliberately excluded: every `settings/*` endpoint (credentials, API keys,
+  password, rebuild, bulk import), `auth/login`, `share.py`, `calendar_feed.py`, and
+  trim/merge/split/climb-route edits (visual-review workflows a human should confirm).
   **Revision: `get_activity_stream` can go past the fixed `low` tier** — originally hardcoded to
   `low` (~200 points) regardless of what the caller asked for, on the theory that bulk per-second
   data doesn't belong in an agent's context window (ADR 0007 decision 7). Reported directly

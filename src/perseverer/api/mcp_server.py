@@ -520,6 +520,499 @@ async def list_notes(entity_type: str, entity_id: str) -> list[dict[str, Any]]:
     return list(response.json())
 
 
+def _drop_none(payload: dict[str, Any]) -> dict[str, Any]:
+    """Omit unset optional fields from a request body rather than sending explicit nulls."""
+    return {k: v for k, v in payload.items() if v is not None}
+
+
+# --- Write tools -----------------------------------------------------------------------------
+# Planned workouts / races (training plans), goals, blood tests, gear, and per-activity
+# corrections. Deliberately NOT exposed: every settings/* endpoint (credentials, rebuild, bulk
+# import), and trim/merge/split/climb-route edits (visual-review workflows). See ADR 0007
+# decision 9.
+
+_WORKOUT_SYNTAX_HELP = """
+sport is "running", "yoga", "bouldering", "hiit", or "strength_training".
+
+running -- put the workout in source_text, ONE STEP PER LINE, grammar:
+    [intensity] duration [target] [cadence] [# comment]
+  intensity (optional): warmup | cooldown | recovery | rest | active
+  duration (required): 10m, 5m30s, 90s (time; bare "m" = MINUTES) or 2km, 800mtr, 1mi
+    (distance; "mtr" = meters), or "lap" (runs until the athlete presses the watch lap button;
+    "lap 5km" adds a calendar-only estimate, never an end condition)
+  target (optional): "5:10/km Pace" or "5:00-5:20/km Pace"; or "150 HR", "140-150 HR", "Z2 HR"
+  cadence (optional): "170-180spm" or "175spm"
+  A standalone "Nx" line (e.g. "5x") starts a repeat block: every following non-blank line, up to
+  the next BLANK LINE, is a child repeated N times. A step meant to come AFTER the block needs its
+  own blank line before it -- indentation does not end a block. Example:
+      Warmup 15m 6:30-7:00/km Pace
+
+      5x
+        1km 4:50-5:00/km Pace
+        recovery 90s
+
+      Cooldown 10m 6:30-7:00/km Pace
+  Unrecognized tokens don't reject the workout -- they come back in parse_errors, so check it.
+
+yoga / bouldering -- source_text is freeform notes (never parsed); set duration_minutes.
+
+hiit / strength_training -- pass structured steps (source_text ignored), each a dict:
+    {"step_index": 0, "duration_type": "reps"|"time"|"rest", "duration_reps": 10,
+     "duration_time_s": 45, "intensity": "active"|"rest", "exercise_category": "BENCH_PRESS",
+     "exercise_name": "" (or e.g. "HAMMER_CURL"), "weight_kg": 40, "comment": "...",
+     "repeat_from_step": 0, "repeat_count": 3}
+  A repeat step has repeat_from_step/repeat_count and repeats the steps from repeat_from_step up
+  to (not including) its own step_index. Category/name come from Garmin's exercise catalog.
+
+scheduled_time is "HH:MM" 24h (display only). comment is a note for the whole workout.
+Creating/updating only saves the workout as a draft in Perseverer; workouts due within the push
+window (default 7 days) are pushed to the athlete's Garmin automatically each day, or call
+push_planned_workout to push one now.
+"""
+
+
+@mcp.tool(
+    description=(
+        "Schedule a workout on an ISO date (a day may hold several). Returns the saved workout, "
+        "including parse_errors and the computed estimated_duration_s/distance/load. Call once "
+        "per session to build a training plan (or create_recurring_planned_workout for a "
+        "repeating one)." + _WORKOUT_SYNTAX_HELP
+    )
+)
+async def create_planned_workout(
+    local_date: str,
+    sport: str,
+    name: str | None = None,
+    source_text: str | None = None,
+    scheduled_time: str | None = None,
+    duration_minutes: float | None = None,
+    steps: list[dict[str, Any]] | None = None,
+    comment: str | None = None,
+) -> dict[str, Any]:
+    """Schedule a workout on an ISO date (a day may hold several). Returns the saved workout,
+    including parse_errors and the computed estimated_duration_s/distance/load. Call once per
+    session to build a training plan (or create_recurring_planned_workout for a repeating one).
+    """
+    response = await _call_api(
+        "POST",
+        "/api/v1/planned-workouts",
+        json=_drop_none(
+            {
+                "local_date": local_date,
+                "sport": sport,
+                "name": name,
+                "source_text": source_text,
+                "scheduled_time": scheduled_time,
+                "duration_minutes": duration_minutes,
+                "steps": steps,
+                "comment": comment,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def update_planned_workout(
+    workout_id: int,
+    sport: str,
+    name: str | None = None,
+    source_text: str | None = None,
+    scheduled_time: str | None = None,
+    duration_minutes: float | None = None,
+    steps: list[dict[str, Any]] | None = None,
+    comment: str | None = None,
+) -> dict[str, Any]:
+    """Replace an existing workout's content wholesale (same fields as create_planned_workout,
+    minus the date -- to move a workout, delete and re-create it). Omitted optional fields are
+    cleared, so pass the full desired content."""
+    response = await _call_api(
+        "PUT",
+        f"/api/v1/planned-workouts/{workout_id}",
+        json=_drop_none(
+            {
+                "sport": sport,
+                "name": name,
+                "source_text": source_text,
+                "scheduled_time": scheduled_time,
+                "duration_minutes": duration_minutes,
+                "steps": steps,
+                "comment": comment,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def delete_planned_workout(workout_id: int) -> None:
+    """Delete a scheduled workout (also removes its Garmin-side template, best-effort, if it was
+    already pushed)."""
+    await _call_api("DELETE", f"/api/v1/planned-workouts/{workout_id}")
+
+
+@mcp.tool()
+async def complete_planned_workout(workout_id: int) -> dict[str, Any]:
+    """Mark a scheduled workout as done (the athlete's own manual marker)."""
+    response = await _call_api("POST", f"/api/v1/planned-workouts/{workout_id}/complete")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def uncomplete_planned_workout(workout_id: int) -> dict[str, Any]:
+    """Clear a scheduled workout's manual done marker."""
+    response = await _call_api("POST", f"/api/v1/planned-workouts/{workout_id}/uncomplete")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def push_planned_workout(workout_id: int) -> dict[str, Any]:
+    """Push one scheduled workout to the athlete's Garmin account now (it appears on their watch
+    calendar). Runs in the background -- read the workout back afterwards and check push_status
+    ("pushed" / "push_failed" + push_error). Workouts due within the push window are pushed
+    automatically each day anyway; use this to push one further out or retry a failure."""
+    response = await _call_api("POST", f"/api/v1/planned-workouts/{workout_id}/push")
+    return dict(response.json())
+
+
+@mcp.tool(
+    description=(
+        "Schedule the same workout repeatedly starting at local_date. frequency is 'weekly', "
+        "'every_n_days' (needs interval_days >= 1), or 'monthly'. Give exactly one of count "
+        "(total occurrences, including the first) or until (ISO date, inclusive). Returns "
+        "created_dates. Content fields work exactly as in create_planned_workout."
+        + _WORKOUT_SYNTAX_HELP
+    )
+)
+async def create_recurring_planned_workout(
+    local_date: str,
+    sport: str,
+    frequency: str,
+    name: str | None = None,
+    source_text: str | None = None,
+    scheduled_time: str | None = None,
+    duration_minutes: float | None = None,
+    steps: list[dict[str, Any]] | None = None,
+    comment: str | None = None,
+    interval_days: int | None = None,
+    count: int | None = None,
+    until: str | None = None,
+) -> dict[str, Any]:
+    """Schedule the same workout repeatedly starting at local_date. frequency is "weekly",
+    "every_n_days" (needs interval_days >= 1), or "monthly". Give exactly one of count (total
+    occurrences, including the first) or until (ISO date, inclusive). Returns created_dates. The
+    workout content fields work exactly as in create_planned_workout."""
+    response = await _call_api(
+        "POST",
+        "/api/v1/planned-workouts/recurring",
+        json=_drop_none(
+            {
+                "local_date": local_date,
+                "sport": sport,
+                "name": name,
+                "source_text": source_text,
+                "scheduled_time": scheduled_time,
+                "duration_minutes": duration_minutes,
+                "steps": steps,
+                "comment": comment,
+                "frequency": frequency,
+                "interval_days": interval_days,
+                "count": count,
+                "until": until,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def create_planned_race(
+    local_date: str,
+    name: str,
+    distance_m: float,
+    sport: str = "running",
+    scheduled_time: str | None = None,
+    target_duration_s: float | None = None,
+) -> dict[str, Any]:
+    """Add a race to the calendar (distance in metres, optional goal finish time in seconds).
+    Returns it with days_until and a predicted finish time when the distance is standard."""
+    response = await _call_api(
+        "POST",
+        "/api/v1/planned-races",
+        json=_drop_none(
+            {
+                "local_date": local_date,
+                "name": name,
+                "sport": sport,
+                "distance_m": distance_m,
+                "scheduled_time": scheduled_time,
+                "target_duration_s": target_duration_s,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def update_planned_race(
+    race_id: int,
+    local_date: str,
+    name: str,
+    distance_m: float,
+    sport: str = "running",
+    scheduled_time: str | None = None,
+    target_duration_s: float | None = None,
+) -> dict[str, Any]:
+    """Replace a race's fields wholesale (pass the full desired content)."""
+    response = await _call_api(
+        "PUT",
+        f"/api/v1/planned-races/{race_id}",
+        json=_drop_none(
+            {
+                "local_date": local_date,
+                "name": name,
+                "sport": sport,
+                "distance_m": distance_m,
+                "scheduled_time": scheduled_time,
+                "target_duration_s": target_duration_s,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def delete_planned_race(race_id: int) -> None:
+    """Remove a race from the calendar."""
+    await _call_api("DELETE", f"/api/v1/planned-races/{race_id}")
+
+
+@mcp.tool()
+async def set_goal(
+    period_type: str,
+    period_start: str,
+    target_distance_m: float,
+    sport: str | None = None,
+) -> dict[str, Any]:
+    """Set (or replace) the distance goal for one year ("YYYY") or month ("YYYY-MM"), in metres;
+    sport=None means every sport combined. One goal per period -- setting again replaces it."""
+    response = await _call_api(
+        "PUT",
+        "/api/v1/goals",
+        json=_drop_none(
+            {
+                "period_type": period_type,
+                "period_start": period_start,
+                "sport": sport,
+                "target_distance_m": target_distance_m,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def delete_goal(goal_id: int) -> None:
+    """Delete a distance goal by id (from set_goal's response)."""
+    await _call_api("DELETE", f"/api/v1/goals/{goal_id}")
+
+
+@mcp.tool()
+async def create_blood_test_result(
+    local_date: str,
+    marker: str,
+    value_num: float,
+    unit: str | None = None,
+    reference_low: float | None = None,
+    reference_high: float | None = None,
+    lab_name: str | None = None,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Record one lab marker for a draw date. reference_low/high are the athlete's own
+    lab-reported range (never invented)."""
+    response = await _call_api(
+        "POST",
+        "/api/v1/blood-tests",
+        json=_drop_none(
+            {
+                "local_date": local_date,
+                "marker": marker,
+                "value_num": value_num,
+                "unit": unit,
+                "reference_low": reference_low,
+                "reference_high": reference_high,
+                "lab_name": lab_name,
+                "notes": notes,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def create_blood_test_panel(
+    local_date: str,
+    results: list[dict[str, Any]],
+    lab_name: str | None = None,
+    notes: str | None = None,
+) -> list[dict[str, Any]]:
+    """Record a whole panel at once: one draw date plus results, each
+    {"marker": str, "value_num": float, "unit": str?, "reference_low": float?,
+    "reference_high": float?}."""
+    response = await _call_api(
+        "POST",
+        "/api/v1/blood-tests/batch",
+        json=_drop_none(
+            {"local_date": local_date, "lab_name": lab_name, "notes": notes, "results": results}
+        ),
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def update_blood_test_result(
+    result_id: int,
+    local_date: str,
+    marker: str,
+    value_num: float,
+    unit: str | None = None,
+    reference_low: float | None = None,
+    reference_high: float | None = None,
+    lab_name: str | None = None,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Replace one blood-test result's fields wholesale."""
+    response = await _call_api(
+        "PUT",
+        f"/api/v1/blood-tests/{result_id}",
+        json=_drop_none(
+            {
+                "local_date": local_date,
+                "marker": marker,
+                "value_num": value_num,
+                "unit": unit,
+                "reference_low": reference_low,
+                "reference_high": reference_high,
+                "lab_name": lab_name,
+                "notes": notes,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def delete_blood_test_result(result_id: int) -> None:
+    """Delete one blood-test result."""
+    await _call_api("DELETE", f"/api/v1/blood-tests/{result_id}")
+
+
+@mcp.tool()
+async def delete_blood_test_panel(local_date: str) -> None:
+    """Delete every blood-test result drawn on one ISO date."""
+    await _call_api("DELETE", f"/api/v1/blood-tests/by-date/{local_date}")
+
+
+@mcp.tool()
+async def create_shoe(
+    brand: str,
+    model: str,
+    size: str | None = None,
+    comments: str | None = None,
+    initial_distance_km: float = 0.0,
+    max_distance_km: float | None = 800.0,
+) -> dict[str, Any]:
+    """Add a shoe pair (initial_distance_km = mileage already on it; max_distance_km=None for no
+    replacement limit)."""
+    response = await _call_api(
+        "POST",
+        "/api/v1/gear/shoes",
+        json={
+            "brand": brand,
+            "model": model,
+            "size": size,
+            "comments": comments,
+            "initial_distance_km": initial_distance_km,
+            "max_distance_km": max_distance_km,
+        },
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def set_default_shoe(sport: str, shoe_id: str) -> dict[str, Any]:
+    """Make a pair the default for a sport from now on (never reassigns past activities)."""
+    response = await _call_api(
+        "PUT", f"/api/v1/gear/defaults/{sport}", json={"shoe_id": shoe_id}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def retire_shoe(shoe_id: str) -> dict[str, Any]:
+    """Retire a pair (history kept; clears it as any sport's default; stops alerts)."""
+    response = await _call_api("PUT", f"/api/v1/gear/shoes/{shoe_id}/retire")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def set_activity_shoe(activity_id: str, shoe_id: str | None) -> dict[str, Any]:
+    """Assign a shoe pair to one distance-bearing activity; None clears the explicit choice
+    (falling back to the sport default)."""
+    response = await _call_api(
+        "PUT", f"/api/v1/gear/activities/{activity_id}/shoe", json={"shoe_id": shoe_id}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def set_activity_sport(
+    activity_id: str, sport: str, sub_sport: str | None = None
+) -> dict[str, Any]:
+    """Correct an activity's sport/sub_sport when the source recorded the wrong one. Durable
+    across a full database rebuild."""
+    response = await _call_api(
+        "PATCH",
+        f"/api/v1/activities/{activity_id}/sport",
+        json=_drop_none({"sport": sport, "sub_sport": sub_sport}),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def set_activity_race(activity_id: str, is_race: bool) -> dict[str, Any]:
+    """Mark or unmark an activity as a race."""
+    response = await _call_api(
+        "PATCH", f"/api/v1/activities/{activity_id}/race", json={"is_race": is_race}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def set_activity_name(activity_id: str, name: str) -> dict[str, Any]:
+    """Give an activity a custom title."""
+    response = await _call_api(
+        "PATCH", f"/api/v1/activities/{activity_id}/name", json={"name": name}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def set_activity_fueling(
+    activity_id: str,
+    carbohydrates_g: float | None = None,
+    sodium_mg: float | None = None,
+) -> dict[str, Any]:
+    """Record carbohydrate/sodium intake for an activity. Both fields are set together, so pass
+    the current value of whichever you're not changing."""
+    response = await _call_api(
+        "PATCH",
+        f"/api/v1/activities/{activity_id}/fueling",
+        json={"carbohydrates_g": carbohydrates_g, "sodium_mg": sodium_mg},
+    )
+    return dict(response.json())
+
+
 def _require_api_key_asgi(inner_app: ASGIApp) -> ASGIApp:
     """Wraps the MCP mount with the same shared-secret gate every REST route has via
     `Depends(require_api_key)` -- `Mount`-ed sub-apps never reach FastAPI's own dependency

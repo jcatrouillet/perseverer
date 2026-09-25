@@ -116,6 +116,22 @@ Garmin device within days. AGENTS.md's own MCP server bullet carries the full re
 decision exists so a future contributor asking "why isn't X exposed" finds an answer here, not
 silence implying it was simply missed.
 
+### 9. Write access added (41 to 65 tools), superseding decision 8's read-only boundary
+
+Decision 8 withheld every mutating endpoint outside notes. The owner then asked for write access
+explicitly, "especially the planned workout, I want agents to be able to create a training plan."
+Exposed now: planned workouts (create/update/delete/complete/uncomplete/push/recurring), planned
+races, goals, blood tests, gear (shoes, defaults, retirement, per-activity shoe), and per-activity
+corrections (sport/race/name/fueling). Still excluded: `settings/*`, `auth/login`, share/calendar
+feed, and trim/merge/split/climb-route edits. Two consequences are worth stating. First, planned
+workouts are the one write path to a third-party account: creating one only saves a draft, but the
+existing daily job pushes anything within the push window to the athlete's Garmin automatically,
+and `push_planned_workout` does so immediately, so an agent-authored plan reaches the watch without
+a further human step. Second, an agent can only author a running workout if it knows the text
+syntax, so the create tools' descriptions embed the full grammar (registered through
+`@mcp.tool(description=...)`; FastMCP snapshots `__doc__` at decoration time, so appending to it
+afterwards silently does nothing) and its example is test-verified to parse without errors.
+
 ## Consequences
 
 - A future second MCP-capable service (unlikely, but ADR 0001's "second Python service" framing
