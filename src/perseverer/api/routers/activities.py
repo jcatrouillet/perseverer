@@ -1455,12 +1455,12 @@ def get_activity_insights(
 ) -> list[InsightOut]:
     """Point-in-time insights for this one activity -- e.g. "your fastest 10 km to date" or a
     "current streak" -- computed fresh at request time, not read from the athlete-wide `insight`
-    table (unlike GET /insights). Always bounded to activities at-or-before this one's own
-    `local_date`, never anything that happened later: browsing an old run must never leak
-    knowledge of runs that hadn't happened yet. See insights/rules_activity.py.
+    table (unlike GET /insights). Always bounded to activities at-or-before this activity's own
+    timestamp, never anything that happened later: browsing an old activity must never leak
+    knowledge of a later performance. See insights/rules_activity.py.
     """
     row = conn.execute(
-        select(activity.c.local_date).where(
+        select(activity.c.local_date, activity.c.start_time_utc).where(
             activity.c.id == activity_id,
             activity.c.athlete_id == athlete_id,
             activity.c.deleted_at.is_(None),
@@ -1473,7 +1473,12 @@ def get_activity_insights(
 
     as_of = date.fromisoformat(row.local_date)
     all_activities = load_insight_activities(conn, athlete_id)
-    bounded = [a for a in all_activities if a.local_date <= row.local_date]
+    bounded = [
+        a
+        for a in all_activities
+        if a.local_date < row.local_date
+        or (a.local_date == row.local_date and a.start_time_utc <= row.start_time_utc)
+    ]
     insights = compute_activity_insights(activity_id, bounded, as_of)
 
     computed_at = datetime.now(UTC)
@@ -2143,10 +2148,22 @@ def get_activity_stream(
     athlete_id: Annotated[str, Depends(require_api_key)],
     tier: str = Query("medium", pattern="^(low|medium|high)$"),
     channels: list[str] | None = Query(None),
+    # Elapsed seconds from the activity's own first recorded sample -- same convention as
+    # activity_trim_override's own trim_start_s/trim_end_s below, and as every frontend chart's
+    # own elapsed-seconds x-axis. Optional: omitted, the response covers the whole activity
+    # (or the trimmed window, if one is active), exactly as before this pair of params existed.
+    # Lets a caller ask for e.g. "high tier, just this 3-minute stretch" without paying for a
+    # full-activity high-tier response just to then discard most of it -- the one thing "high"
+    # tier alone couldn't do for a multi-hour activity (see downsample()'s own docstring on how
+    # bucket width is sized from the *requested* window's span, not the whole activity's).
+    start_s: float | None = Query(None, ge=0),
+    end_s: float | None = Query(None, ge=0),
     conn: Connection = Depends(get_conn),
     con: duckdb.DuckDBPyConnection = Depends(get_duckdb),
     settings: Settings = Depends(get_settings),
 ) -> StreamResponse:
+    if start_s is not None and end_s is not None and start_s >= end_s:
+        raise HTTPException(status_code=400, detail="start_s must be less than end_s")
     activity_row = conn.execute(
         select(activity.c.duration_s, activity.c.start_time_utc).where(
             activity.c.id == activity_id,
@@ -2185,6 +2202,15 @@ def get_activity_stream(
     window = None
     if trim_row is not None:
         window = (trim_row.trim_start_s or 0.0, trim_row.trim_end_s or float("inf"))
+    if start_s is not None or end_s is not None:
+        requested_window = (start_s or 0.0, end_s if end_s is not None else float("inf"))
+        # Intersect, never replace, an active trim -- the trimmed-away portion must stay
+        # invisible regardless of what a caller's own start_s/end_s asks for.
+        window = (
+            (max(window[0], requested_window[0]), min(window[1], requested_window[1]))
+            if window is not None
+            else requested_window
+        )
 
     try:
         result = downsample(

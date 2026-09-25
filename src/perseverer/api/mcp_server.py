@@ -76,13 +76,35 @@ async def get_activity(activity_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def get_activity_stream(activity_id: str) -> dict[str, Any]:
-    """A coarse (~200-point) time-series shape for one activity (heart rate, pace, etc) --
-    always the "low" resolution tier regardless of the activity's actual sample rate, since
-    full per-second data doesn't belong in an agent's context window. See ADR 0007 decision 7.
-    """
+async def get_activity_stream(
+    activity_id: str,
+    tier: str = "low",
+    channels: list[str] | None = None,
+    start_s: float | None = None,
+    end_s: float | None = None,
+) -> dict[str, Any]:
+    """Time-series data for one activity (heart rate, pace, cadence, etc), elapsed seconds from
+    the activity's own start. Defaults to the coarse "low" tier (~200 points spanning the whole
+    activity) to keep a whole-activity request out of the context window by default -- pass
+    tier="high" for near-1-second resolution (activities under ~5.5h at 1Hz get their true raw
+    samples; a longer one still gets sub-6s buckets across its full span).
+
+    To inspect a specific stretch at full resolution without paying for the whole activity's own
+    high-tier response, narrow with start_s/end_s (elapsed seconds from the activity's own start,
+    e.g. start_s=1200, end_s=1380 for the 20:00-23:00 mark) -- bucket width is sized from that
+    narrowed span, not the whole activity, so even a multi-hour activity's own 3-minute stretch
+    comes back at true 1-second resolution under tier="high". channels optionally limits which
+    series are returned (e.g. ["heart_rate", "cadence"]) -- omit for every channel the activity
+    actually recorded. See list_activities/get_activity for which channels an activity has."""
+    params: dict[str, Any] = {"tier": tier}
+    if channels:
+        params["channels"] = channels
+    if start_s is not None:
+        params["start_s"] = start_s
+    if end_s is not None:
+        params["end_s"] = end_s
     response = await _call_api(
-        "GET", f"/api/v1/activities/{activity_id}/stream", params={"tier": "low"}
+        "GET", f"/api/v1/activities/{activity_id}/stream", params=params
     )
     return dict(response.json())
 

@@ -105,6 +105,23 @@ environment:
   rather than a second implementation. Gated by the same `X-API-Key` via a raw ASGI wrapper
   (`Mount` bypasses FastAPI's own `Depends`). `mcp>=1.9,<2` — 2.x just went stable and isn't
   adopted yet. See `docs/adr/0007-phase-4-mcp-server.md`.
+  **Revision: `get_activity_stream` can go past the fixed `low` tier** — originally hardcoded to
+  `low` (~200 points) regardless of what the caller asked for, on the theory that bulk per-second
+  data doesn't belong in an agent's context window (ADR 0007 decision 7). Reported directly
+  against a real use case that theory didn't cover: checking a specific few-minute stretch of an
+  activity for something a coarse 200-point-per-whole-activity shape genuinely can't show. The
+  tool now takes `tier`/`channels`/`start_s`/`end_s`, all passed straight through to
+  `/activities/{id}/stream`'s own params (still defaulting to `tier="low"`, so a caller asking
+  for nothing extra sees no change) — the REST endpoint itself gained `start_s`/`end_s` in the
+  same change (elapsed seconds from the activity's own start, intersected with an active trim
+  rather than ever escaping it). `stream_query.py::downsample` had to change alongside this: its
+  bucket-width math previously sized buckets from the *whole activity's* `duration_s` even when a
+  narrower `window` was given (the pre-existing trim-serving mechanism this reuses), which would
+  have quietly defeated the whole point — a `tier="high"` request narrowed to a 3-minute window
+  of a 2-hour activity would otherwise still get ~36-second buckets sized for the full 2 hours,
+  not the true near-1-second resolution the narrower window asks for. Bucket width is now sized
+  from the *window's own* span when one is given (falling back to `duration_s - window_start`
+  for an open-ended window, e.g. an untrimmed trim end).
 - **Per-athlete auth (Phase 5)**: `require_api_key` (`api/dependencies.py`) resolves — not just
   gates — the authenticated `athlete_id` from any of three credentials: the legacy shared
   `PERSEVERER_API_KEY` (→ `DEFAULT_ATHLETE_ID`, so the MCP server and existing scripts keep

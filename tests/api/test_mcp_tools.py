@@ -67,9 +67,11 @@ async def test_get_activity_returns_detail(client: TestClient, engine: Engine) -
     assert result["laps"] == []
 
 
-async def test_get_activity_stream_forces_low_tier_regardless_of_resolution(
+async def test_get_activity_stream_defaults_to_low_tier(
     client: TestClient, engine: Engine, tmp_path: Path
 ) -> None:
+    """Default behavior is unchanged -- a caller that doesn't ask for anything finer still gets
+    the coarse, context-window-friendly tier, not a whole activity's worth of raw samples."""
     with engine.connect() as conn:
         seed_activity(conn, activity_id="a1")
 
@@ -99,6 +101,44 @@ async def test_get_activity_stream_forces_low_tier_regardless_of_resolution(
     result = await get_activity_stream("a1")
     assert result["tier"] == "low"
     assert len(result["timestamps"]) < 5000
+
+
+async def test_get_activity_stream_supports_high_tier_narrowed_to_a_window(
+    client: TestClient, engine: Engine, tmp_path: Path
+) -> None:
+    """The reported gap: a caller needs 1-second data for a specific few-minute stretch of a
+    much longer activity, not the whole thing bucketed down to fit a fixed point budget."""
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1", duration_s=5000.0)
+
+    start = dt.datetime(2025, 6, 1, 10, tzinfo=dt.UTC)
+    points = [
+        StreamPoint(
+            timestamp_utc=start + dt.timedelta(seconds=i), values={"heart_rate": 100.0 + i}
+        )
+        for i in range(5000)
+    ]
+    rel_path, n_samples, channels = write_activity_stream(
+        tmp_path / "parquet", DEFAULT_ATHLETE_ID, "a1", points
+    )
+    with engine.connect() as conn:
+        conn.execute(
+            activity_stream.insert().values(
+                activity_id="a1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                parquet_path=rel_path,
+                n_samples=n_samples,
+                channels=json.dumps(channels),
+                sample_rate_hint=1.0,
+            )
+        )
+        conn.commit()
+
+    result = await get_activity_stream("a1", tier="high", start_s=1000, end_s=1180)
+    assert result["tier"] == "high"
+    assert len(result["timestamps"]) == 181
+    assert result["series"]["heart_rate"][0] == 1100.0
+    assert result["series"]["heart_rate"][-1] == 1280.0
 
 
 async def test_list_health_observations(client: TestClient, engine: Engine) -> None:

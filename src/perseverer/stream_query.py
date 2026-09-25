@@ -52,10 +52,18 @@ def downsample(
     not column identifiers, which get interpolated into the query text below. Raises
     `ValueError` for an unknown tier or an unrecognized channel.
 
-    `window`, when given, is `(trim_start_s, trim_end_s)` elapsed seconds from the *file's own*
-    first recorded sample -- the Parquet file is never truncated (see activity_trim.py's own
-    "never destructive" docstring), so a trimmed activity's stream is still served by filtering
-    the same full file down to the kept window at read time, not a second smaller file.
+    `window`, when given, is `(start_s, end_s)` elapsed seconds from the *file's own* first
+    recorded sample -- either a trim (the Parquet file is never truncated, see activity_trim.py's
+    own "never destructive" docstring, so a trimmed activity's stream is still served by filtering
+    the same full file down to the kept window at read time, not a second smaller file) or an
+    explicit caller-requested sub-range (`GET .../stream`'s own `start_s`/`end_s`), or both
+    (intersected by the caller). Bucket width is sized from *this window's own span*, not the
+    `duration_s` argument -- a bare `ceil(duration_s / target_points)` would size buckets for the
+    whole activity even when the window asks for a much narrower slice, defeating the point of a
+    high-tier request scoped to a few minutes (a `ceil(7200 / 200)` = 36s bucket would collapse a
+    3-minute window into 5 buckets regardless of tier). `end_s` may be `float("inf")` (an
+    unbounded trim/request end) -- the window's own span is then undefined, so this falls back to
+    `duration_s - start_s` instead, treating `duration_s` as the activity's own full elapsed span.
     """
     if tier not in _TIER_TARGET_POINTS:
         raise ValueError(f"unknown tier {tier!r}, expected one of {sorted(_TIER_TARGET_POINTS)}")
@@ -87,7 +95,13 @@ def downsample(
         """
         rows = con.execute(query, [str(parquet_path), *window_params]).fetchall()
     else:
-        bucket_width_s = max(1, math.ceil(duration_s / target_points))
+        if window is not None:
+            effective_duration_s = (
+                window[1] - window[0] if math.isfinite(window[1]) else duration_s - window[0]
+            )
+        else:
+            effective_duration_s = duration_s
+        bucket_width_s = max(1, math.ceil(max(effective_duration_s, 0.0) / target_points))
         agg_list = ", ".join(f"avg({q}) AS {q}" for q in quoted)
         query = f"""
             WITH src AS (

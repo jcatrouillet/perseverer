@@ -191,3 +191,57 @@ def test_window_filters_when_bucketing_too(
 
     assert result.timestamps[0] == datetime(2025, 6, 1, tzinfo=UTC)
     assert result.timestamps[-1] < datetime(2025, 6, 1, tzinfo=UTC) + timedelta(seconds=1000)
+
+
+def test_window_bucket_width_uses_the_windows_own_span_not_duration_s(
+    con: duckdb.DuckDBPyConnection, tmp_path: Path
+) -> None:
+    """The real gap this fixes: a caller asking for a 3-minute window inside a much longer
+    activity, at a tier whose target is smaller than the *whole activity's* sample count, must
+    still get that window at its own true resolution -- sizing the bucket width from
+    `duration_s` (the whole 5000-second activity) instead of the window's own 180-second span
+    would produce a bucket width of ceil(5000/200)=25s, collapsing this 180-second window into
+    about 7 buckets instead of the ~180 one-second buckets it should get."""
+    path = tmp_path / "stream.parquet"
+    n_samples = 5000
+    _write_fixture(path, n_samples)
+
+    result = downsample(
+        con,
+        path,
+        tier="low",  # target 200 -- below the whole file's 5000 samples, so bucketing applies
+        channels=["heart_rate"],
+        available_channels=frozenset({"heart_rate", "cadence"}),
+        duration_s=5000.0,  # the whole activity's own span -- must NOT drive the bucket width
+        n_samples=n_samples,
+        window=(0.0, 179.0),  # a 180-second window, well under the tier's 200-point target
+    )
+
+    # ceil(180 / 200) == 1: one-second buckets, not the ~25s buckets duration_s=5000 would imply.
+    assert len(result.timestamps) > 100
+
+
+def test_window_with_unbounded_end_sizes_buckets_from_duration_s_minus_start(
+    con: duckdb.DuckDBPyConnection, tmp_path: Path
+) -> None:
+    """An unbounded window end (float("inf"), e.g. an untrimmed trim_end_s) has no span of its
+    own to size buckets from -- falls back to `duration_s - window[0]`, treating `duration_s` as
+    the activity's own full elapsed span."""
+    path = tmp_path / "stream.parquet"
+    n_samples = 5000
+    _write_fixture(path, n_samples)
+
+    result = downsample(
+        con,
+        path,
+        tier="low",  # target 200
+        channels=["heart_rate"],
+        available_channels=frozenset({"heart_rate", "cadence"}),
+        duration_s=5000.0,
+        n_samples=n_samples,
+        window=(4000.0, float("inf")),  # last 1000 seconds, open-ended
+    )
+
+    # ceil((5000 - 4000) / 200) == 5: five-second buckets over the remaining ~1000s -> ~200 points.
+    assert 150 <= len(result.timestamps) <= 220
+    assert result.timestamps[0] == datetime(2025, 6, 1, tzinfo=UTC) + timedelta(seconds=4000)

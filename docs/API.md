@@ -539,10 +539,12 @@ of three point-count tiers.
 | `activity_id` | path | **required** | string | — | |
 | `tier` | query | optional | string | `medium` | `low` (~200 pts), `medium` (~1000 pts), `high` (~20000 pts). |
 | `channels` | query | optional | array\<string\> | — | Which channels to return. Omit for every available channel. Available names: `heart_rate`, `power`, `temperature`, `speed_mps`, `altitude_m`, `respiration_rate`, `distance_m`, `cadence`, `lat`, `lon` — an activity only has the channels its device actually recorded. |
+| `start_s` | query | optional | number | — | Narrow to elapsed seconds from the activity's own first recorded sample (e.g. `start_s=1200&end_s=1380` for the 20:00–23:00 mark). Bucket width is sized from this narrowed window's own span, not the whole activity's duration — the way to get true near-1-second resolution for a short stretch of a long activity at `tier=high` without paying for (or receiving) the whole activity's own high-tier response. Intersected with, never widening past, an active trim. |
+| `end_s` | query | optional | number | — | See `start_s`. Omit for "to the end" (or "to the end of the trim," if one is active). |
 
 **Responses:** `200` → `StreamResponse`. `400` → a requested channel isn't available for this
-activity, or another downsample-argument mismatch. `404` → activity not found, or no stream data
-for this activity.
+activity, `start_s >= end_s`, or another downsample-argument mismatch. `404` → activity not
+found, or no stream data for this activity.
 
 ---
 

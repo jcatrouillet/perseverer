@@ -11,6 +11,7 @@ from sqlalchemy import Engine
 from perseverer.db.schema import (
     activity_metric,
     activity_stream,
+    activity_trim_override,
     health_observation,
     lap,
     metric_definition,
@@ -442,6 +443,104 @@ def test_stream_endpoint_downsamples_and_404s_without_stream(
         "/api/v1/activities/a1/stream?channels=not_a_channel", headers=auth_headers
     )
     assert r.status_code == 400
+
+
+def test_stream_endpoint_start_s_end_s_narrows_the_window(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine, tmp_path: Path
+) -> None:
+    """A caller asking for just a few minutes of a long activity at high tier should get that
+    slice at true resolution, not the whole activity bucketed down to fit -- the exact gap
+    reported live: checking a 3-minute stretch needed 1-second data, not a ~200/1000/20000-point
+    downsample of the entire recording."""
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1", duration_s=300.0)
+
+    start = datetime(2025, 6, 1, 10, 0, 0, tzinfo=UTC)
+    points = [
+        StreamPoint(timestamp_utc=start + timedelta(seconds=i), values={"heart_rate": 100.0 + i})
+        for i in range(300)
+    ]
+    rel_path, n_samples, channels = write_activity_stream(
+        tmp_path / "parquet", DEFAULT_ATHLETE_ID, "a1", points
+    )
+    with engine.connect() as conn:
+        conn.execute(
+            activity_stream.insert().values(
+                activity_id="a1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                parquet_path=rel_path,
+                n_samples=n_samples,
+                channels=json.dumps(channels),
+                sample_rate_hint=1.0,
+            )
+        )
+        conn.commit()
+
+    r = client.get(
+        "/api/v1/activities/a1/stream?tier=high&start_s=100&end_s=120", headers=auth_headers
+    )
+    assert r.status_code == 200
+    body = r.json()
+    # Seconds 100..120 inclusive, at true 1-second resolution -- not collapsed into a handful of
+    # buckets sized for the whole 300-second activity.
+    assert len(body["timestamps"]) == 21
+    assert body["series"]["heart_rate"][0] == 200.0
+    assert body["series"]["heart_rate"][-1] == 220.0
+
+    r = client.get("/api/v1/activities/a1/stream?start_s=200&end_s=100", headers=auth_headers)
+    assert r.status_code == 400
+
+
+def test_stream_endpoint_start_s_end_s_never_escapes_an_active_trim(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine, tmp_path: Path
+) -> None:
+    """A caller's own start_s/end_s narrows further within an active trim, but must never widen
+    past it -- the trimmed-away portion stays invisible regardless of what's requested."""
+    activity_start = datetime(2025, 6, 1, 10, 0, 0)
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1", duration_s=300.0)
+        conn.execute(
+            activity_trim_override.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_start_time_utc=activity_start,
+                trim_start_s=50.0,
+                trim_end_s=150.0,
+                created_at=activity_start,
+                updated_at=activity_start,
+            )
+        )
+        conn.commit()
+
+    start = datetime(2025, 6, 1, 10, 0, 0, tzinfo=UTC)
+    points = [
+        StreamPoint(timestamp_utc=start + timedelta(seconds=i), values={"heart_rate": 100.0 + i})
+        for i in range(300)
+    ]
+    rel_path, n_samples, channels = write_activity_stream(
+        tmp_path / "parquet", DEFAULT_ATHLETE_ID, "a1", points
+    )
+    with engine.connect() as conn:
+        conn.execute(
+            activity_stream.insert().values(
+                activity_id="a1",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                parquet_path=rel_path,
+                n_samples=n_samples,
+                channels=json.dumps(channels),
+                sample_rate_hint=1.0,
+            )
+        )
+        conn.commit()
+
+    # Asks for 0..300 (the whole file) -- must still be clamped down to the trim's own 50..150.
+    r = client.get(
+        "/api/v1/activities/a1/stream?tier=high&start_s=0&end_s=300", headers=auth_headers
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["timestamps"]) == 101
+    assert body["series"]["heart_rate"][0] == 150.0
+    assert body["series"]["heart_rate"][-1] == 250.0
 
 
 def _write_flat_gap_stream(

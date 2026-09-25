@@ -84,11 +84,20 @@ tool tests (`app.dependency_overrides` apply regardless of which client reaches 
 pattern already used to break the real `fit_folder.py`/`ingest_dispatch.py` circular import in
 Phase 2, applied here because `api/main.py` needs to mount the MCP app that needs `app` itself.
 
-### 7. `get_activity_stream`'s tier is forced to `low`
+### 7. `get_activity_stream` defaults to `low`, but a caller can ask for finer resolution
 
-Bulk per-second stream data doesn't belong in an agent's context window regardless of what a
-tool caller requests — the tool ignores any tier argument and always requests `low` (~200
-points) from the underlying `/activities/{id}/stream` endpoint.
+Originally the tool ignored any tier argument and always requested `low` (~200 points) — a
+blanket "bulk per-second data doesn't belong in an agent's context window" rule. Revised once a
+real coaching question ("check the 3-minute stretch tonight") needed genuine 1-second data the
+`low` tier can't give: the tool now accepts `tier`/`channels`/`start_s`/`end_s`, passed straight
+through to `/activities/{id}/stream`'s own params (the REST endpoint gained `start_s`/`end_s` in
+the same change — elapsed seconds from the activity's own start, intersected with any active
+trim rather than escaping it). `tier` still defaults to `low`, so a caller that asks for nothing
+extra keeps getting the original context-window-friendly shape; asking for `tier="high"` narrowed
+to a `start_s`/`end_s` window gets true resolution for just that stretch without paying for (or
+returning) the whole activity's own high-tier response. See `stream_query.py::downsample`'s own
+docstring for why bucket width must be sized from the *window's* own span, not the whole
+activity's `duration_s`, for this to actually work for a long activity's short stretch.
 
 ## Consequences
 

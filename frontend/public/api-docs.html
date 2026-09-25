@@ -1667,10 +1667,12 @@ const GROUPS = [
         ["activity_id","path","req","string","—",""],
         ["tier","query","opt","string","medium","One of low (~200 pts), medium (~1000 pts), high (~20000 pts)."],
         ["channels","query","opt","array&lt;string&gt;","—","Which channels to return. Omit for every available channel. Available names: heart_rate, power, temperature, speed_mps, altitude_m, respiration_rate, distance_m, cadence, lat, lon — an activity only has the channels its device actually recorded."],
+        ["start_s","query","opt","number","—","Narrow to elapsed seconds from the activity's own first sample. Bucket width is sized from this window's own span, not the whole activity's duration — true near-1-second resolution for a short stretch of a long activity at tier=high. Intersected with, never widening past, an active trim."],
+        ["end_s","query","opt","number","—","See start_s. Omit for \"to the end\" (or the trim's own end, if one is active)."],
       ],
       responses: [
         { code: 200, ref: "StreamResponse" },
-        { code: 400, note: "A requested channel isn't available for this activity, or another downsample-argument mismatch. detail is a plain string." },
+        { code: 400, note: "A requested channel isn't available for this activity, start_s >= end_s, or another downsample-argument mismatch. detail is a plain string." },
         { code: 404, note: 'detail: "activity not found" or "no stream data for this activity"' },
       ],
       example: { qs: "?tier=high&channels=heart_rate&channels=speed_mps&channels=lat&channels=lon" }
