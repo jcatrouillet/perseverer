@@ -156,6 +156,341 @@ async def get_calendar(
 
 
 @mcp.tool()
+async def get_calendar_weeks(start_date: str, end_date: str) -> dict[str, Any]:
+    """Precomputed week-level rollups (activity totals, distance, elevation, moving time) for an
+    ISO date range -- a sum-of-sums over get_calendar's own daily rollups, one row per Monday-
+    starting week overlapping the range. Prefer this over get_calendar for a "how was this month,
+    week by week" question."""
+    response = await _call_api(
+        "GET", "/api/v1/calendar/weeks", params={"start_date": start_date, "end_date": end_date}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_calendar_months(start_date: str, end_date: str) -> dict[str, Any]:
+    """Precomputed month-level rollups, the same shape as get_calendar_weeks but bucketed by
+    calendar month instead of week."""
+    response = await _call_api(
+        "GET", "/api/v1/calendar/months", params={"start_date": start_date, "end_date": end_date}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def list_activity_years() -> list[int]:
+    """Distinct calendar years with at least one activity, descending -- the cheap way to learn
+    how far back this athlete's own history goes before picking a date range for another tool."""
+    response = await _call_api("GET", "/api/v1/activities/years")
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_climbing_summary(
+    start_date: str | None = None, end_date: str | None = None
+) -> dict[str, Any]:
+    """Aggregate bouldering stats (routes attempted/completed, by grade) across every session in
+    an optional ISO date range -- omit both dates for the athlete's whole climbing history."""
+    params: dict[str, Any] = {}
+    if start_date:
+        params["start_date"] = start_date
+    if end_date:
+        params["end_date"] = end_date
+    response = await _call_api("GET", "/api/v1/activities/climbing-summary", params=params)
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_activity_context(activity_id: str) -> dict[str, Any]:
+    """How this activity stacks up against the athlete's own same-sport history: a percentile
+    rank and same-sport/similar-distance peer activities from the 90 days up to and including
+    this one, plus this activity's own all-time-fastest same-sport/similar-distance peers."""
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/context")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_activity_comparisons(activity_id: str) -> dict[str, Any]:
+    """A running activity's pace/HR/cadence compared against its own recent similar-effort
+    history -- the numbers behind the activity detail page's comparison table."""
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/comparisons")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_activity_climb_comparisons(activity_id: str) -> dict[str, Any]:
+    """A bouldering session's routes-by-grade compared against the athlete's own recent
+    bouldering history."""
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/climb-comparisons")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_activity_insights(activity_id: str) -> list[dict[str, Any]]:
+    """Rules-based insights computed specifically about this one activity (e.g. "longest run in
+    the last 12 months", an all-time best, a current streak) -- always derived from the
+    athlete's own past, never anything that happened after this activity."""
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/insights")
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_activity_weather(activity_id: str) -> dict[str, Any]:
+    """Weather during this activity's own time window at its own GPS location (temperature, dew
+    point, wind, precipitation, an hour-by-hour trajectory) -- read from this app's own archived
+    Open-Meteo fetch, never a live vendor call. `available: false` if nothing was ever fetched
+    for this activity (no GPS start point, or the fetch failed)."""
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/weather")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_activity_location(activity_id: str) -> dict[str, Any]:
+    """The reverse-geocoded place name (city/region/country) for this activity's own GPS start
+    point, from this app's own cache -- a background lookup is triggered on first request if
+    nothing is cached yet, so a repeat call shortly after may return a freshly-resolved name."""
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/location")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_activity_workout(activity_id: str) -> dict[str, Any] | None:
+    """The pre-planned structured workout (if any) this activity was recorded against -- steps,
+    targets, and how each executed lap compares. `null` if this activity has no associated
+    planned workout."""
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/workout")
+    result = response.json()
+    return dict(result) if result is not None else None
+
+
+@mcp.tool()
+async def get_activity_sources(activity_id: str) -> dict[str, Any]:
+    """Which raw sources (Garmin device, Strava, etc) contributed to this activity, and why they
+    were merged into one record if more than one did."""
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/sources")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_health_dashboard(start_date: str, end_date: str) -> dict[str, Any]:
+    """Per-day body/vitals metrics (weight, BMI, resting/max HR, HRV, SpO2, steps, body
+    composition, blood pressure, etc) merged across whichever source actually recorded each
+    logical metric -- the same data the Health page's trend charts read."""
+    response = await _call_api(
+        "GET", "/api/v1/health/dashboard", params={"start_date": start_date, "end_date": end_date}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_health_stream(metric_key: str, for_date: str) -> dict[str, Any]:
+    """An intraday (sub-daily) health series for one metric on one date -- e.g.
+    "garmin.daily_body_battery.level" or a stress series -- read from health_stream, not the
+    daily-scalar health_observation table get_health_dashboard/list_health_observations use."""
+    response = await _call_api(
+        "GET", "/api/v1/health/stream", params={"metric_key": metric_key, "date": for_date}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_fitness(start_date: str, end_date: str) -> list[dict[str, Any]]:
+    """Daily Coggan/Banister training load, CTL (fitness), ATL (fatigue), and TSB (form) over an
+    ISO date range -- this project's own independently-computed estimate, shown alongside
+    (never reconciled against) Garmin's own Training Readiness/Status."""
+    response = await _call_api(
+        "GET", "/api/v1/fitness", params={"start_date": start_date, "end_date": end_date}
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_performance(start_date: str, end_date: str) -> list[dict[str, Any]]:
+    """Daily rolling VDOT, max HR, threshold pace/HR (aerobic + anaerobic), and race-time
+    predictions (5k/10k/half/marathon) over an ISO date range -- this project's own
+    independently-computed estimates, shown alongside (never reconciled against) Garmin's own
+    race predictions/lactate threshold."""
+    response = await _call_api(
+        "GET", "/api/v1/performance", params={"start_date": start_date, "end_date": end_date}
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_vo2max_analysis(as_of: str | None = None) -> dict[str, Any]:
+    """Which activity is currently driving the athlete's own rolling VDOT/VO2max estimate, which
+    other recent runs are ready to take over, and a plain-language explanation of any gap (no
+    qualifying run yet, the driving run is about to age out, etc). Defaults `as_of` to today."""
+    params = {"as_of": as_of} if as_of else {}
+    response = await _call_api("GET", "/api/v1/performance/vo2max-analysis", params=params)
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_pace_hr_zones(as_of: str | None = None) -> dict[str, Any]:
+    """The complete 5-zone pace + heart-rate table (Recovery/Basic Endurance/Aerobic Threshold/
+    Lactate Threshold/VO2 Max), each with a real pace range, HR range, and a plain-language
+    "when/how to use it" -- built from the athlete's own entire running history. Defaults `as_of`
+    to today."""
+    params = {"as_of": as_of} if as_of else {}
+    response = await _call_api("GET", "/api/v1/performance/pace-hr-zones", params=params)
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_race_readiness(
+    race_id: int | None = None, as_of: str | None = None
+) -> dict[str, Any]:
+    """Has the athlete run enough recent weekly distance and long-run volume for their next
+    scheduled race, not just "are they fit" -- readiness percentage, current volume vs target,
+    a VDOT-based prognosis shown alongside (never blended into) readiness, and the week-by-week
+    history behind it. Defaults to the athlete's own nearest upcoming running race; `race_id`
+    targets a specific one. `available: false` (never fabricated) with no upcoming race."""
+    params: dict[str, Any] = {}
+    if race_id is not None:
+        params["race_id"] = race_id
+    if as_of:
+        params["as_of"] = as_of
+    response = await _call_api("GET", "/api/v1/performance/race-readiness", params=params)
+    return dict(response.json())
+
+
+@mcp.tool()
+async def get_performance_curve(
+    metric: str, start_date: str, end_date: str, sports: str | None = None
+) -> dict[str, Any]:
+    """The best sustained average value for each of a fixed set of durations (1s-2h) across
+    every qualifying activity in an ISO date range -- a Runalyze-style "Heart Rate Curve"/cycling
+    "Critical Power Curve" applied to this athlete's own history. `metric` is "pace", "gap", or
+    "heart_rate" ("pace"/"gap" are always running-only; "heart_rate" honors `sports`, a
+    comma-separated list, e.g. "running,cycling")."""
+    params: dict[str, Any] = {"metric": metric, "start_date": start_date, "end_date": end_date}
+    if sports:
+        params["sports"] = sports
+    response = await _call_api("GET", "/api/v1/performance/curve", params=params)
+    return dict(response.json())
+
+
+@mcp.tool()
+async def list_insights(kind: str | None = None, window: str | None = None) -> list[dict[str, Any]]:
+    """Athlete-wide rules-based insights (personal bests, streaks, notable efforts, training-load
+    flags, health-metric callouts) -- deterministic, not LLM-generated, refreshed on every
+    ingest. Optionally filter by `kind` and/or `window`."""
+    params: dict[str, Any] = {}
+    if kind:
+        params["kind"] = kind
+    if window:
+        params["window"] = window
+    response = await _call_api("GET", "/api/v1/insights", params=params)
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_pace_bands() -> list[dict[str, Any]]:
+    """Total time-in-band across the athlete's whole running history, fastest to slowest band."""
+    response = await _call_api("GET", "/api/v1/insights/pace-bands")
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_weather_forecast(days: int | None = None) -> dict[str, Any]:
+    """Weather forecast for the athlete's own configured home location -- a coarse per-day
+    icon/temperature for up to 16 days, plus rich hour-by-hour conditions (dew point, wind,
+    precipitation, sunrise/sunset) for the next few days. `available: false` if the athlete
+    hasn't set a home location. Defaults `days` to the maximum (16)."""
+    params = {"days": days} if days is not None else {}
+    response = await _call_api("GET", "/api/v1/weather/forecast", params=params)
+    return dict(response.json())
+
+
+@mcp.tool()
+async def list_blood_tests(start_date: str, end_date: str) -> list[dict[str, Any]]:
+    """Athlete-entered lab results (one row per marker per draw) in an ISO date range, with each
+    marker's own reference range and an out-of-range flag against the athlete's own stated
+    range."""
+    response = await _call_api(
+        "GET", "/api/v1/blood-tests", params={"start_date": start_date, "end_date": end_date}
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_goal_progress(period_type: str, period_start: str) -> dict[str, Any]:
+    """Progress toward a distance goal for one calendar year or month. `period_type` is "year" or
+    "month"; `period_start` is "YYYY" for a year or "YYYY-MM" for a month. `available: false`
+    (never fabricated) when no goal is set for that exact period."""
+    response = await _call_api(
+        "GET",
+        "/api/v1/goals",
+        params={"period_type": period_type, "period_start": period_start},
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def list_planned_workouts(start_date: str, end_date: str) -> list[dict[str, Any]]:
+    """Scheduled workouts (any sport tier: running/yoga/bouldering/hiit/strength_training) in an
+    ISO date range -- each with its own completion status (explicit or matched against a
+    recorded activity) and, for running, an estimated distance/duration/load."""
+    response = await _call_api(
+        "GET", "/api/v1/planned-workouts", params={"start_date": start_date, "end_date": end_date}
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_planned_workouts_for_date(local_date: str) -> list[dict[str, Any]]:
+    """Every scheduled workout on one specific date (a day can hold more than one, e.g. a
+    morning run plus an evening strength session), in full detail including steps/targets."""
+    response = await _call_api("GET", f"/api/v1/planned-workouts/by-date/{local_date}")
+    return list(response.json())
+
+
+@mcp.tool()
+async def list_planned_races(start_date: str, end_date: str) -> list[dict[str, Any]]:
+    """Races on the calendar in an ISO date range, each with days-until and a target-vs-
+    predicted finish time (from this athlete's own VDOT-based prediction, when the race's
+    distance matches a standard race distance)."""
+    response = await _call_api(
+        "GET", "/api/v1/planned-races", params={"start_date": start_date, "end_date": end_date}
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def list_shoes(include_retired: bool = False) -> list[dict[str, Any]]:
+    """The athlete's own shoe pairs, each with live accumulated distance (from activities
+    explicitly assigned to it, plus its sport's own dated default when applicable),
+    remaining distance to its configured limit, and which sport(s) it's the current default
+    for."""
+    response = await _call_api(
+        "GET", "/api/v1/gear/shoes", params={"include_retired": include_retired}
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def get_gear_alerts() -> list[dict[str, Any]]:
+    """Every shoe pair whose live accumulated distance has reached its own configured
+    replacement limit."""
+    response = await _call_api("GET", "/api/v1/gear/alerts")
+    return list(response.json())
+
+
+@mcp.tool()
+async def update_note(note_id: int, body: str) -> dict[str, Any]:
+    """Edit an existing note's own text, keeping its entity/author/created_at unchanged."""
+    response = await _call_api("PUT", f"/api/v1/notes/{note_id}", json={"body": body})
+    return dict(response.json())
+
+
+@mcp.tool()
+async def delete_note(note_id: int) -> None:
+    """Delete a note."""
+    await _call_api("DELETE", f"/api/v1/notes/{note_id}")
+
+
+@mcp.tool()
 async def create_note(
     entity_type: str, entity_id: str, body: str, author: str | None = None
 ) -> dict[str, Any]:

@@ -99,6 +99,23 @@ returning) the whole activity's own high-tier response. See `stream_query.py::do
 docstring for why bucket width must be sized from the *window's* own span, not the whole
 activity's `duration_s`, for this to actually work for a long activity's short stretch.
 
+### 8. Tool coverage expanded from 8 to 41, read-only plus completed Notes CRUD
+
+Reported directly as a real gap: the tool surface had stayed frozen at Phase 4's original scope
+while the REST API grew to ~100 endpoints. The fix is mechanical — every new tool follows
+decision 6 exactly, a thin `_call_api` proxy with no logic of its own — but the *scope* of which
+endpoints get a tool is a real decision, not a foregone conclusion: read-only informational
+endpoints (Fitness & Form, Performance/VO2max/pace-HR-zones/race-readiness/performance-curve,
+Insights, Health dashboard/stream, Gear, Blood tests, Goals, Planned workouts/races, Weather
+forecast, and the remaining per-activity `GET`s) plus `update_note`/`delete_note` (completing
+the Notes CRUD the mission statement itself calls for). Every mutating endpoint outside notes is
+deliberately left out: `settings/*` (credentials/operational actions), and every other write —
+activity corrections, trim/merge, gear defaults/retirement, blood-test entry, goal writes, and
+especially planned-workout/planned-race writes, since a push there can reach the athlete's actual
+Garmin device within days. AGENTS.md's own MCP server bullet carries the full reasoning; this
+decision exists so a future contributor asking "why isn't X exposed" finds an answer here, not
+silence implying it was simply missed.
+
 ## Consequences
 
 - A future second MCP-capable service (unlikely, but ADR 0001's "second Python service" framing

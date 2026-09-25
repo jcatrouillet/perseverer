@@ -100,11 +100,33 @@ environment:
 - **MCP server** (`api/mcp_server.py`), mounted at `/mcp` inside the same `api`
   container/process, not a separate service — a deliberate, informed deviation from an early
   Phase-0 guess, made once Streamable HTTP's actual shape (a plain mountable ASGI app) was
-  known. Eight tools, one per REST endpoint above plus `create_note`/`list_notes`; each tool
-  calls its REST endpoint in-process via `httpx.ASGITransport`, reusing the REST layer's logic
-  rather than a second implementation. Gated by the same `X-API-Key` via a raw ASGI wrapper
-  (`Mount` bypasses FastAPI's own `Depends`). `mcp>=1.9,<2` — 2.x just went stable and isn't
-  adopted yet. See `docs/adr/0007-phase-4-mcp-server.md`.
+  known. Originally eight tools, one per REST endpoint above plus `create_note`/`list_notes`;
+  each tool calls its REST endpoint in-process via `httpx.ASGITransport`, reusing the REST
+  layer's logic rather than a second implementation. Gated by the same `X-API-Key` via a raw
+  ASGI wrapper (`Mount` bypasses FastAPI's own `Depends`). `mcp>=1.9,<2` — 2.x just went stable
+  and isn't adopted yet. See `docs/adr/0007-phase-4-mcp-server.md`.
+  **Revision: expanded from 8 to 41 tools** — reported directly as a real gap: the tool surface
+  had stayed frozen at its original Phase-4 scope while the REST API grew to ~100 endpoints
+  across a dozen features (Fitness & Form, Performance/VO2max/pace-HR-zones/race-readiness/
+  performance-curve, Insights, Health dashboard/stream, Gear, Blood tests, Goals, Planned
+  workouts/races, Weather forecast), none of it reachable through MCP. Every new tool is a
+  thin `_call_api` proxy exactly like the original eight — no new logic, just closing the gap
+  between what the REST API can answer and what an agent could actually ask it. Scope is
+  deliberately bounded to **read-only informational tools, plus completing the Notes CRUD**
+  (`update_note`/`delete_note`, alongside the pre-existing `create_note`/`list_notes` — the one
+  concrete gap in this project's own "an AI agent can write notes through" mission statement,
+  since only half the CRUD existed). Deliberately excluded, none of it an oversight: every
+  `settings/*` endpoint (Garmin/Eufy login, API keys, password, rebuild, bulk import — all
+  operational/credential actions, never appropriate for an agent to trigger); `auth/login`,
+  `share.py`, `calendar_feed.py` (not agent-relevant); and every *other* mutating endpoint
+  (activity sport/race/name/fueling corrections, trim/merge/split, gear defaults/retirement,
+  blood-test entry, goal writes, and — most deliberately — planned-workout/planned-race
+  writes, since `POST/PUT .../push` can put a workout on the athlete's actual Garmin device
+  within days; the scheduled-workouts bullet above already treats every write path there as
+  strictly human-initiated, and this scope decision keeps that invariant intact rather than
+  quietly opening a side door to it through the agent surface). If write access to any of these
+  is ever wanted, it needs its own explicit decision, not a default inherited from "the read
+  tools were easy to add."
   **Revision: `get_activity_stream` can go past the fixed `low` tier** — originally hardcoded to
   `low` (~200 points) regardless of what the caller asked for, on the theory that bulk per-second
   data doesn't belong in an agent's context window (ADR 0007 decision 7). Reported directly

@@ -1813,10 +1813,16 @@ Server version and environment. Unauthenticated: `{"version": "0.1.0", "environm
 
 ## MCP server
 
-Every read endpoint above, plus `create_note`/`list_notes`, is also exposed as an MCP (Model
-Context Protocol) tool for AI agents, mounted at `/mcp` on the same host and gated by the same
-`X-API-Key` credential described in Authentication. Each tool is a thin wrapper that calls its
-REST counterpart in-process — the shapes documented above apply there too.
+Most read endpoints above, plus the full Notes CRUD (`create_note`/`list_notes`/`update_note`/
+`delete_note`), are also exposed as MCP (Model Context Protocol) tools for AI agents, mounted at
+`/mcp` on the same host and gated by the same `X-API-Key` credential described in Authentication.
+Each tool is a thin wrapper that calls its REST counterpart in-process — the shapes documented
+above apply there too. Deliberately not exposed: every `settings/*` endpoint (credentials and
+operational actions), `auth/login`, the public `share`/`calendar` feed pages, and every mutating
+endpoint outside notes — activity corrections, trim/merge, gear defaults/retirement, blood-test
+entry, goal writes, and planned-workout/planned-race writes (a push there can reach the athlete's
+actual Garmin device) all stay human-initiated only. See `docs/adr/0007-phase-4-mcp-server.md`
+decision 8 for the full reasoning.
 
 ---
 
