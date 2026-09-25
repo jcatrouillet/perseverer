@@ -1826,6 +1826,16 @@ tests, gear, and per-activity sport/race/name/fueling corrections. Deliberately 
 `share`/`calendar` feed pages, and trim/merge/split/climb-route edits. See
 `docs/adr/0007-phase-4-mcp-server.md` decisions 8-9.
 
+Authentication for `/mcp` is either the `X-API-Key` header above or **OAuth 2.1** for remote
+clients that cannot send one (e.g. claude.ai's custom connector): discovery at
+`/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource/mcp`,
+dynamic client registration at `POST /register`, `GET /authorize` (PKCE `S256` required), `POST
+/token` (`authorization_code` and `refresh_token` grants; access tokens last 1 hour, refresh
+tokens 30 days and rotate), and `POST /revoke` (send an empty `client_secret` for a public
+client). The authorize step sends the browser to `/oauth/login`, where the athlete signs in with
+their Perseverer username/password; only the deployment's primary athlete may authorize. See ADR
+0007 decision 10.
+
 ---
 
 ## Schema Reference

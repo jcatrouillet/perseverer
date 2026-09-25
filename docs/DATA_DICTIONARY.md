@@ -1909,6 +1909,20 @@ per `(athlete_id, sport)`, `shoe_id` + `assigned_at`.
   column. `PUT ... {"shoe_id": null}` (clearing an explicit choice) resolves and returns the
   now-applicable default in the same response, rather than a bare `null`.
 
+## OAuth authorization server for the MCP endpoint (oauth_client, oauth_authorization_code, oauth_token)
+
+State for `auth/oauth.py` (ADR 0007 decision 10), in SQLite rather than memory because `api` runs
+two uvicorn workers. `oauth_client`: one row per dynamically-registered application (`client_id`,
+the RFC 7591 registration as `client_info_json`, `created_at`) — deliberately the one table here
+with no `athlete_id`, since a client exists before anyone has logged in (added to
+`EXEMPT_FROM_ATHLETE_SCOPING` alongside `metric_definition`). `oauth_authorization_code`: a
+single-use code, keyed by its SHA-256 (`code_hash`), with the athlete, client, `redirect_uri`,
+PKCE `code_challenge`, scopes, optional `resource` and a 5-minute `expires_at`; deleted on
+exchange. `oauth_token`: access and refresh tokens keyed by SHA-256 (`token_hash`), `kind`
+(`access` 1h / `refresh` 30d), `athlete_id`, `client_id`, scopes and `grant_id`, which ties the
+pair together so revoking or rotating either removes both. Raw codes and tokens are never stored
+and cannot be recovered. Expired rows are pruned opportunistically on each issue.
+
 ## Weather: full conditions judgement from one endpoint (weather.py)
 
 `GET /activities/{id}/weather` originally carried just enough for a header badge (temperature/

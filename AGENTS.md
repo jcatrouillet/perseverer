@@ -138,6 +138,35 @@ environment:
   90s`). Still deliberately excluded: every `settings/*` endpoint (credentials, API keys,
   password, rebuild, bulk import), `auth/login`, `share.py`, `calendar_feed.py`, and
   trim/merge/split/climb-route edits (visual-review workflows a human should confirm).
+  **Revision: OAuth 2.1 on `/mcp`, so claude.ai's custom connector can authenticate** — that
+  dialog takes a URL (plus optional OAuth client credentials) and cannot send the `X-API-Key`
+  header, so the header-only gate made a URL-only connector 401 on every call. The MCP SDK's own
+  authorization-server support serves `/.well-known/oauth-authorization-server`,
+  `/.well-known/oauth-protected-resource/mcp`, `/authorize`, `/token`, `/register` (RFC 7591
+  dynamic client registration) and `/revoke`, with PKCE verified by the SDK. `auth/oauth.py`
+  (`PersevererOAuthProvider`) supplies storage: `oauth_client` (the registered application — the
+  one new table exempt from `athlete_id` scoping, since it exists before anyone logs in, like
+  `metric_definition`), `oauth_authorization_code` (single-use, deleted on exchange) and
+  `oauth_token` (access 1h / refresh 30d, rotated on every refresh, revoked as a pair via
+  `grant_id`); codes and tokens are stored only as SHA-256 hashes, and everything is in SQLite
+  rather than memory because `api` runs two uvicorn workers. The consent step is this app's own
+  page, `GET/POST /oauth/login` (`api/routers/oauth.py`): `/authorize` redirects there carrying a
+  short-lived signed JWT of the pending request (no table needed), and a correct Perseverer
+  username/password — checked by `auth/credentials.py::authenticate_athlete`, the very same
+  lockout-protected, constant-time check `/auth/login` now also uses, extracted so there is one
+  implementation to audit — mints the code and redirects to the client's registered
+  `redirect_uri`. **Only the default athlete may authorize**: the MCP tools call the REST layer
+  with the shared API key, i.e. as `DEFAULT_ATHLETE_ID`, so letting a second athlete log in would
+  show them the first athlete's data (the login page refuses with a 403 rather than mislead).
+  The header path is preserved, not replaced: the ASGI wrapper rewrites a valid `X-API-Key`
+  into `Authorization: Bearer <key>` and `load_access_token` accepts the raw API key as a token,
+  so Claude Code's existing registration works unchanged; a wrong key is still a 401. The wrapper
+  lets exactly the OAuth paths through to the SDK and keeps every other non-`/mcp` path a plain
+  404 (the incident documented in `test_mcp_mount_fallthrough.py`). Deployment needs
+  `PERSEVERER_PUBLIC_BASE_URL` (the issuer/resource identifier in the discovery documents) and
+  `PERSEVERER_JWT_SECRET` set, and `docker/nginx.conf` forwards those paths to the API. SDK
+  quirk worth knowing: `/revoke`'s request model requires a `client_secret` field even for a
+  public client, so such a client must send it empty.
   **Revision: `get_activity_stream` can go past the fixed `low` tier** — originally hardcoded to
   `low` (~200 points) regardless of what the caller asked for, on the theory that bulk per-second
   data doesn't belong in an agent's context window (ADR 0007 decision 7). Reported directly

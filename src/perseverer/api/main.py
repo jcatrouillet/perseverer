@@ -37,6 +37,7 @@ from perseverer.api.routers import (
     health,
     insights,
     notes,
+    oauth,
     performance,
     planned_races,
     planned_workouts,
@@ -91,6 +92,7 @@ app.include_router(share.management_router, prefix="/api/v1")
 # /healthz//version/auth/login. See share.py's own module docstring for why (and how the
 # reverse proxy/nginx get a same-origin /share/{token} URL to this route at all).
 app.include_router(share.router)
+app.include_router(oauth.router)  # /oauth/login -- the MCP OAuth consent page (public by design)
 # GET /share/calendar/{token}.ics -- a second, structurally distinct public route (one standing
 # per-athlete secret + text/calendar, not a one-off HTML share) reusing the same /share/ nginx
 # prefix rule. See calendar_feed.py's own module docstring.

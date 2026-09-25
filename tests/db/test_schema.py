@@ -38,7 +38,9 @@ def test_exempt_tables_are_the_expected_small_set() -> None:
     deliberate, reviewed decision (see docs/adr/0002), not an accident. `auth_login_attempt`
     (Phase 9 hardening, ADR 0014) joined this set deliberately: a login attempt against a
     nonexistent username has no athlete row to attach it to, and must still be counted -- that's
-    exactly the case a brute-force attempt usually is."""
+    exactly the case a brute-force attempt usually is. `oauth_client` (ADR 0007 decision 10) is a
+    dynamically-registered *application* (e.g. claude.ai), which exists before any athlete has
+    logged in -- a shared catalog like `metric_definition`, not an athlete's data."""
     assert frozenset(
-        {"athlete", "metric_definition", "auth_login_attempt"}
+        {"athlete", "metric_definition", "auth_login_attempt", "oauth_client"}
     ) == EXEMPT_FROM_ATHLETE_SCOPING

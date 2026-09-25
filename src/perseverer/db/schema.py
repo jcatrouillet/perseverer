@@ -1253,7 +1253,55 @@ auth_login_attempt = Table(
 # --- Athlete-scoping bookkeeping, enforced by tests/db/test_schema.py -----------
 
 #: Tables that intentionally do NOT carry athlete_id because they are shared catalogs, not an
+# OAuth 2.1 authorization server state for the MCP endpoint (auth/oauth.py, ADR 0007 decision 10).
+# DB-backed, not in-memory, for the same reason auth_login_attempt is: `api` runs 2 uvicorn workers
+# that share no process memory but do share this one SQLite file, and a dynamically-registered
+# client / an issued token has to be visible to whichever worker gets the next request.
+# `oauth_client` is a registered *application* (e.g. claude.ai) -- it exists before any athlete
+# has logged in, so it carries no athlete_id; see EXEMPT_FROM_ATHLETE_SCOPING below.
+oauth_client = Table(
+    "oauth_client",
+    metadata,
+    Column("client_id", String, primary_key=True),
+    Column("client_info_json", Text, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+)
+
+# One row per issued authorization code -- single-use (deleted on exchange) and short-lived. Only
+# the SHA-256 of the code is stored, same "raw secret never recoverable" posture as every other
+# credential in this schema.
+oauth_authorization_code = Table(
+    "oauth_authorization_code",
+    metadata,
+    Column("code_hash", String, primary_key=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("client_id", String, nullable=False),
+    Column("redirect_uri", String, nullable=False),
+    Column("redirect_uri_provided_explicitly", Boolean, nullable=False),
+    Column("code_challenge", String, nullable=False),
+    Column("scopes", String, nullable=False),  # space-separated
+    Column("resource", String, nullable=True),
+    Column("expires_at", DateTime(), nullable=False),
+)
+
+# Access and refresh tokens, hashed. `grant_id` ties an access token to the refresh token issued
+# alongside it so revoking either revokes the pair.
+oauth_token = Table(
+    "oauth_token",
+    metadata,
+    Column("token_hash", String, primary_key=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("client_id", String, nullable=False),
+    Column("kind", String, nullable=False),  # "access" | "refresh"
+    Column("scopes", String, nullable=False),  # space-separated
+    Column("resource", String, nullable=True),
+    Column("grant_id", String, nullable=False),
+    Column("expires_at", DateTime(), nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    Index("ix_oauth_token_grant", "grant_id"),
+)
+
 #: individual athlete's data. Any table not in this set and not carrying athlete_id is a bug.
 EXEMPT_FROM_ATHLETE_SCOPING = frozenset(
-    {"athlete", "metric_definition", "auth_login_attempt"}
+    {"athlete", "metric_definition", "auth_login_attempt", "oauth_client"}
 )

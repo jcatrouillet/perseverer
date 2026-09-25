@@ -13,15 +13,35 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import AnyHttpUrl
 from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from perseverer.auth.oauth import SCOPE, oauth_provider
 from perseverer.config import get_settings
+
+_public_base_url = (get_settings().public_base_url or "http://localhost:8000").rstrip("/")
 
 mcp = FastMCP(
     "Perseverer",
+    # OAuth 2.1 (dynamic client registration + PKCE) so a remote MCP client that can't send a
+    # custom header -- claude.ai's custom connector -- can authenticate. The SDK serves
+    # /.well-known/*, /authorize, /token, /register and /revoke; auth/oauth.py supplies storage
+    # and api/routers/oauth.py the login page. The header-key path is preserved by the ASGI
+    # wrapper below. See ADR 0007 decision 10.
+    auth_server_provider=oauth_provider,
+    auth=AuthSettings(
+        issuer_url=AnyHttpUrl(_public_base_url),
+        resource_server_url=AnyHttpUrl(f"{_public_base_url}/mcp"),
+        required_scopes=[SCOPE],
+        client_registration_options=ClientRegistrationOptions(
+            enabled=True, valid_scopes=[SCOPE], default_scopes=[SCOPE]
+        ),
+        revocation_options=RevocationOptions(enabled=True),
+    ),
     # DNS-rebinding protection is redundant here -- the API key (_require_api_key_asgi below)
     # is the real gate, and enabling this would need a deployment-specific hostname baked into
     # config for no real security gain against that specific threat. See ADR 0007 decision 4.
@@ -1013,14 +1033,27 @@ async def set_activity_fueling(
     return dict(response.json())
 
 
+# The only non-/mcp paths the MCP sub-app is allowed to answer: the OAuth authorization server's
+# own endpoints (served by the SDK). Everything else outside /mcp stays a plain 404.
+_OAUTH_PATHS = frozenset({"/authorize", "/token", "/register", "/revoke"})
+_OAUTH_WELL_KNOWN_PREFIX = "/.well-known/oauth-"
+
+
 def _require_api_key_asgi(inner_app: ASGIApp) -> ASGIApp:
-    """Wraps the MCP mount with the same shared-secret gate every REST route has via
-    `Depends(require_api_key)` -- `Mount`-ed sub-apps never reach FastAPI's own dependency
-    injection, so this is a raw ASGI equivalent. See ADR 0007 decision 5.
+    """Fronts the MCP mount. Two credentials reach `/mcp`: an OAuth bearer token (validated by the
+    SDK itself, see auth/oauth.py) or the shared `X-API-Key` header this wrapper has always
+    accepted -- a valid one is rewritten into an `Authorization: Bearer` header so the SDK's own
+    auth middleware, which only understands bearer tokens, lets it through and Claude Code's
+    header-based registration keeps working unchanged. `Mount`-ed sub-apps never reach FastAPI's
+    own dependency injection, hence a raw ASGI wrapper. See ADR 0007 decisions 5 and 10.
     """
 
     async def wrapped(scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
+            await inner_app(scope, receive, send)
+            return
+        path = scope["path"]
+        if path in _OAUTH_PATHS or path.startswith(_OAUTH_WELL_KNOWN_PREFIX):
             await inner_app(scope, receive, send)
             return
         # This wrapper sits behind `app.mount("/", mcp_asgi_app)` (main.py) -- Starlette's Mount
@@ -1031,24 +1064,26 @@ def _require_api_key_asgi(inner_app: ASGIApp) -> ASGIApp:
         # normal 404 -- which is exactly indistinguishable from a real auth failure to a client,
         # and was confirmed to cause a very confusing real incident: a JWT-authenticated frontend
         # session got silently logged out because one specific endpoint fell through to this
-        # X-API-Key-only check, which JWT bearer tokens can never satisfy. Only requests actually
-        # under /mcp should ever reach the auth check below.
-        if not scope["path"].startswith("/mcp"):
+        # X-API-Key-only check, which JWT bearer tokens can never satisfy. Only /mcp and the
+        # OAuth endpoints above should ever reach the auth logic below.
+        if not path.startswith("/mcp"):
             await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
             return
-        settings = get_settings()
-        headers = dict(scope["headers"])
-        provided = headers.get(b"x-api-key", b"").decode()
-        if not settings.api_key:
-            await JSONResponse({"detail": "API key not configured"}, status_code=503)(
-                scope, receive, send
-            )
-            return
-        if not secrets.compare_digest(provided, settings.api_key):
-            await JSONResponse({"detail": "invalid or missing API key"}, status_code=401)(
-                scope, receive, send
-            )
-            return
+        provided = dict(scope["headers"]).get(b"x-api-key", b"")
+        if provided:
+            api_key = get_settings().api_key
+            if not api_key or not secrets.compare_digest(provided.decode(), api_key):
+                await JSONResponse({"detail": "invalid or missing API key"}, status_code=401)(
+                    scope, receive, send
+                )
+                return
+            scope = {
+                **scope,
+                "headers": [
+                    *((k, v) for k, v in scope["headers"] if k != b"authorization"),
+                    (b"authorization", b"Bearer " + provided),
+                ],
+            }
         await inner_app(scope, receive, send)
 
     return wrapped

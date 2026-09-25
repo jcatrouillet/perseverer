@@ -6,21 +6,14 @@ credential check. See docs/adr/0008-phase-5-frontend.md.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection
 
 from perseverer.api.dependencies import SettingsDep, get_conn
 from perseverer.api.schemas.auth import LoginRequest, LoginResponse
-from perseverer.auth.lockout import is_locked_out, record_attempt
-from perseverer.auth.passwords import hash_password, verify_password
+from perseverer.auth.credentials import authenticate_athlete
 from perseverer.auth.tokens import create_session_token
-from perseverer.db.schema import athlete
 
 router = APIRouter()
-
-# Constant-time comparison target for unknown usernames -- never valid for any real password
-# since verify_password would need the exact matching random salt to succeed.
-_DUMMY_HASH = hash_password("")
-
 
 @router.post("/auth/login")
 def login(
@@ -31,31 +24,13 @@ def login(
     if not settings.jwt_secret:
         raise HTTPException(status_code=503, detail="JWT signing not configured")
 
-    # Computed unconditionally, before the credential check below, so a locked-out request and
-    # a wrong-password request do the exact same amount of work (see auth/lockout.py's own
-    # docstring) -- this endpoint already goes out of its way to keep an unknown username from
-    # returning measurably faster than a wrong password (ADR 0008), and a lockout check must not
-    # reopen that same timing side-channel.
-    locked_out = is_locked_out(conn, payload.username)
-
-    row = conn.execute(
-        select(athlete.c.id, athlete.c.password_hash).where(athlete.c.username == payload.username)
-    ).one_or_none()
-    # Always run verify_password, even for an unknown username -- against a dummy hash --
-    # so a nonexistent username doesn't return measurably faster than a wrong password
-    # (this frontend is reachable beyond a trusted network by design, see ADR 0008).
-    stored_hash = row.password_hash if row is not None and row.password_hash else _DUMMY_HASH
-    password_ok = verify_password(payload.password, stored_hash)
-    valid_credentials = row is not None and row.password_hash is not None and password_ok
-
-    record_attempt(conn, payload.username, success=valid_credentials and not locked_out)
-    conn.commit()
-
+    athlete_id = authenticate_athlete(conn, payload.username, payload.password)
     # Locked out and wrong-credentials both raise the exact same 401 with the exact same
     # message -- never tell an external caller which one actually happened.
-    if locked_out or not valid_credentials:
+    if athlete_id is None:
         raise HTTPException(status_code=401, detail="invalid username or password")
 
-    assert row is not None  # valid_credentials already guarantees this
-    token, expires_at = create_session_token(row.id, settings.jwt_secret, settings.jwt_expiry_days)
+    token, expires_at = create_session_token(
+        athlete_id, settings.jwt_secret, settings.jwt_expiry_days
+    )
     return LoginResponse(access_token=token, expires_at=expires_at)

@@ -454,3 +454,19 @@ STARTTLS on 587 misbehaves, switch to `PERSEVERER_SMTP_PORT=465` +
 (2) ticks "Weekly summary" and/or "Monthly summary" on Settings → External tools → Email
 reports. "Send test email" there sends the current weekly report immediately — the way to
 confirm SMTP + the Profile email are right without waiting for Sunday.
+
+## Connecting claude.ai to the MCP server (OAuth)
+
+Prerequisites on bercy (both already set in `perseverer.env`): `PERSEVERER_PUBLIC_BASE_URL`
+(the public origin, e.g. `https://perseverer.catrouillet.net` — it becomes the OAuth issuer) and
+`PERSEVERER_JWT_SECRET`. The frontend's `nginx.conf` forwards `/.well-known/oauth-*`,
+`/authorize`, `/token`, `/register`, `/revoke` and `/oauth/` to the API, so deploy the frontend
+image along with the API image.
+
+Then on claude.ai: **Settings → Connectors → Add custom connector**, name it Perseverer, URL
+`https://perseverer.catrouillet.net/mcp`, leave the OAuth client fields empty (the server
+supports dynamic client registration). Connect, sign in on the Perseverer page that opens with
+your normal username and password, and approve. The connector then works in claude.ai, the
+desktop app and scheduled runs with no PC involved. Only the primary athlete can authorize. To
+cut off a connector, delete its rows from `oauth_token`; Claude Code's header-based
+registration (`X-API-Key`) is unaffected either way.

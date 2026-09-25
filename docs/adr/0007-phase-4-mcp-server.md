@@ -132,6 +132,23 @@ syntax, so the create tools' descriptions embed the full grammar (registered thr
 `@mcp.tool(description=...)`; FastMCP snapshots `__doc__` at decoration time, so appending to it
 afterwards silently does nothing) and its example is test-verified to parse without errors.
 
+### 10. OAuth 2.1 on `/mcp` for remote clients that cannot send a custom header
+
+claude.ai's custom connector accepts a URL and optional OAuth client credentials, not an arbitrary
+header, so decision 5's header-only gate made it unusable. Options weighed: a secret in the URL
+path (small, but the URL becomes the credential and lands in proxy logs), a read-only second
+mount, and real OAuth. OAuth was chosen by the owner. The SDK already implements the protocol
+surface (discovery, dynamic client registration, PKCE, redirect-URI validation); this decision
+adds only what it cannot: storage and the resource-owner login. Client, code and token state is
+in SQLite because `api` runs two workers with no shared memory, tokens and codes are stored as
+hashes, codes are single-use (deleted on exchange), and refresh tokens rotate. The login page
+reuses `/auth/login`'s lockout-protected credential check (extracted to `auth/credentials.py`).
+Only the default athlete can authorize, because every tool acts as that athlete via the shared
+key. Decision 5 still stands for header clients: a valid `X-API-Key` is rewritten into a bearer
+token and accepted, so Claude Code's registration is untouched. Not attempted: per-athlete tool
+identity (tools would need to carry the OAuth subject into `_call_api`) and refresh-token reuse
+detection beyond rotation.
+
 ## Consequences
 
 - A future second MCP-capable service (unlikely, but ADR 0001's "second Python service" framing
