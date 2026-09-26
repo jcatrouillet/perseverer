@@ -27,6 +27,12 @@ _public_base_url = (get_settings().public_base_url or "http://localhost:8000").r
 
 mcp = FastMCP(
     "Perseverer",
+    # Stateless: `api` runs 2 uvicorn workers that share no process memory, and Streamable HTTP
+    # sessions are otherwise held in the memory of whichever worker handled `initialize` -- a
+    # follow-up request landing on the other worker got "session not found" (404/400), observed
+    # live as ~4 of 11 real claude.ai requests failing. Every tool here is a plain request/
+    # response, so nothing needs a persistent session.
+    stateless_http=True,
     # OAuth 2.1 (dynamic client registration + PKCE) so a remote MCP client that can't send a
     # custom header -- claude.ai's custom connector -- can authenticate. The SDK serves
     # /.well-known/*, /authorize, /token, /register and /revoke; auth/oauth.py supplies storage

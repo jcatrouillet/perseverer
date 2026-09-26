@@ -191,6 +191,12 @@ def test_full_oauth_flow(client: TestClient, engine: Engine) -> None:
         assert c.post("/mcp", json=_INIT, headers=bearer).status_code == 200
         keyed = {**_MCP_HEADERS, "X-API-Key": TEST_API_KEY}
         assert c.post("/mcp", json=_INIT, headers=keyed).status_code == 200
+        # Stateless: a tool listing needs no prior `initialize` and no session id, so it cannot
+        # fail by landing on a different worker than the one that handled the handshake.
+        listing = {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+        stateless = c.post("/mcp", json=listing, headers=bearer)
+        assert stateless.status_code == 200, stateless.text
+        assert "create_planned_workout" in stateless.text
         wrong_key = {**_MCP_HEADERS, "X-API-Key": "nope"}
         assert c.post("/mcp", json=_INIT, headers=wrong_key).status_code == 401
         garbage = {**_MCP_HEADERS, "Authorization": "Bearer not-a-token"}

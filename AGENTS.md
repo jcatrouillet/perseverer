@@ -176,6 +176,12 @@ environment:
   denylist also fixes any share link opened in a browser with the app installed. A browser with
   the old worker needs one normal visit to the app (which installs the new worker) before the
   connector's Connect step will work.
+  **And a second one, found from the live logs right after connecting**: ~4 of 11 real claude.ai
+  `/mcp` requests failed (404 "session not found" / 400 missing session), because Streamable
+  HTTP sessions live in the memory of the one uvicorn worker that handled `initialize` and `api`
+  runs two. `FastMCP(stateless_http=True)` removes the problem at the root — every tool is a
+  plain request/response, so nothing needs a persistent session (a test asserts a bare
+  `tools/list` works with no handshake).
   **Revision: `get_activity_stream` can go past the fixed `low` tier** — originally hardcoded to
   `low` (~200 points) regardless of what the caller asked for, on the theory that bulk per-second
   data doesn't belong in an agent's context window (ADR 0007 decision 7). Reported directly
