@@ -1795,10 +1795,15 @@ environment:
   `fetch_forecast`/`fetch_upcoming_conditions` and `_day_detail_out` unchanged, so it is equally
   uncached/un-archived. Location is `route_geom.start_lat/start_lng` of the newest
   (`activity.start_time_utc`) non-deleted activity that has one; an activity with no GPS is
-  skipped, not chosen. The timezone is the activity's own recorded `tz_name`, else Open-Meteo's
+  skipped, not chosen. The timezone is *requested* as the activity's own recorded `tz_name`, else Open-Meteo's
   `auto` (derived from the coordinates) — *not* the athlete's home `athlete.timezone`, since the
-  forecast's `local_date`s must be the location's own dates; the response echoes it in
-  `source_activity.timezone`. Deliberately **no fallback to the home location** when there is no
+  forecast's `local_date`s must be the location's own dates. Activities in this archive store no
+  `tz_name` (only a UTC offset), so `auto` is the normal case; the response therefore reports the
+  zone Open-Meteo *resolved* (its top-level `timezone` field, via
+  `weather_forecast.py::fetch_forecast_with_timezone`/`parse_resolved_timezone`) in
+  `source_activity.timezone` — a real IANA name like `America/Los_Angeles`, never the literal
+  `auto` (a request mode, not a zone), `null` only when nothing was resolved — and reuses that
+  resolved name for the second, rich-detail request. Deliberately **no fallback to the home location** when there is no
   located activity: `available: false` with `source_activity: null`, because a silent
   substitution would answer a different question than the caller asked.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web

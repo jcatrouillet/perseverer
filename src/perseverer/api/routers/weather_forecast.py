@@ -31,6 +31,7 @@ from perseverer.weather_forecast import (
     MAX_FORECAST_DAYS,
     ForecastDayDetail,
     fetch_forecast,
+    fetch_forecast_with_timezone,
     fetch_upcoming_conditions,
 )
 
@@ -132,8 +133,9 @@ def get_last_activity_forecast(
     activity that has one -- for when the athlete is away from home (a trip, a race weekend) and
     their configured home location would answer the wrong question. `days` sets the coarse
     per-day list; `upcoming` (rich hourly detail) always covers the next
-    UPCOMING_DETAIL_DAYS. Timezone is the activity's own recorded `tz_name`, else Open-Meteo's
-    `auto` (derived from the coordinates), so `local_date` is the *location's* local date, not
+    UPCOMING_DETAIL_DAYS. Timezone is requested as the activity's own recorded `tz_name`, else
+    Open-Meteo's `auto` (derived from the coordinates), and the zone Open-Meteo actually resolved
+    is echoed in `source_activity.timezone`, so `local_date` is the *location's* local date, not
     the athlete's home one. `available=false` -- never a fabricated forecast -- when the athlete
     has no activity with a GPS start point or the coarse fetch fails; unlike
     GET /weather/forecast this deliberately does not fall back to the home location, since the
@@ -162,7 +164,12 @@ def get_last_activity_forecast(
     if row is None:
         return ActivityLocationForecastOut(available=False)
 
-    tz = row.tz_name or "auto"
+    requested_tz = row.tz_name or "auto"
+    fetched = fetch_forecast_with_timezone(row.start_lat, row.start_lng, days, tz=requested_tz)
+    forecast_days, resolved_tz = fetched if fetched is not None else (None, None)
+    # Report the zone Open-Meteo actually used -- the real name behind an "auto" request -- and
+    # never the literal "auto", which is a request mode, not a timezone. Activities here don't
+    # store a tz_name, so "auto" is the common case.
     source = ForecastSourceActivityOut(
         id=row.id,
         local_date=row.local_date,
@@ -170,10 +177,11 @@ def get_last_activity_forecast(
         sport=row.sport,
         start_lat=row.start_lat,
         start_lng=row.start_lng,
-        timezone=tz,
+        timezone=resolved_tz or row.tz_name,
     )
-    forecast_days = fetch_forecast(row.start_lat, row.start_lng, days, tz=tz)
-    upcoming = fetch_upcoming_conditions(row.start_lat, row.start_lng, tz=tz)
+    upcoming = fetch_upcoming_conditions(
+        row.start_lat, row.start_lng, tz=resolved_tz or requested_tz
+    )
     upcoming_out = [_day_detail_out(d) for d in upcoming or []]
     if not forecast_days:
         return ActivityLocationForecastOut(

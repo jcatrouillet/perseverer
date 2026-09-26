@@ -117,9 +117,24 @@ def parse_forecast_response(raw: dict[str, Any]) -> list[ForecastDay]:
     return days
 
 
+def parse_resolved_timezone(raw: dict[str, Any]) -> str | None:
+    """The IANA zone name Open-Meteo actually used for the response (its top-level `timezone`
+    field) -- the real name behind a `timezone=auto` request, which is how a forecast for a
+    coordinate with no known zone can still say which zone its local dates are in."""
+    tz = raw.get("timezone")
+    return tz if isinstance(tz, str) and tz else None
+
+
 def fetch_forecast(
     lat: float, lon: float, days: int, *, tz: str = "UTC", client: httpx.Client | None = None
 ) -> list[ForecastDay] | None:
+    result = fetch_forecast_with_timezone(lat, lon, days, tz=tz, client=client)
+    return None if result is None else result[0]
+
+
+def fetch_forecast_with_timezone(
+    lat: float, lon: float, days: int, *, tz: str = "UTC", client: httpx.Client | None = None
+) -> tuple[list[ForecastDay], str | None] | None:
     """Calls Open-Meteo's forecast endpoint for `min(days, MAX_FORECAST_DAYS)` days starting
     today (Open-Meteo's own `forecast_days` semantics -- today plus `forecast_days - 1` more) in
     `tz`, the athlete's own IANA timezone -- see this module's own docstring for why this must be
@@ -128,7 +143,8 @@ def fetch_forecast(
     api/schemas/settings.py::AthleteProfileIn's own zoneinfo check) -- Open-Meteo itself would
     just 400 on a garbage value, which surfaces as a plain fetch failure (None) below. Returns
     None (never a fabricated forecast) on any HTTP failure; returns [] if the response parses but
-    has no usable daily data."""
+    has no usable daily data. The second tuple element is the zone name Open-Meteo resolved (see
+    `parse_resolved_timezone`), None if the response omits it."""
     requested_days = max(0, min(days, MAX_FORECAST_DAYS))
     params = {
         "latitude": f"{lat:.4f}",
@@ -149,7 +165,8 @@ def fetch_forecast(
         if owns_client:
             http_client.close()
 
-    return parse_forecast_response(response.json())
+    raw = response.json()
+    return parse_forecast_response(raw), parse_resolved_timezone(raw)
 
 
 class ForecastHourlyPoint(NamedTuple):

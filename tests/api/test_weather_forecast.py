@@ -343,11 +343,15 @@ def test_last_activity_forecast_uses_the_most_recent_located_activity(
 
     calls: list[tuple[float, float, int, str]] = []
 
-    def fake_fetch(lat: float, lon: float, days: int, *, tz: str = "UTC") -> list[ForecastDay]:
+    def fake_fetch(
+        lat: float, lon: float, days: int, *, tz: str = "UTC"
+    ) -> tuple[list[ForecastDay], str | None]:
         calls.append((lat, lon, days, tz))
-        return [ForecastDay(date(2026, 9, 14), 3, 12.0, 19.0)]
+        return [ForecastDay(date(2026, 9, 14), 3, 12.0, 19.0)], "Europe/Paris"
 
-    monkeypatch.setattr("perseverer.api.routers.weather_forecast.fetch_forecast", fake_fetch)
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast_with_timezone", fake_fetch
+    )
 
     r = client.get("/api/v1/weather/forecast/last-activity", headers=auth_headers)
     assert r.status_code == 200
@@ -374,16 +378,31 @@ def test_last_activity_forecast_falls_back_to_auto_timezone(
 ) -> None:
     _seed_located_activity(engine, "a1", start=datetime(2026, 9, 1, 8), lat=10.0, lng=20.0)
     seen: list[str] = []
+    upcoming_tz: list[str] = []
 
-    def fake_fetch(lat: float, lon: float, days: int, *, tz: str = "UTC") -> list[ForecastDay]:
+    def fake_fetch(
+        lat: float, lon: float, days: int, *, tz: str = "UTC"
+    ) -> tuple[list[ForecastDay], str | None]:
         seen.append(tz)
-        return [ForecastDay(date(2026, 9, 14), 0, 1.0, 2.0)]
+        return [ForecastDay(date(2026, 9, 14), 0, 1.0, 2.0)], "America/Los_Angeles"
 
-    monkeypatch.setattr("perseverer.api.routers.weather_forecast.fetch_forecast", fake_fetch)
+    def fake_upcoming(lat: float, lon: float, *, tz: str = "UTC") -> list[ForecastDayDetail]:
+        upcoming_tz.append(tz)
+        return []
+
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast_with_timezone", fake_fetch
+    )
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_upcoming_conditions", fake_upcoming
+    )
     r = client.get("/api/v1/weather/forecast/last-activity?days=5", headers=auth_headers)
     assert r.status_code == 200
+    # No stored tz_name -> "auto" is what is *requested*, but the response reports the real zone
+    # Open-Meteo resolved -- never the literal "auto" -- and the second request reuses it.
     assert seen == ["auto"]
-    assert r.json()["source_activity"]["timezone"] == "auto"
+    assert r.json()["source_activity"]["timezone"] == "America/Los_Angeles"
+    assert upcoming_tz == ["America/Los_Angeles"]
 
 
 def test_last_activity_forecast_unavailable_when_fetch_fails_but_names_the_source(
@@ -394,11 +413,14 @@ def test_last_activity_forecast_unavailable_when_fetch_fails_but_names_the_sourc
 ) -> None:
     _seed_located_activity(engine, "a1", start=datetime(2026, 9, 1, 8), lat=10.0, lng=20.0)
     monkeypatch.setattr(
-        "perseverer.api.routers.weather_forecast.fetch_forecast", lambda *a, **k: None
+        "perseverer.api.routers.weather_forecast.fetch_forecast_with_timezone",
+        lambda *a, **k: None,
     )
     r = client.get("/api/v1/weather/forecast/last-activity", headers=auth_headers)
     assert r.json()["available"] is False
     assert r.json()["source_activity"]["id"] == "a1"
+    # Nothing was resolved and the activity stores no tz_name: unknown, not the literal "auto".
+    assert r.json()["source_activity"]["timezone"] is None
 
 
 def test_last_activity_forecast_requires_auth_and_bounds_days(

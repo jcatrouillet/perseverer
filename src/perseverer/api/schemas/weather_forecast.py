@@ -89,9 +89,12 @@ class ForecastSourceActivityOut(BaseModel):
     sport: str
     start_lat: float
     start_lng: float
-    # IANA zone the forecast's local dates/times are expressed in: the activity's own recorded
-    # `tz_name` when it has one, else "auto" (Open-Meteo resolves the zone from the coordinates).
-    timezone: str
+    # IANA zone (e.g. "America/Los_Angeles") the forecast's local dates/times are expressed in.
+    # Requested from Open-Meteo as the activity's own `tz_name` when it has one, else "auto"
+    # (resolve from the coordinates) -- and either way reported as the zone name Open-Meteo
+    # actually used. None only when the activity has no tz_name *and* the fetch failed, so no zone
+    # was ever resolved: never the literal "auto", which is a request mode, not a zone.
+    timezone: str | None
 
 
 class ActivityLocationForecastOut(BaseModel):

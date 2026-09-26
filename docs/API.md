@@ -1398,9 +1398,10 @@ The forecast (default the **next 3 days**) at the GPS start point of the athlete
 recorded activity that has one** — for when they're away from home (a trip, a race weekend) and
 `GET /weather/forecast`'s configured home location would answer the wrong question. Same
 `days` + `upcoming` shape and the same deliberately-uncached, un-archived fetch as that endpoint.
-The forecast is requested in the activity's own recorded timezone (`tz_name`), else Open-Meteo's
-`auto` (derived from the coordinates), so `local_date` is the *location's* local date, not the
-athlete's home one; the response names it in `source_activity.timezone`. Unlike
+The forecast is requested in the activity's own recorded timezone (`tz_name`) when it has one,
+else Open-Meteo's `auto` (derived from the coordinates), so `local_date` is the *location's*
+local date, not the athlete's home one. `source_activity.timezone` is always the real IANA name
+Open-Meteo used (e.g. `America/Los_Angeles`), never the literal `auto`. Unlike
 `GET /weather/forecast` this does **not** fall back to the home location — a silent substitution
 would answer a different question than the one asked.
 
@@ -1413,7 +1414,7 @@ would answer a different question than the one asked.
 | Field | Type | Description |
 |---|---|---|
 | `available` | boolean | `false` — never fabricated — when the athlete has no activity with a GPS start point, or the coarse-forecast fetch failed. |
-| `source_activity` | `ForecastSourceActivityOut`, nullable | The activity the location came from: `id`, `local_date`, `name`, `sport`, `start_lat`, `start_lng`, `timezone`. Present even when `available` is `false` because the fetch failed (so a caller can see *where* it tried); `null` only when there is no located activity. |
+| `source_activity` | `ForecastSourceActivityOut`, nullable | The activity the location came from: `id`, `local_date`, `name`, `sport`, `start_lat`, `start_lng`, `timezone` (IANA name; `null` only if the fetch failed and the activity stores no `tz_name`). Present even when `available` is `false` because the fetch failed (so a caller can see *where* it tried); `null` only when there is no located activity. |
 | `days` | `ForecastDayOut[]` | Empty when `available` is `false`. |
 | `upcoming` | `ForecastDayDetailOut[]` | Same rich near-term detail as `GET /weather/forecast`, for the same location. |
 

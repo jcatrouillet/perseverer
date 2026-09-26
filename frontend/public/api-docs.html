@@ -1199,7 +1199,7 @@ const SCHEMAS = [
       ["sport","string",""],
       ["start_lat","number",""],
       ["start_lng","number",""],
-      ["timezone","string","IANA zone the forecast's local dates are in: the activity's tz_name, else \"auto\"."],
+      ["timezone","string|null","IANA zone the forecast's local dates are in (e.g. America/Los_Angeles), as resolved by Open-Meteo -- never the literal auto. null only if the fetch failed and the activity stores no tz_name.","opt"],
     ] },
   { name: "ForecastDayOut", note: "One forecast day, up to Open-Meteo's own 16-day cap.", fields: [
       ["local_date","string(date)",""],
@@ -2199,7 +2199,7 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "GET", path: "/api/v1/weather/forecast/last-activity", summary: "Get the forecast (default next 3 days) at the athlete's most recent located activity.",
-      description: "For when the athlete is away from home and the configured home location would answer the wrong question. Location is the GPS start point of the most recent recorded activity that has one. Same days + upcoming shape and the same uncached fetch as GET /weather/forecast, in the activity's own recorded timezone (else Open-Meteo's auto, derived from the coordinates) -- named in source_activity.timezone. Does not fall back to the home location: a silent substitution would answer a different question.",
+      description: "For when the athlete is away from home and the configured home location would answer the wrong question. Location is the GPS start point of the most recent recorded activity that has one. Same days + upcoming shape and the same uncached fetch as GET /weather/forecast, in the activity's own recorded timezone when it has one, else Open-Meteo's auto (derived from the coordinates); source_activity.timezone is always the real IANA name Open-Meteo used (e.g. America/Los_Angeles), never the literal auto. Does not fall back to the home location: a silent substitution would answer a different question.",
       params: [ ["days","query","opt","integer, 1-16","3","Only affects `days`; `upcoming` always covers its own fixed 3-day window."] ],
       responses: [ { code: 200, ref: "ActivityLocationForecastOut" }, { code: 422, note: "days outside 1-16." } ],
       example: { curl: `curl https://your-perseverer-host/api/v1/weather/forecast/last-activity \\

@@ -14,8 +14,10 @@ from perseverer.weather_forecast import (
     ForecastDay,
     ForecastHourlyPoint,
     fetch_forecast,
+    fetch_forecast_with_timezone,
     fetch_upcoming_conditions,
     parse_forecast_response,
+    parse_resolved_timezone,
     parse_upcoming_conditions_response,
 )
 
@@ -293,3 +295,46 @@ class TestFetchUpcomingConditions:
     def test_returns_empty_list_when_response_has_no_usable_data(self) -> None:
         client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})))
         assert fetch_upcoming_conditions(0.0, 0.0, client=client) == []
+
+
+class TestResolvedTimezone:
+    def test_reads_the_zone_open_meteo_resolved(self) -> None:
+        assert parse_resolved_timezone({"timezone": "America/Los_Angeles"}) == (
+            "America/Los_Angeles"
+        )
+
+    def test_none_when_absent_or_not_a_name(self) -> None:
+        assert parse_resolved_timezone({}) is None
+        assert parse_resolved_timezone({"timezone": ""}) is None
+        assert parse_resolved_timezone({"timezone": 7}) is None
+
+    def test_fetch_returns_the_zone_behind_an_auto_request(self) -> None:
+        captured: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured.update(request.url.params)
+            return httpx.Response(
+                200,
+                json={
+                    "timezone": "America/Los_Angeles",
+                    "daily": {
+                        "time": ["2026-09-14"],
+                        "weathercode": [0],
+                        "temperature_2m_max": [25.0],
+                        "temperature_2m_min": [15.0],
+                    },
+                },
+            )
+
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        result = fetch_forecast_with_timezone(37.36, -121.97, 3, tz="auto", client=client)
+
+        assert captured["timezone"] == "auto"
+        assert result == (
+            [ForecastDay(date(2026, 9, 14), 0, 15.0, 25.0)],
+            "America/Los_Angeles",
+        )
+
+    def test_fetch_failure_is_none(self) -> None:
+        client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+        assert fetch_forecast_with_timezone(0.0, 0.0, 3, client=client) is None
