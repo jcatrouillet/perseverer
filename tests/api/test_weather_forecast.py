@@ -16,9 +16,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
-from perseverer.db.schema import athlete
+from perseverer.db.schema import activity as activity_table
+from perseverer.db.schema import athlete, route_geom
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.weather_forecast import ForecastDay, ForecastDayDetail, ForecastHourlyPoint
+from tests.api.conftest import seed_activity
 
 
 @pytest.fixture(autouse=True)
@@ -273,3 +275,135 @@ def test_upcoming_is_populated_even_when_the_coarse_forecast_is_unavailable(
     assert body["available"] is False
     assert len(body["upcoming"]) == 1
     assert body["upcoming"][0]["local_date"] == "2026-09-14"
+
+
+# --- GET /weather/forecast/last-activity ---------------------------------------------------
+
+
+def _seed_located_activity(
+    engine: Engine,
+    activity_id: str,
+    *,
+    start: datetime,
+    lat: float | None,
+    lng: float | None,
+    tz_name: str | None = None,
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id=activity_id)
+        conn.execute(
+            activity_table.update()
+            .where(activity_table.c.id == activity_id)
+            .values(start_time_utc=start, tz_name=tz_name)
+        )
+        conn.execute(
+            route_geom.insert().values(
+                activity_id=activity_id,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_lat=lat,
+                start_lng=lng,
+            )
+        )
+        conn.commit()
+
+
+def test_last_activity_forecast_unavailable_without_a_located_activity(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="no-gps")  # an activity with no route_geom row at all
+    r = client.get("/api/v1/weather/forecast/last-activity", headers=auth_headers)
+    assert r.status_code == 200
+    assert r.json() == {
+        "available": False,
+        "source_activity": None,
+        "days": [],
+        "upcoming": [],
+    }
+
+
+def test_last_activity_forecast_uses_the_most_recent_located_activity(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_home_location(engine, 1.0, 1.0)  # must NOT be used
+    _seed_located_activity(
+        engine, "older", start=datetime(2026, 9, 1, 8), lat=37.36, lng=-121.97
+    )
+    _seed_located_activity(
+        engine, "newest-with-gps", start=datetime(2026, 9, 10, 8), lat=48.85, lng=2.35,
+        tz_name="Europe/Paris",
+    )
+    # More recent than both, but no GPS start point -- must be skipped, not chosen.
+    _seed_located_activity(
+        engine, "newest-no-gps", start=datetime(2026, 9, 12, 8), lat=None, lng=None
+    )
+
+    calls: list[tuple[float, float, int, str]] = []
+
+    def fake_fetch(lat: float, lon: float, days: int, *, tz: str = "UTC") -> list[ForecastDay]:
+        calls.append((lat, lon, days, tz))
+        return [ForecastDay(date(2026, 9, 14), 3, 12.0, 19.0)]
+
+    monkeypatch.setattr("perseverer.api.routers.weather_forecast.fetch_forecast", fake_fetch)
+
+    r = client.get("/api/v1/weather/forecast/last-activity", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert calls == [(48.85, 2.35, 3, "Europe/Paris")]
+    assert body["available"] is True
+    assert body["source_activity"]["id"] == "newest-with-gps"
+    assert body["source_activity"]["timezone"] == "Europe/Paris"
+    assert body["days"] == [
+        {
+            "local_date": "2026-09-14",
+            "weather_code": 3,
+            "temperature_min_c": 12.0,
+            "temperature_max_c": 19.0,
+        }
+    ]
+
+
+def test_last_activity_forecast_falls_back_to_auto_timezone(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_located_activity(engine, "a1", start=datetime(2026, 9, 1, 8), lat=10.0, lng=20.0)
+    seen: list[str] = []
+
+    def fake_fetch(lat: float, lon: float, days: int, *, tz: str = "UTC") -> list[ForecastDay]:
+        seen.append(tz)
+        return [ForecastDay(date(2026, 9, 14), 0, 1.0, 2.0)]
+
+    monkeypatch.setattr("perseverer.api.routers.weather_forecast.fetch_forecast", fake_fetch)
+    r = client.get("/api/v1/weather/forecast/last-activity?days=5", headers=auth_headers)
+    assert r.status_code == 200
+    assert seen == ["auto"]
+    assert r.json()["source_activity"]["timezone"] == "auto"
+
+
+def test_last_activity_forecast_unavailable_when_fetch_fails_but_names_the_source(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_located_activity(engine, "a1", start=datetime(2026, 9, 1, 8), lat=10.0, lng=20.0)
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast", lambda *a, **k: None
+    )
+    r = client.get("/api/v1/weather/forecast/last-activity", headers=auth_headers)
+    assert r.json()["available"] is False
+    assert r.json()["source_activity"]["id"] == "a1"
+
+
+def test_last_activity_forecast_requires_auth_and_bounds_days(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    assert client.get("/api/v1/weather/forecast/last-activity").status_code == 401
+    r = client.get("/api/v1/weather/forecast/last-activity?days=17", headers=auth_headers)
+    assert r.status_code == 422

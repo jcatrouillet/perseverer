@@ -51,6 +51,7 @@ from perseverer.api.mcp_server import (
     get_goal_progress,
     get_health_dashboard,
     get_health_stream,
+    get_last_activity_forecast,
     get_pace_bands,
     get_pace_hr_zones,
     get_performance,
@@ -627,3 +628,11 @@ async def test_activity_correction_tools(client: TestClient, engine: Engine) -> 
     assert (await set_activity_name("a1", "Big day"))["name"] == "Big day"
     fueling = await set_activity_fueling("a1", carbohydrates_g=60, sodium_mg=500)
     assert fueling["carbohydrates_g"] == 60
+
+
+async def test_get_last_activity_forecast_unavailable_without_a_located_activity(
+    client: TestClient,
+) -> None:
+    result = await get_last_activity_forecast()
+    assert result["available"] is False
+    assert result["source_activity"] is None

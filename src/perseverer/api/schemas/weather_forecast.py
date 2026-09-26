@@ -78,3 +78,29 @@ class WeatherForecastOut(BaseModel):
     # (never fabricated, and independent of `available` above) whenever that second request
     # itself fails or returns nothing usable, even when `days` succeeded.
     upcoming: list[ForecastDayDetailOut] = []
+
+
+class ForecastSourceActivityOut(BaseModel):
+    """The recorded activity whose GPS start point the forecast was fetched for."""
+
+    id: str
+    local_date: str | None
+    name: str | None
+    sport: str
+    start_lat: float
+    start_lng: float
+    # IANA zone the forecast's local dates/times are expressed in: the activity's own recorded
+    # `tz_name` when it has one, else "auto" (Open-Meteo resolves the zone from the coordinates).
+    timezone: str
+
+
+class ActivityLocationForecastOut(BaseModel):
+    """GET /weather/forecast/last-activity -- the forecast at the athlete's most recent recorded
+    activity that has a GPS start point, rather than their configured home location. Same
+    `available` convention as WeatherForecastOut: false (never fabricated) when there is no such
+    activity or the Open-Meteo fetch failed."""
+
+    available: bool
+    source_activity: ForecastSourceActivityOut | None = None
+    days: list[ForecastDayOut] = []
+    upcoming: list[ForecastDayDetailOut] = []

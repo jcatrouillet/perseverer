@@ -430,6 +430,18 @@ async def get_weather_forecast(days: int | None = None) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def get_last_activity_forecast(days: int | None = None) -> dict[str, Any]:
+    """Weather forecast (default the next 3 days, plus rich hour-by-hour detail: dew point, wind,
+    precipitation, sunrise/sunset) at the GPS start point of the athlete's most recent activity
+    that has one -- use this instead of get_weather_forecast when the athlete is away from home.
+    The response names the source_activity and the timezone its local dates are in.
+    `available: false` if there is no activity with a location or the fetch failed."""
+    params = {"days": days} if days is not None else {}
+    response = await _call_api("GET", "/api/v1/weather/forecast/last-activity", params=params)
+    return dict(response.json())
+
+
+@mcp.tool()
 async def list_blood_tests(start_date: str, end_date: str) -> list[dict[str, Any]]:
     """Athlete-entered lab results (one row per marker per draw) in an ISO date range, with each
     marker's own reference range and an out-of-range flag against the athlete's own stated

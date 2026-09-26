@@ -1186,6 +1186,21 @@ const SCHEMAS = [
       ["days","array<ForecastDayOut>","[] when available is false.","opt"],
       ["upcoming","array<ForecastDayDetailOut>","The near-term rich-conditions detail, from a SECOND, independent Open-Meteo request than days -- [] whenever that one fails or returns nothing usable, regardless of available/days above (and vice versa).","opt"],
     ] },
+  { name: "ActivityLocationForecastOut", note: "Returned by GET /weather/forecast/last-activity. available is false -- never fabricated -- when the athlete has no activity with a GPS start point or the coarse fetch failed.", fields: [
+      ["available","boolean","required"],
+      ["source_activity","ForecastSourceActivityOut|null","The activity the location came from; present even when available is false because the fetch failed, null only when there is no located activity.","opt"],
+      ["days","array<ForecastDayOut>","[] when available is false.","opt"],
+      ["upcoming","array<ForecastDayDetailOut>","Same rich near-term detail as GET /weather/forecast, for the same location.","opt"]
+    ] },
+  { name: "ForecastSourceActivityOut", note: "The activity whose GPS start point the forecast was fetched for.", fields: [
+      ["id","string",""],
+      ["local_date","string(date)|null","","opt"],
+      ["name","string|null","","opt"],
+      ["sport","string",""],
+      ["start_lat","number",""],
+      ["start_lng","number",""],
+      ["timezone","string","IANA zone the forecast's local dates are in: the activity's tz_name, else \"auto\"."],
+    ] },
   { name: "ForecastDayOut", note: "One forecast day, up to Open-Meteo's own 16-day cap.", fields: [
       ["local_date","string(date)",""],
       ["weather_code","integer","WMO weather interpretation code -- same taxonomy ActivityWeatherOut.weather_code uses."],
@@ -2181,6 +2196,13 @@ const GROUPS = [
       params: [ ["days","query","opt","integer, 1-16","16","Defaults to Open-Meteo's own 16-day cap."] ],
       responses: [ { code: 200, ref: "WeatherForecastOut" }, { code: 422, note: "days outside 1-16." } ],
       example: { curl: `curl https://your-perseverer-host/api/v1/weather/forecast?days=7 \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/api/v1/weather/forecast/last-activity", summary: "Get the forecast (default next 3 days) at the athlete's most recent located activity.",
+      description: "For when the athlete is away from home and the configured home location would answer the wrong question. Location is the GPS start point of the most recent recorded activity that has one. Same days + upcoming shape and the same uncached fetch as GET /weather/forecast, in the activity's own recorded timezone (else Open-Meteo's auto, derived from the coordinates) -- named in source_activity.timezone. Does not fall back to the home location: a silent substitution would answer a different question.",
+      params: [ ["days","query","opt","integer, 1-16","3","Only affects `days`; `upcoming` always covers its own fixed 3-day window."] ],
+      responses: [ { code: 200, ref: "ActivityLocationForecastOut" }, { code: 422, note: "days outside 1-16." } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/weather/forecast/last-activity \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
   ]},

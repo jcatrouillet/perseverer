@@ -1392,6 +1392,31 @@ time (see `ForecastDayDetailOut` below).
 | `days` | `ForecastDayOut[]` | Empty when `available` is `false`. |
 | `upcoming` | `ForecastDayDetailOut[]` | The near-term rich-conditions detail, from a separate Open-Meteo request than `days`. `[]` whenever that request fails or returns nothing usable — independent of `available`/`days`, in either direction. |
 
+### `GET /weather/forecast/last-activity`
+
+The forecast (default the **next 3 days**) at the GPS start point of the athlete's **most recent
+recorded activity that has one** — for when they're away from home (a trip, a race weekend) and
+`GET /weather/forecast`'s configured home location would answer the wrong question. Same
+`days` + `upcoming` shape and the same deliberately-uncached, un-archived fetch as that endpoint.
+The forecast is requested in the activity's own recorded timezone (`tz_name`), else Open-Meteo's
+`auto` (derived from the coordinates), so `local_date` is the *location's* local date, not the
+athlete's home one; the response names it in `source_activity.timezone`. Unlike
+`GET /weather/forecast` this does **not** fall back to the home location — a silent substitution
+would answer a different question than the one asked.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `days` | query | optional | integer, 1-16 | Defaults to 3. Only affects `days` below — `upcoming` always covers its own fixed 3-day window. |
+
+**Response `200`:** `ActivityLocationForecastOut`:
+
+| Field | Type | Description |
+|---|---|---|
+| `available` | boolean | `false` — never fabricated — when the athlete has no activity with a GPS start point, or the coarse-forecast fetch failed. |
+| `source_activity` | `ForecastSourceActivityOut`, nullable | The activity the location came from: `id`, `local_date`, `name`, `sport`, `start_lat`, `start_lng`, `timezone`. Present even when `available` is `false` because the fetch failed (so a caller can see *where* it tried); `null` only when there is no located activity. |
+| `days` | `ForecastDayOut[]` | Empty when `available` is `false`. |
+| `upcoming` | `ForecastDayDetailOut[]` | Same rich near-term detail as `GET /weather/forecast`, for the same location. |
+
 `ForecastDayOut`:
 
 | Field | Type | Description |

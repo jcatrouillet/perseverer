@@ -1788,6 +1788,19 @@ environment:
   dates — with an explicit `_local` suffix (vs. `weather.py`'s own `_utc` fields) rather than
   leaving the distinction implicit. Backend-only for now, matching `ActivityWeatherOut.hourly[]`'s
   own precedent of a rich field with zero frontend rendering — no Week view UI change.
+  **Revision: `GET /weather/forecast/last-activity` — the same forecast at the location of the
+  athlete's most recent activity that has a GPS start point** (default the next 3 days, `days` up
+  to 16; also the MCP tool `get_last_activity_forecast`). For an athlete away from home — a trip,
+  a race weekend — the configured `home_lat`/`home_lon` answers the wrong question. It reuses
+  `fetch_forecast`/`fetch_upcoming_conditions` and `_day_detail_out` unchanged, so it is equally
+  uncached/un-archived. Location is `route_geom.start_lat/start_lng` of the newest
+  (`activity.start_time_utc`) non-deleted activity that has one; an activity with no GPS is
+  skipped, not chosen. The timezone is the activity's own recorded `tz_name`, else Open-Meteo's
+  `auto` (derived from the coordinates) — *not* the athlete's home `athlete.timezone`, since the
+  forecast's `local_date`s must be the location's own dates; the response echoes it in
+  `source_activity.timezone`. Deliberately **no fallback to the home location** when there is no
+  located activity: `available: false` with `source_activity: null`, because a silent
+  substitution would answer a different question than the caller asked.
 - **Settings-page operational actions**: `api/routers/settings.py` adds the web
   counterparts of four CLI-only commands — Garmin login/status, `sync import garmin-connect`
   ("sync now"), `sync rebuild`, and `sync import garmin-export`/`strava-export` (bulk .zip
