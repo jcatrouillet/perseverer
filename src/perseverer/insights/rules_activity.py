@@ -1,5 +1,5 @@
-"""Point-in-time, per-activity insights: how does THIS run compare to the athlete's own past --
-never future -- activities. Composes the existing athlete-wide rule functions
+"""Point-in-time, per-activity insights: how does THIS activity compare to the athlete's own
+past -- never future -- activities. Running activities compose the existing athlete-wide rules
 (`compute_effort_insights`, `compute_pb_insights`, `compute_window_best_insights`,
 `rules_streaks.current_streak`) unchanged rather than a new comparison algorithm: calling them
 with a candidate pool already bounded to
@@ -37,15 +37,17 @@ to fetch it for); distance, pace, heart rate, elevation, and start time are reco
 essentially every activity, so the same population check would just suppress ordinary, real
 "longest run" claims for a normal-sized history.
 
-Every surviving Insight's title is then rewritten (`_relabel`) into a period-explicit,
-running-only phrasing -- "Longest run in the last 12 months" or "Longest run ever" rather than
-the athlete-wide engine's generic "Longest distance (run)" -- so the panel never leaves the
-athlete guessing which window ("last month? last year? ever?") a claim is about.
+Every surviving running Insight's title is then rewritten (`_relabel`) into a period-explicit
+phrase -- "Longest run in the last 12 months" or "Longest run ever" rather than the athlete-wide
+engine's generic "Longest distance (run)" -- so the panel never leaves the athlete guessing
+which window ("last month? last year? ever?") a claim is about. Bouldering uses the session's
+route splits directly for its own record dimensions.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import date
 
 from perseverer.insights.rules_efforts import (
@@ -105,6 +107,47 @@ _EFFORT_PHRASES: dict[str, str] = {
     "temperature_high": "Hottest run",
     "temperature_low": "Coldest run",
 }
+
+
+@dataclass(frozen=True)
+class _ClimbDimension:
+    key: str
+    phrase: str
+    direction: str  # "high" | "low"
+    value_fn: Callable[[InsightActivity], float | None]
+    unit: str
+
+
+# These values describe one bouldering session, not the activity's generic distance/duration
+# fields. An attempted grade includes every graded route: completing a route necessarily means
+# attempting it first, while a higher failed route can still establish the attempted-grade best.
+_CLIMB_DIMENSIONS: tuple[_ClimbDimension, ...] = (
+    _ClimbDimension("route_count", "Most routes", "high", lambda a: a.climb_route_count, "routes"),
+    _ClimbDimension(
+        "attempted_grade", "Highest attempted grade", "high",
+        lambda a: a.climb_max_attempted_grade, "V-grade",
+    ),
+    _ClimbDimension(
+        "completed_grade", "Highest completed grade", "high",
+        lambda a: a.climb_max_completed_grade, "V-grade",
+    ),
+    _ClimbDimension("climb_time", "Longest climb time", "high", lambda a: a.climb_time_s, "s"),
+    _ClimbDimension("max_hr_high", "Highest heart rate", "high", lambda a: a.max_hr, "bpm"),
+    _ClimbDimension("max_hr_low", "Lowest peak heart rate", "low", lambda a: a.max_hr, "bpm"),
+    _ClimbDimension(
+        "avg_hr_high", "Highest average heart rate", "high", lambda a: a.avg_hr, "bpm"
+    ),
+    _ClimbDimension(
+        "avg_hr_low", "Lowest average heart rate", "low", lambda a: a.avg_hr, "bpm"
+    ),
+)
+
+_CLIMB_WINDOWS: tuple[tuple[str, int | None], ...] = (
+    ("30d", 30),
+    ("90d", 90),
+    ("year", None),
+    (_ALL_TIME_WINDOW, None),
+)
 
 
 def _window_span_days(window: str, as_of: date) -> int:
@@ -186,12 +229,83 @@ def _relabel(insight: Insight) -> Insight:
     return insight
 
 
+def _climbing_activities(activities: list[InsightActivity]) -> list[InsightActivity]:
+    """Only sessions with a real graded route belong in bouldering comparisons.
+
+    This is deliberately data-driven rather than based only on the sport label: routes are the
+    source of truth for a bouldering session, and it keeps a rock-climbing activity with no
+    bouldering splits out of these records.
+    """
+    return [a for a in activities if a.climb_route_count is not None]
+
+
+def _climb_window_activities(
+    activities: list[InsightActivity], window: str, days: int | None, as_of: date
+) -> list[InsightActivity]:
+    if window == _ALL_TIME_WINDOW:
+        return activities
+    start = window_start_date(window, days, as_of)
+    return [a for a in activities if start.isoformat() <= a.local_date <= as_of.isoformat()]
+
+
+def _climb_winner(
+    activities: list[InsightActivity], dim: _ClimbDimension
+) -> tuple[InsightActivity, float] | None:
+    scored = [(a, value) for a in activities if (value := dim.value_fn(a)) is not None]
+    if not scored:
+        return None
+    values = [value for _, value in scored]
+    best_value = min(values) if dim.direction == "low" else max(values)
+    # A tie is not a new record. The earliest session with the value owns the record; ordering
+    # by start timestamp also makes this deterministic for the loader and direct rule tests.
+    winners = [pair for pair in scored if pair[1] == best_value]
+    return min(winners, key=lambda pair: (pair[0].start_time_utc, pair[0].id))
+
+
+def _compute_climbing_activity_insights(
+    activity_id: str, bounded_activities: list[InsightActivity], as_of: date
+) -> list[Insight]:
+    climbing = _climbing_activities(bounded_activities)
+    if not any(a.id == activity_id for a in climbing):
+        return []
+
+    records: list[Insight] = []
+    for window, days in _CLIMB_WINDOWS:
+        candidates = _climb_window_activities(climbing, window, days, as_of)
+        for dim in _CLIMB_DIMENSIONS:
+            winner = _climb_winner(candidates, dim)
+            if winner is None or winner[0].id != activity_id:
+                continue
+            period = _WINDOW_LABELS[window]
+            records.append(
+                Insight(
+                    kind="climb_record",
+                    window=window,
+                    subject_key=f"climb:{dim.key}",
+                    title=f"{dim.phrase} {period}",
+                    detail={"activity_id": activity_id, "unit": dim.unit, "sport": "rock_climbing"},
+                    value_num=winner[1],
+                    sport_family="climb",
+                    activity_id=activity_id,
+                    local_date=winner[0].local_date,
+                )
+            )
+    return _dedupe_widest_window(records, as_of)
+
+
 def compute_activity_insights(
     activity_id: str, bounded_activities: list[InsightActivity], as_of: date
 ) -> list[Insight]:
     """`bounded_activities` must already exclude anything after `as_of` -- this function does not
     re-check dates itself, matching every other rule module's "pure function over an
     already-bounded list" contract."""
+    # Bouldering has route-specific records. Do not run the generic effort rules for it: those
+    # would describe a bouldering session as a "run" and include irrelevant distance metrics.
+    if any(
+        a.id == activity_id and a.climb_route_count is not None for a in bounded_activities
+    ):
+        return _compute_climbing_activity_insights(activity_id, bounded_activities, as_of)
+
     effort_all = compute_effort_insights(bounded_activities, as_of)
     effort = [i for i in effort_all if i.activity_id == activity_id]
     effort = [i for i in effort if _has_real_comparison(i, bounded_activities, as_of)]

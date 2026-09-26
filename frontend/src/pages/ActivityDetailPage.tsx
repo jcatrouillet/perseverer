@@ -8,7 +8,6 @@ import { Link } from "wouter";
 import { extractHrZones } from "../activityMetrics";
 import {
   useActivity,
-  useActivityClimbComparisons,
   useActivityComparisons,
   useActivityContext,
   useActivityInsights,
@@ -53,7 +52,6 @@ import { ActivityWeather } from "../components/ActivityWeather";
 import { BoulderingRoutesTable } from "../components/BoulderingRoutesTable";
 import { ChartFullscreen } from "../components/ChartFullscreen";
 import { CopyWorkoutButton } from "../components/CopyWorkoutButton";
-import { ClimbComparisonTable } from "../components/ClimbComparisonTable";
 import { ClimbGradeChart } from "../components/ClimbGradeChart";
 import { Icon } from "../components/Icon";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -148,10 +146,6 @@ export function ActivityDetailPage({ id }: { id: string }) {
     id,
     activity.data != null && isRunningSport(activity.data.sport),
   );
-  const climbComparisons = useActivityClimbComparisons(
-    id,
-    activity.data != null && isBoulderingActivity(activity.data.sport, activity.data.sub_sport),
-  );
   const weather = useActivityWeather(id, activity.data?.route?.start_lat != null);
   const location = useActivityLocation(id, activity.data?.route?.start_lat != null);
   const workout = useActivityWorkout(id);
@@ -178,6 +172,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   if (activity.isError || !activity.data) return <p role="alert">Activity not found.</p>;
 
   const a = activity.data;
+  const isBouldering = isBoulderingActivity(a.sport, a.sub_sport);
   const sport = displaySport(a);
   const style = sportStyle(sport);
   const paceSport = isPaceSport(sport);
@@ -335,7 +330,10 @@ export function ActivityDetailPage({ id }: { id: string }) {
         </div>
         {activityInsights.data && activityInsights.data.length > 0 && (
           <div className="activity-detail__insights-col">
-            <ActivityInsightsPanel insights={activityInsights.data} />
+            <ActivityInsightsPanel
+              insights={activityInsights.data}
+              heading={isBouldering ? "Bouldering insights" : "Run insights"}
+            />
           </div>
         )}
       </div>
@@ -557,9 +555,6 @@ export function ActivityDetailPage({ id }: { id: string }) {
               setClimbRouteStatus.isError || addClimbRoute.isError || deleteClimbRoute.isError
             }
           />
-          {climbComparisons.data && (
-            <ClimbComparisonTable activity={a} comparisons={climbComparisons.data} />
-          )}
         </>
       )}
 

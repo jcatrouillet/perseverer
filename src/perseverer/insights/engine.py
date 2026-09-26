@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Connection, case, select
+from sqlalchemy import Connection, case, func, select
 
 from perseverer.db.schema import (
     activity,
@@ -23,6 +23,7 @@ from perseverer.db.schema import (
     fitness_daily_rollup,
     health_metric_daily_rollup,
     sleep_session,
+    split,
 )
 from perseverer.db.schema import (
     insight as insight_table,
@@ -97,6 +98,30 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
     max_cadence_raw_subq = _scalar_metric_subquery(_MAX_CADENCE_METRIC_KEY)
     temp_min_subq = _scalar_metric_subquery(_WEATHER_MIN_KEY)
     temp_max_subq = _scalar_metric_subquery(_WEATHER_MAX_KEY)
+    climb_route_count_subq = (
+        select(func.count())
+        .select_from(split)
+        .where(split.c.activity_id == activity.c.id, split.c.climb_grade.is_not(None))
+        .scalar_subquery()
+    )
+    climb_max_attempted_grade_subq = (
+        select(func.max(split.c.climb_grade))
+        .where(split.c.activity_id == activity.c.id, split.c.climb_grade.is_not(None))
+        .scalar_subquery()
+    )
+    climb_max_completed_grade_subq = (
+        select(func.max(split.c.climb_grade))
+        .where(
+            split.c.activity_id == activity.c.id,
+            split.c.climb_result == "completed",
+        )
+        .scalar_subquery()
+    )
+    climb_time_s_subq = (
+        select(func.sum(split.c.duration_s))
+        .where(split.c.activity_id == activity.c.id, split.c.split_type == "climb_active")
+        .scalar_subquery()
+    )
 
     rows = conn.execute(
         select(
@@ -117,11 +142,17 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
             max_cadence_raw_subq.label("max_cadence_raw"),
             temp_min_subq.label("temperature_min_c"),
             temp_max_subq.label("temperature_max_c"),
-        ).where(
+            climb_route_count_subq.label("climb_route_count"),
+            climb_max_attempted_grade_subq.label("climb_max_attempted_grade"),
+            climb_max_completed_grade_subq.label("climb_max_completed_grade"),
+            climb_time_s_subq.label("climb_time_s"),
+        )
+        .where(
             activity.c.athlete_id == athlete_id,
             activity.c.deleted_at.is_(None),
             activity.c.local_date.is_not(None),
         )
+        .order_by(activity.c.start_time_utc.asc(), activity.c.id.asc())
     ).fetchall()
 
     out: list[InsightActivity] = []
@@ -154,6 +185,12 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
                 elevation_loss_m=r.elevation_loss_m,
                 temperature_min_c=r.temperature_min_c,
                 temperature_max_c=r.temperature_max_c,
+                # SQL COUNT returns zero rather than NULL for ordinary activities. Treat that
+                # as absent so only actual bouldering sessions join the comparison pool.
+                climb_route_count=r.climb_route_count or None,
+                climb_max_attempted_grade=r.climb_max_attempted_grade,
+                climb_max_completed_grade=r.climb_max_completed_grade,
+                climb_time_s=r.climb_time_s,
             )
         )
     return out

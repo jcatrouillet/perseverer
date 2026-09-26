@@ -16,6 +16,12 @@ def _activity(
     temperature_max_c: float | None = None,
     cadence: float | None = None,
     max_cadence: float | None = None,
+    avg_hr: float | None = None,
+    max_hr: float | None = None,
+    climb_route_count: int | None = None,
+    climb_max_attempted_grade: int | None = None,
+    climb_max_completed_grade: int | None = None,
+    climb_time_s: float | None = None,
 ) -> InsightActivity:
     return InsightActivity(
         id=id_,
@@ -27,15 +33,62 @@ def _activity(
         distance_m=distance_m,
         duration_s=duration_s,
         moving_duration_s=duration_s,
-        avg_hr=None,
-        max_hr=None,
+        avg_hr=avg_hr,
+        max_hr=max_hr,
         cadence=cadence,
         max_cadence=max_cadence,
         elevation_gain_m=None,
         elevation_loss_m=None,
         temperature_min_c=temperature_min_c,
         temperature_max_c=temperature_max_c,
+        climb_route_count=climb_route_count,
+        climb_max_attempted_grade=climb_max_attempted_grade,
+        climb_max_completed_grade=climb_max_completed_grade,
+        climb_time_s=climb_time_s,
     )
+
+
+def test_bouldering_records_use_route_metrics_and_the_widest_true_window() -> None:
+    older = _activity(
+        "older", "2025-01-01", 0.0, 1800.0, sport_family="climb",
+        avg_hr=150.0, max_hr=180.0, climb_route_count=4,
+        climb_max_attempted_grade=4, climb_max_completed_grade=3, climb_time_s=600.0,
+    )
+    target = _activity(
+        "target", "2026-06-15", 0.0, 1800.0, sport_family="climb",
+        avg_hr=120.0, max_hr=140.0, climb_route_count=8,
+        climb_max_attempted_grade=7, climb_max_completed_grade=6, climb_time_s=900.0,
+    )
+
+    insights = compute_activity_insights("target", [older, target], dt.date(2026, 6, 15))
+
+    by_subject = {i.subject_key: i for i in insights}
+    assert by_subject["climb:route_count"].title == "Most routes ever"
+    assert by_subject["climb:attempted_grade"].title == "Highest attempted grade ever"
+    assert by_subject["climb:completed_grade"].title == "Highest completed grade ever"
+    assert by_subject["climb:climb_time"].title == "Longest climb time ever"
+    assert by_subject["climb:max_hr_low"].title == "Lowest peak heart rate ever"
+    assert by_subject["climb:avg_hr_low"].title == "Lowest average heart rate ever"
+    # The old higher heart rate is outside the calendar-year window. The current lower value is
+    # correctly a new low all-time record and a high within this year's bouldering sessions.
+    assert by_subject["climb:max_hr_high"].window == "year"
+    assert by_subject["climb:avg_hr_high"].window == "year"
+
+
+def test_bouldering_ties_do_not_create_a_second_record() -> None:
+    earlier = _activity(
+        "earlier", "2026-06-01", 0.0, 1800.0, sport_family="climb",
+        climb_route_count=5, climb_max_attempted_grade=5, climb_time_s=300.0,
+    )
+    target = _activity(
+        "target", "2026-06-15", 0.0, 1800.0, sport_family="climb",
+        climb_route_count=5, climb_max_attempted_grade=5, climb_time_s=300.0,
+    )
+
+    insights = compute_activity_insights("target", [target, earlier], dt.date(2026, 6, 15))
+
+    assert not any(i.subject_key == "climb:route_count" for i in insights)
+    assert not any(i.subject_key == "climb:attempted_grade" for i in insights)
 
 
 def test_never_credits_a_future_activity_for_a_past_ones_insight() -> None:

@@ -4,10 +4,38 @@ into the future": an activity's insights must never be able to see, or be influe
 activity dated after it.
 """
 
-from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from datetime import datetime
 
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, update
+
+from perseverer.db.schema import activity, split
+from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from tests.api.conftest import seed_activity
+
+
+def _add_climb_route(
+    engine: Engine,
+    *,
+    activity_id: str,
+    split_index: int,
+    grade: int,
+    result: str,
+    duration_s: float,
+) -> None:
+    with engine.connect() as conn:
+        conn.execute(
+            split.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id=activity_id,
+                split_index=split_index,
+                split_type="climb_active",
+                climb_grade=grade,
+                climb_result=result,
+                duration_s=duration_s,
+            )
+        )
+        conn.commit()
 
 
 def test_insights_404_for_unknown_activity(
@@ -95,3 +123,81 @@ def test_current_streak_only_counts_days_up_to_this_activity(
     body = r.json()
     streak = next(i for i in body if i["kind"] == "streak")
     assert streak["value_num"] == 4.0
+
+
+def test_bouldering_insights_never_look_ahead_to_a_later_session(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="earlier_boulder", local_date="2025-06-01",
+            sport="rock_climbing", sub_sport="bouldering", distance_m=None,
+        )
+        seed_activity(
+            conn, activity_id="later_boulder", local_date="2025-06-15",
+            sport="rock_climbing", sub_sport="bouldering", distance_m=None,
+        )
+    _add_climb_route(
+        engine,
+        activity_id="earlier_boulder",
+        split_index=0,
+        grade=4,
+        result="completed",
+        duration_s=60.0,
+    )
+    _add_climb_route(
+        engine,
+        activity_id="later_boulder",
+        split_index=0,
+        grade=7,
+        result="completed",
+        duration_s=90.0,
+    )
+
+    r = client.get("/api/v1/activities/earlier_boulder/insights", headers=auth_headers)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert any(i["title"] == "Highest attempted grade ever" for i in body)
+    assert all(i["activity_id"] != "later_boulder" for i in body)
+
+
+def test_bouldering_insights_exclude_a_later_session_on_the_same_day(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="morning_boulder", local_date="2025-06-01",
+            sport="rock_climbing", sub_sport="bouldering", distance_m=None,
+        )
+        seed_activity(
+            conn, activity_id="evening_boulder", local_date="2025-06-01",
+            sport="rock_climbing", sub_sport="bouldering", distance_m=None,
+        )
+        conn.execute(
+            update(activity)
+            .where(activity.c.id == "evening_boulder")
+            .values(start_time_utc=datetime(2025, 6, 1, 18, 0, 0))
+        )
+        conn.commit()
+    _add_climb_route(
+        engine,
+        activity_id="morning_boulder",
+        split_index=0,
+        grade=4,
+        result="completed",
+        duration_s=60.0,
+    )
+    _add_climb_route(
+        engine,
+        activity_id="evening_boulder",
+        split_index=0,
+        grade=7,
+        result="completed",
+        duration_s=90.0,
+    )
+
+    r = client.get("/api/v1/activities/morning_boulder/insights", headers=auth_headers)
+
+    assert r.status_code == 200
+    assert any(i["title"] == "Highest attempted grade ever" for i in r.json())

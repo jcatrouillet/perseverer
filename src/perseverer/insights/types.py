@@ -35,6 +35,12 @@ class InsightActivity:
     # across activities logged in different local timezones, or with a bogus midnight-UTC
     # placeholder timestamp, produces a nonsense "earliest start" winner).
     utc_offset_s: int = 0
+    # Bouldering route metrics are flattened from the activity's climb_active split rows by
+    # insights.engine. They stay optional because normal activities have no such rows.
+    climb_route_count: int | None = None
+    climb_max_attempted_grade: int | None = None
+    climb_max_completed_grade: int | None = None
+    climb_time_s: float | None = None
 
 
 @dataclass(frozen=True)

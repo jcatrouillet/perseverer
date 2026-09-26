@@ -608,8 +608,8 @@ export function useDuplicatePairs() {
 
 /** Point-in-time insights for one activity (GET /activities/{id}/insights) -- always bounded to
  * that activity's own past, never anything after it. `enabled` should be gated on the activity's
- * sport (see ActivityDetailPage.tsx's `isRunningSport` check) rather than always-on like
- * `useActivityContext` above, since this panel is deliberately running-specific. */
+ * sport (see ActivityDetailPage.tsx) rather than always-on like `useActivityContext` above.
+ * The panel currently supports running and bouldering activities. */
 export function useActivityInsights(activityId: string, enabled: boolean) {
   return useQuery({
     queryKey: ["activity-insights", activityId],
