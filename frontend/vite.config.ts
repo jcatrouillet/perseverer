@@ -23,6 +23,23 @@ export default defineConfig({
         // would never get invalidated by vite-plugin-pwa's own update mechanism). Must always
         // be fetched live.
         globIgnores: ["config.js"],
+        // Paths the *server* answers, not the SPA. By default the generated service worker
+        // serves the cached app shell (index.html) for every browser navigation, so in any
+        // browser that had already loaded Perseverer, navigating to /authorize (the MCP OAuth
+        // flow, ADR 0007 decision 10) or /oauth/login rendered the SPA's "Not found" page and
+        // the request never reached the API -- confirmed live. Share pages (/share/...), raw API
+        // and MCP URLs, and the OAuth endpoints must always go to the network.
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/mcp/,
+          /^\/share\//,
+          /^\/oauth\//,
+          /^\/authorize$/,
+          /^\/token$/,
+          /^\/register$/,
+          /^\/revoke$/,
+          /^\/\.well-known\//,
+        ],
       },
       manifest: {
         name: "Perseverer",

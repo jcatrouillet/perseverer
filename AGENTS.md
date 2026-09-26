@@ -167,6 +167,15 @@ environment:
   `PERSEVERER_JWT_SECRET` set, and `docker/nginx.conf` forwards those paths to the API. SDK
   quirk worth knowing: `/revoke`'s request model requires a `client_secret` field even for a
   public client, so such a client must send it empty.
+  **A real deploy-time bug this surfaced**: the PWA service worker (`vite.config.ts`, workbox's
+  default `navigateFallback`) answers *every* browser navigation with the cached SPA shell, so in
+  any browser that had loaded Perseverer before, opening `/authorize` rendered the SPA's "Not
+  found" page and never reached the API (curl and a fresh browser worked, which is why tests and
+  server logs looked fine). `navigateFallbackDenylist` now excludes `/api/`, `/mcp`, `/share/`,
+  `/oauth/`, `/authorize`, `/token`, `/register`, `/revoke` and `/.well-known/` — the same
+  denylist also fixes any share link opened in a browser with the app installed. A browser with
+  the old worker needs one normal visit to the app (which installs the new worker) before the
+  connector's Connect step will work.
   **Revision: `get_activity_stream` can go past the fixed `low` tier** — originally hardcoded to
   `low` (~200 points) regardless of what the caller asked for, on the theory that bulk per-second
   data doesn't belong in an agent's context window (ADR 0007 decision 7). Reported directly
