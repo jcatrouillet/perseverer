@@ -387,6 +387,7 @@ activity = Table(
     Column("deleted_at", DateTime(), nullable=True),
     Index("ix_activity_athlete_start", "athlete_id", "start_time_utc"),
     Index("ix_activity_athlete_local_date", "athlete_id", "local_date"),
+    Index("ix_activity_shoe", "shoe_id"),
 )
 
 # An athlete's own after-the-fact correction -- originally just "this sport is wrong" (see
@@ -1252,7 +1253,6 @@ auth_login_attempt = Table(
 
 # --- Athlete-scoping bookkeeping, enforced by tests/db/test_schema.py -----------
 
-#: Tables that intentionally do NOT carry athlete_id because they are shared catalogs, not an
 # OAuth 2.1 authorization server state for the MCP endpoint (auth/oauth.py, ADR 0007 decision 10).
 # DB-backed, not in-memory, for the same reason auth_login_attempt is: `api` runs 2 uvicorn workers
 # that share no process memory but do share this one SQLite file, and a dynamically-registered
@@ -1301,6 +1301,7 @@ oauth_token = Table(
     Index("ix_oauth_token_grant", "grant_id"),
 )
 
+#: Tables that intentionally do NOT carry athlete_id because they are shared catalogs, not an
 #: individual athlete's data. Any table not in this set and not carrying athlete_id is a bug.
 EXEMPT_FROM_ATHLETE_SCOPING = frozenset(
     {"athlete", "metric_definition", "auth_login_attempt", "oauth_client"}
