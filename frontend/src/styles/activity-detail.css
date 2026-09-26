@@ -74,7 +74,12 @@
 }
 
 .activity-detail__main-col {
-  flex: 3 1 480px;
+  /* Basis kept at 320px, not larger: the insights column (320px) + gap has to fit on the same
+     line for the two to sit side by side. A 480px basis wrapped the insights below the stats
+     on any content width under ~816px (e.g. an 800px window, well within "desktop"); 320px
+     lets them share a line from ~656px up while flex-grow still gives the stats nearly all
+     the room on a wide screen. Below that they still stack, as the wrap comment above says. */
+  flex: 3 1 320px;
   min-width: 0;
 }
 
