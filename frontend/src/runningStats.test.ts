@@ -106,6 +106,11 @@ describe("formatDurationHM", () => {
   it("formats an hour or more as \"Xh Ym\"", () => {
     expect(formatDurationHM(74 * 60)).toBe("1h 14m");
   });
+
+  it("never shows 60 minutes when rounding reaches the next hour", () => {
+    expect(formatDurationHM(3_599)).toBe("1h 0m");
+    expect(formatDurationHM(7_199)).toBe("2h 0m");
+  });
 });
 
 describe("isPaceSport", () => {

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DurationGoalProgressOut } from "../api/types";
+import { formatTargetHM, parseTargetHM } from "./DurationGoalForm";
 import { DurationGoalsSection, durationGoalTitle } from "./DurationGoalsSection";
 
 const mockGoals = vi.fn();
@@ -56,6 +57,29 @@ describe("durationGoalTitle", () => {
   });
 });
 
+describe("target time as h:mm", () => {
+  it("parses hours and minutes, and a bare number as whole hours", () => {
+    expect(parseTargetHM("3:30")).toBe(12_600);
+    expect(parseTargetHM("0:45")).toBe(2_700);
+    expect(parseTargetHM(" 12:05 ")).toBe(43_500);
+    expect(parseTargetHM("3")).toBe(10_800);
+  });
+
+  it("rejects what is not h:mm", () => {
+    for (const bad of ["", "0", "0:00", "3:60", "3:5", "2.5", "-1:00", "1:30:00", "abc"]) {
+      expect(parseTargetHM(bad)).toBeNull();
+    }
+  });
+
+  it("formats a stored target back to h:mm", () => {
+    expect(formatTargetHM(10_800)).toBe("3:00");
+    expect(formatTargetHM(5_400)).toBe("1:30");
+    expect(formatTargetHM(2_700)).toBe("0:45");
+    expect(formatTargetHM(1_080_000)).toBe("300:00");
+    expect(formatTargetHM(7_199)).toBe("2:00");
+  });
+});
+
 describe("DurationGoalsSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,7 +119,7 @@ describe("DurationGoalsSection", () => {
       expect(options).toContain(sport);
     }
     fireEvent.change(screen.getByLabelText("Sport"), { target: { value: "yoga" } });
-    fireEvent.change(screen.getByLabelText("Target time (hours)"), { target: { value: "2.5" } });
+    fireEvent.change(screen.getByLabelText("Target time (h:mm)"), { target: { value: "2:30" } });
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
     expect(mockCreate).toHaveBeenCalledWith(
       { period_type: "month", period_start: "2026-10", sport: "yoga", target_duration_s: 9000 },
@@ -107,7 +131,7 @@ describe("DurationGoalsSection", () => {
     mockGoals.mockReturnValue({ data: [], isLoading: false, isError: false });
     render(<DurationGoalsSection periodType="year" periodStart="2026" />);
     fireEvent.click(screen.getByRole("button", { name: "+ Add a time goal" }));
-    fireEvent.change(screen.getByLabelText("Target time (hours)"), { target: { value: "300" } });
+    fireEvent.change(screen.getByLabelText("Target time (h:mm)"), { target: { value: "300" } });
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
     expect(mockCreate).toHaveBeenCalledWith(
       { period_type: "year", period_start: "2026", sport: null, target_duration_s: 1_080_000 },
@@ -119,7 +143,7 @@ describe("DurationGoalsSection", () => {
     mockGoals.mockReturnValue({ data: [], isLoading: false, isError: false });
     const { unmount } = render(<DurationGoalsSection periodType="week" periodStart="2026-09-28" />);
     fireEvent.click(screen.getByRole("button", { name: "+ Add a time goal" }));
-    fireEvent.change(screen.getByLabelText("Target time (hours)"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Target time (h:mm)"), { target: { value: "3:00" } });
     fireEvent.change(screen.getByLabelText(/Repeat for/), { target: { value: "6" } });
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
     expect(mockRepeat).toHaveBeenCalledWith(
@@ -146,7 +170,8 @@ describe("DurationGoalsSection", () => {
     render(<DurationGoalsSection periodType="week" periodStart="2026-09-28" />);
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.queryByLabelText(/Repeat for/)).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Target time (hours)"), { target: { value: "4" } });
+    expect(screen.getByLabelText("Target time (h:mm)")).toHaveValue("3:00");
+    fireEvent.change(screen.getByLabelText("Target time (h:mm)"), { target: { value: "4:15" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(mockUpdate).toHaveBeenCalledWith(
       {
@@ -154,7 +179,7 @@ describe("DurationGoalsSection", () => {
         period_type: "week",
         period_start: "2026-09-28",
         sport: "yoga",
-        target_duration_s: 14_400,
+        target_duration_s: 15_300,
       },
       expect.anything(),
     );

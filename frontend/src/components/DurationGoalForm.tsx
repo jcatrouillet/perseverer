@@ -11,8 +11,24 @@ import {
 import type { DurationGoalOut } from "../api/types";
 import { KNOWN_SPORTS } from "../metricStyle";
 
-const HOUR = 3600;
 const ALL = "";
+
+/** 10_800 -> "3:00", 5_400 -> "1:30" -- the "h:mm" a target is typed and shown in. */
+export function formatTargetHM(totalSeconds: number): string {
+  const totalMinutes = Math.round(totalSeconds / 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h}:${m.toString().padStart(2, "0")}`;
+}
+
+/** "3:30" -> 12_600, "0:45" -> 2_700, "3" -> 10_800 (a bare number is whole hours). Anything
+ * else -- minutes past 59, decimals, negatives, a zero total -- is null. */
+export function parseTargetHM(text: string): number | null {
+  const match = /^(\d+)(?::([0-5]\d))?$/.exec(text.trim());
+  if (!match) return null;
+  const seconds = (Number(match[1]) * 60 + Number(match[2] ?? 0)) * 60;
+  return seconds > 0 ? seconds : null;
+}
 
 export function DurationGoalForm({
   periodType,
@@ -28,9 +44,7 @@ export function DurationGoalForm({
   onCancel: () => void;
 }) {
   const [sport, setSport] = useState(existing?.sport ?? ALL);
-  const [hours, setHours] = useState(
-    existing ? String(Math.round((existing.target_duration_s / HOUR) * 100) / 100) : "",
-  );
+  const [target, setTarget] = useState(existing ? formatTargetHM(existing.target_duration_s) : "");
   const create = useCreateDurationGoal();
   const update = useUpdateDurationGoal();
   const repeat = useRepeatDurationGoal();
@@ -48,13 +62,13 @@ export function DurationGoalForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const h = Number(hours);
-    if (!Number.isFinite(h) || h <= 0) return;
+    const targetS = parseTargetHM(target);
+    if (targetS == null) return;
     const body = {
       period_type: periodType,
       period_start: periodStart,
       sport: sport === ALL ? null : sport,
-      target_duration_s: Math.round(h * HOUR),
+      target_duration_s: targetS,
     };
     const repeatCount = Number(weeks);
     if (existing) update.mutate({ id: existing.id, ...body }, { onSuccess: onSaved });
@@ -77,14 +91,15 @@ export function DurationGoalForm({
         </select>
       </label>
       <label className="field">
-        Target time (hours)
+        Target time (h:mm)
         <input
           className="input"
-          type="number"
-          min="0.25"
-          step="0.25"
-          value={hours}
-          onChange={(e) => setHours(e.target.value)}
+          type="text"
+          placeholder="3:30"
+          pattern="\d+(:[0-5]\d)?"
+          title="Hours and minutes, e.g. 3:30 or 12:45 (a bare number is whole hours)"
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
           required
         />
       </label>

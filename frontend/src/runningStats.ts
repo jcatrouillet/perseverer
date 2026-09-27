@@ -199,8 +199,10 @@ export function buildPauseCompressor(
  * a supporting stat rather than the record itself (contrast the personal-records table's exact
  * "1:14:00" clock format, which stays local to that table). */
 export function formatDurationHM(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.round((totalSeconds % 3600) / 60);
+  // Round to whole minutes first, so 59m 50s reads "1h 0m" rather than "60m".
+  const totalMinutes = Math.round(totalSeconds / 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 

@@ -1699,6 +1699,15 @@ environment:
   now three sections — Running & distance, Time, Bouldering — and the target-vs-actual chart is one
   shared `GoalLineChart.tsx` (routes for bouldering, hours for time). MCP: four more tools
   (`get_/create_/update_/delete_duration_goal(s)`, 69 → 73 tools).
+  **Revision: the target is entered as h:mm, not a decimal number of hours** — reported directly,
+  since a plain-hours field is awkward for the week/month goals this feature was really asked for
+  ("3.5" for three and a half hours reads worse than "3:30", and rounds badly at odd durations).
+  `DurationGoalForm.tsx::formatTargetHM`/`parseTargetHM` convert between the stored
+  `target_duration_s` and a typed "H:MM" string (a bare number, e.g. "3", is still accepted as
+  whole hours); `formatDurationHM` (`runningStats.ts`, used by the goal summary tiles and titles)
+  now rounds to the nearest whole minute before splitting into h/m, so a duration a hair under an
+  hour boundary (e.g. 3599s) reads "1h 0m" rather than the confusing "60m" a naive `Math.floor`
+  produced.
 - **Bouldering goals (`bouldering_goal`, `bouldering_goals.py`, `BoulderingGoalsButton.tsx`)**:
   a target number of **completed** routes ("sends") in a week, month or year, at one V-grade
   (optionally "or harder") or any grade — e.g. 10 × V4 in 2026, 1 × V5 in October 2026 — tracked
