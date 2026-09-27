@@ -189,4 +189,46 @@ describe("GoalButton", () => {
     expect(mockSetGoalMutate).toHaveBeenCalledTimes(1);
     expect(mockRepeatGoalMutate).not.toHaveBeenCalled();
   });
+
+  it("only offers sports that cover a distance", () => {
+    mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
+    render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    const select = screen.getByLabelText("Sport") as HTMLSelectElement;
+    const offered = [...select.options].map((o) => o.value);
+    expect(offered).toEqual([
+      "",
+      "running",
+      "cycling",
+      "rowing",
+      "walking",
+      "hiking",
+      "snowshoeing",
+      "alpine_skiing",
+    ]);
+    for (const noDistance of [
+      "strength_training",
+      "fitness_equipment",
+      "hiit",
+      "yoga",
+      "breathing",
+      "rock_climbing",
+      "racket",
+    ]) {
+      expect(offered).not.toContain(noDistance);
+    }
+  });
+
+  it("keeps an already-saved goal's sport selectable even if it is no longer offered", () => {
+    mockUseGoalProgress.mockReturnValue({
+      data: { ...WITH_GOAL, goal: { ...WITH_GOAL.goal!, sport: "yoga" } },
+      isLoading: false,
+      isError: false,
+    });
+    render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    fireEvent.click(screen.getByText("Edit goal"));
+    const select = screen.getByLabelText("Sport") as HTMLSelectElement;
+    expect(select.value).toBe("yoga");
+  });
 });

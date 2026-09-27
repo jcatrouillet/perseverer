@@ -77,6 +77,20 @@ export function sportStyle(sport: string): MetricStyle {
   return SPORT_STYLES[sport] ?? { tone: "neutral", icon: "calendar" };
 }
 
+/** The sports that cover a distance -- what a distance goal can be scoped to. Deliberately a
+ * short explicit list rather than "every sport": strength, HIIT, fitness equipment, yoga,
+ * breathing, rock climbing and racket sports have no meaningful distance, so offering them would
+ * only let an athlete set a goal that can never be met. */
+export const DISTANCE_SPORTS: readonly string[] = [
+  "running",
+  "cycling",
+  "rowing",
+  "walking",
+  "hiking",
+  "snowshoeing",
+  "alpine_skiing",
+];
+
 /** Same as `sportStyle`, for a *scheduled* workout's own sport strings -- "bouldering" is really
  * a rock-climbing sub-discipline (this app already knows that for recorded activities, via
  * `garmin_activity_summary.py`'s own sport="rock_climbing"/sub_sport="bouldering" pair) but has

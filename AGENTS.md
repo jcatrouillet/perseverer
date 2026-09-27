@@ -1661,7 +1661,11 @@ environment:
   tile row (current distance, ahead/behind pace) reading the same two API fields the chart's own
   "today" tooltip point does, so the two can never drift from each other. `GoalForm.tsx` enters
   the target in the athlete's own Personalize distance unit (km or miles) and converts to metres
-  at submit time (SI-in-storage). **Revision: the chart's tooltip shows the real ahead/behind-goal
+  at submit time (SI-in-storage). Its sport picker offers only sports that cover a distance
+  (`metricStyle.ts::DISTANCE_SPORTS`: running, cycling, rowing, walking, hiking, snowshoeing, alpine
+  skiing, plus "All sports") — not strength, HIIT, fitness equipment, yoga, breathing, rock climbing
+  or racket, which could only ever yield a goal that can't be met; a goal already saved for a sport
+  outside that list stays selectable when edited. The API still accepts any sport string. **Revision: the chart's tooltip shows the real ahead/behind-goal
   difference at *any* hovered point, not just today** — originally it just listed each series' own
   raw value (`Target: X` / `Actual: Y`) with no computed difference, unlike the reference widget.
   `actualData` now precomputes each day's own interpolated target by reusing the identity that

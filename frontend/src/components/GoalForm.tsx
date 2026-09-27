@@ -7,7 +7,7 @@ import { useState } from "react";
 import type { GoalOut } from "../api/types";
 import { useRepeatGoal, useSetGoal } from "../api/queries";
 import { useDistanceFormat } from "../formatDistance";
-import { KNOWN_SPORTS } from "../metricStyle";
+import { DISTANCE_SPORTS } from "../metricStyle";
 
 export function GoalForm({
   periodType,
@@ -25,6 +25,12 @@ export function GoalForm({
     existing ? String(Math.round(metersToDisplay(existing.target_distance_m))) : "",
   );
   const [sport, setSport] = useState(existing?.sport ?? "running");
+  // A goal saved before this list was narrowed may be scoped to a sport that is no longer offered;
+  // keep it selectable so opening the edit form doesn't silently change it.
+  const sportOptions =
+    existing?.sport && !DISTANCE_SPORTS.includes(existing.sport)
+      ? [...DISTANCE_SPORTS, existing.sport]
+      : DISTANCE_SPORTS;
   const setGoal = useSetGoal();
   const repeatGoal = useRepeatGoal();
   // Only a NEW weekly goal can be repeated across several weeks; editing changes just this week.
@@ -55,7 +61,7 @@ export function GoalForm({
         Sport
         <select className="input" value={sport} onChange={(e) => setSport(e.target.value)}>
           <option value="">All sports</option>
-          {KNOWN_SPORTS.map((s) => (
+          {sportOptions.map((s) => (
             <option key={s} value={s}>
               {s.replace(/_/g, " ")}
             </option>
