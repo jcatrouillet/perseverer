@@ -944,6 +944,82 @@ async def delete_bouldering_goal(goal_id: int) -> None:
 
 
 @mcp.tool()
+async def get_duration_goals(period_type: str, period_start: str) -> list[dict[str, Any]]:
+    """Every duration goal (target TIME on a sport, or on every sport combined) set for one week,
+    month or year, each with its progress in seconds. `period_type` is "week" (period_start = the
+    ISO date the 7-day week starts on), "month" ("YYYY-MM") or "year" ("YYYY"). Any sport works.
+    Empty list when none is set."""
+    response = await _call_api(
+        "GET",
+        "/api/v1/duration-goals",
+        params={"period_type": period_type, "period_start": period_start},
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def create_duration_goal(
+    period_type: str,
+    period_start: str,
+    target_duration_s: float,
+    sport: str | None = None,
+    repeat_weeks: int = 1,
+) -> dict[str, Any]:
+    """Set a duration goal: `target_duration_s` seconds of activity time on `sport` (any sport,
+    e.g. "yoga", "strength_training", "running"; omit for every sport combined) in a week ("week",
+    period_start = the ISO start date), month ("YYYY-MM") or year ("YYYY"). e.g. 3 hours of yoga
+    a week: target_duration_s=10800. One goal per period and sport -- a duplicate is refused (use
+    update_duration_goal). For a weekly goal, `repeat_weeks` > 1 creates the same goal for that
+    many consecutive weeks (weeks that already have it are skipped) and returns
+    {"created": [...], "skipped_period_starts": [...]}."""
+    payload = _drop_none(
+        {
+            "period_type": period_type,
+            "period_start": period_start,
+            "sport": sport,
+            "target_duration_s": target_duration_s,
+        }
+    )
+    if repeat_weeks > 1:
+        response = await _call_api(
+            "POST", "/api/v1/duration-goals/repeat", json={**payload, "weeks": repeat_weeks}
+        )
+    else:
+        response = await _call_api("POST", "/api/v1/duration-goals", json=payload)
+    return dict(response.json())
+
+
+@mcp.tool()
+async def update_duration_goal(
+    goal_id: int,
+    period_type: str,
+    period_start: str,
+    target_duration_s: float,
+    sport: str | None = None,
+) -> dict[str, Any]:
+    """Replace a duration goal (by id) -- send every field, same meaning as create_duration_goal."""
+    response = await _call_api(
+        "PUT",
+        f"/api/v1/duration-goals/{goal_id}",
+        json=_drop_none(
+            {
+                "period_type": period_type,
+                "period_start": period_start,
+                "sport": sport,
+                "target_duration_s": target_duration_s,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def delete_duration_goal(goal_id: int) -> None:
+    """Delete a duration goal by id."""
+    await _call_api("DELETE", f"/api/v1/duration-goals/{goal_id}")
+
+
+@mcp.tool()
 async def create_blood_test_result(
     local_date: str,
     marker: str,

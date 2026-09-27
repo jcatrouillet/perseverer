@@ -1185,6 +1185,44 @@ export interface GoalProgressOut {
   pct_complete: number | null;
 }
 
+/** A duration goal: a target amount of TIME (seconds) on one sport, or on every sport combined
+ * (`sport: null`), in a week/month/year. `period_start` as for the other goal kinds. */
+export interface DurationGoalOut {
+  id: number;
+  period_type: "week" | "month" | "year";
+  period_start: string;
+  sport: string | null;
+  target_duration_s: number;
+}
+
+export interface DurationGoalIn {
+  period_type: "week" | "month" | "year";
+  period_start: string;
+  sport: string | null;
+  target_duration_s: number;
+}
+
+export interface DurationGoalProgressPoint {
+  local_date: string;
+  cumulative_duration_s: number;
+}
+
+export interface DurationGoalProgressOut {
+  goal: DurationGoalOut;
+  period_end: string;
+  daily: DurationGoalProgressPoint[];
+  target_per_day_s: number;
+  current_duration_s: number;
+  target_as_of_today_s: number;
+  ahead_behind_s: number;
+  pct_complete: number;
+}
+
+export interface DurationGoalRepeatOut {
+  created: DurationGoalOut[];
+  skipped_period_starts: string[];
+}
+
 /** Response of POST /goals/repeat: the same weekly goal on every week it covers. */
 export interface GoalRepeatOut {
   goals: GoalOut[];

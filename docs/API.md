@@ -1085,6 +1085,43 @@ Deletes a goal by id.
 
 **Responses:** `200` (no response body of interest). `404` → `detail: "goal not found"`.
 
+### Duration goals
+
+A duration goal is a target **amount of time** on one sport (any sport at all) or on every sport
+combined (`sport: null`), in a week, month or year. Unlike a distance goal it needs no distance, so
+it works for yoga, strength, climbing and the rest. Time is the activity's **moving duration**,
+falling back to its elapsed duration when a recording has none — the same "Moving time" the stat
+tiles show. A period can hold several duration goals, **one per sport** (plus one for all sports);
+each is addressed by its own `id`.
+
+#### `GET /duration-goals`
+
+Every duration goal for exactly this period, each with its own progress. Empty list when none is
+set. Query: `period_type` (`week`/`month`/`year`) and `period_start` (`"YYYY"`, `"YYYY-MM"`, or the
+ISO date a 7-day week starts on). **Response `200`:** `DurationGoalProgressOut[]` — `goal` (`id`,
+`period_type`, `period_start`, `sport`, `target_duration_s`), `period_end`, `daily` (one
+`{local_date, cumulative_duration_s}` per day through today), `target_per_day_s`,
+`current_duration_s`, `target_as_of_today_s`, `ahead_behind_s` (seconds; positive = ahead of pace)
+and `pct_complete`. Ordered by sport name, the all-sports goal last.
+
+#### `POST /duration-goals`
+
+Body (`DurationGoalIn`): `period_type`, `period_start`, `sport` (string or `null`),
+`target_duration_s` (seconds, > 0). `201` → `DurationGoalOut`; `409` → a goal for that period and
+sport already exists; `422` → invalid period or target.
+
+#### `POST /duration-goals/repeat`
+
+The same weekly goal for `weeks` (1–104, the first counts) consecutive weeks from `period_start`.
+Weeks that already hold a goal for the same sport are skipped. `201` →
+`{"created": [DurationGoalOut, …], "skipped_period_starts": ["…"]}`; `422` for a non-`week` goal
+or a bad start.
+
+#### `PUT /duration-goals/{goal_id}` · `DELETE /duration-goals/{goal_id}`
+
+`PUT` replaces a goal (send every field; `200`, `404`, `409` on a collision, `422`). `DELETE`
+removes it (`200`, `404`).
+
 ### Bouldering goals
 
 A bouldering goal is a target **number of completed routes** ("sends" — attempts never count) in a

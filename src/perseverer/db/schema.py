@@ -227,6 +227,27 @@ goal = Table(
     UniqueConstraint("athlete_id", "period_type", "period_start", name="uq_goal_identity"),
 )
 
+# A duration goal: an amount of TIME on one sport (`sport` NULL = every sport combined) over a
+# week, month or year. Works for any sport, since every activity has a duration -- unlike `goal`
+# above (distance, which only makes sense for sports that cover one). Separate from `goal` so a
+# period can hold several (2h of yoga AND 4h of running AND 8h overall), one per sport: identity is
+# (athlete, period, sport), enforced by the API (a NULL sport column can't carry a SQL unique
+# constraint). `period_start` follows `goal`'s convention -- "YYYY", "YYYY-MM", or the ISO date a
+# 7-day week begins on. Progress is computed on read from `activity` (duration_goals.py).
+duration_goal = Table(
+    "duration_goal",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("period_type", String, nullable=False),  # "week" | "month" | "year"
+    Column("period_start", String, nullable=False),
+    Column("sport", String, nullable=True),
+    Column("target_duration_s", Float, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    Index("ix_duration_goal_athlete_period", "athlete_id", "period_type", "period_start"),
+)
+
 # A bouldering goal: a number of COMPLETED routes ("sends") over a week, month or year -- either at
 # one specific V-grade ("10x V4"), at that grade or harder, or of any grade at all. Deliberately a
 # separate table from `goal` above (distance, one row per period): a period can hold several of

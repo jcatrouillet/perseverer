@@ -1814,6 +1814,19 @@ same "fetch once, aggregate in the browser" precedent.
   surfacing that run's own name/date/distance/pace/VDOT/duration in an `aria-live` details strip
   and linking straight to the activity.
 
+## Duration goals (duration_goal, duration_goals.py)
+
+A target amount of **time** on one sport, or on every sport combined, in a week, month or year —
+works for any sport (unlike a distance goal, which needs a distance). Columns: `period_type`
+(`week`|`month`|`year`), `period_start` (`"YYYY"`, `"YYYY-MM"`, or the ISO date a 7-day week begins
+on), `sport` (`NULL` = every sport combined), `target_duration_s`, `created_at`/`updated_at`. A
+period may hold several, but identity is `(athlete_id, period_type, period_start, sport)` — the API
+refuses a second goal for the same sport (409); it is enforced there rather than by a SQL unique
+constraint because a NULL `sport` cannot carry one. Progress is computed on read from `activity`:
+the sum of `COALESCE(moving_duration_s, duration_s)` (the same "Moving time" the stat tiles show)
+over non-deleted activities of that sport inside the period through today, with the same
+straight-line ahead/behind pace as the distance goals.
+
 ## Bouldering goals (bouldering_goal, bouldering_goals.py)
 
 A target number of **completed** routes in a week, month or year. Unlike `goal` (distance, one row

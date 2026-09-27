@@ -1,12 +1,13 @@
 // The one "Goals" button MonthView/YearView/WeekView render next to their <h1> -- the only place a
 // goal is ever visible on those pages. The popup it opens holds every kind of goal for that period:
-// the distance goal (running or any sport) and any number of bouldering goals, for a week, month
-// or year alike. The graphs are deliberately never inline: they only exist inside the popup.
+// the distance goal (running or any distance sport), any number of time goals (any sport at all)
+// and any number of bouldering goals, for a week, month or year alike. The graphs are deliberately never inline: they only exist inside the popup.
 import { useState } from "react";
 
 import { useDeleteGoal, useGoalProgress } from "../api/queries";
 import { useDistanceFormat } from "../formatDistance";
 import { BoulderingGoalsSection } from "./BoulderingGoalsSection";
+import { DurationGoalsSection } from "./DurationGoalsSection";
 import { GoalForm } from "./GoalForm";
 import { GoalProgressChart } from "./GoalProgressChart";
 import { LoadingSpinner } from "./LoadingSpinner";
@@ -98,6 +99,8 @@ export function GoalButton({
             </>
           )}
         </section>
+
+        <DurationGoalsSection periodType={periodType} periodStart={periodStart} />
 
         <BoulderingGoalsSection periodType={periodType} periodStart={periodStart} />
       </Modal>

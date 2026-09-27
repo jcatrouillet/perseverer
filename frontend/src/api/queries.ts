@@ -51,6 +51,10 @@ import type {
   BoulderingGoalOut,
   BoulderingGoalProgressOut,
   BoulderingGoalRepeatOut,
+  DurationGoalIn,
+  DurationGoalOut,
+  DurationGoalProgressOut,
+  DurationGoalRepeatOut,
   GoalOut,
   GoalProgressOut,
   GoalRepeatOut,
@@ -1273,6 +1277,66 @@ export function useDeleteBoulderingGoal() {
     mutationFn: (goal: BoulderingGoalOut) => apiDelete<void>(`/api/v1/bouldering-goals/${goal.id}`),
     onSuccess: (_void, goal) =>
       invalidateBoulderingGoals(queryClient, goal.period_type, goal.period_start),
+  });
+}
+
+/** Every duration goal (time on a sport, or on every sport) set for one week/month/year, each with
+ * its own progress line. An empty list means none is set. */
+export function useDurationGoals(periodType: "week" | "month" | "year", periodStart: string) {
+  return useQuery({
+    queryKey: ["duration-goals", periodType, periodStart],
+    queryFn: () =>
+      apiGet<DurationGoalProgressOut[]>(
+        `/api/v1/duration-goals${buildQuery({ period_type: periodType, period_start: periodStart })}`,
+      ),
+  });
+}
+
+export function useCreateDurationGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DurationGoalIn) => apiPost<DurationGoalOut>("/api/v1/duration-goals", body),
+    onSuccess: (_goal, v) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["duration-goals", v.period_type, v.period_start],
+      });
+    },
+  });
+}
+
+export function useRepeatDurationGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DurationGoalIn & { weeks: number }) =>
+      apiPost<DurationGoalRepeatOut>("/api/v1/duration-goals/repeat", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["duration-goals", "week"] });
+    },
+  });
+}
+
+export function useUpdateDurationGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: DurationGoalIn & { id: number }) =>
+      apiPut<DurationGoalOut>(`/api/v1/duration-goals/${id}`, body),
+    onSuccess: (_goal, v) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["duration-goals", v.period_type, v.period_start],
+      });
+    },
+  });
+}
+
+export function useDeleteDurationGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (goal: DurationGoalOut) => apiDelete<void>(`/api/v1/duration-goals/${goal.id}`),
+    onSuccess: (_void, goal) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["duration-goals", goal.period_type, goal.period_start],
+      });
+    },
   });
 }
 

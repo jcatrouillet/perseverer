@@ -22,6 +22,7 @@ from perseverer.api.mcp_server import (
     create_blood_test_panel,
     create_blood_test_result,
     create_bouldering_goal,
+    create_duration_goal,
     create_note,
     create_planned_race,
     create_planned_workout,
@@ -30,6 +31,7 @@ from perseverer.api.mcp_server import (
     delete_blood_test_panel,
     delete_blood_test_result,
     delete_bouldering_goal,
+    delete_duration_goal,
     delete_goal,
     delete_note,
     delete_planned_race,
@@ -49,6 +51,7 @@ from perseverer.api.mcp_server import (
     get_calendar_months,
     get_calendar_weeks,
     get_climbing_summary,
+    get_duration_goals,
     get_fitness,
     get_gear_alerts,
     get_goal_progress,
@@ -85,6 +88,7 @@ from perseverer.api.mcp_server import (
     uncomplete_planned_workout,
     update_blood_test_result,
     update_bouldering_goal,
+    update_duration_goal,
     update_note,
     update_planned_race,
     update_planned_workout,
@@ -617,6 +621,20 @@ async def test_repeat_weekly_goal_tools(client: TestClient) -> None:
     again = await create_bouldering_goal("week", "2026-10-05", 2, grade=4, repeat_weeks=3)
     assert [g["period_start"] for g in again["created"]] == ["2026-10-19"]
     assert again["skipped_period_starts"] == ["2026-10-05", "2026-10-12"]
+
+
+async def test_duration_goal_tools(client: TestClient) -> None:
+    assert await get_duration_goals("month", "2026-10") == []
+    goal = await create_duration_goal("month", "2026-10", 36_000, sport="yoga")
+    assert goal["sport"] == "yoga"
+    listed = await get_duration_goals("month", "2026-10")
+    assert [g["goal"]["id"] for g in listed] == [goal["id"]]
+    updated = await update_duration_goal(goal["id"], "month", "2026-10", 72_000, sport="yoga")
+    assert updated["target_duration_s"] == 72_000
+    repeated = await create_duration_goal("week", "2026-09-28", 3600, repeat_weeks=3)
+    assert len(repeated["created"]) == 3
+    await delete_duration_goal(goal["id"])
+    assert await get_duration_goals("month", "2026-10") == []
 
 
 async def test_blood_test_write_tools(client: TestClient) -> None:

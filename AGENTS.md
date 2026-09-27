@@ -1683,6 +1683,22 @@ environment:
   a repeat overlapping an earlier stretch is the normal case, and silently overwriting or
   duplicating a goal would each be worse than leaving it. Every week is written in one transaction.
   Capped at 104 weeks.
+- **Duration goals — a target amount of TIME, for any sport (`duration_goal`,
+  `duration_goals.py`, `DurationGoalsSection.tsx`)**: asked for "all sports (literally all of them)"
+  as a duration per week/month/year, since a distance goal only makes sense for a sport that covers
+  one (`DISTANCE_SPORTS`). Its own table and endpoints (`GET/POST /duration-goals`, `POST
+  /duration-goals/repeat`, `PUT/DELETE /duration-goals/{id}`) rather than a metric column on `goal`:
+  a period can hold several (2h yoga AND 4h running AND 8h overall), one per sport, so identity is
+  `(athlete, period, sport)` enforced by the API (409 on a duplicate — a NULL `sport` can't carry a
+  SQL unique constraint). `sport = null` means every sport combined; the form offers the full
+  `KNOWN_SPORTS` catalog. Time is `COALESCE(moving_duration_s, duration_s)` — the same "Moving time"
+  the app's stat tiles show, so a goal never disagrees with the totals beside it. Progress is
+  computed on read from `activity` (bounded to one period, never stored) with the same
+  straight-line ahead/behind pace as the other goals. A weekly goal can be repeated over several
+  weeks like the others (weeks already holding that sport's goal are skipped). The Goals popup is
+  now three sections — Running & distance, Time, Bouldering — and the target-vs-actual chart is one
+  shared `GoalLineChart.tsx` (routes for bouldering, hours for time). MCP: four more tools
+  (`get_/create_/update_/delete_duration_goal(s)`, 69 → 73 tools).
 - **Bouldering goals (`bouldering_goal`, `bouldering_goals.py`, `BoulderingGoalsButton.tsx`)**:
   a target number of **completed** routes ("sends") in a week, month or year, at one V-grade
   (optionally "or harder") or any grade — e.g. 10 × V4 in 2026, 1 × V5 in October 2026 — tracked

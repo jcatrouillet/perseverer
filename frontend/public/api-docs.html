@@ -1146,6 +1146,23 @@ const SCHEMAS = [
       ["ahead_behind_m","number|null","optional — current_distance_m minus target_distance_as_of_today_m; positive means ahead","opt"],
       ["pct_complete","number|null","optional — current_distance_m / target_distance_m × 100","opt"],
     ] },
+  { name: "DurationGoalOut", note: "Returned by POST/PUT /duration-goals, and inside DurationGoalProgressOut.", fields: [
+      ["id","integer",""],
+      ["period_type","string","week, month or year."],
+      ["period_start","string","\"YYYY\", \"YYYY-MM\" or the ISO start date of a 7-day week."],
+      ["sport","string|null","null = every sport combined.","opt"],
+      ["target_duration_s","number","Target time in seconds."],
+    ] },
+  { name: "DurationGoalProgressOut", note: "One element of the GET /duration-goals list.", fields: [
+      ["goal","DurationGoalOut",""],
+      ["period_end","string(date)",""],
+      ["daily","array<{local_date, cumulative_duration_s}>","One entry per day from the period start through today."],
+      ["target_per_day_s","number","Straight-line pace, seconds per day."],
+      ["current_duration_s","number","Time so far, in seconds."],
+      ["target_as_of_today_s","number","Where dead-even pace would put you today."],
+      ["ahead_behind_s","number","current minus target-as-of-today, seconds; positive = ahead."],
+      ["pct_complete","number","current / target; may exceed 1."],
+    ] },
   { name: "BoulderingGoalOut", note: "Returned by POST/PUT /bouldering-goals, and inside BoulderingGoalProgressOut.", fields: [
       ["id","integer",""],
       ["period_type","string","week, month or year."],
@@ -2045,6 +2062,68 @@ const GROUPS = [
       params: [ ["goal_id","path","req","integer","—","From GoalOut.id."] ],
       responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "goal not found"' } ],
       example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/goals/${EX.GOAL} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/api/v1/duration-goals", summary: "List the time goals for one period, with progress.",
+      description: "A duration goal is a target amount of TIME on one sport (any sport) or on every sport combined, in a week, month or year. Time is the activity's moving duration (falling back to elapsed). One goal per sport per period. Empty list when none is set.",
+      params: [
+        ["period_type","query","req","string","—","week, month or year."],
+        ["period_start","query","req","string","—","\"YYYY\", \"YYYY-MM\", or the ISO date a 7-day week starts on."],
+      ],
+      responses: [ { code: 200, ref: "array&lt;DurationGoalProgressOut&gt;" } ],
+      example: { qs: "?period_type=week&period_start=2026-09-28" }
+    },
+    { method: "POST", path: "/api/v1/duration-goals", summary: "Create a duration goal.",
+      description: "One goal per period and sport; a duplicate is refused with 409.",
+      body: { schema: "DurationGoalIn", fields: [
+        ["period_type","string","req","","week, month or year."],
+        ["period_start","string","req","","\"YYYY\", \"YYYY-MM\" or the ISO start date of a 7-day week."],
+        ["sport","string|null","opt","","Any sport; omit or null for every sport combined."],
+        ["target_duration_s","number","req","","Seconds, greater than 0."],
+      ]},
+      responses: [
+        { code: 201, ref: "DurationGoalOut" },
+        { code: 409, note: "A goal for this period and sport already exists." },
+        { code: 422, note: "Invalid period or target." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/duration-goals \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"period_type": "week", "period_start": "2026-09-28", "sport": "yoga", "target_duration_s": 10800}'` }
+    },
+    { method: "POST", path: "/api/v1/duration-goals/repeat", summary: "Repeat a weekly duration goal for several weeks.",
+      description: "The same weekly goal for weeks consecutive weeks from period_start (the first counts). Weeks that already hold a goal for the same sport are skipped.",
+      body: { schema: "DurationGoalRepeatIn", fields: [
+        ["period_type","string","req","","Must be week."],
+        ["period_start","string","req","","ISO start date of the first week."],
+        ["sport","string|null","opt","",""],
+        ["target_duration_s","number","req","",""],
+        ["weeks","integer","req","","1 to 104."],
+      ]},
+      responses: [
+        { code: 201, note: "{ created: DurationGoalOut[], skipped_period_starts: string[] }." },
+        { code: 422, note: "Not a week goal, weeks out of range, or a bad period_start." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/duration-goals/repeat \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"period_type": "week", "period_start": "2026-09-28", "sport": "yoga", "target_duration_s": 10800, "weeks": 8}'` }
+    },
+    { method: "PUT", path: "/api/v1/duration-goals/{goal_id}", summary: "Replace a duration goal.",
+      description: "Send every field (same body as POST).",
+      params: [ ["goal_id","path","req","integer","—","From DurationGoalOut.id."] ],
+      responses: [
+        { code: 200, ref: "DurationGoalOut" },
+        { code: 404, note: 'detail: "goal not found"' },
+        { code: 409, note: "The new scope collides with a different existing goal." },
+      ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/duration-goals/1 \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"period_type": "week", "period_start": "2026-09-28", "sport": "yoga", "target_duration_s": 14400}'` }
+    },
+    { method: "DELETE", path: "/api/v1/duration-goals/{goal_id}", summary: "Delete a duration goal.",
+      description: "",
+      params: [ ["goal_id","path","req","integer","—","From DurationGoalOut.id."] ],
+      responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "goal not found"' } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/duration-goals/1 \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "GET", path: "/api/v1/bouldering-goals", summary: "List the bouldering goals for one period, with progress.",

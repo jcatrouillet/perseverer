@@ -131,6 +131,11 @@ vi.mock("../../api/queries", () => ({
   useCreateBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useUpdateBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useDeleteBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false }),
+  useDurationGoals: () => ({ data: [], isLoading: false, isError: false }),
+  useCreateDurationGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useUpdateDurationGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useDeleteDurationGoal: () => ({ mutate: vi.fn(), isPending: false }),
+  useRepeatDurationGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
 }));
 
 const RUNNING_WORKOUT: PlannedWorkoutOut = {
