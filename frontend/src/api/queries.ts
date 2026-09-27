@@ -1153,14 +1153,8 @@ export function useLatestJob(source: JobSource, enabled: boolean) {
 /** A distance goal for a whole calendar year or month, plus its progress line -- `periodStart`
  * is "YYYY" for period_type "year", "YYYY-MM" for "month" (see goals.py::period_bounds).
  * `available: false` in the response means no goal is set for this period yet, not an error. */
-export function useGoalProgress(
-  periodType: "year" | "month",
-  periodStart: string,
-  /** false skips the request -- a week has no distance goal, only bouldering goals. */
-  enabled = true,
-) {
+export function useGoalProgress(periodType: "week" | "month" | "year", periodStart: string) {
   return useQuery({
-    enabled,
     queryKey: ["goal-progress", periodType, periodStart],
     queryFn: () =>
       apiGet<GoalProgressOut>(
@@ -1170,7 +1164,7 @@ export function useGoalProgress(
 }
 
 export interface SetGoalInput {
-  period_type: "year" | "month";
+  period_type: "week" | "month" | "year";
   period_start: string;
   sport: string | null;
   target_distance_m: number;

@@ -1042,8 +1042,8 @@ goal is configured for this exact `period_type`/`period_start`/sport combination
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
-| `period_type` | query | **required** | string | `year` or `month`. |
-| `period_start` | query | **required** | string | `"YYYY"` for `year`, `"YYYY-MM"` for `month`. |
+| `period_type` | query | **required** | string | `week`, `month` or `year`. |
+| `period_start` | query | **required** | string | `"YYYY"` for `year`, `"YYYY-MM"` for `month`, the ISO date the 7-day week starts on for `week` (any weekday). |
 
 **Response `200`:** `GoalProgressOut`.
 
@@ -1057,12 +1057,12 @@ goal rather than creating a second one.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `period_type` | string | required | `year` or `month`. |
-| `period_start` | string | required | `"YYYY"` or `"YYYY-MM"`, matching `period_type`. |
+| `period_type` | string | required | `week`, `month` or `year`. |
+| `period_start` | string | required | `"YYYY"`, `"YYYY-MM"` or the ISO start date of a week, matching `period_type`. |
 | `sport` | string, nullable | optional | Omit (or `null`) for a goal covering every sport combined. |
 | `target_distance_m` | number | required | |
 
-**Responses:** `200` → `GoalOut`. `400` → `period_type` isn't `year`/`month`, or `period_start`
+**Responses:** `200` → `GoalOut`. `422` → `period_type` isn't `week`/`month`/`year`, or `period_start`
 doesn't parse for the given `period_type`. `detail` is a plain string.
 
 ### `DELETE /goals/{goal_id}`

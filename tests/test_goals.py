@@ -25,9 +25,20 @@ class TestPeriodBounds:
     def test_leap_year_february(self) -> None:
         assert period_bounds("month", "2024-02") == (dt.date(2024, 2, 1), dt.date(2024, 2, 29))
 
+    def test_week_is_seven_days_from_any_weekday(self) -> None:
+        # A Sunday start and a Monday start are both valid -- the frontend's week-start
+        # preference decides which day a week begins on.
+        assert period_bounds("week", "2026-09-27") == (dt.date(2026, 9, 27), dt.date(2026, 10, 3))
+        assert period_bounds("week", "2026-09-28") == (dt.date(2026, 9, 28), dt.date(2026, 10, 4))
+
+    def test_malformed_week_start_raises(self) -> None:
+        for bad in ("2026", "2026-13-40", "not-a-date"):
+            with pytest.raises(InvalidPeriod):
+                period_bounds("week", bad)
+
     def test_invalid_period_type_raises(self) -> None:
         with pytest.raises(InvalidPeriod):
-            period_bounds("week", "2026")
+            period_bounds("day", "2026-01-01")
 
     def test_non_numeric_year_raises(self) -> None:
         with pytest.raises(InvalidPeriod):
@@ -83,6 +94,47 @@ def _seed_activity(
 
 
 class TestComputeProgress:
+    def test_week_goal_sums_the_seven_days_and_paces_per_day(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        _seed_activity(
+            engine, activity_id="in1", local_date="2026-09-28", sport="running", distance_m=10_000.0
+        )
+        _seed_activity(
+            engine, activity_id="in2", local_date="2026-10-02", sport="running", distance_m=6_000.0
+        )
+        # Just outside the 7-day window on either side.
+        _seed_activity(
+            engine,
+            activity_id="out1",
+            local_date="2026-09-27",
+            sport="running",
+            distance_m=99_000.0,
+        )
+        _seed_activity(
+            engine,
+            activity_id="out2",
+            local_date="2026-10-05",
+            sport="running",
+            distance_m=99_000.0,
+        )
+        with engine.connect() as conn:
+            progress = compute_progress(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                period_type="week",
+                period_start="2026-09-28",
+                sport="running",
+                target_distance_m=70_000.0,
+                as_of=dt.date(2026, 10, 1),
+            )
+        assert progress.period_end == "2026-10-04"
+        # Through Thursday Oct 1: only the Sep 28 run so far (the Oct 2 run is still in the future).
+        assert progress.current_distance_m == 10_000.0
+        assert len(progress.daily) == 4
+        assert progress.target_per_day_m == 10_000.0
+        assert progress.target_distance_as_of_today_m == 40_000.0
+        assert progress.ahead_behind_m == -30_000.0
+
     def test_cumulative_daily_series_and_current_total(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
         _seed_activity(

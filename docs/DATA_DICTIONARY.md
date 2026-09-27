@@ -1830,7 +1830,7 @@ attempt, including an unconfirmed `unknown_<n>` result, never counts. Ahead/behi
 straight-line `target_count / days_in_period * days_elapsed` pace as distance goals (0 before the
 period starts).
 
-## Distance goals, per year or month (goal, goals.py)
+## Distance goals, per year, month or week (goal, goals.py)
 
 A target distance for a whole calendar year or month, optionally scoped to one sport (`sport =
 null` means every sport combined). `goal` (`db/schema.py`) has one row per `(athlete_id,

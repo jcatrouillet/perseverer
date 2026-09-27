@@ -1639,8 +1639,10 @@ environment:
   feed (`calendar_feed.py::_build_race_event`) and the weekly email's "Races this week" section
   (`email_reports.py`) — both read the same `planned_race` row the calendar already fetches, no
   new query shape.
-- **Distance goals, per year or month (`goal`, `goals.py`, `GoalButton.tsx`)**: a target distance
-  for a whole calendar year or month, optionally scoped to one sport (`sport = null` means every
+- **Distance goals, per year, month or week (`goal`, `goals.py`, `GoalButton.tsx`)**: a target
+  distance for a whole calendar year, month or 7-day week (a week's `period_start` is the ISO date
+  its 7 days begin on, any weekday — the frontend's own week-start preference decides which; added
+  on request so the Week view's Goals popup can hold a running goal too, not just bouldering ones), optionally scoped to one sport (`sport = null` means every
   sport combined) — one goal per `(athlete_id, period_type, period_start)` (`uq_goal_identity`);
   setting a new sport on an existing period's goal replaces it rather than adding a second one.
   `PUT /goals` upserts on that identity; `GET /goals?period_type=&period_start=` returns
@@ -1682,8 +1684,8 @@ environment:
   Grades are exact by default (`grade == 4` counts only V4); `and_harder` widens it to `>=`.
   Frontend: there is **one "Goals" button** per period (`GoalButton.tsx`, on Week/Month/Year — the
   running-goal button it always was, renamed, not a second bouldering-only button), and its popup
-  holds both kinds: a "Running & distance" section (the distance goal, year/month only — a week
-  skips that request) and a "Bouldering" section (`BoulderingGoalsSection.tsx`) with one card per
+  holds both kinds for a week, month or year alike: a "Running & distance" section (the distance
+  goal) and a "Bouldering" section (`BoulderingGoalsSection.tsx`) with one card per
   goal (title like "10 × V4 or harder", completed/target tiles, ahead/behind in routes, a step-line
   chart against the grey target pace) plus add/edit/delete. `.calendar-header` wraps so the buttons
   don't overflow at phone width. MCP: four tools

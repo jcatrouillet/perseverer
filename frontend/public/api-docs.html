@@ -2001,8 +2001,8 @@ const GROUPS = [
     { method: "GET", path: "/api/v1/goals", summary: "Progress toward a distance goal for one period.",
       description: "Cumulative distance so far this period vs. the flat pace-to-target line, plus a day-by-day series for a progress chart. available: false when no goal is configured for this exact period_type/period_start/sport combination.",
       params: [
-        ["period_type","query","req","string","—","year or month."],
-        ["period_start","query","req","string","—","\"YYYY\" for year, \"YYYY-MM\" for month."],
+        ["period_type","query","req","string","—","week, month or year."],
+        ["period_start","query","req","string","—","\"YYYY\" for year, \"YYYY-MM\" for month, the ISO date a 7-day week starts on for week (any weekday)."],
       ],
       responses: [ { code: 200, ref: "GoalProgressOut" } ],
       example: { qs: "?period_type=month&period_start=2026-08" }
@@ -2010,14 +2010,14 @@ const GROUPS = [
     { method: "PUT", path: "/api/v1/goals", summary: "Create or replace the distance goal for one period.",
       description: "Upsert keyed on (period_type, period_start, sport) — calling this again for the same period and sport replaces the existing goal rather than creating a second one.",
       body: { schema: "GoalIn", fields: [
-        ["period_type","string","req","","year or month."],
-        ["period_start","string","req","","\"YYYY\" or \"YYYY-MM\", matching period_type."],
+        ["period_type","string","req","","week, month or year."],
+        ["period_start","string","req","","\"YYYY\", \"YYYY-MM\" or the ISO start date of a 7-day week, matching period_type."],
         ["sport","string|null","opt","","Omit (or null) for a goal covering every sport combined."],
         ["target_distance_m","number","req","",""],
       ]},
       responses: [
         { code: 200, ref: "GoalOut" },
-        { code: 400, note: "period_type isn't year/month, or period_start doesn't parse for the given period_type. detail is a plain string." },
+        { code: 422, note: "period_type isn't week/month/year, or period_start doesn't parse for the given period_type. detail is a plain string." },
       ],
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/goals \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\

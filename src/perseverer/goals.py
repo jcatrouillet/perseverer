@@ -1,6 +1,6 @@
-"""A distance goal for a whole calendar year or month, and the progress line/trend chart data
-computed against it -- see db/schema.py::goal for the storage shape (one row per athlete per
-period, upserted, `sport=None` meaning every sport combined).
+"""A distance goal for a whole calendar year, month or 7-day week, and the progress line/trend
+chart data computed against it -- see db/schema.py::goal for the storage shape (one row per
+athlete per period, upserted, `sport=None` meaning every sport combined).
 
 Progress is computed fresh on every read from the `activity` table, not cached in a rollup:
 each query is already bounded to one year (<=366 days) or one month of an athlete's activities,
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import calendar
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import Connection, func, select
 
@@ -27,7 +27,15 @@ class InvalidPeriod(ValueError):
 
 def period_bounds(period_type: str, period_start: str) -> tuple[date, date]:
     """Returns (first_day, last_day), both inclusive, for a goal's period. `period_start` is
-    "YYYY" for period_type="year", "YYYY-MM" for period_type="month"."""
+    "YYYY" for period_type="year", "YYYY-MM" for period_type="month", and the ISO date the 7-day
+    period begins on for period_type="week" (any weekday -- the frontend's own week-start
+    preference decides which, so a Sunday-start week is as valid as a Monday-start one)."""
+    if period_type == "week":
+        try:
+            first = date.fromisoformat(period_start)
+        except ValueError as e:
+            raise InvalidPeriod(f"not a valid YYYY-MM-DD week start: {period_start!r}") from e
+        return first, first + timedelta(days=6)
     if period_type == "year":
         try:
             year = int(period_start)
@@ -44,7 +52,7 @@ def period_bounds(period_type: str, period_start: str) -> tuple[date, date]:
             raise InvalidPeriod(f"not a valid YYYY-MM month: {period_start!r}")
         last_day = calendar.monthrange(year, month)[1]
         return date(year, month, 1), date(year, month, last_day)
-    raise InvalidPeriod(f"period_type must be 'year' or 'month', got {period_type!r}")
+    raise InvalidPeriod(f"period_type must be 'week', 'month' or 'year', got {period_type!r}")
 
 
 @dataclass

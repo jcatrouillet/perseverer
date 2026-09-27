@@ -15,7 +15,7 @@ export function GoalForm({
   existing,
   onSaved,
 }: {
-  periodType: "year" | "month";
+  periodType: "week" | "month" | "year";
   periodStart: string;
   existing: GoalOut | null;
   onSaved: () => void;

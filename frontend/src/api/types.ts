@@ -1162,7 +1162,7 @@ export interface LoginResponse {
 
 export interface GoalOut {
   id: number;
-  period_type: "year" | "month";
+  period_type: "week" | "month" | "year";
   period_start: string;
   sport: string | null;
   target_distance_m: number;

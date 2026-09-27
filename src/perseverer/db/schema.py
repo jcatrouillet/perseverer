@@ -218,7 +218,7 @@ goal = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
-    Column("period_type", String, nullable=False),  # "year" | "month"
+    Column("period_type", String, nullable=False),  # "week" | "month" | "year"
     Column("period_start", String, nullable=False),
     Column("sport", String, nullable=True),
     Column("target_distance_m", Float, nullable=False),

@@ -92,10 +92,58 @@ def test_put_upserts_rather_than_duplicating(
 def test_put_rejects_invalid_period_type(client: TestClient, auth_headers: dict[str, str]) -> None:
     r = client.put(
         "/api/v1/goals",
-        json={"period_type": "week", "period_start": "2026", "target_distance_m": 100.0},
+        json={"period_type": "day", "period_start": "2026-01-01", "target_distance_m": 100.0},
         headers=auth_headers,
     )
     assert r.status_code == 422
+
+
+def test_a_week_running_goal_can_be_created_read_and_deleted(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="w1", sport="running", local_date="2026-09-15", distance_m=12_000.0
+        )
+    put = client.put(
+        "/api/v1/goals",
+        json={
+            "period_type": "week",
+            "period_start": "2026-09-14",
+            "sport": "running",
+            "target_distance_m": 40_000.0,
+        },
+        headers=auth_headers,
+    )
+    assert put.status_code == 200
+    assert put.json()["period_type"] == "week"
+
+    got = client.get(
+        "/api/v1/goals",
+        params={"period_type": "week", "period_start": "2026-09-14"},
+        headers=auth_headers,
+    ).json()
+    assert got["available"] is True
+    assert got["period_end"] == "2026-09-20"
+    assert got["current_distance_m"] == 12_000.0
+    # A different week has its own (absent) goal.
+    other = client.get(
+        "/api/v1/goals",
+        params={"period_type": "week", "period_start": "2026-09-21"},
+        headers=auth_headers,
+    ).json()
+    assert other["available"] is False
+
+    bad = client.put(
+        "/api/v1/goals",
+        json={"period_type": "week", "period_start": "2026", "target_distance_m": 1.0},
+        headers=auth_headers,
+    )
+    assert bad.status_code == 422
+
+    assert (
+        client.delete(f"/api/v1/goals/{put.json()['id']}", headers=auth_headers).status_code == 200
+    )
 
 
 def test_put_rejects_non_positive_target(client: TestClient, auth_headers: dict[str, str]) -> None:

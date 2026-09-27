@@ -1,5 +1,5 @@
 """Request/response models for GET/PUT/DELETE /goals -- a distance goal for a whole calendar
-year or month, and the progress line computed against it. See db/schema.py::goal for the
+year, month or 7-day week, and the progress line computed against it. See db/schema.py::goal for the
 storage shape and goals.py for the progress computation.
 """
 
@@ -9,16 +9,16 @@ from pydantic import BaseModel, field_validator
 
 
 class GoalIn(BaseModel):
-    period_type: str  # "year" | "month"
-    period_start: str  # "YYYY" for a year, "YYYY-MM" for a month
+    period_type: str  # "week" | "month" | "year"
+    period_start: str  # "YYYY" year, "YYYY-MM" month, or the ISO date a 7-day week starts on
     sport: str | None = None  # None = every sport combined
     target_distance_m: float
 
     @field_validator("period_type")
     @classmethod
     def _valid_period_type(cls, v: str) -> str:
-        if v not in ("year", "month"):
-            raise ValueError('period_type must be "year" or "month"')
+        if v not in ("week", "month", "year"):
+            raise ValueError('period_type must be "week", "month" or "year"')
         return v
 
     @field_validator("target_distance_m")

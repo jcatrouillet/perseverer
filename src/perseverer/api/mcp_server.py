@@ -452,9 +452,9 @@ async def list_blood_tests(start_date: str, end_date: str) -> list[dict[str, Any
 
 @mcp.tool()
 async def get_goal_progress(period_type: str, period_start: str) -> dict[str, Any]:
-    """Progress toward a distance goal for one calendar year or month. `period_type` is "year" or
-    "month"; `period_start` is "YYYY" for a year or "YYYY-MM" for a month. `available: false`
-    (never fabricated) when no goal is set for that exact period."""
+    """Progress toward a distance goal for one week, month or year. `period_type` is "week"
+    (`period_start` = the ISO date the 7-day week starts on), "month" ("YYYY-MM") or "year"
+    ("YYYY"). `available: false` (never fabricated) when no goal is set for that exact period."""
     response = await _call_api(
         "GET",
         "/api/v1/goals",
@@ -830,8 +830,9 @@ async def set_goal(
     target_distance_m: float,
     sport: str | None = None,
 ) -> dict[str, Any]:
-    """Set (or replace) the distance goal for one year ("YYYY") or month ("YYYY-MM"), in metres;
-    sport=None means every sport combined. One goal per period -- setting again replaces it."""
+    """Set (or replace) the distance goal for one week ("week", period_start = the ISO start date
+    of the 7 days), month ("YYYY-MM") or year ("YYYY"), in metres; sport=None means every sport
+    combined. One goal per period -- setting again replaces it."""
     response = await _call_api(
         "PUT",
         "/api/v1/goals",

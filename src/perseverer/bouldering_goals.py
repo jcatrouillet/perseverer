@@ -19,22 +19,12 @@ from sqlalchemy import Connection, select
 
 from perseverer.db.schema import activity
 from perseverer.db.schema import split as split_table
-from perseverer.goals import InvalidPeriod
 from perseverer.goals import period_bounds as distance_period_bounds
 
 
 def period_bounds(period_type: str, period_start: str) -> tuple[date, date]:
-    """(first_day, last_day), both inclusive. Year/month reuse goals.py's own parsing; a week is
-    the 7 days beginning on the ISO date `period_start` (any weekday)."""
-    if period_type == "week":
-        try:
-            first = date.fromisoformat(period_start)
-        except ValueError as e:
-            raise InvalidPeriod(f"not a valid YYYY-MM-DD week start: {period_start!r}") from e
-        return first, first + timedelta(days=6)
-    if period_type in ("year", "month"):
-        return distance_period_bounds(period_type, period_start)
-    raise InvalidPeriod(f"period_type must be 'week', 'month' or 'year', got {period_type!r}")
+    """(first_day, last_day), both inclusive -- the same period parsing distance goals use."""
+    return distance_period_bounds(period_type, period_start)
 
 
 def grade_matches(climb_grade: int, goal_grade: int | None, and_harder: bool) -> bool:

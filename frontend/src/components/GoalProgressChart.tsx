@@ -123,10 +123,14 @@ export function GoalProgressChart({ progress }: { progress: GoalProgressOut }) {
   const { metersToDisplay, unitLabel } = useDistanceFormat();
   if (!progress.available || progress.goal == null || progress.period_end == null) return null;
 
+  const { period_type, period_start } = progress.goal;
+  // A week's period_start is already a full ISO date (the day its 7 days begin on).
   const periodStartTs = parseIsoUtc(
-    progress.goal.period_type === "year"
-      ? `${progress.goal.period_start}-01-01`
-      : `${progress.goal.period_start}-01`,
+    period_type === "year"
+      ? `${period_start}-01-01`
+      : period_type === "month"
+        ? `${period_start}-01`
+        : period_start,
   );
   const periodEndTs = parseIsoUtc(progress.period_end);
   const targetKm = metersToDisplay(progress.goal.target_distance_m);

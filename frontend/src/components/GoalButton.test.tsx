@@ -66,13 +66,14 @@ describe("GoalButton", () => {
     expect(screen.getByRole("dialog", { name: /October 2026 goals/ })).toBeInTheDocument();
   });
 
-  it("a week only has bouldering goals: no distance section, no distance request", () => {
-    mockUseGoalProgress.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+  it("a week gets the running/distance goal too, requested for that exact week", () => {
+    mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
     render(<GoalButton periodType="week" periodStart="2026-09-27" periodLabel="Week of 2026-09-27" />);
-    expect(mockUseGoalProgress).toHaveBeenCalledWith("year", "2026-09-27", false);
+    expect(mockUseGoalProgress).toHaveBeenCalledWith("week", "2026-09-27");
     fireEvent.click(screen.getByRole("button", { name: "Goals" }));
-    expect(screen.queryByRole("heading", { name: /Running/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Running/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bouldering" })).toBeInTheDocument();
+    expect(screen.getByText("Target distance (km)")).toBeInTheDocument();
   });
 
   it("the graph never renders on the page itself, only after opening the popup", () => {
