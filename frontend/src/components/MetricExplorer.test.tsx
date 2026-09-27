@@ -51,3 +51,61 @@ describe("MetricExplorer", () => {
     expect(screen.getByText("Chart A")).toBeInTheDocument();
   });
 });
+
+const GROUPED: ExplorerMetric[] = [
+  { key: "weight", title: "Weight", content: <p>weight chart</p> },
+  { key: "b:ldl", title: "LDL", group: "Blood · Lipids", content: <p>ldl chart</p> },
+  { key: "b:hdl", title: "HDL", group: "Blood · Lipids", content: <p>hdl chart</p> },
+  {
+    key: "b:alt",
+    title: "ALT",
+    group: "Blood · Liver",
+    hideDetailHeader: true,
+    content: <p>alt chart</p>,
+  },
+];
+
+describe("MetricExplorer groups", () => {
+  it("lists ungrouped metrics flat and keeps other groups collapsed", () => {
+    render(<MetricExplorer metrics={GROUPED} selected={null} onSelect={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Weight" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Blood · Lipids/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByRole("button", { name: "LDL" })).not.toBeInTheDocument();
+  });
+
+  it("opens a group by hand, showing its count, and selecting an entry calls onSelect", () => {
+    const onSelect = vi.fn();
+    render(<MetricExplorer metrics={GROUPED} selected={null} onSelect={onSelect} />);
+    const toggle = screen.getByRole("button", { name: /Blood · Lipids/ });
+    expect(toggle).toHaveTextContent("2");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "LDL" }));
+    expect(onSelect).toHaveBeenCalledWith("b:ldl");
+  });
+
+  it("opens the group holding the selected metric automatically", () => {
+    render(<MetricExplorer metrics={GROUPED} selected="b:alt" onSelect={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "ALT" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: /Blood · Liver/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  it("skips the shared detail header for a metric that opts out", () => {
+    const header = <div>window controls</div>;
+    const { rerender } = render(
+      <MetricExplorer metrics={GROUPED} selected="weight" onSelect={vi.fn()} detailHeader={header} />,
+    );
+    expect(screen.getByText("window controls")).toBeInTheDocument();
+    rerender(
+      <MetricExplorer metrics={GROUPED} selected="b:alt" onSelect={vi.fn()} detailHeader={header} />,
+    );
+    expect(screen.queryByText("window controls")).not.toBeInTheDocument();
+    expect(screen.getByText("alt chart")).toBeInTheDocument();
+  });
+});

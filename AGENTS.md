@@ -371,6 +371,31 @@ environment:
   entry — confirmed live that with only the athlete's-own-history source, a brand-new athlete saw
   no dropdown at all, a real gap this closed. A "+ New marker…" option switches that one row to a
   free-text input instead, with a "Choose existing" link back, for anything not in either list.
+  **Revision: blood tests are browsed per MARKER, not per draw date** — asked directly ("add each
+  marker as an entry in the left menu where we can track the marker over time, flag in the graph
+  the values outside of the standard"), then, once ~90 distinct markers were in (a full CBC with
+  differential alone is 20), "the list becomes long, maybe create categories". Every distinct
+  `blood_test_result.marker` is now an entry in `HealthPage.tsx`'s own `MetricExplorer` list, under
+  a collapsible category heading (`bloodMarkers.ts::markerCategory`, regex rules in a fixed order:
+  Lipids / Glucose & thyroid / Electrolytes & kidney / Liver & pancreas / Blood count / Blood gas /
+  Other — a navigation aid only, never a clinical classification; `MetricExplorer`'s new optional
+  `group` field renders these, a group being open while it holds the selected marker and toggleable
+  by hand, the list itself scrolling independently rather than running off the page). Selecting a
+  marker shows `BloodMarkerChart.tsx`: the values as a line over real time (a numeric time-scaled
+  x-axis with whole-year ticks, since lab draws are sparse and span decades, not the daily-series
+  windowing `TrendControls`/`trendWindow.ts` assume — hence `ExplorerMetric.hideDetailHeader`), each
+  report's own reference low/high as dashed `stepAfter` lines (ranges differ between labs and
+  change over the years, so a single band would misstate old points), and every value outside the
+  range **stored on that same result row** as a larger red dot (`isOutOfRange`, moved to
+  `bloodMarkers.ts` and unchanged: a result with no range is never flagged, a value exactly on a
+  bound is in range) — plus the marker's results as a newest-first table with the same inline
+  Edit/Delete (`BloodTestsPanel.tsx::ResultRow`, now exported, with a `lead="date"` variant for a
+  single marker's own history). `BloodTestsPanel` stays below the explorer for what a per-marker view
+  can't do — adding a new draw, and the old by-date view (per-panel lab/notes edit, delete a whole
+  test) now behind a collapsed "Manage by test date" `<details>`. No API change. A real layout bug
+  caught live at 375px: `.metric-explorer`'s desktop `align-items: flex-start` becomes content-
+  sized in the mobile column layout, so a responsive chart sized itself off its last-measured
+  (desktop) width and pushed the whole page to 531px — the mobile rule now `align-items: stretch`.
 - **Gear: shoe mileage tracking and replacement alerts (`shoe`, `athlete_default_shoe`, `gear.py`,
   `/gear` page)**: athlete-owned shoe pairs (`brand`/`model`/optional `size`/`comments`,
   `initial_distance_km` for mileage already on the pair before it was entered, `max_distance_km`

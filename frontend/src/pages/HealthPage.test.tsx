@@ -202,4 +202,40 @@ describe("HealthPage", () => {
     render(<HealthPage />);
     expect(screen.getByRole("heading", { name: "Sleep time" })).toBeInTheDocument();
   });
+
+  it("lists each blood marker under a collapsible category and charts the selected one", () => {
+    mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    mockUseBloodTests.mockReturnValue({
+      data: [
+        {
+          id: 1,
+          local_date: "2015-10-14",
+          marker: "ALT",
+          value_num: 81,
+          unit: "U/L",
+          reference_low: 15,
+          reference_high: 60,
+          lab_name: null,
+          notes: null,
+          created_at: "2015-10-14T00:00:00",
+          updated_at: "2015-10-14T00:00:00",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    render(<HealthPage />);
+    // With nothing else to show, the first marker is selected by default -- so its category is
+    // already open.
+    expect(screen.getByRole("button", { name: /Blood · Liver & pancreas/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "ALT" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("heading", { name: /ALT/ })).toBeInTheDocument();
+    expect(screen.getByText(/1 result, 1 outside the range/)).toBeInTheDocument();
+    // A blood marker is its own all-time history, so the window controls are not shown for it.
+    expect(screen.queryByRole("button", { name: "Week" })).not.toBeInTheDocument();
+  });
 });

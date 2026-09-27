@@ -809,6 +809,9 @@ tbody tr:last-child td {
   gap: var(--space-1);
   position: sticky;
   top: calc(3.5rem + var(--space-4));
+  /* Long once category groups are expanded -- scrolls on its own instead of running off-page. */
+  max-height: calc(100vh - 5rem - var(--space-4));
+  overflow-y: auto;
 }
 
 .metric-explorer__item {
@@ -839,9 +842,52 @@ tbody tr:last-child td {
   min-width: 0;
 }
 
+/* Collapsible category (the Health page's blood-test markers). */
+.metric-explorer__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.metric-explorer__group-toggle {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-xs, 0.75rem);
+  font-weight: 700;
+  gap: var(--space-2);
+  letter-spacing: 0.04em;
+  padding: var(--space-1) var(--space-3);
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.metric-explorer__group-toggle:hover {
+  color: var(--color-text);
+}
+
+.metric-explorer__count {
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.metric-explorer__group-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 @media (max-width: 720px) {
   .metric-explorer {
     flex-direction: column;
+    /* `flex-start` (the desktop value) would size the detail pane to its content in a column,
+       and a responsive chart inside then sizes itself off whatever width it last measured
+       instead of the screen -- stretch pins it to the container's real width. */
+    align-items: stretch;
   }
 
   .metric-explorer__list {
@@ -856,11 +902,26 @@ tbody tr:last-child td {
     flex-direction: row;
     flex-wrap: nowrap;
     overflow-x: auto;
+    max-height: none;
     width: 100%;
   }
 
   .metric-explorer__item {
     flex-shrink: 0;
+  }
+
+  /* The pill row scrolls sideways: each category sits inline as its own toggle followed by its
+     pills once open. */
+  .metric-explorer__group,
+  .metric-explorer__group-items {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 0;
+  }
+
+  .metric-explorer__group-toggle {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 }
 

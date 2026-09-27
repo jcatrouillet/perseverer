@@ -16,25 +16,12 @@ import {
   useUpdateBloodTestResult,
 } from "../api/queries";
 import type { BloodTestMarkerIn, BloodTestResultOut } from "../api/types";
-import { EARLIEST_PLAUSIBLE_DATE, isoDate, parseIsoDate } from "../dateUtils";
+import { formatDate, formatRange, isOutOfRange } from "../bloodMarkers";
+import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../dateUtils";
 import { LoadingSpinner } from "./LoadingSpinner";
 import "../styles/blood-tests.css";
 
 const TODAY = isoDate(new Date());
-
-function formatDate(localDate: string): string {
-  // timeZone: "UTC" is required, not decorative -- parseIsoDate returns a UTC-midnight Date, and
-  // toLocaleDateString defaults to the browser's own local timezone, which silently rolls the
-  // displayed date back a day for anyone west of UTC (confirmed live: entering "2026-09-13"
-  // rendered back as "Sep 12, 2026" without this). Same fix RunningStats.tsx's own
-  // formatShortDate already applies to the identical parse-then-format shape.
-  return parseIsoDate(localDate).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
 
 interface Panel {
   localDate: string;
@@ -119,23 +106,17 @@ function buildMarkerCatalog(results: BloodTestResultOut[]): Map<string, MarkerCa
   return catalog;
 }
 
-function isOutOfRange(r: BloodTestResultOut): boolean {
-  return (
-    (r.reference_low != null && r.value_num < r.reference_low) ||
-    (r.reference_high != null && r.value_num > r.reference_high)
-  );
-}
-
-function formatRange(r: BloodTestResultOut): string {
-  if (r.reference_low == null && r.reference_high == null) return "—";
-  if (r.reference_low != null && r.reference_high != null) {
-    return `${r.reference_low}–${r.reference_high}`;
-  }
-  if (r.reference_low != null) return `≥ ${r.reference_low}`;
-  return `≤ ${r.reference_high}`;
-}
-
-function ResultRow({ result }: { result: BloodTestResultOut }) {
+export function ResultRow({
+  result,
+  lead = "marker",
+}: {
+  result: BloodTestResultOut;
+  /** Which identifying value opens the row: the marker name (a whole panel's table, where every
+   * row is a different marker) or the draw date (one marker's own history, where every row is the
+   * same marker on a different date). */
+  lead?: "marker" | "date";
+}) {
+  const leadLabel = lead === "date" ? formatDate(result.local_date) : result.marker;
   const updateResult = useUpdateBloodTestResult();
   const deleteResult = useDeleteBloodTestResult();
   const [isEditing, setIsEditing] = useState(false);
@@ -168,7 +149,7 @@ function ResultRow({ result }: { result: BloodTestResultOut }) {
   if (isEditing) {
     return (
       <tr className="blood-tests__row blood-tests__row--editing">
-        <td>{result.marker}</td>
+        <td>{leadLabel}</td>
         <td>
           <input
             className="input blood-tests__cell-input"
@@ -224,7 +205,7 @@ function ResultRow({ result }: { result: BloodTestResultOut }) {
 
   return (
     <tr className={isOutOfRange(result) ? "blood-tests__row blood-tests__row--out-of-range" : "blood-tests__row"}>
-      <td>{result.marker}</td>
+      <td>{leadLabel}</td>
       <td>
         {result.value_num}
         {isOutOfRange(result) && (
@@ -664,9 +645,10 @@ export function BloodTestsPanel() {
     <section className="card">
       <h2>Blood tests</h2>
       <p className="chart-note">
-        Your own lab results, entered by hand. Reference ranges (when given) come from your own
-        lab report -- shown here only to flag values outside the range you provided, not as
-        medical advice.
+        Every marker you have recorded is listed in the menu above, each charted over time. Use
+        this section to add a new blood test, or to correct or delete results by test date.
+        Reference ranges (when given) come from your own lab report -- shown only to flag values
+        outside the range you provided, not as medical advice.
       </p>
 
       {results.isLoading && <LoadingSpinner />}
@@ -677,11 +659,16 @@ export function BloodTestsPanel() {
       )}
 
       {panels.length > 0 && (
-        <div className="blood-tests__panels">
-          {panels.map((panel, i) => (
-            <PanelCard key={panel.localDate} panel={panel} defaultOpen={i === 0} />
-          ))}
-        </div>
+        <details className="blood-tests__manage">
+          <summary className="blood-tests__manage-summary">
+            Manage by test date ({panels.length})
+          </summary>
+          <div className="blood-tests__panels">
+            {panels.map((panel, i) => (
+              <PanelCard key={panel.localDate} panel={panel} defaultOpen={i === 0} />
+            ))}
+          </div>
+        </details>
       )}
 
       {isAdding ? (

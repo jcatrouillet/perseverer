@@ -9,8 +9,10 @@
 // untouched) tile-grid/trend-chart rendering, which this rewrite doesn't touch.
 import { useMemo, useState } from "react";
 
-import { useHealthDashboard, useSleep } from "../api/queries";
+import { useBloodTests, useHealthDashboard, useSleep } from "../api/queries";
 import type { SleepSessionOut } from "../api/types";
+import { groupResultsByMarker } from "../bloodMarkers";
+import { BloodMarkerChart } from "../components/BloodMarkerChart";
 import { BloodTestsPanel } from "../components/BloodTestsPanel";
 import { ChartFullscreen } from "../components/ChartFullscreen";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -45,6 +47,8 @@ export const HRV_METRIC = ["hrv_nightly_average"];
 export const WEIGHT_METRIC = ["weight_kg"];
 
 const TODAY = isoDate(new Date());
+
+const BLOOD_PREFIX = "blood:";
 
 function color(logicalMetric: string): string {
   return toneColor(healthMetricStyle(logicalMetric).tone);
@@ -196,6 +200,8 @@ export function HealthPage() {
 
   const dashboard = useHealthDashboard(EARLIEST_PLAUSIBLE_DATE, TODAY);
   const sleep = useSleep(EARLIEST_PLAUSIBLE_DATE, TODAY);
+  const bloodTests = useBloodTests(EARLIEST_PLAUSIBLE_DATE, TODAY);
+  const bloodSeries = useMemo(() => groupResultsByMarker(bloodTests.data ?? []), [bloodTests.data]);
 
   const dashboardPoints = useMemo(
     () => (dashboard.data ? mergeTrendSeries(dashboard.data.metrics, ALL_DASHBOARD_KEYS) : []),
@@ -213,8 +219,12 @@ export function HealthPage() {
     () => CHARTS.filter((chart) => hasAnyRawValue(sourceForChart(chart), chart.keys)),
     [dashboardPoints, sleepPoints],
   );
+  // A blood marker ("blood:<name>") is its own all-time history, not a windowed daily series, so
+  // it neither takes part in the shared window controls nor in `activeChart`'s history bounds.
   const activeChart =
-    availableCharts.find((c) => c.key === selectedMetric) ?? availableCharts[0] ?? null;
+    availableCharts.find((c) => c.key === selectedMetric) ??
+    (selectedMetric?.startsWith(BLOOD_PREFIX) ? null : availableCharts[0]) ??
+    null;
 
   // Scoped to the *selected* metric's own keys -- not a merge across every metric on the page --
   // so "All time" for Sleep starts where sleep data actually starts (e.g. 2022), not wherever
@@ -232,7 +242,7 @@ export function HealthPage() {
     [resolution, anchor, dataStart, effectiveCustomRange],
   );
 
-  const isLoading = dashboard.isLoading || sleep.isLoading;
+  const isLoading = dashboard.isLoading || sleep.isLoading || bloodTests.isLoading;
   const isError = dashboard.isError || sleep.isError;
 
   function changeResolution(next: Resolution) {
@@ -246,9 +256,21 @@ export function HealthPage() {
     }
   }
 
-  const metrics: ExplorerMetric[] = useMemo(
+  const bloodMetrics: ExplorerMetric[] = useMemo(
     () =>
-      availableCharts.map((chart) => {
+      bloodSeries.map((s) => ({
+        key: `${BLOOD_PREFIX}${s.marker}`,
+        title: s.marker,
+        group: `Blood · ${s.category}`,
+        hideDetailHeader: true,
+        content: <BloodMarkerChart marker={s.marker} results={s.results} />,
+      })),
+    [bloodSeries],
+  );
+
+  const metrics: ExplorerMetric[] = useMemo(
+    () => [
+      ...availableCharts.map((chart) => {
         const points = bucketSeriesToWindow(sourceForChart(chart), chart.keys, window);
         return {
           key: chart.key,
@@ -260,7 +282,9 @@ export function HealthPage() {
           ),
         };
       }),
-    [availableCharts, window],
+      ...bloodMetrics,
+    ],
+    [availableCharts, window, bloodMetrics],
   );
 
   return (
