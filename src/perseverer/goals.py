@@ -55,6 +55,14 @@ def period_bounds(period_type: str, period_start: str) -> tuple[date, date]:
     raise InvalidPeriod(f"period_type must be 'week', 'month' or 'year', got {period_type!r}")
 
 
+def repeated_week_starts(first_week_start: str, weeks: int) -> list[str]:
+    """`weeks` consecutive 7-day periods beginning on `first_week_start` (an ISO date), each as
+    that period's own ISO start date -- what "repeat this weekly goal for N weeks" expands to.
+    The first entry is `first_week_start` itself."""
+    first = period_bounds("week", first_week_start)[0]
+    return [(first + timedelta(days=7 * i)).isoformat() for i in range(weeks)]
+
+
 @dataclass
 class DailyPoint:
     local_date: str

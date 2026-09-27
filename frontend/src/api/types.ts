@@ -1185,6 +1185,18 @@ export interface GoalProgressOut {
   pct_complete: number | null;
 }
 
+/** Response of POST /goals/repeat: the same weekly goal on every week it covers. */
+export interface GoalRepeatOut {
+  goals: GoalOut[];
+}
+
+/** Response of POST /bouldering-goals/repeat. Weeks that already held an identical goal are left
+ * as they were and listed in `skipped_period_starts`. */
+export interface BoulderingGoalRepeatOut {
+  created: BoulderingGoalOut[];
+  skipped_period_starts: string[];
+}
+
 /** A bouldering goal: a target number of COMPLETED routes in a week/month/year, at one V-grade
  * (optionally "or harder") or any grade (`grade: null`). `period_start` is "YYYY" for a year,
  * "YYYY-MM" for a month, or the ISO date a 7-day week starts on. */

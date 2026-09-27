@@ -305,3 +305,26 @@ class TestComputeProgress:
             )
 
         assert progress.pct_complete == pytest.approx(0.25)
+
+
+class TestRepeatedWeekStarts:
+    def test_consecutive_seven_day_steps_across_month_and_year_ends(self) -> None:
+        from perseverer.goals import repeated_week_starts
+
+        assert repeated_week_starts("2026-12-21", 4) == [
+            "2026-12-21",
+            "2026-12-28",
+            "2027-01-04",
+            "2027-01-11",
+        ]
+
+    def test_one_week_is_just_the_start(self) -> None:
+        from perseverer.goals import repeated_week_starts
+
+        assert repeated_week_starts("2026-09-27", 1) == ["2026-09-27"]
+
+    def test_a_bad_start_raises(self) -> None:
+        from perseverer.goals import repeated_week_starts
+
+        with pytest.raises(InvalidPeriod):
+            repeated_week_starts("2026", 3)

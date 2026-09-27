@@ -1669,6 +1669,16 @@ environment:
   `target_distance_as_of_today_m`/`ahead_behind_m` are built from, so the chart's own per-day
   target can never drift from the summary tile above it. Today's own point additionally gets the
   reference widget's richer "the N km you ran today puts you M km ahead/behind" sentence.
+  **Repeating a weekly goal over several weeks** (`POST /goals/repeat`, `POST
+  /bouldering-goals/repeat`, `goals.py::repeated_week_starts`): the Week popup's add form has a
+  "Repeat for (weeks)" field (new weekly goals only — not on edit, not for month/year; also
+  `repeat_weeks` on the `set_goal`/`create_bouldering_goal` MCP tools). The two kinds differ
+  deliberately: a distance goal is one-per-period-and-sport, so repeating **replaces** an existing
+  goal in a covered week (same upsert as PUT), whereas a bouldering repeat **skips** a week that
+  already holds an identical goal (grade + or-harder) and reports it in `skipped_period_starts` —
+  a repeat overlapping an earlier stretch is the normal case, and silently overwriting or
+  duplicating a goal would each be worse than leaving it. Every week is written in one transaction.
+  Capped at 104 weeks.
 - **Bouldering goals (`bouldering_goal`, `bouldering_goals.py`, `BoulderingGoalsButton.tsx`)**:
   a target number of **completed** routes ("sends") in a week, month or year, at one V-grade
   (optionally "or harder") or any grade — e.g. 10 × V4 in 2026, 1 × V5 in October 2026 — tracked

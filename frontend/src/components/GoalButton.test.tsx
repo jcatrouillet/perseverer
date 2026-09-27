@@ -7,6 +7,7 @@ import { GoalButton } from "./GoalButton";
 const mockUseGoalProgress = vi.fn();
 const mockSetGoalMutate = vi.fn();
 const mockDeleteGoalMutate = vi.fn();
+const mockRepeatGoalMutate = vi.fn();
 
 vi.mock("../api/queries", () => ({
   useGoalProgress: (...args: unknown[]) => mockUseGoalProgress(...args),
@@ -17,6 +18,8 @@ vi.mock("../api/queries", () => ({
   useDeleteBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false }),
   useSetGoal: () => ({ mutate: mockSetGoalMutate, isPending: false, isError: false }),
   useDeleteGoal: () => ({ mutate: mockDeleteGoalMutate }),
+  useRepeatGoal: () => ({ mutate: mockRepeatGoalMutate, isPending: false, isError: false }),
+  useRepeatBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
 }));
 
 const NO_GOAL: GoalProgressOut = {
@@ -33,7 +36,13 @@ const NO_GOAL: GoalProgressOut = {
 
 const WITH_GOAL: GoalProgressOut = {
   available: true,
-  goal: { id: 1, period_type: "year", period_start: "2026", sport: "running", target_distance_m: 2_000_000 },
+  goal: {
+    id: 1,
+    period_type: "year",
+    period_start: "2026",
+    sport: "running",
+    target_distance_m: 2_000_000,
+  },
   period_end: "2026-12-31",
   daily: [
     { local_date: "2026-01-01", cumulative_distance_m: 0 },
@@ -49,7 +58,9 @@ const WITH_GOAL: GoalProgressOut = {
 describe("GoalButton", () => {
   it("is one button labelled Goals, whether or not a goal is set", () => {
     mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
-    const { unmount } = render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
+    const { unmount } = render(
+      <GoalButton periodType="year" periodStart="2026" periodLabel="2026" />,
+    );
     expect(screen.getByRole("button", { name: "Goals" })).toBeInTheDocument();
     unmount();
     mockUseGoalProgress.mockReturnValue({ data: WITH_GOAL, isLoading: false, isError: false });
@@ -68,7 +79,9 @@ describe("GoalButton", () => {
 
   it("a week gets the running/distance goal too, requested for that exact week", () => {
     mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
-    render(<GoalButton periodType="week" periodStart="2026-09-27" periodLabel="Week of 2026-09-27" />);
+    render(
+      <GoalButton periodType="week" periodStart="2026-09-27" periodLabel="Week of 2026-09-27" />,
+    );
     expect(mockUseGoalProgress).toHaveBeenCalledWith("week", "2026-09-27");
     fireEvent.click(screen.getByRole("button", { name: "Goals" }));
     expect(screen.getByRole("heading", { name: /Running/ })).toBeInTheDocument();
@@ -78,7 +91,9 @@ describe("GoalButton", () => {
 
   it("the graph never renders on the page itself, only after opening the popup", () => {
     mockUseGoalProgress.mockReturnValue({ data: WITH_GOAL, isLoading: false, isError: false });
-    const { container } = render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
+    const { container } = render(
+      <GoalButton periodType="year" periodStart="2026" periodLabel="2026" />,
+    );
     expect(container.querySelector(".goal-progress")).not.toBeInTheDocument();
   });
 
@@ -134,5 +149,44 @@ describe("GoalButton", () => {
     fireEvent.click(screen.getByText("Delete goal"));
 
     expect(mockDeleteGoalMutate).toHaveBeenCalledWith(WITH_GOAL.goal);
+  });
+
+  it("a new weekly goal can be repeated for several weeks; a month goal has no repeat option", () => {
+    mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
+    const { unmount } = render(
+      <GoalButton periodType="week" periodStart="2026-09-28" periodLabel="Week" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    fireEvent.change(screen.getByLabelText(/Target distance/), { target: { value: "40" } });
+    fireEvent.change(screen.getByLabelText(/Repeat for/), { target: { value: "6" } });
+    fireEvent.click(screen.getByRole("button", { name: "Set goal" }));
+    expect(mockRepeatGoalMutate).toHaveBeenCalledWith(
+      {
+        period_type: "week",
+        period_start: "2026-09-28",
+        sport: "running",
+        target_distance_m: 40000,
+        weeks: 6,
+      },
+      expect.anything(),
+    );
+    expect(mockSetGoalMutate).not.toHaveBeenCalled();
+    unmount();
+
+    render(<GoalButton periodType="month" periodStart="2026-10" periodLabel="Oct" />);
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    expect(screen.queryByLabelText(/Repeat for/)).not.toBeInTheDocument();
+  });
+
+  it("repeating for 1 week is just a normal single goal", () => {
+    mockSetGoalMutate.mockClear();
+    mockRepeatGoalMutate.mockClear();
+    mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
+    render(<GoalButton periodType="week" periodStart="2026-09-28" periodLabel="Week" />);
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    fireEvent.change(screen.getByLabelText(/Target distance/), { target: { value: "40" } });
+    fireEvent.click(screen.getByRole("button", { name: "Set goal" }));
+    expect(mockSetGoalMutate).toHaveBeenCalledTimes(1);
+    expect(mockRepeatGoalMutate).not.toHaveBeenCalled();
   });
 });

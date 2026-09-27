@@ -177,3 +177,69 @@ def test_requires_authentication(client: TestClient) -> None:
         "/api/v1/bouldering-goals", params={"period_type": "year", "period_start": "2026"}
     ).status_code in (401, 403)
     assert client.post("/api/v1/bouldering-goals", json=_goal()).status_code in (401, 403)
+
+
+def _repeat_body(**overrides: object) -> dict[str, object]:
+    body = _goal(period_type="week", period_start="2026-09-28", weeks=4)
+    body.update(overrides)
+    return body
+
+
+def test_repeat_creates_one_goal_per_week_and_skips_weeks_that_already_have_it(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    # The third of the four weeks already holds an identical goal.
+    existing = _goal(period_type="week", period_start="2026-10-12", target_count=99)
+    assert (
+        client.post("/api/v1/bouldering-goals", json=existing, headers=auth_headers).status_code
+        == 201
+    )
+
+    r = client.post("/api/v1/bouldering-goals/repeat", json=_repeat_body(), headers=auth_headers)
+    assert r.status_code == 201
+    body = r.json()
+    assert [g["period_start"] for g in body["created"]] == [
+        "2026-09-28",
+        "2026-10-05",
+        "2026-10-19",
+    ]
+    assert body["skipped_period_starts"] == ["2026-10-12"]
+    assert {g["grade"] for g in body["created"]} == {4}
+
+    # The skipped week keeps the goal it already had (not overwritten by the repeat).
+    kept = client.get(
+        "/api/v1/bouldering-goals",
+        params={"period_type": "week", "period_start": "2026-10-12"},
+        headers=auth_headers,
+    ).json()
+    assert [g["goal"]["target_count"] for g in kept] == [99]
+
+
+def test_repeat_of_a_different_grade_is_not_skipped(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    client.post(
+        "/api/v1/bouldering-goals",
+        json=_goal(period_type="week", period_start="2026-09-28", grade=5),
+        headers=auth_headers,
+    )
+    r = client.post(
+        "/api/v1/bouldering-goals/repeat", json=_repeat_body(weeks=2), headers=auth_headers
+    )
+    assert r.json()["skipped_period_starts"] == []
+    assert len(r.json()["created"]) == 2
+
+
+def test_repeat_validation(client: TestClient, auth_headers: dict[str, str]) -> None:
+    def status(**overrides: object) -> int:
+        r = client.post(
+            "/api/v1/bouldering-goals/repeat", json=_repeat_body(**overrides), headers=auth_headers
+        )
+        return int(r.status_code)
+
+    assert status(weeks=0) == 422
+    assert status(weeks=105) == 422
+    assert status(period_type="month", period_start="2026-10") == 422
+    assert status(period_start="not-a-date") == 422
+    assert status(grade=None, and_harder=True) == 422
+    assert status(weeks=1) == 201

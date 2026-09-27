@@ -1065,6 +1065,16 @@ goal rather than creating a second one.
 **Responses:** `200` → `GoalOut`. `422` → `period_type` isn't `week`/`month`/`year`, or `period_start`
 doesn't parse for the given `period_type`. `detail` is a plain string.
 
+### `POST /goals/repeat`
+
+The same **weekly** distance goal for several consecutive weeks. Body: `GoalIn` fields with
+`period_type: "week"`, `period_start` = the first week's ISO start date, plus `weeks` (integer
+1–104; the first week counts). Each week is upserted exactly like `PUT /goals`, so a week that
+already has a goal has it **replaced**; every week is written in one transaction.
+
+**Responses:** `200` → `{"goals": [GoalOut, …]}`, one per week in order. `422` → not a `week`
+goal, `weeks` out of range, or an unparseable `period_start`.
+
 ### `DELETE /goals/{goal_id}`
 
 Deletes a goal by id.
@@ -1109,6 +1119,17 @@ Creates a goal. **Request body** (`BoulderingGoalIn`): `period_type`, `period_st
 **Responses:** `201` → `BoulderingGoalOut`. `422` → invalid period/grade/target, or `and_harder`
 without a `grade`. `409` → an identical goal (same period, grade and `and_harder`) already exists —
 change its target with `PUT` instead.
+
+#### `POST /bouldering-goals/repeat`
+
+The same **weekly** bouldering goal for several consecutive weeks. Body: `BoulderingGoalIn` with
+`period_type: "week"`, `period_start` = the first week's ISO start date, plus `weeks` (integer
+1–104; the first week counts). A week that already holds an identical goal (same grade and
+`and_harder`) is **skipped**, not an error, and left as it was.
+
+**Responses:** `201` → `{"created": [BoulderingGoalOut, …], "skipped_period_starts": ["…"]}`.
+`422` → not a `week` goal, `weeks` out of range, bad `period_start`, or `and_harder` without a
+`grade`.
 
 #### `PUT /bouldering-goals/{goal_id}`
 

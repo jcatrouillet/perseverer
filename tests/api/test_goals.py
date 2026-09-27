@@ -4,6 +4,7 @@ available=False no-goal-set case, upsert-not-duplicate, validation, and auth."""
 
 from __future__ import annotations
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 
@@ -196,3 +197,71 @@ def test_endpoints_require_auth(client: TestClient) -> None:
     ).status_code in (401, 403)
     assert client.put("/api/v1/goals", json={}).status_code in (401, 403)
     assert client.delete("/api/v1/goals/1").status_code in (401, 403)
+
+
+def _repeat(client: TestClient, headers: dict[str, str], **overrides: object) -> httpx.Response:
+    body: dict[str, object] = {
+        "period_type": "week",
+        "period_start": "2026-09-28",
+        "sport": "running",
+        "target_distance_m": 40_000.0,
+        "weeks": 4,
+    }
+    body.update(overrides)
+    response: httpx.Response = client.post("/api/v1/goals/repeat", json=body, headers=headers)
+    return response
+
+
+def test_repeat_creates_the_same_weekly_goal_for_consecutive_weeks(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = _repeat(client, auth_headers)
+    assert r.status_code == 200
+    starts = [g["period_start"] for g in r.json()["goals"]]
+    assert starts == ["2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19"]
+    assert {g["target_distance_m"] for g in r.json()["goals"]} == {40_000.0}
+
+    for start in starts:
+        got = client.get(
+            "/api/v1/goals",
+            params={"period_type": "week", "period_start": start},
+            headers=auth_headers,
+        ).json()
+        assert got["available"] is True
+    after = client.get(
+        "/api/v1/goals",
+        params={"period_type": "week", "period_start": "2026-10-26"},
+        headers=auth_headers,
+    ).json()
+    assert after["available"] is False
+
+
+def test_repeat_replaces_an_existing_goal_in_a_covered_week(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    existing = client.put(
+        "/api/v1/goals",
+        json={
+            "period_type": "week",
+            "period_start": "2026-10-05",
+            "sport": "running",
+            "target_distance_m": 10_000.0,
+        },
+        headers=auth_headers,
+    ).json()
+    r = _repeat(client, auth_headers, weeks=2)
+    by_start = {g["period_start"]: g for g in r.json()["goals"]}
+    # Same row updated in place (upsert), not a second goal for that week.
+    assert by_start["2026-10-05"]["id"] == existing["id"]
+    assert by_start["2026-10-05"]["target_distance_m"] == 40_000.0
+
+
+def test_repeat_validation(client: TestClient, auth_headers: dict[str, str]) -> None:
+    def status(**overrides: object) -> int:
+        return int(_repeat(client, auth_headers, **overrides).status_code)
+
+    assert status(weeks=0) == 422
+    assert status(weeks=105) == 422
+    assert status(period_type="month", period_start="2026-10") == 422
+    assert status(period_start="not-a-date") == 422
+    assert status(weeks=1) == 200

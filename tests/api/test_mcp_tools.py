@@ -605,6 +605,20 @@ async def test_bouldering_goal_tools(client: TestClient) -> None:
     assert await get_bouldering_goals("year", "2026") == []
 
 
+async def test_repeat_weekly_goal_tools(client: TestClient) -> None:
+    distance = await set_goal("week", "2026-09-28", 40_000, sport="running", repeat_weeks=3)
+    assert [g["period_start"] for g in distance["goals"]] == [
+        "2026-09-28",
+        "2026-10-05",
+        "2026-10-12",
+    ]
+    bouldering = await create_bouldering_goal("week", "2026-09-28", 2, grade=4, repeat_weeks=3)
+    assert len(bouldering["created"]) == 3
+    again = await create_bouldering_goal("week", "2026-10-05", 2, grade=4, repeat_weeks=3)
+    assert [g["period_start"] for g in again["created"]] == ["2026-10-19"]
+    assert again["skipped_period_starts"] == ["2026-10-05", "2026-10-12"]
+
+
 async def test_blood_test_write_tools(client: TestClient) -> None:
     single = await create_blood_test_result("2026-09-01", "HbA1c", 5.2, unit="%")
     panel = await create_blood_test_panel(

@@ -43,6 +43,26 @@ class BoulderingGoalIn(BaseModel):
         return self
 
 
+class BoulderingGoalRepeatIn(BoulderingGoalIn):
+    """A weekly bouldering goal repeated over `weeks` consecutive weeks starting at `period_start`
+    (the first week's own start date, so `period_type` must be "week")."""
+
+    weeks: int
+
+    @field_validator("weeks")
+    @classmethod
+    def _sane_weeks(cls, v: int) -> int:
+        if not 1 <= v <= 104:
+            raise ValueError("weeks must be between 1 and 104")
+        return v
+
+    @model_validator(mode="after")
+    def _weekly_only(self) -> BoulderingGoalRepeatIn:
+        if self.period_type != "week":
+            raise ValueError('only a "week" goal can be repeated')
+        return self
+
+
 class BoulderingGoalOut(BaseModel):
     id: int
     period_type: str
@@ -66,3 +86,9 @@ class BoulderingGoalProgressOut(BaseModel):
     target_as_of_today: float
     ahead_behind: float
     pct_complete: float
+
+
+class BoulderingGoalRepeatOut(BaseModel):
+    created: list[BoulderingGoalOut]
+    # Weeks that already held an identical goal (same grade and "or harder"), left as they were.
+    skipped_period_starts: list[str]

@@ -12,9 +12,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Connection, Row, select
 
 from perseverer.api.dependencies import get_conn, require_api_key
-from perseverer.api.schemas.goals import GoalIn, GoalOut, GoalProgressOut, GoalProgressPoint
+from perseverer.api.schemas.goals import (
+    GoalIn,
+    GoalOut,
+    GoalProgressOut,
+    GoalProgressPoint,
+    GoalRepeatIn,
+    GoalRepeatOut,
+)
 from perseverer.db.schema import goal as goal_table
-from perseverer.goals import InvalidPeriod, compute_progress, period_bounds
+from perseverer.goals import InvalidPeriod, compute_progress, period_bounds, repeated_week_starts
 
 router = APIRouter()
 
@@ -79,23 +86,16 @@ def get_goal_progress(
     )
 
 
-@router.put("/goals")
-def set_goal(
-    payload: GoalIn,
-    athlete_id: Annotated[str, Depends(require_api_key)],
-    conn: Connection = Depends(get_conn),
+def _upsert_goal(
+    conn: Connection, athlete_id: str, payload: GoalIn, period_start: str, now: datetime
 ) -> GoalOut:
-    try:
-        period_bounds(payload.period_type, payload.period_start)
-    except InvalidPeriod as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
-
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    """Insert, or replace, the one goal for `(athlete, period_type, period_start)` -- does not
+    commit, so a repeat can write every week in one transaction."""
     existing_id = conn.execute(
         select(goal_table.c.id).where(
             goal_table.c.athlete_id == athlete_id,
             goal_table.c.period_type == payload.period_type,
-            goal_table.c.period_start == payload.period_start,
+            goal_table.c.period_start == period_start,
         )
     ).scalar_one_or_none()
 
@@ -104,7 +104,7 @@ def set_goal(
             goal_table.insert().values(
                 athlete_id=athlete_id,
                 period_type=payload.period_type,
-                period_start=payload.period_start,
+                period_start=period_start,
                 sport=payload.sport,
                 target_distance_m=payload.target_distance_m,
                 created_at=now,
@@ -124,15 +124,50 @@ def set_goal(
             )
         )
         goal_id = existing_id
-    conn.commit()
 
     return GoalOut(
         id=goal_id,
         period_type=payload.period_type,
-        period_start=payload.period_start,
+        period_start=period_start,
         sport=payload.sport,
         target_distance_m=payload.target_distance_m,
     )
+
+
+@router.put("/goals")
+def set_goal(
+    payload: GoalIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> GoalOut:
+    try:
+        period_bounds(payload.period_type, payload.period_start)
+    except InvalidPeriod as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    out = _upsert_goal(conn, athlete_id, payload, payload.period_start, now)
+    conn.commit()
+    return out
+
+
+@router.post("/goals/repeat")
+def repeat_weekly_goal(
+    payload: GoalRepeatIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> GoalRepeatOut:
+    """The same weekly distance goal for `weeks` consecutive weeks from `period_start`. Same
+    upsert as PUT /goals per week: a week that already has a goal has it REPLACED by this one,
+    every week is written in one transaction (all or none)."""
+    try:
+        starts = repeated_week_starts(payload.period_start, payload.weeks)
+    except InvalidPeriod as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    now = datetime.now(UTC).replace(tzinfo=None)
+    goals = [_upsert_goal(conn, athlete_id, payload, start, now) for start in starts]
+    conn.commit()
+    return GoalRepeatOut(goals=goals)
 
 
 @router.delete("/goals/{goal_id}")
@@ -142,9 +177,7 @@ def delete_goal(
     conn: Connection = Depends(get_conn),
 ) -> None:
     result = conn.execute(
-        goal_table.delete().where(
-            goal_table.c.id == goal_id, goal_table.c.athlete_id == athlete_id
-        )
+        goal_table.delete().where(goal_table.c.id == goal_id, goal_table.c.athlete_id == athlete_id)
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="goal not found")

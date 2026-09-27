@@ -8,12 +8,14 @@ const mockGoals = vi.fn();
 const mockCreate = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
+const mockRepeat = vi.fn();
 
 vi.mock("../api/queries", () => ({
   useBoulderingGoals: (...args: unknown[]) => mockGoals(...args),
   useCreateBoulderingGoal: () => ({ mutate: mockCreate, isPending: false, error: null }),
   useUpdateBoulderingGoal: () => ({ mutate: mockUpdate, isPending: false, error: null }),
   useDeleteBoulderingGoal: () => ({ mutate: mockDelete, isPending: false }),
+  useRepeatBoulderingGoal: () => ({ mutate: mockRepeat, isPending: false, error: null }),
 }));
 
 function progress(
@@ -67,7 +69,14 @@ describe("BoulderingGoalsSection", () => {
 
   it("lists every goal for the period with its progress", () => {
     mockGoals.mockReturnValue({
-      data: [progress(1), progress(2, { grade: 5, target_count: 1 }, { current_count: 0, ahead_behind: -0.1, pct_complete: 0 })],
+      data: [
+        progress(1),
+        progress(
+          2,
+          { grade: 5, target_count: 1 },
+          { current_count: 0, ahead_behind: -0.1, pct_complete: 0 },
+        ),
+      ],
       isLoading: false,
       isError: false,
     });
@@ -88,7 +97,13 @@ describe("BoulderingGoalsSection", () => {
     fireEvent.change(screen.getByLabelText("Completed routes"), { target: { value: "5" } });
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
     expect(mockCreate).toHaveBeenCalledWith(
-      { period_type: "month", period_start: "2026-10", grade: 4, and_harder: true, target_count: 5 },
+      {
+        period_type: "month",
+        period_start: "2026-10",
+        grade: 4,
+        and_harder: true,
+        target_count: 5,
+      },
       expect.anything(),
     );
   });
@@ -101,7 +116,13 @@ describe("BoulderingGoalsSection", () => {
     fireEvent.change(screen.getByLabelText("Completed routes"), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
     expect(mockCreate).toHaveBeenCalledWith(
-      { period_type: "year", period_start: "2026", grade: null, and_harder: false, target_count: 30 },
+      {
+        period_type: "year",
+        period_start: "2026",
+        grade: null,
+        and_harder: false,
+        target_count: 30,
+      },
       expect.anything(),
     );
   });
@@ -128,5 +149,44 @@ describe("BoulderingGoalsSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(mockDelete).toHaveBeenCalledWith(g.goal);
+  });
+
+  it("a new weekly goal can be repeated for several weeks", () => {
+    mockGoals.mockReturnValue({ data: [], isLoading: false, isError: false });
+    render(<BoulderingGoalsSection periodType="week" periodStart="2026-09-28" />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add a bouldering goal" }));
+    fireEvent.change(screen.getByLabelText("Grade"), { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText("Completed routes"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText(/Repeat for/), { target: { value: "8" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
+    expect(mockRepeat).toHaveBeenCalledWith(
+      {
+        period_type: "week",
+        period_start: "2026-09-28",
+        grade: 4,
+        and_harder: false,
+        target_count: 2,
+        weeks: 8,
+      },
+      expect.anything(),
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("offers no repeat for a month or year goal, or when editing", () => {
+    mockGoals.mockReturnValue({ data: [], isLoading: false, isError: false });
+    const { unmount } = render(<BoulderingGoalsSection periodType="month" periodStart="2026-10" />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add a bouldering goal" }));
+    expect(screen.queryByLabelText(/Repeat for/)).not.toBeInTheDocument();
+    unmount();
+
+    mockGoals.mockReturnValue({
+      data: [progress(3, { period_type: "week", period_start: "2026-09-28" })],
+      isLoading: false,
+      isError: false,
+    });
+    render(<BoulderingGoalsSection periodType="week" periodStart="2026-09-28" />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.queryByLabelText(/Repeat for/)).not.toBeInTheDocument();
   });
 });

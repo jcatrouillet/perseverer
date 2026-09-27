@@ -5,7 +5,7 @@
 import { useState } from "react";
 
 import type { GoalOut } from "../api/types";
-import { useSetGoal } from "../api/queries";
+import { useRepeatGoal, useSetGoal } from "../api/queries";
 import { useDistanceFormat } from "../formatDistance";
 import { KNOWN_SPORTS } from "../metricStyle";
 
@@ -26,20 +26,27 @@ export function GoalForm({
   );
   const [sport, setSport] = useState(existing?.sport ?? "running");
   const setGoal = useSetGoal();
+  const repeatGoal = useRepeatGoal();
+  // Only a NEW weekly goal can be repeated across several weeks; editing changes just this week.
+  const canRepeat = periodType === "week" && !existing;
+  const [weeks, setWeeks] = useState("1");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const target = Number(targetDisplay);
     if (!Number.isFinite(target) || target <= 0) return;
-    setGoal.mutate(
-      {
-        period_type: periodType,
-        period_start: periodStart,
-        sport: sport === "" ? null : sport,
-        target_distance_m: displayToMeters(target),
-      },
-      { onSuccess: onSaved },
-    );
+    const body = {
+      period_type: periodType,
+      period_start: periodStart,
+      sport: sport === "" ? null : sport,
+      target_distance_m: displayToMeters(target),
+    };
+    const repeatCount = Number(weeks);
+    if (canRepeat && Number.isInteger(repeatCount) && repeatCount > 1) {
+      repeatGoal.mutate({ ...body, weeks: repeatCount }, { onSuccess: onSaved });
+    } else {
+      setGoal.mutate(body, { onSuccess: onSaved });
+    }
   };
 
   return (
@@ -67,10 +74,34 @@ export function GoalForm({
           required
         />
       </label>
-      <button type="submit" className="button button--primary" disabled={setGoal.isPending}>
+      {canRepeat && (
+        <label className="field">
+          Repeat for (weeks)
+          <input
+            className="input"
+            type="number"
+            min="1"
+            max="104"
+            step="1"
+            value={weeks}
+            onChange={(e) => setWeeks(e.target.value)}
+          />
+          <span className="field__hint">
+            Sets this same goal for that many consecutive weeks, starting with this one. A week that
+            already has a goal gets it replaced.
+          </span>
+        </label>
+      )}
+      <button
+        type="submit"
+        className="button button--primary"
+        disabled={setGoal.isPending || repeatGoal.isPending}
+      >
         {existing ? "Save" : "Set goal"}
       </button>
-      {setGoal.isError && <span role="alert">Couldn't save that goal.</span>}
+      {(setGoal.isError || repeatGoal.isError) && (
+        <span role="alert">Couldn't save that goal.</span>
+      )}
     </form>
   );
 }

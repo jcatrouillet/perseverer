@@ -2023,6 +2023,23 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"period_type": "month", "period_start": "2026-08", "sport": "running", "target_distance_m": 160000}'` }
     },
+    { method: "POST", path: "/api/v1/goals/repeat", summary: "Repeat a weekly distance goal for several weeks.",
+      description: "The same weekly goal for `weeks` consecutive weeks from period_start (the first week's ISO start date; the first week counts). Each week is upserted like PUT /goals, so a week that already has a goal has it replaced. All weeks are written in one transaction.",
+      body: { schema: "GoalRepeatIn", fields: [
+        ["period_type","string","req","","Must be week."],
+        ["period_start","string","req","","ISO start date of the first week."],
+        ["sport","string|null","opt","","Omit (or null) for every sport combined."],
+        ["target_distance_m","number","req","",""],
+        ["weeks","integer","req","","1 to 104, including the first week."],
+      ]},
+      responses: [
+        { code: 200, note: "{ goals: GoalOut[] } — one per week, in order." },
+        { code: 422, note: "Not a week goal, weeks out of range, or an unparseable period_start." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/goals/repeat \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"period_type": "week", "period_start": "2026-09-28", "sport": "running", "target_distance_m": 40000, "weeks": 8}'` }
+    },
     { method: "DELETE", path: "/api/v1/goals/{goal_id}", summary: "Delete a goal.",
       description: "",
       params: [ ["goal_id","path","req","integer","—","From GoalOut.id."] ],
@@ -2056,6 +2073,24 @@ const GROUPS = [
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/bouldering-goals \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"period_type": "year", "period_start": "2026", "grade": 4, "target_count": 10}'` }
+    },
+    { method: "POST", path: "/api/v1/bouldering-goals/repeat", summary: "Repeat a weekly bouldering goal for several weeks.",
+      description: "The same weekly goal for `weeks` consecutive weeks from period_start (the first week counts). A week that already holds an identical goal (same grade and and_harder) is skipped, not an error.",
+      body: { schema: "BoulderingGoalRepeatIn", fields: [
+        ["period_type","string","req","","Must be week."],
+        ["period_start","string","req","","ISO start date of the first week."],
+        ["grade","integer|null","opt","","V-grade 0-20; null = any grade."],
+        ["and_harder","boolean","opt","","Needs a grade. Default false."],
+        ["target_count","integer","req","","Completed routes, greater than 0."],
+        ["weeks","integer","req","","1 to 104, including the first week."],
+      ]},
+      responses: [
+        { code: 201, note: "{ created: BoulderingGoalOut[], skipped_period_starts: string[] }." },
+        { code: 422, note: "Not a week goal, weeks out of range, bad period_start, or and_harder without a grade." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/bouldering-goals/repeat \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"period_type": "week", "period_start": "2026-09-28", "grade": 4, "target_count": 2, "weeks": 8}'` }
     },
     { method: "PUT", path: "/api/v1/bouldering-goals/{goal_id}", summary: "Replace a bouldering goal.",
       description: "Send every field (same body as POST).",

@@ -5,7 +5,7 @@ storage shape and goals.py for the progress computation.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class GoalIn(BaseModel):
@@ -27,6 +27,26 @@ class GoalIn(BaseModel):
         if v <= 0:
             raise ValueError("target_distance_m must be greater than zero")
         return v
+
+
+class GoalRepeatIn(GoalIn):
+    """A weekly goal repeated over `weeks` consecutive weeks starting at `period_start` (which is
+    the first week's own start date, so `period_type` must be "week")."""
+
+    weeks: int
+
+    @field_validator("weeks")
+    @classmethod
+    def _sane_weeks(cls, v: int) -> int:
+        if not 1 <= v <= 104:
+            raise ValueError("weeks must be between 1 and 104")
+        return v
+
+    @model_validator(mode="after")
+    def _weekly_only(self) -> GoalRepeatIn:
+        if self.period_type != "week":
+            raise ValueError('only a "week" goal can be repeated')
+        return self
 
 
 class GoalOut(BaseModel):
@@ -54,3 +74,7 @@ class GoalProgressOut(BaseModel):
     target_distance_as_of_today_m: float | None = None
     ahead_behind_m: float | None = None
     pct_complete: float | None = None
+
+
+class GoalRepeatOut(BaseModel):
+    goals: list[GoalOut]

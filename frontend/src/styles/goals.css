@@ -118,3 +118,10 @@
 .bouldering-goals {
   margin-top: var(--space-5);
 }
+
+.field__hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  max-width: 280px;
+}

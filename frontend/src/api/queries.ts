@@ -50,8 +50,10 @@ import type {
   BoulderingGoalIn,
   BoulderingGoalOut,
   BoulderingGoalProgressOut,
+  BoulderingGoalRepeatOut,
   GoalOut,
   GoalProgressOut,
+  GoalRepeatOut,
   GearAlertOut,
   HealthDashboardOut,
   HealthObservationOut,
@@ -332,11 +334,17 @@ export function useActivity(activityId: string) {
 }
 
 export function useShoes(includeRetired = false) {
-  return useQuery({ queryKey: ["gear-shoes", includeRetired], queryFn: () => apiGet<ShoeOut[]>(`/api/v1/gear/shoes?include_retired=${includeRetired}`) });
+  return useQuery({
+    queryKey: ["gear-shoes", includeRetired],
+    queryFn: () => apiGet<ShoeOut[]>(`/api/v1/gear/shoes?include_retired=${includeRetired}`),
+  });
 }
 
 export function useGearAlerts() {
-  return useQuery({ queryKey: ["gear-alerts"], queryFn: () => apiGet<GearAlertOut[]>("/api/v1/gear/alerts") });
+  return useQuery({
+    queryKey: ["gear-alerts"],
+    queryFn: () => apiGet<GearAlertOut[]>("/api/v1/gear/alerts"),
+  });
 }
 
 export function useCreateShoe() {
@@ -350,7 +358,8 @@ export function useCreateShoe() {
 export function useSetDefaultShoe() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ sport, shoeId }: { sport: string; shoeId: string }) => apiPut<ShoeOut>(`/api/v1/gear/defaults/${encodeURIComponent(sport)}`, { shoe_id: shoeId }),
+    mutationFn: ({ sport, shoeId }: { sport: string; shoeId: string }) =>
+      apiPut<ShoeOut>(`/api/v1/gear/defaults/${encodeURIComponent(sport)}`, { shoe_id: shoeId }),
     onSuccess: () => client.invalidateQueries({ queryKey: ["gear-shoes"] }),
   });
 }
@@ -364,13 +373,18 @@ export function useRetireShoe() {
 }
 
 export function useActivityShoe(activityId: string, enabled: boolean) {
-  return useQuery({ queryKey: ["activity-shoe", activityId], queryFn: () => apiGet<ActivityShoeOut>(`/api/v1/gear/activities/${activityId}/shoe`), enabled });
+  return useQuery({
+    queryKey: ["activity-shoe", activityId],
+    queryFn: () => apiGet<ActivityShoeOut>(`/api/v1/gear/activities/${activityId}/shoe`),
+    enabled,
+  });
 }
 
 export function useSetActivityShoe(activityId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (shoeId: string | null) => apiPut<ActivityShoeOut>(`/api/v1/gear/activities/${activityId}/shoe`, { shoe_id: shoeId }),
+    mutationFn: (shoeId: string | null) =>
+      apiPut<ActivityShoeOut>(`/api/v1/gear/activities/${activityId}/shoe`, { shoe_id: shoeId }),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ["activity-shoe", activityId] });
       client.invalidateQueries({ queryKey: ["gear-shoes"] });
@@ -425,8 +439,7 @@ export function useActivityContext(activityId: string, enabled: boolean = true) 
 export function useActivityComparisons(activityId: string, enabled: boolean) {
   return useQuery({
     queryKey: ["activity-comparisons", activityId],
-    queryFn: () =>
-      apiGet<ActivityComparisonsOut>(`/api/v1/activities/${activityId}/comparisons`),
+    queryFn: () => apiGet<ActivityComparisonsOut>(`/api/v1/activities/${activityId}/comparisons`),
     enabled,
   });
 }
@@ -562,9 +575,7 @@ export function useActivityMergePreview(activityId: string, otherId: string, ena
   return useQuery({
     queryKey: ["activity-merge-preview", activityId, otherId],
     queryFn: () =>
-      apiGet<ActivityMergePreviewOut>(
-        `/api/v1/activities/${activityId}/merge-preview/${otherId}`,
-      ),
+      apiGet<ActivityMergePreviewOut>(`/api/v1/activities/${activityId}/merge-preview/${otherId}`),
     enabled,
   });
 }
@@ -863,7 +874,8 @@ export function useHrZoneConfig() {
 export function useSetHrZoneConfig() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: HrZoneConfigIn) => apiPut<HrZoneConfigOut>("/api/v1/settings/hr-zones", body),
+    mutationFn: (body: HrZoneConfigIn) =>
+      apiPut<HrZoneConfigOut>("/api/v1/settings/hr-zones", body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["hr-zone-config"] });
     },
@@ -1143,8 +1155,7 @@ export function useUploadBulkExport() {
 export function useLatestJob(source: JobSource, enabled: boolean) {
   return useQuery({
     queryKey: ["latest-job", source],
-    queryFn: () =>
-      apiGet<JobStatusOut | null>(`/api/v1/settings/jobs/latest?source=${source}`),
+    queryFn: () => apiGet<JobStatusOut | null>(`/api/v1/settings/jobs/latest?source=${source}`),
     enabled,
     refetchInterval: (query) => (query.state.data?.status === "running" ? 2000 : false),
   });
@@ -1178,6 +1189,19 @@ export function useSetGoal() {
       void queryClient.invalidateQueries({
         queryKey: ["goal-progress", variables.period_type, variables.period_start],
       });
+    },
+  });
+}
+
+/** The same weekly distance goal for `weeks` consecutive weeks from `period_start` (a week's
+ * ISO start date); a week that already has a goal has it replaced. */
+export function useRepeatGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SetGoalInput & { weeks: number }) =>
+      apiPost<GoalRepeatOut>("/api/v1/goals/repeat", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["goal-progress", "week"] });
     },
   });
 }
@@ -1223,6 +1247,17 @@ export function useCreateBoulderingGoal() {
   });
 }
 
+export function useRepeatBoulderingGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BoulderingGoalIn & { weeks: number }) =>
+      apiPost<BoulderingGoalRepeatOut>("/api/v1/bouldering-goals/repeat", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["bouldering-goals", "week"] });
+    },
+  });
+}
+
 export function useUpdateBoulderingGoal() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -1235,8 +1270,7 @@ export function useUpdateBoulderingGoal() {
 export function useDeleteBoulderingGoal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (goal: BoulderingGoalOut) =>
-      apiDelete<void>(`/api/v1/bouldering-goals/${goal.id}`),
+    mutationFn: (goal: BoulderingGoalOut) => apiDelete<void>(`/api/v1/bouldering-goals/${goal.id}`),
     onSuccess: (_void, goal) =>
       invalidateBoulderingGoals(queryClient, goal.period_type, goal.period_start),
   });

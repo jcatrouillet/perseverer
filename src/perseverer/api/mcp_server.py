@@ -829,22 +829,28 @@ async def set_goal(
     period_start: str,
     target_distance_m: float,
     sport: str | None = None,
+    repeat_weeks: int = 1,
 ) -> dict[str, Any]:
     """Set (or replace) the distance goal for one week ("week", period_start = the ISO start date
     of the 7 days), month ("YYYY-MM") or year ("YYYY"), in metres; sport=None means every sport
-    combined. One goal per period -- setting again replaces it."""
-    response = await _call_api(
-        "PUT",
-        "/api/v1/goals",
-        json=_drop_none(
-            {
-                "period_type": period_type,
-                "period_start": period_start,
-                "sport": sport,
-                "target_distance_m": target_distance_m,
-            }
-        ),
+    combined. One goal per period -- setting again replaces it. For a weekly goal,
+    `repeat_weeks` > 1 sets the same goal for that many consecutive weeks starting at
+    `period_start` (a week that already has a goal has it replaced) and returns
+    {"goals": [...]}, one per week."""
+    payload = _drop_none(
+        {
+            "period_type": period_type,
+            "period_start": period_start,
+            "sport": sport,
+            "target_distance_m": target_distance_m,
+        }
     )
+    if repeat_weeks > 1:
+        response = await _call_api(
+            "POST", "/api/v1/goals/repeat", json={**payload, "weeks": repeat_weeks}
+        )
+    else:
+        response = await _call_api("PUT", "/api/v1/goals", json=payload)
     return dict(response.json())
 
 
@@ -875,26 +881,32 @@ async def create_bouldering_goal(
     target_count: int,
     grade: int | None = None,
     and_harder: bool = False,
+    repeat_weeks: int = 1,
 ) -> dict[str, Any]:
     """Set a bouldering goal: `target_count` completed routes in a week ("week", period_start = the
     ISO start date), month ("month", "YYYY-MM") or year ("year", "YYYY"). `grade` is the V-grade
     number (4 = V4); omit it to count routes of any grade; `and_harder` makes it "that grade or
     harder". e.g. 10x V4 in 2026: period_type="year", period_start="2026", grade=4,
     target_count=10. Several goals may share one period, but an identical one (same period, grade
-    and and_harder) is refused -- change its target with update_bouldering_goal."""
-    response = await _call_api(
-        "POST",
-        "/api/v1/bouldering-goals",
-        json=_drop_none(
-            {
-                "period_type": period_type,
-                "period_start": period_start,
-                "grade": grade,
-                "and_harder": and_harder,
-                "target_count": target_count,
-            }
-        ),
+    and and_harder) is refused -- change its target with update_bouldering_goal. For a weekly
+    goal, `repeat_weeks` > 1 creates the same goal for that many consecutive weeks starting at
+    `period_start` (weeks that already have it are skipped) and returns
+    {"created": [...], "skipped_period_starts": [...]}."""
+    payload = _drop_none(
+        {
+            "period_type": period_type,
+            "period_start": period_start,
+            "grade": grade,
+            "and_harder": and_harder,
+            "target_count": target_count,
+        }
     )
+    if repeat_weeks > 1:
+        response = await _call_api(
+            "POST", "/api/v1/bouldering-goals/repeat", json={**payload, "weeks": repeat_weeks}
+        )
+    else:
+        response = await _call_api("POST", "/api/v1/bouldering-goals", json=payload)
     return dict(response.json())
 
 

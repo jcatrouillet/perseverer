@@ -2,7 +2,11 @@
 // any grade), and whether harder routes count too. Counting is always COMPLETED routes only.
 import { useState } from "react";
 
-import { useCreateBoulderingGoal, useUpdateBoulderingGoal } from "../api/queries";
+import {
+  useCreateBoulderingGoal,
+  useRepeatBoulderingGoal,
+  useUpdateBoulderingGoal,
+} from "../api/queries";
 import type { BoulderingGoalOut } from "../api/types";
 import { formatGrade } from "../boulderingRoutes";
 
@@ -27,8 +31,12 @@ export function BoulderingGoalForm({
   const [target, setTarget] = useState(existing ? String(existing.target_count) : "");
   const create = useCreateBoulderingGoal();
   const update = useUpdateBoulderingGoal();
-  const pending = create.isPending || update.isPending;
-  const error = create.error ?? update.error;
+  const repeat = useRepeatBoulderingGoal();
+  // Only a NEW weekly goal can be repeated across several weeks; editing changes just this one.
+  const canRepeat = periodType === "week" && !existing;
+  const [weeks, setWeeks] = useState("1");
+  const pending = create.isPending || update.isPending || repeat.isPending;
+  const error = create.error ?? update.error ?? repeat.error;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +49,10 @@ export function BoulderingGoalForm({
       and_harder: grade === ANY ? false : andHarder,
       target_count: count,
     };
+    const repeatCount = Number(weeks);
     if (existing) update.mutate({ id: existing.id, ...body }, { onSuccess: onSaved });
+    else if (canRepeat && Number.isInteger(repeatCount) && repeatCount > 1)
+      repeat.mutate({ ...body, weeks: repeatCount }, { onSuccess: onSaved });
     else create.mutate(body, { onSuccess: onSaved });
   };
 
@@ -79,6 +90,24 @@ export function BoulderingGoalForm({
           required
         />
       </label>
+      {canRepeat && (
+        <label className="field">
+          Repeat for (weeks)
+          <input
+            className="input"
+            type="number"
+            min="1"
+            max="104"
+            step="1"
+            value={weeks}
+            onChange={(e) => setWeeks(e.target.value)}
+          />
+          <span className="field__hint">
+            Sets this same goal for that many consecutive weeks, starting with this one. A week that
+            already has it is left as it is.
+          </span>
+        </label>
+      )}
       <button type="submit" className="button button--primary" disabled={pending}>
         {existing ? "Save" : "Add goal"}
       </button>

@@ -17,10 +17,12 @@ from perseverer.api.schemas.bouldering_goals import (
     BoulderingGoalOut,
     BoulderingGoalProgressOut,
     BoulderingGoalProgressPoint,
+    BoulderingGoalRepeatIn,
+    BoulderingGoalRepeatOut,
 )
 from perseverer.bouldering_goals import compute_progress, period_bounds
 from perseverer.db.schema import bouldering_goal as goal_table
-from perseverer.goals import InvalidPeriod
+from perseverer.goals import InvalidPeriod, repeated_week_starts
 
 router = APIRouter()
 
@@ -144,6 +146,52 @@ def create_bouldering_goal(
     conn.commit()
     assert result.inserted_primary_key is not None
     return BoulderingGoalOut(id=result.inserted_primary_key[0], **payload.model_dump())
+
+
+@router.post("/bouldering-goals/repeat", status_code=201)
+def repeat_bouldering_goal(
+    payload: BoulderingGoalRepeatIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> BoulderingGoalRepeatOut:
+    """The same weekly bouldering goal for `weeks` consecutive weeks from `period_start`. Unlike a
+    single create, a week that already holds an identical goal is skipped (reported in
+    `skipped_period_starts`), not an error -- repeating a goal over a stretch that partly overlaps
+    an earlier one is the normal case. Every new row is written in one transaction."""
+    try:
+        starts = repeated_week_starts(payload.period_start, payload.weeks)
+    except InvalidPeriod as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    now = datetime.now(UTC).replace(tzinfo=None)
+    created: list[BoulderingGoalOut] = []
+    skipped: list[str] = []
+    for start in starts:
+        week = BoulderingGoalIn(
+            period_type="week",
+            period_start=start,
+            grade=payload.grade,
+            and_harder=payload.and_harder,
+            target_count=payload.target_count,
+        )
+        if _duplicate_exists(conn, athlete_id, week, exclude_id=None):
+            skipped.append(start)
+            continue
+        result = conn.execute(
+            goal_table.insert().values(
+                athlete_id=athlete_id,
+                period_type="week",
+                period_start=start,
+                grade=week.grade,
+                and_harder=week.and_harder,
+                target_count=week.target_count,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        assert result.inserted_primary_key is not None
+        created.append(BoulderingGoalOut(id=result.inserted_primary_key[0], **week.model_dump()))
+    conn.commit()
+    return BoulderingGoalRepeatOut(created=created, skipped_period_starts=skipped)
 
 
 @router.put("/bouldering-goals/{goal_id}")
