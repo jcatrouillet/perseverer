@@ -88,7 +88,7 @@ vi.mock("../../api/queries", () => ({
     isError: false,
   }),
   useSetGoal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
-  // The bouldering-goals header button rendered next to the running-goal one.
+  // The bouldering half of the Goals popup.
   useBoulderingGoals: () => ({ data: [], isLoading: false, isError: false }),
   useCreateBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useUpdateBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),

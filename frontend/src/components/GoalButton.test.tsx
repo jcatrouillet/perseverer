@@ -10,6 +10,11 @@ const mockDeleteGoalMutate = vi.fn();
 
 vi.mock("../api/queries", () => ({
   useGoalProgress: (...args: unknown[]) => mockUseGoalProgress(...args),
+  // The bouldering half of the same popup.
+  useBoulderingGoals: () => ({ data: [], isLoading: false, isError: false }),
+  useCreateBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useUpdateBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useDeleteBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false }),
   useSetGoal: () => ({ mutate: mockSetGoalMutate, isPending: false, isError: false }),
   useDeleteGoal: () => ({ mutate: mockDeleteGoalMutate }),
 }));
@@ -42,16 +47,32 @@ const WITH_GOAL: GoalProgressOut = {
 };
 
 describe("GoalButton", () => {
-  it("shows 'Set goal' when no goal exists for the period", () => {
+  it("is one button labelled Goals, whether or not a goal is set", () => {
     mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
-    render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    expect(screen.getByText("Set goal")).toBeInTheDocument();
-  });
-
-  it("shows the percent-complete label when a goal exists", () => {
+    const { unmount } = render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
+    expect(screen.getByRole("button", { name: "Goals" })).toBeInTheDocument();
+    unmount();
     mockUseGoalProgress.mockReturnValue({ data: WITH_GOAL, isLoading: false, isError: false });
     render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    expect(screen.getByText("Goal: 64%")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Goals" })).toBeInTheDocument();
+  });
+
+  it("the popup holds both the running/distance goal and the bouldering goals", () => {
+    mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
+    render(<GoalButton periodType="month" periodStart="2026-10" periodLabel="October 2026" />);
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    expect(screen.getByRole("heading", { name: /Running/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bouldering" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /October 2026 goals/ })).toBeInTheDocument();
+  });
+
+  it("a week only has bouldering goals: no distance section, no distance request", () => {
+    mockUseGoalProgress.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+    render(<GoalButton periodType="week" periodStart="2026-09-27" periodLabel="Week of 2026-09-27" />);
+    expect(mockUseGoalProgress).toHaveBeenCalledWith("year", "2026-09-27", false);
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    expect(screen.queryByRole("heading", { name: /Running/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bouldering" })).toBeInTheDocument();
   });
 
   it("the graph never renders on the page itself, only after opening the popup", () => {
@@ -64,7 +85,7 @@ describe("GoalButton", () => {
     mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
     render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
 
-    fireEvent.click(screen.getByText("Set goal"));
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Target distance (km)")).toBeInTheDocument();
@@ -74,7 +95,7 @@ describe("GoalButton", () => {
     mockUseGoalProgress.mockReturnValue({ data: WITH_GOAL, isLoading: false, isError: false });
     render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
 
-    fireEvent.click(screen.getByText("Goal: 64%"));
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("1287.0 km")).toBeInTheDocument();
@@ -85,7 +106,7 @@ describe("GoalButton", () => {
   it("Edit goal reveals the form pre-filled with the existing target", () => {
     mockUseGoalProgress.mockReturnValue({ data: WITH_GOAL, isLoading: false, isError: false });
     render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    fireEvent.click(screen.getByText("Goal: 64%"));
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
 
     fireEvent.click(screen.getByText("Edit goal"));
 
@@ -96,7 +117,7 @@ describe("GoalButton", () => {
   it("closing the popup (Escape) removes the dialog from the document", () => {
     mockUseGoalProgress.mockReturnValue({ data: NO_GOAL, isLoading: false, isError: false });
     render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    fireEvent.click(screen.getByText("Set goal"));
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: "Escape" });
@@ -107,7 +128,7 @@ describe("GoalButton", () => {
   it("Delete goal calls the delete mutation with the current goal", () => {
     mockUseGoalProgress.mockReturnValue({ data: WITH_GOAL, isLoading: false, isError: false });
     render(<GoalButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    fireEvent.click(screen.getByText("Goal: 64%"));
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
 
     fireEvent.click(screen.getByText("Delete goal"));
 

@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { BoulderingGoalProgressOut } from "../api/types";
-import { BoulderingGoalsButton, goalTitle } from "./BoulderingGoalsButton";
+import { BoulderingGoalsSection, goalTitle } from "./BoulderingGoalsSection";
 
 const mockGoals = vi.fn();
 const mockCreate = vi.fn();
@@ -45,10 +45,6 @@ function progress(
   };
 }
 
-function open() {
-  fireEvent.click(screen.getByRole("button", { name: /Bouldering goals/ }));
-}
-
 describe("goalTitle", () => {
   it("describes the grade scope", () => {
     const base = progress(1).goal;
@@ -58,31 +54,14 @@ describe("goalTitle", () => {
   });
 });
 
-describe("BoulderingGoalsButton", () => {
+describe("BoulderingGoalsSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("shows a plain label when no goal is set, and the count when some are", () => {
-    mockGoals.mockReturnValue({ data: [], isLoading: false, isError: false });
-    const { unmount } = render(
-      <BoulderingGoalsButton periodType="year" periodStart="2026" periodLabel="2026" />,
-    );
-    expect(screen.getByRole("button", { name: "Bouldering goals" })).toBeInTheDocument();
-    unmount();
-
-    mockGoals.mockReturnValue({
-      data: [progress(1), progress(2, { grade: 5, target_count: 1 })],
-      isLoading: false,
-      isError: false,
-    });
-    render(<BoulderingGoalsButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    expect(screen.getByRole("button", { name: "Bouldering goals: 2" })).toBeInTheDocument();
-  });
-
   it("asks for the goals of exactly this period", () => {
     mockGoals.mockReturnValue({ data: [], isLoading: false, isError: false });
-    render(<BoulderingGoalsButton periodType="week" periodStart="2026-09-27" periodLabel="w" />);
+    render(<BoulderingGoalsSection periodType="week" periodStart="2026-09-27" />);
     expect(mockGoals).toHaveBeenCalledWith("week", "2026-09-27");
   });
 
@@ -92,8 +71,7 @@ describe("BoulderingGoalsButton", () => {
       isLoading: false,
       isError: false,
     });
-    render(<BoulderingGoalsButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    open();
+    render(<BoulderingGoalsSection periodType="year" periodStart="2026" />);
     expect(screen.getByRole("heading", { name: "10 × V4" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "1 × V5" })).toBeInTheDocument();
     expect(screen.getByText(/of 10 completed \(10%\)/)).toBeInTheDocument();
@@ -103,9 +81,8 @@ describe("BoulderingGoalsButton", () => {
 
   it("adds a goal with the chosen grade, 'or harder' and count", () => {
     mockGoals.mockReturnValue({ data: [], isLoading: false, isError: false });
-    render(<BoulderingGoalsButton periodType="month" periodStart="2026-10" periodLabel="Oct" />);
-    open();
-    fireEvent.click(screen.getByRole("button", { name: "+ Add a goal" }));
+    render(<BoulderingGoalsSection periodType="month" periodStart="2026-10" />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add a bouldering goal" }));
     fireEvent.change(screen.getByLabelText("Grade"), { target: { value: "4" } });
     fireEvent.click(screen.getByLabelText("or harder"));
     fireEvent.change(screen.getByLabelText("Completed routes"), { target: { value: "5" } });
@@ -118,9 +95,8 @@ describe("BoulderingGoalsButton", () => {
 
   it("an any-grade goal never sends 'or harder'", () => {
     mockGoals.mockReturnValue({ data: [], isLoading: false, isError: false });
-    render(<BoulderingGoalsButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    open();
-    fireEvent.click(screen.getByRole("button", { name: "+ Add a goal" }));
+    render(<BoulderingGoalsSection periodType="year" periodStart="2026" />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add a bouldering goal" }));
     expect(screen.getByLabelText("or harder")).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Completed routes"), { target: { value: "30" } });
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
@@ -133,8 +109,7 @@ describe("BoulderingGoalsButton", () => {
   it("edits an existing goal in place and deletes one", () => {
     const g = progress(7);
     mockGoals.mockReturnValue({ data: [g], isLoading: false, isError: false });
-    render(<BoulderingGoalsButton periodType="year" periodStart="2026" periodLabel="2026" />);
-    open();
+    render(<BoulderingGoalsSection periodType="year" periodStart="2026" />);
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByLabelText("Completed routes"), { target: { value: "12" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

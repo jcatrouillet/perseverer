@@ -1680,10 +1680,13 @@ environment:
   bouldering `activity` rows (`climb_result == "completed"` only — an attempt, or an unconfirmed
   `unknown_<n>` result, never counts), never stored, so a corrected route status shows immediately.
   Grades are exact by default (`grade == 4` counts only V4); `and_harder` widens it to `>=`.
-  Frontend: a "Bouldering goals" button beside the running-goal one on Week/Month/Year
-  (`.calendar-header` now wraps so the extra button doesn't overflow at phone width) opening a popup
-  with one card per goal (title like "10 × V4 or harder", completed/target tiles, ahead/behind in
-  routes, a step-line chart against the grey target pace) plus add/edit/delete. MCP: four tools
+  Frontend: there is **one "Goals" button** per period (`GoalButton.tsx`, on Week/Month/Year — the
+  running-goal button it always was, renamed, not a second bouldering-only button), and its popup
+  holds both kinds: a "Running & distance" section (the distance goal, year/month only — a week
+  skips that request) and a "Bouldering" section (`BoulderingGoalsSection.tsx`) with one card per
+  goal (title like "10 × V4 or harder", completed/target tiles, ahead/behind in routes, a step-line
+  chart against the grey target pace) plus add/edit/delete. `.calendar-header` wraps so the buttons
+  don't overflow at phone width. MCP: four tools
   (`get_/create_/update_/delete_bouldering_goal(s)`, taking the tool count from 65 to 69). See
   `docs/DATA_DICTIONARY.md` and `docs/API.md`.
 - **Race Readiness (`race_readiness.py`, Insights tab)**: has the athlete actually run enough

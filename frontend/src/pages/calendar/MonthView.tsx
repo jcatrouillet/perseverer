@@ -17,7 +17,6 @@ import type { DayRollupOut, PlannedRaceOut, PlannedWorkoutListItemOut } from "..
 import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
-import { BoulderingGoalsButton } from "../../components/BoulderingGoalsButton";
 import { GoalButton } from "../../components/GoalButton";
 import { PeriodShareButton } from "../../components/ShareButton";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
@@ -182,11 +181,6 @@ export function MonthView({ year, month }: { year: number; month: number }) {
       <div className="calendar-header">
         <h1>{periodLabel}</h1>
         <GoalButton
-          periodType="month"
-          periodStart={`${year}-${String(month).padStart(2, "0")}`}
-          periodLabel={periodLabel}
-        />
-        <BoulderingGoalsButton
           periodType="month"
           periodStart={`${year}-${String(month).padStart(2, "0")}`}
           periodLabel={periodLabel}

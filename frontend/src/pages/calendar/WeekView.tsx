@@ -20,7 +20,7 @@ import type {
   PlannedWorkoutListItemOut,
 } from "../../api/types";
 import { ActivityCard } from "../../components/ActivityCard";
-import { BoulderingGoalsButton } from "../../components/BoulderingGoalsButton";
+import { GoalButton } from "../../components/GoalButton";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
@@ -339,11 +339,7 @@ export function WeekView({ date }: { date: string }) {
         <h1>
           Week of {start} – {end}
         </h1>
-        <BoulderingGoalsButton
-          periodType="week"
-          periodStart={start}
-          periodLabel={`Week of ${start}`}
-        />
+        <GoalButton periodType="week" periodStart={start} periodLabel={`Week of ${start}`} />
       </div>
 
       <section className="card">

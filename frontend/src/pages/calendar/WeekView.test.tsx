@@ -121,7 +121,10 @@ vi.mock("../../api/queries", () => ({
   useNotes: (...args: unknown[]) => mockUseNotes(...args),
   useCreateNote: () => mockUseCreateNote(),
   useWeatherForecast: () => mockUseWeatherForecast(),
-  // The bouldering-goals header button rendered next to the running-goal one.
+  // The single Goals header button (a week only has bouldering goals; the distance query is skipped).
+  useGoalProgress: () => ({ data: undefined, isLoading: false, isError: false }),
+  useSetGoal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useDeleteGoal: () => ({ mutate: vi.fn() }),
   useBoulderingGoals: () => ({ data: [], isLoading: false, isError: false }),
   useCreateBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useUpdateBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),

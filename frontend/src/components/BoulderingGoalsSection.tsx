@@ -1,7 +1,7 @@
-// The header button Week/Month/Year views render next to the running-goal button: opens a popup
-// listing every bouldering goal set for that period (several may share one -- "10x V4 this year"
-// and "1x V5 in October" are two goals), each with its progress against a straight-line pace, plus
-// a form to add more. Same "graph only ever inside the popup" convention as GoalButton.tsx.
+// The bouldering half of the goals popup GoalButton.tsx opens (there is one "goal" button per
+// period, not a separate one per sport): every bouldering goal set for that week/month/year --
+// several may share a period ("10x V4 this year" and "1x V5 in October" are two goals) -- each
+// with its progress against a straight-line pace, plus a form to add more.
 import { useState } from "react";
 
 import { useBoulderingGoals, useDeleteBoulderingGoal } from "../api/queries";
@@ -10,7 +10,6 @@ import { formatGrade } from "../boulderingRoutes";
 import { BoulderingGoalChart } from "./BoulderingGoalChart";
 import { BoulderingGoalForm } from "./BoulderingGoalForm";
 import { LoadingSpinner } from "./LoadingSpinner";
-import { Modal } from "./Modal";
 import "../styles/goals.css";
 
 /** "10 × V4", "5 × V4 or harder", "8 × any grade". */
@@ -33,7 +32,7 @@ function GoalCard({
   const ahead = progress.ahead_behind >= 0;
   return (
     <section className="bouldering-goal">
-      <h3 className="bouldering-goal__title">{goalTitle(progress.goal)}</h3>
+      <h4 className="bouldering-goal__title">{goalTitle(progress.goal)}</h4>
       <div className="goal-progress__summary">
         <div className="goal-progress__summary-tile">
           <span className="goal-progress__summary-value">{progress.current_count}</span>
@@ -73,75 +72,59 @@ function GoalCard({
   );
 }
 
-export function BoulderingGoalsButton({
+export function BoulderingGoalsSection({
   periodType,
   periodStart,
-  periodLabel,
 }: {
   periodType: "week" | "month" | "year";
   periodStart: string;
-  periodLabel: string;
 }) {
-  const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<BoulderingGoalOut | "new" | null>(null);
   const goals = useBoulderingGoals(periodType, periodStart);
-  const count = goals.data?.length ?? 0;
 
   return (
-    <>
-      <button type="button" className="button goal-button" onClick={() => setOpen(true)}>
-        {count > 0 ? `Bouldering goals: ${count}` : "Bouldering goals"}
-      </button>
+    <section className="bouldering-goals">
+      <h3 className="bouldering-goals__heading">Bouldering</h3>
+      {goals.isLoading && <LoadingSpinner size="sm" />}
+      {goals.isError && <p role="alert">Could not load the bouldering goals.</p>}
 
-      <Modal
-        open={open}
-        onClose={() => {
-          setOpen(false);
-          setEditing(null);
-        }}
-        title={`${periodLabel} bouldering goals`}
-      >
-        {goals.isLoading && <LoadingSpinner size="sm" />}
-        {goals.isError && <p role="alert">Could not load these goals.</p>}
+      {goals.data && goals.data.length === 0 && editing === null && (
+        <p className="chart-note">
+          No bouldering goal for this period yet. A goal counts completed routes only — for
+          example 10 × V4 in a year, or 1 × V5 in a month.
+        </p>
+      )}
 
-        {goals.data && goals.data.length === 0 && editing === null && (
-          <p className="chart-note">
-            No bouldering goal for this period yet. A goal counts completed routes only — for
-            example 10 × V4 in a year, or 1 × V5 in a month.
-          </p>
-        )}
-
-        {goals.data?.map((p) =>
-          editing !== "new" && editing?.id === p.goal.id ? (
-            <BoulderingGoalForm
-              key={p.goal.id}
-              periodType={periodType}
-              periodStart={periodStart}
-              existing={p.goal}
-              onSaved={() => setEditing(null)}
-              onCancel={() => setEditing(null)}
-            />
-          ) : (
-            <GoalCard key={p.goal.id} progress={p} onEdit={() => setEditing(p.goal)} />
-          ),
-        )}
-
-        {editing === "new" ? (
+      {goals.data?.map((p) =>
+        editing !== "new" && editing?.id === p.goal.id ? (
           <BoulderingGoalForm
+            key={p.goal.id}
             periodType={periodType}
             periodStart={periodStart}
-            existing={null}
+            existing={p.goal}
             onSaved={() => setEditing(null)}
             onCancel={() => setEditing(null)}
           />
         ) : (
-          goals.data && (
-            <button type="button" className="button" onClick={() => setEditing("new")}>
-              + Add a goal
-            </button>
-          )
-        )}
-      </Modal>
-    </>
+          <GoalCard key={p.goal.id} progress={p} onEdit={() => setEditing(p.goal)} />
+        ),
+      )}
+
+      {editing === "new" ? (
+        <BoulderingGoalForm
+          periodType={periodType}
+          periodStart={periodStart}
+          existing={null}
+          onSaved={() => setEditing(null)}
+          onCancel={() => setEditing(null)}
+        />
+      ) : (
+        goals.data && (
+          <button type="button" className="button" onClick={() => setEditing("new")}>
+            + Add a bouldering goal
+          </button>
+        )
+      )}
+    </section>
   );
 }
