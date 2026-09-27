@@ -1075,6 +1075,50 @@ Deletes a goal by id.
 
 **Responses:** `200` (no response body of interest). `404` → `detail: "goal not found"`.
 
+### Bouldering goals
+
+A bouldering goal is a target **number of completed routes** ("sends" — attempts never count) in a
+week, month or year: either at one V-grade (`grade: 4` = V4, optionally `and_harder: true` for "V4
+or harder") or of any grade (`grade: null`). A period can hold **several** goals (e.g. 10 x V4 in
+2026 *and* 1 x V5 in October 2026); each is addressed by its own `id`. Progress is computed on
+every read from the athlete's bouldering sessions, using the same straight-line pace-to-target
+framing as the distance goals above.
+
+#### `GET /bouldering-goals`
+
+Every bouldering goal set for exactly this period, each with its own progress line. An empty list
+(never a fabricated goal) when none is set.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `period_type` | query | **required** | string | `week`, `month` or `year`. |
+| `period_start` | query | **required** | string | `"YYYY"` for `year`, `"YYYY-MM"` for `month`, or the ISO date the 7-day week starts on for `week` (any weekday). |
+
+**Response `200`:** `BoulderingGoalProgressOut[]` — `goal` (`id`, `period_type`, `period_start`,
+`grade`, `and_harder`, `target_count`), `period_end`, `daily` (one `{local_date, cumulative_count}`
+per day from the period start through today), `target_per_day`, `current_count`,
+`target_as_of_today`, `ahead_behind` (routes; positive = ahead of pace) and `pct_complete` (may
+exceed 1). Ordered by grade ascending, the any-grade goal last.
+
+#### `POST /bouldering-goals`
+
+Creates a goal. **Request body** (`BoulderingGoalIn`): `period_type`, `period_start` (as above),
+`grade` (integer 0–20 or `null`), `and_harder` (boolean, default `false`; needs a `grade`) and
+`target_count` (integer > 0).
+
+**Responses:** `201` → `BoulderingGoalOut`. `422` → invalid period/grade/target, or `and_harder`
+without a `grade`. `409` → an identical goal (same period, grade and `and_harder`) already exists —
+change its target with `PUT` instead.
+
+#### `PUT /bouldering-goals/{goal_id}`
+
+Replaces a goal (send every field). `200` → `BoulderingGoalOut`; `404` unknown id; `409` if the new
+scope collides with a different existing goal; `422` as above.
+
+#### `DELETE /bouldering-goals/{goal_id}`
+
+Deletes a goal by id. `200`; `404` → `detail: "goal not found"`.
+
 ---
 
 ## Planned Workouts

@@ -21,6 +21,7 @@ from perseverer.api.mcp_server import (
     complete_planned_workout,
     create_blood_test_panel,
     create_blood_test_result,
+    create_bouldering_goal,
     create_note,
     create_planned_race,
     create_planned_workout,
@@ -28,6 +29,7 @@ from perseverer.api.mcp_server import (
     create_shoe,
     delete_blood_test_panel,
     delete_blood_test_result,
+    delete_bouldering_goal,
     delete_goal,
     delete_note,
     delete_planned_race,
@@ -42,6 +44,7 @@ from perseverer.api.mcp_server import (
     get_activity_stream,
     get_activity_weather,
     get_activity_workout,
+    get_bouldering_goals,
     get_calendar,
     get_calendar_months,
     get_calendar_weeks,
@@ -81,6 +84,7 @@ from perseverer.api.mcp_server import (
     set_goal,
     uncomplete_planned_workout,
     update_blood_test_result,
+    update_bouldering_goal,
     update_note,
     update_planned_race,
     update_planned_workout,
@@ -141,9 +145,7 @@ async def test_get_activity_stream_defaults_to_low_tier(
 
     start = dt.datetime(2025, 6, 1, 10, tzinfo=dt.UTC)
     points = [
-        StreamPoint(
-            timestamp_utc=start + dt.timedelta(seconds=i), values={"heart_rate": 100.0 + i}
-        )
+        StreamPoint(timestamp_utc=start + dt.timedelta(seconds=i), values={"heart_rate": 100.0 + i})
         for i in range(5000)
     ]
     rel_path, n_samples, channels = write_activity_stream(
@@ -177,9 +179,7 @@ async def test_get_activity_stream_supports_high_tier_narrowed_to_a_window(
 
     start = dt.datetime(2025, 6, 1, 10, tzinfo=dt.UTC)
     points = [
-        StreamPoint(
-            timestamp_utc=start + dt.timedelta(seconds=i), values={"heart_rate": 100.0 + i}
-        )
+        StreamPoint(timestamp_utc=start + dt.timedelta(seconds=i), values={"heart_rate": 100.0 + i})
         for i in range(5000)
     ]
     rel_path, n_samples, channels = write_activity_stream(
@@ -331,9 +331,7 @@ async def test_get_climbing_summary_empty_range(client: TestClient) -> None:
     assert result["session_count"] == 0
 
 
-async def test_get_activity_context_for_a_real_activity(
-    client: TestClient, engine: Engine
-) -> None:
+async def test_get_activity_context_for_a_real_activity(client: TestClient, engine: Engine) -> None:
     with engine.connect() as conn:
         seed_activity(conn, activity_id="a1")
 
@@ -403,9 +401,7 @@ async def test_get_activity_workout_is_none_without_a_planned_workout(
     assert await get_activity_workout("a1") is None
 
 
-async def test_get_activity_sources_for_a_real_activity(
-    client: TestClient, engine: Engine
-) -> None:
+async def test_get_activity_sources_for_a_real_activity(client: TestClient, engine: Engine) -> None:
     with engine.connect() as conn:
         seed_activity(conn, activity_id="a1")
 
@@ -593,15 +589,29 @@ async def test_set_and_delete_goal(client: TestClient) -> None:
     assert (await get_goal_progress("year", "2026"))["available"] is False
 
 
+async def test_bouldering_goal_tools(client: TestClient) -> None:
+    assert await get_bouldering_goals("year", "2026") == []
+    goal = await create_bouldering_goal("year", "2026", 10, grade=4)
+    assert goal["grade"] == 4
+    assert goal["target_count"] == 10
+    october = await create_bouldering_goal("month", "2026-10", 1, grade=5)
+    assert october["period_start"] == "2026-10"
+    listed = await get_bouldering_goals("year", "2026")
+    assert [g["goal"]["id"] for g in listed] == [goal["id"]]
+    assert listed[0]["current_count"] == 0
+    updated = await update_bouldering_goal(goal["id"], "year", "2026", 12, grade=4)
+    assert updated["target_count"] == 12
+    await delete_bouldering_goal(goal["id"])
+    assert await get_bouldering_goals("year", "2026") == []
+
+
 async def test_blood_test_write_tools(client: TestClient) -> None:
     single = await create_blood_test_result("2026-09-01", "HbA1c", 5.2, unit="%")
     panel = await create_blood_test_panel(
         "2026-09-02", [{"marker": "LDL", "value_num": 90, "unit": "mg/dL"}], lab_name="Quest"
     )
     assert len(panel) == 1
-    updated = await update_blood_test_result(
-        single["id"], "2026-09-01", "HbA1c", 5.4, unit="%"
-    )
+    updated = await update_blood_test_result(single["id"], "2026-09-01", "HbA1c", 5.4, unit="%")
     assert updated["value_num"] == 5.4
     await delete_blood_test_result(single["id"])
     await delete_blood_test_panel("2026-09-02")

@@ -1814,6 +1814,22 @@ same "fetch once, aggregate in the browser" precedent.
   surfacing that run's own name/date/distance/pace/VDOT/duration in an `aria-live` details strip
   and linking straight to the activity.
 
+## Bouldering goals (bouldering_goal, bouldering_goals.py)
+
+A target number of **completed** routes in a week, month or year. Unlike `goal` (distance, one row
+per period), a period can hold several: `bouldering_goal` has no per-period uniqueness and each row
+is addressed by its own `id`; the API refuses an *identical* goal (same period, `grade`,
+`and_harder`) with 409. Columns: `period_type` (`week`|`month`|`year`), `period_start` (`"YYYY"`,
+`"YYYY-MM"`, or the ISO date a 7-day week starts on — any weekday, since the frontend's own
+week-start preference decides which), `grade` (V-grade integer, `NULL` = routes of any grade),
+`and_harder` (count that grade or harder; needs a grade), `target_count`, `created_at`/
+`updated_at`. Progress is computed on read from `split` rows (`climb_grade`, `climb_result =
+"completed"`) of the athlete's non-deleted `bouldering` activities inside the period, never
+stored — so a corrected route status (`bouldering_overrides.py`) is reflected immediately. An
+attempt, including an unconfirmed `unknown_<n>` result, never counts. Ahead/behind uses the same
+straight-line `target_count / days_in_period * days_elapsed` pace as distance goals (0 before the
+period starts).
+
 ## Distance goals, per year or month (goal, goals.py)
 
 A target distance for a whole calendar year or month, optionally scoped to one sport (`sport =

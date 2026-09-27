@@ -47,6 +47,9 @@ import type {
   GarminAuthStatusOut,
   GarminLoginIn,
   GarminLoginOut,
+  BoulderingGoalIn,
+  BoulderingGoalOut,
+  BoulderingGoalProgressOut,
   GoalOut,
   GoalProgressOut,
   GearAlertOut,
@@ -1188,6 +1191,54 @@ export function useDeleteGoal() {
         queryKey: ["goal-progress", goal.period_type, goal.period_start],
       });
     },
+  });
+}
+
+/** Every bouldering goal set for one week/month/year (several may share a period), each with its
+ * own progress line. An empty list means none is set, not an error. */
+export function useBoulderingGoals(periodType: "week" | "month" | "year", periodStart: string) {
+  return useQuery({
+    queryKey: ["bouldering-goals", periodType, periodStart],
+    queryFn: () =>
+      apiGet<BoulderingGoalProgressOut[]>(
+        `/api/v1/bouldering-goals${buildQuery({ period_type: periodType, period_start: periodStart })}`,
+      ),
+  });
+}
+
+function invalidateBoulderingGoals(
+  queryClient: ReturnType<typeof useQueryClient>,
+  periodType: string,
+  periodStart: string,
+) {
+  void queryClient.invalidateQueries({ queryKey: ["bouldering-goals", periodType, periodStart] });
+}
+
+export function useCreateBoulderingGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BoulderingGoalIn) =>
+      apiPost<BoulderingGoalOut>("/api/v1/bouldering-goals", body),
+    onSuccess: (_goal, v) => invalidateBoulderingGoals(queryClient, v.period_type, v.period_start),
+  });
+}
+
+export function useUpdateBoulderingGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: BoulderingGoalIn & { id: number }) =>
+      apiPut<BoulderingGoalOut>(`/api/v1/bouldering-goals/${id}`, body),
+    onSuccess: (_goal, v) => invalidateBoulderingGoals(queryClient, v.period_type, v.period_start),
+  });
+}
+
+export function useDeleteBoulderingGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (goal: BoulderingGoalOut) =>
+      apiDelete<void>(`/api/v1/bouldering-goals/${goal.id}`),
+    onSuccess: (_void, goal) =>
+      invalidateBoulderingGoals(queryClient, goal.period_type, goal.period_start),
   });
 }
 

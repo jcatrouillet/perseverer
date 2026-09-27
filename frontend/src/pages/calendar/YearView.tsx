@@ -12,6 +12,7 @@ import {
 import { ChartFullscreen } from "../../components/ChartFullscreen";
 import { DateNavigator } from "../../components/DateNavigator";
 import { FitnessChart } from "../../components/FitnessChart";
+import { BoulderingGoalsButton } from "../../components/BoulderingGoalsButton";
 import { GoalButton } from "../../components/GoalButton";
 import { PeriodShareButton } from "../../components/ShareButton";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
@@ -91,6 +92,11 @@ export function YearView({ year }: { year: number }) {
       <div className="calendar-header">
         <h1>{year}</h1>
         <GoalButton periodType="year" periodStart={String(year)} periodLabel={String(year)} />
+        <BoulderingGoalsButton
+          periodType="year"
+          periodStart={String(year)}
+          periodLabel={String(year)}
+        />
         <PeriodShareButton periodType="year" periodStart={String(year)} />
       </div>
       {months.isLoading && <LoadingSpinner />}

@@ -20,6 +20,7 @@ import type {
   PlannedWorkoutListItemOut,
 } from "../../api/types";
 import { ActivityCard } from "../../components/ActivityCard";
+import { BoulderingGoalsButton } from "../../components/BoulderingGoalsButton";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
@@ -334,9 +335,16 @@ export function WeekView({ date }: { date: string }) {
         month={Number(monthOfWeekStart.slice(5, 7))}
         selectedWeekStart={start}
       />
-      <h1>
-        Week of {start} – {end}
-      </h1>
+      <div className="calendar-header">
+        <h1>
+          Week of {start} – {end}
+        </h1>
+        <BoulderingGoalsButton
+          periodType="week"
+          periodStart={start}
+          periodLabel={`Week of ${start}`}
+        />
+      </div>
 
       <section className="card">
         <h2>Notes</h2>

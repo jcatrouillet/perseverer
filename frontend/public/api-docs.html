@@ -1146,6 +1146,24 @@ const SCHEMAS = [
       ["ahead_behind_m","number|null","optional — current_distance_m minus target_distance_as_of_today_m; positive means ahead","opt"],
       ["pct_complete","number|null","optional — current_distance_m / target_distance_m × 100","opt"],
     ] },
+  { name: "BoulderingGoalOut", note: "Returned by POST/PUT /bouldering-goals, and inside BoulderingGoalProgressOut.", fields: [
+      ["id","integer",""],
+      ["period_type","string","week, month or year."],
+      ["period_start","string","\"YYYY\", \"YYYY-MM\" or the ISO start date of a 7-day week."],
+      ["grade","integer|null","V-grade (4 = V4); null = routes of any grade.","opt"],
+      ["and_harder","boolean","Count that grade or harder."],
+      ["target_count","integer","Target number of completed routes."],
+    ] },
+  { name: "BoulderingGoalProgressOut", note: "One element of the GET /bouldering-goals list.", fields: [
+      ["goal","BoulderingGoalOut",""],
+      ["period_end","string(date)",""],
+      ["daily","array<{local_date, cumulative_count}>","One entry per day from the period start through today."],
+      ["target_per_day","number","Straight-line pace, routes per day."],
+      ["current_count","integer","Completed matching routes so far."],
+      ["target_as_of_today","number","Where dead-even pace would put you today."],
+      ["ahead_behind","number","current_count minus target_as_of_today (routes); positive = ahead."],
+      ["pct_complete","number","current_count / target_count; may exceed 1."],
+    ] },
   { name: "GoalOut", note: "Returned inside GoalProgressOut, and directly by PUT /goals.", fields: [
       ["id","integer",""],
       ["period_type","string","year or month."],
@@ -2010,6 +2028,52 @@ const GROUPS = [
       params: [ ["goal_id","path","req","integer","—","From GoalOut.id."] ],
       responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "goal not found"' } ],
       example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/goals/${EX.GOAL} \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/api/v1/bouldering-goals", summary: "List the bouldering goals for one period, with progress.",
+      description: "A bouldering goal is a target number of COMPLETED routes (attempts never count) in a week, month or year, at one V-grade (optionally 'or harder') or any grade. A period can hold several. Empty list when none is set. Same straight-line pace-to-target framing as distance goals.",
+      params: [
+        ["period_type","query","req","string","—","week, month or year."],
+        ["period_start","query","req","string","—","\"YYYY\" for year, \"YYYY-MM\" for month, or the ISO date a 7-day week starts on (any weekday)."],
+      ],
+      responses: [ { code: 200, ref: "array&lt;BoulderingGoalProgressOut&gt;" } ],
+      example: { qs: "?period_type=year&period_start=2026" }
+    },
+    { method: "POST", path: "/api/v1/bouldering-goals", summary: "Create a bouldering goal.",
+      description: "Several goals may share one period; an identical one (same period, grade and and_harder) is refused with 409.",
+      body: { schema: "BoulderingGoalIn", fields: [
+        ["period_type","string","req","","week, month or year."],
+        ["period_start","string","req","","\"YYYY\", \"YYYY-MM\" or the ISO start date of a 7-day week."],
+        ["grade","integer|null","opt","","V-grade 0-20 (4 = V4). Omit or null for routes of any grade."],
+        ["and_harder","boolean","opt","","Count that grade or harder. Needs a grade. Default false."],
+        ["target_count","integer","req","","Completed routes, greater than 0."],
+      ]},
+      responses: [
+        { code: 201, ref: "BoulderingGoalOut" },
+        { code: 409, note: "An identical goal already exists for this period." },
+        { code: 422, note: "Invalid period, grade or target, or and_harder without a grade." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/bouldering-goals \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"period_type": "year", "period_start": "2026", "grade": 4, "target_count": 10}'` }
+    },
+    { method: "PUT", path: "/api/v1/bouldering-goals/{goal_id}", summary: "Replace a bouldering goal.",
+      description: "Send every field (same body as POST).",
+      params: [ ["goal_id","path","req","integer","—","From BoulderingGoalOut.id."] ],
+      responses: [
+        { code: 200, ref: "BoulderingGoalOut" },
+        { code: 404, note: 'detail: "goal not found"' },
+        { code: 409, note: "The new scope collides with a different existing goal." },
+      ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/bouldering-goals/1 \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"period_type": "year", "period_start": "2026", "grade": 4, "target_count": 12}'` }
+    },
+    { method: "DELETE", path: "/api/v1/bouldering-goals/{goal_id}", summary: "Delete a bouldering goal.",
+      description: "",
+      params: [ ["goal_id","path","req","integer","—","From BoulderingGoalOut.id."] ],
+      responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "goal not found"' } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/bouldering-goals/1 \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
   ]},

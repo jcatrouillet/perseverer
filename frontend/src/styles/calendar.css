@@ -3,6 +3,9 @@
 .calendar-header {
   display: flex;
   align-items: center;
+  /* Wraps: the title plus the goal / bouldering-goal / share buttons don't fit one line at
+     phone width. */
+  flex-wrap: wrap;
   gap: var(--space-3);
 }
 

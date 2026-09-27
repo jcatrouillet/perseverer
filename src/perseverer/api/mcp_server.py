@@ -129,9 +129,7 @@ async def get_activity_stream(
         params["start_s"] = start_s
     if end_s is not None:
         params["end_s"] = end_s
-    response = await _call_api(
-        "GET", f"/api/v1/activities/{activity_id}/stream", params=params
-    )
+    response = await _call_api("GET", f"/api/v1/activities/{activity_id}/stream", params=params)
     return dict(response.json())
 
 
@@ -856,6 +854,83 @@ async def delete_goal(goal_id: int) -> None:
 
 
 @mcp.tool()
+async def get_bouldering_goals(period_type: str, period_start: str) -> list[dict[str, Any]]:
+    """Every bouldering goal set for one week, month or year, each with its progress. `period_type`
+    is "week" (period_start = the ISO date the 7-day week starts on), "month" ("YYYY-MM") or
+    "year" ("YYYY"). A goal counts COMPLETED routes only, of one V-grade (optionally "or harder")
+    or of any grade; a period can hold several. Empty list when none is set."""
+    response = await _call_api(
+        "GET",
+        "/api/v1/bouldering-goals",
+        params={"period_type": period_type, "period_start": period_start},
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def create_bouldering_goal(
+    period_type: str,
+    period_start: str,
+    target_count: int,
+    grade: int | None = None,
+    and_harder: bool = False,
+) -> dict[str, Any]:
+    """Set a bouldering goal: `target_count` completed routes in a week ("week", period_start = the
+    ISO start date), month ("month", "YYYY-MM") or year ("year", "YYYY"). `grade` is the V-grade
+    number (4 = V4); omit it to count routes of any grade; `and_harder` makes it "that grade or
+    harder". e.g. 10x V4 in 2026: period_type="year", period_start="2026", grade=4,
+    target_count=10. Several goals may share one period, but an identical one (same period, grade
+    and and_harder) is refused -- change its target with update_bouldering_goal."""
+    response = await _call_api(
+        "POST",
+        "/api/v1/bouldering-goals",
+        json=_drop_none(
+            {
+                "period_type": period_type,
+                "period_start": period_start,
+                "grade": grade,
+                "and_harder": and_harder,
+                "target_count": target_count,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def update_bouldering_goal(
+    goal_id: int,
+    period_type: str,
+    period_start: str,
+    target_count: int,
+    grade: int | None = None,
+    and_harder: bool = False,
+) -> dict[str, Any]:
+    """Replace a bouldering goal (by id, from create_bouldering_goal/get_bouldering_goals) -- send
+    every field, same meaning as create_bouldering_goal."""
+    response = await _call_api(
+        "PUT",
+        f"/api/v1/bouldering-goals/{goal_id}",
+        json=_drop_none(
+            {
+                "period_type": period_type,
+                "period_start": period_start,
+                "grade": grade,
+                "and_harder": and_harder,
+                "target_count": target_count,
+            }
+        ),
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def delete_bouldering_goal(goal_id: int) -> None:
+    """Delete a bouldering goal by id."""
+    await _call_api("DELETE", f"/api/v1/bouldering-goals/{goal_id}")
+
+
+@mcp.tool()
 async def create_blood_test_result(
     local_date: str,
     marker: str,
@@ -980,9 +1055,7 @@ async def create_shoe(
 @mcp.tool()
 async def set_default_shoe(sport: str, shoe_id: str) -> dict[str, Any]:
     """Make a pair the default for a sport from now on (never reassigns past activities)."""
-    response = await _call_api(
-        "PUT", f"/api/v1/gear/defaults/{sport}", json={"shoe_id": shoe_id}
-    )
+    response = await _call_api("PUT", f"/api/v1/gear/defaults/{sport}", json={"shoe_id": shoe_id})
     return dict(response.json())
 
 

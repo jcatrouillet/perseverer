@@ -1667,6 +1667,25 @@ environment:
   `target_distance_as_of_today_m`/`ahead_behind_m` are built from, so the chart's own per-day
   target can never drift from the summary tile above it. Today's own point additionally gets the
   reference widget's richer "the N km you ran today puts you M km ahead/behind" sentence.
+- **Bouldering goals (`bouldering_goal`, `bouldering_goals.py`, `BoulderingGoalsButton.tsx`)**:
+  a target number of **completed** routes ("sends") in a week, month or year, at one V-grade
+  (optionally "or harder") or any grade — e.g. 10 × V4 in 2026, 1 × V5 in October 2026 — tracked
+  against a straight-line pace exactly like the distance goals above. Deliberately its own table
+  and endpoints rather than a variant of `goal`: a period can hold **several** goals, so there is
+  no per-period uniqueness and each goal is addressed by its own id (`GET/POST /bouldering-goals`,
+  `PUT/DELETE /bouldering-goals/{id}`; only an *identical* goal — same period, grade, `and_harder`
+  — is refused, 409). `period_start` is `"YYYY"`/`"YYYY-MM"` or, for a week, the ISO date the 7 days
+  start on (any weekday: the frontend's week-start preference, not the Monday-anchored backend
+  rollups, decides it). Progress is computed on read from `split` rows joined to non-deleted
+  bouldering `activity` rows (`climb_result == "completed"` only — an attempt, or an unconfirmed
+  `unknown_<n>` result, never counts), never stored, so a corrected route status shows immediately.
+  Grades are exact by default (`grade == 4` counts only V4); `and_harder` widens it to `>=`.
+  Frontend: a "Bouldering goals" button beside the running-goal one on Week/Month/Year
+  (`.calendar-header` now wraps so the extra button doesn't overflow at phone width) opening a popup
+  with one card per goal (title like "10 × V4 or harder", completed/target tiles, ahead/behind in
+  routes, a step-line chart against the grey target pace) plus add/edit/delete. MCP: four tools
+  (`get_/create_/update_/delete_bouldering_goal(s)`, taking the tool count from 65 to 69). See
+  `docs/DATA_DICTIONARY.md` and `docs/API.md`.
 - **Race Readiness (`race_readiness.py`, Insights tab)**: has the athlete actually run enough
   *volume* for their next scheduled race, not just "are they fit" — a materially different
   question from the existing VDOT-based race prediction above (`predicted_duration_s_for_distance`),

@@ -227,6 +227,31 @@ goal = Table(
     UniqueConstraint("athlete_id", "period_type", "period_start", name="uq_goal_identity"),
 )
 
+# A bouldering goal: a number of COMPLETED routes ("sends") over a week, month or year -- either at
+# one specific V-grade ("10x V4"), at that grade or harder, or of any grade at all. Deliberately a
+# separate table from `goal` above (distance, one row per period): a period can hold several of
+# these at once ("10x V4 this year" and "1x V5 in October"), so there's no per-period uniqueness --
+# a bouldering goal is identified by its own id. `period_start` is "YYYY" (year), "YYYY-MM" (month)
+# or the ISO date the 7-day period starts on (week, any weekday -- the frontend's own week-start
+# preference decides which day that is). Progress is computed on read from the `split` rows of
+# bouldering activities (bouldering_goals.py), never stored: counting the completed routes inside
+# one period is a bounded query, and a stored counter would drift the moment a route's status is
+# corrected (bouldering_overrides.py).
+bouldering_goal = Table(
+    "bouldering_goal",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("period_type", String, nullable=False),  # "week" | "month" | "year"
+    Column("period_start", String, nullable=False),
+    Column("grade", Integer, nullable=True),  # V-grade; NULL = routes of any grade
+    Column("and_harder", Boolean, nullable=False, server_default="0"),
+    Column("target_count", Integer, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    Index("ix_bouldering_goal_athlete_period", "athlete_id", "period_type", "period_start"),
+)
+
 # A single upcoming race on the calendar -- a dated *event* with a distance and an optional time
 # target, deliberately not a planned_workout sport tier: a race has no step model to push to
 # Garmin, it's just something to look forward to and pace a goal against (see planned_races.py).

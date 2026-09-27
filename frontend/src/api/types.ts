@@ -1185,6 +1185,42 @@ export interface GoalProgressOut {
   pct_complete: number | null;
 }
 
+/** A bouldering goal: a target number of COMPLETED routes in a week/month/year, at one V-grade
+ * (optionally "or harder") or any grade (`grade: null`). `period_start` is "YYYY" for a year,
+ * "YYYY-MM" for a month, or the ISO date a 7-day week starts on. */
+export interface BoulderingGoalOut {
+  id: number;
+  period_type: "week" | "month" | "year";
+  period_start: string;
+  grade: number | null;
+  and_harder: boolean;
+  target_count: number;
+}
+
+export interface BoulderingGoalIn {
+  period_type: "week" | "month" | "year";
+  period_start: string;
+  grade: number | null;
+  and_harder: boolean;
+  target_count: number;
+}
+
+export interface BoulderingGoalProgressPoint {
+  local_date: string;
+  cumulative_count: number;
+}
+
+export interface BoulderingGoalProgressOut {
+  goal: BoulderingGoalOut;
+  period_end: string;
+  daily: BoulderingGoalProgressPoint[];
+  target_per_day: number;
+  current_count: number;
+  target_as_of_today: number;
+  ahead_behind: number;
+  pct_complete: number;
+}
+
 export interface ShoeIn {
   brand: string;
   model: string;
