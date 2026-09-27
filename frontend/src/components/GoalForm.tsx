@@ -83,13 +83,10 @@ export function GoalForm({
             min="1"
             max="104"
             step="1"
+            title="Sets this goal for that many consecutive weeks, replacing any goal already set in those weeks"
             value={weeks}
             onChange={(e) => setWeeks(e.target.value)}
           />
-          <span className="field__hint">
-            Sets this same goal for that many consecutive weeks, starting with this one. A week that
-            already has a goal gets it replaced.
-          </span>
         </label>
       )}
       <button

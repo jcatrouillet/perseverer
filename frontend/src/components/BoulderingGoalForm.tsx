@@ -99,13 +99,10 @@ export function BoulderingGoalForm({
             min="1"
             max="104"
             step="1"
+            title="Sets this goal for that many consecutive weeks; weeks that already have it are skipped"
             value={weeks}
             onChange={(e) => setWeeks(e.target.value)}
           />
-          <span className="field__hint">
-            Sets this same goal for that many consecutive weeks, starting with this one. A week that
-            already has it is left as it is.
-          </span>
         </label>
       )}
       <button type="submit" className="button button--primary" disabled={pending}>

@@ -11,7 +11,13 @@
 }
 
 .goal-form .field {
-  min-width: 160px;
+  min-width: 0;
+  width: 160px;
+}
+
+/* Buttons match the inputs' height so a form row lines up on both its top and bottom edge. */
+.goal-form .button {
+  height: 48px;
 }
 
 .goal-progress__summary {
@@ -102,11 +108,16 @@
   margin: 0 0 var(--space-3);
 }
 
-.goal-form__check {
+.goal-form .goal-form__check {
   align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   flex-direction: row;
   gap: var(--space-2);
-  min-width: 0;
+  height: 48px;
+  padding: 0 var(--space-3);
+  white-space: nowrap;
+  width: auto;
 }
 
 /* Section headings inside the single Goals popup (Running & distance / Bouldering). */
@@ -119,9 +130,3 @@
   margin-top: var(--space-5);
 }
 
-.field__hint {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  font-weight: 400;
-  max-width: 280px;
-}
