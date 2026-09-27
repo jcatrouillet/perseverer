@@ -150,6 +150,14 @@
   font-weight: 500;
 }
 
+.blood-marker__description {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  margin: 0 0 var(--space-2);
+  max-width: 65ch;
+}
+
 .blood-marker .chart-legend {
   margin-bottom: var(--space-4);
 }

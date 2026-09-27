@@ -401,7 +401,15 @@ environment:
   single marker's own history). `BloodTestsPanel` remains for what a per-marker view
   can't do — adding a new draw, and the old by-date view (per-panel lab/notes edit, delete a whole
   test) behind a collapsed "Manage by test date" `<details>`; both render inside the explorer's
-  detail pane as that "Add or manage results" entry. No API change. A real layout bug
+  detail pane as that "Add or manage results" entry.
+  **Each marker also shows a short "what it represents" description** under its title
+  (`bloodMarkerInfo.ts::markerDescription`, a bundled name → text table covering every marker
+  imported so far plus the add form's common names; a marker with no entry shows none). These are
+  general, educational descriptions of what a marker *measures* — deliberately never a target,
+  "normal" range, or reading of the athlete's own value, since the only range this app ever shows is
+  the one printed on the athlete's own lab report (a test guards against wording like "normal",
+  "healthy", or "optimal" creeping in). Names are looked up case-insensitively, so a new marker
+  spelled differently from the table simply gets no description until an entry is added. No API change. A real layout bug
   caught live at 375px: `.metric-explorer`'s desktop `align-items: flex-start` becomes content-
   sized in the mobile column layout, so a responsive chart sized itself off its last-measured
   (desktop) width and pushed the whole page to 531px — the mobile rule now `align-items: stretch`.

@@ -59,4 +59,9 @@ describe("BloodMarkerChart", () => {
     expect(screen.getByText(/outside its reference range/)).toBeInTheDocument();
     expect(screen.getByText(/1 result,/)).toBeInTheDocument();
   });
+
+  it("shows a description of what the marker represents", () => {
+    render(<BloodMarkerChart marker="ALT" results={[result(1, "2015-10-14", 81)]} />);
+    expect(screen.getByText(/Alanine aminotransferase/)).toBeInTheDocument();
+  });
 });

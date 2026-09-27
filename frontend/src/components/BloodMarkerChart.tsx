@@ -14,6 +14,7 @@ import {
 } from "recharts";
 
 import type { BloodTestResultOut } from "../api/types";
+import { markerDescription } from "../bloodMarkerInfo";
 import { formatDate, formatRange, isOutOfRange } from "../bloodMarkers";
 import { parseIsoDate } from "../dateUtils";
 import { ChartLegend } from "./ChartLegend";
@@ -118,6 +119,7 @@ export function BloodMarkerChart({
   // A single result (or several on one day) would collapse the axis to a point -- give it room.
   const pad = last === first ? 180 * DAY_MS : Math.max((last - first) * 0.04, 15 * DAY_MS);
 
+  const description = markerDescription(marker);
   const latest = results[results.length - 1]!;
   const newestFirst = [...results].reverse();
 
@@ -127,6 +129,7 @@ export function BloodMarkerChart({
         {marker}
         {unit && <span className="blood-marker__unit">{unit}</span>}
       </h2>
+      {description && <p className="blood-marker__description">{description}</p>}
       <p className="chart-note">
         Latest {formatDate(latest.local_date)}: {latest.value_num}
         {latest.unit ? ` ${latest.unit}` : ""}
