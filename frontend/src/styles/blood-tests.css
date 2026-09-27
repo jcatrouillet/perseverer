@@ -135,3 +135,55 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* One marker's history (BloodMarkerChart.tsx), shown in the Health page's metric explorer. */
+.blood-marker__title {
+  align-items: baseline;
+  display: flex;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-1);
+}
+
+.blood-marker__unit {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+}
+
+.blood-marker .chart-legend {
+  margin-bottom: var(--space-4);
+}
+
+.blood-marker-tooltip {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-sm);
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+}
+
+.blood-marker-tooltip__flag {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* Add / manage section, shown inside the explorer's detail pane. */
+.blood-tests {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.blood-tests h2 {
+  margin: 0;
+}
+
+.blood-tests__manage-summary {
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}

@@ -72,6 +72,8 @@ describe("HealthPage", () => {
     mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
     render(<HealthPage />);
 
+    // Steps sits in the collapsed "Activity & sleep" group until it is opened.
+    fireEvent.click(screen.getByRole("button", { name: /Activity & sleep/ }));
     const list = screen.getByRole("navigation", { name: "Metrics" });
     expect(list).toHaveTextContent("Weight");
     expect(list).toHaveTextContent("Steps");
@@ -203,7 +205,7 @@ describe("HealthPage", () => {
     expect(screen.getByRole("heading", { name: "Sleep time" })).toBeInTheDocument();
   });
 
-  it("lists each blood marker under a collapsible category and charts the selected one", () => {
+  it("lists each blood marker under Blood tests > category and charts the selected one", () => {
     mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
     mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
     mockUseBloodTests.mockReturnValue({
@@ -226,16 +228,42 @@ describe("HealthPage", () => {
       isError: false,
     });
     render(<HealthPage />);
-    // With nothing else to show, the first marker is selected by default -- so its category is
-    // already open.
-    expect(screen.getByRole("button", { name: /Blood · Liver & pancreas/ })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
+    // Blood tests is the only group here, so it is already open; open the category under it.
+    fireEvent.click(screen.getByRole("button", { name: /Liver & pancreas/ }));
+    fireEvent.click(screen.getByRole("button", { name: "ALT" }));
     expect(screen.getByRole("button", { name: "ALT" })).toHaveAttribute("aria-current", "true");
     expect(screen.getByRole("heading", { name: /ALT/ })).toBeInTheDocument();
     expect(screen.getByText(/1 result, 1 outside the range/)).toBeInTheDocument();
     // A blood marker is its own all-time history, so the window controls are not shown for it.
     expect(screen.queryByRole("button", { name: "Week" })).not.toBeInTheDocument();
+  });
+
+  it("groups the body metrics into collapsible categories", () => {
+    mockUseHealthDashboard.mockReturnValue({
+      ...EMPTY,
+      data: {
+        metrics: [
+          { logical_metric: "weight_kg", last_observed: TODAY, daily: [dashboardDay(TODAY, 80)] },
+        ],
+      },
+    });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    render(<HealthPage />);
+    expect(screen.getByRole("button", { name: /Body composition/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("navigation", { name: "Metrics" })).toHaveTextContent("Weight");
+    expect(screen.getByRole("button", { name: /Blood tests/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("offers Add or manage results even before any blood test exists", () => {
+    mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    render(<HealthPage />);
+    expect(screen.getByRole("button", { name: "Add or manage results" })).toBeInTheDocument();
   });
 });

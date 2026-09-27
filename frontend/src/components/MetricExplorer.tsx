@@ -16,6 +16,8 @@ export interface ExplorerMetric {
   content: React.ReactNode;
   /** Collapsible heading this metric is listed under. Omit for a flat, always-visible entry. */
   group?: string;
+  /** Optional second level under `group` (e.g. "Blood tests" > "Lipids"). Ignored without `group`. */
+  subgroup?: string;
   /** Skip `detailHeader` for this metric -- for a metric whose own content isn't a windowed time
    * series (e.g. a blood marker's own all-time history, which the shared window controls above
    * every other metric's chart don't apply to). */
@@ -49,15 +51,34 @@ export function MetricExplorer({
   const active = metrics.find((m) => m.key === selected) ?? metrics[0]!;
 
   const flat = metrics.filter((m) => m.group === undefined);
-  const groups: { name: string; items: ExplorerMetric[] }[] = [];
+  interface GroupNode {
+    name: string;
+    direct: ExplorerMetric[];
+    subgroups: { name: string; items: ExplorerMetric[] }[];
+    total: number;
+  }
+  const groups: GroupNode[] = [];
   for (const m of metrics) {
     if (m.group === undefined) continue;
-    const existing = groups.find((g) => g.name === m.group);
-    if (existing) existing.items.push(m);
-    else groups.push({ name: m.group, items: [m] });
+    let g = groups.find((x) => x.name === m.group);
+    if (!g) {
+      g = { name: m.group, direct: [], subgroups: [], total: 0 };
+      groups.push(g);
+    }
+    g.total += 1;
+    if (m.subgroup === undefined) {
+      g.direct.push(m);
+    } else {
+      let sg = g.subgroups.find((x) => x.name === m.subgroup);
+      if (!sg) {
+        sg = { name: m.subgroup, items: [] };
+        g.subgroups.push(sg);
+      }
+      sg.items.push(m);
+    }
   }
 
-  const isGroupOpen = (name: string) => groupOverride[name] ?? name === active.group;
+  const isOpen = (id: string, holdsActive: boolean) => groupOverride[id] ?? holdsActive;
 
   function renderItem(m: ExplorerMetric) {
     return (
@@ -77,27 +98,55 @@ export function MetricExplorer({
     );
   }
 
+  function renderToggle(id: string, label: string, count: number, open: boolean, sub: boolean) {
+    return (
+      <button
+        type="button"
+        className={
+          sub
+            ? "metric-explorer__group-toggle metric-explorer__group-toggle--sub"
+            : "metric-explorer__group-toggle"
+        }
+        aria-expanded={open}
+        onClick={() => setGroupOverride((prev) => ({ ...prev, [id]: !open }))}
+      >
+        <span className="metric-explorer__caret" aria-hidden="true">
+          {open ? "▾" : "▸"}
+        </span>
+        {label}
+        <span className="metric-explorer__count">{count}</span>
+      </button>
+    );
+  }
+
   return (
     <div className="metric-explorer">
       <nav className="metric-explorer__list" aria-label="Metrics">
         {flat.map(renderItem)}
         {groups.map((g) => {
-          const open = isGroupOpen(g.name);
+          const open = isOpen(g.name, g.name === active.group);
           return (
             <div key={g.name} className="metric-explorer__group">
-              <button
-                type="button"
-                className="metric-explorer__group-toggle"
-                aria-expanded={open}
-                onClick={() => setGroupOverride((prev) => ({ ...prev, [g.name]: !open }))}
-              >
-                <span className="metric-explorer__caret" aria-hidden="true">
-                  {open ? "▾" : "▸"}
-                </span>
-                {g.name}
-                <span className="metric-explorer__count">{g.items.length}</span>
-              </button>
-              {open && <div className="metric-explorer__group-items">{g.items.map(renderItem)}</div>}
+              {renderToggle(g.name, g.name, g.total, open, false)}
+              {open && (
+                <div className="metric-explorer__group-items">
+                  {g.direct.map(renderItem)}
+                  {g.subgroups.map((sg) => {
+                    const id = `${g.name}/${sg.name}`;
+                    const subOpen = isOpen(id, g.name === active.group && sg.name === active.subgroup);
+                    return (
+                      <div key={id} className="metric-explorer__group">
+                        {renderToggle(id, sg.name, sg.items.length, subOpen, true)}
+                        {subOpen && (
+                          <div className="metric-explorer__group-items">
+                            {sg.items.map(renderItem)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}

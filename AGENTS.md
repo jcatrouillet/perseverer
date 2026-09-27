@@ -375,12 +375,20 @@ environment:
   marker as an entry in the left menu where we can track the marker over time, flag in the graph
   the values outside of the standard"), then, once ~90 distinct markers were in (a full CBC with
   differential alone is 20), "the list becomes long, maybe create categories". Every distinct
-  `blood_test_result.marker` is now an entry in `HealthPage.tsx`'s own `MetricExplorer` list, under
-  a collapsible category heading (`bloodMarkers.ts::markerCategory`, regex rules in a fixed order:
-  Lipids / Glucose & thyroid / Electrolytes & kidney / Liver & pancreas / Blood count / Blood gas /
-  Other — a navigation aid only, never a clinical classification; `MetricExplorer`'s new optional
-  `group` field renders these, a group being open while it holds the selected marker and toggleable
-  by hand, the list itself scrolling independently rather than running off the page). Selecting a
+  `blood_test_result.marker` is now an entry in `HealthPage.tsx`'s own `MetricExplorer` list, and the
+  whole menu is a **two-level collapsible tree** (reported as "the page looks horrible" once the
+  flat list grew: the existing body metrics had no structure either, and the first attempt's
+  inner-scrolling list with a chunky scrollbar looked wrong): top-level groups Body composition /
+  Heart & vitals / Activity & sleep (each `CHARTS` entry carries a `group`; `GROUP_ORDER` fixes the
+  order) and Blood tests, whose entries sit under a subcategory (`bloodMarkers.ts::markerCategory`,
+  regex rules in a fixed order: Lipids / Glucose & thyroid / Electrolytes & kidney / Liver &
+  pancreas / Blood count / Blood gas / Other — a navigation aid only, never a clinical
+  classification). `MetricExplorer`'s optional `group`/`subgroup` fields render this: a group is
+  open while it holds the selected metric and toggleable by hand, items are indented under a thin
+  rail, the list has no scrollbar of its own (collapsed groups keep it short), and it is a plain
+  vertical accordion on mobile too. "Add or manage results" is the first entry under Blood tests (so
+  a brand-new athlete with no results can still reach the add form) — the old separately-styled
+  card under the page is gone. Selecting a
   marker shows `BloodMarkerChart.tsx`: the values as a line over real time (a numeric time-scaled
   x-axis with whole-year ticks, since lab draws are sparse and span decades, not the daily-series
   windowing `TrendControls`/`trendWindow.ts` assume — hence `ExplorerMetric.hideDetailHeader`), each
@@ -390,9 +398,10 @@ environment:
   `bloodMarkers.ts` and unchanged: a result with no range is never flagged, a value exactly on a
   bound is in range) — plus the marker's results as a newest-first table with the same inline
   Edit/Delete (`BloodTestsPanel.tsx::ResultRow`, now exported, with a `lead="date"` variant for a
-  single marker's own history). `BloodTestsPanel` stays below the explorer for what a per-marker view
+  single marker's own history). `BloodTestsPanel` remains for what a per-marker view
   can't do — adding a new draw, and the old by-date view (per-panel lab/notes edit, delete a whole
-  test) now behind a collapsed "Manage by test date" `<details>`. No API change. A real layout bug
+  test) behind a collapsed "Manage by test date" `<details>`; both render inside the explorer's
+  detail pane as that "Add or manage results" entry. No API change. A real layout bug
   caught live at 375px: `.metric-explorer`'s desktop `align-items: flex-start` becomes content-
   sized in the mobile column layout, so a responsive chart sized itself off its last-measured
   (desktop) width and pushed the whole page to 531px — the mobile rule now `align-items: stretch`.

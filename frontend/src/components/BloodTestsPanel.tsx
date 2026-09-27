@@ -642,10 +642,10 @@ export function BloodTestsPanel() {
   const markerCatalog = useMemo(() => buildMarkerCatalog(results.data ?? []), [results.data]);
 
   return (
-    <section className="card">
-      <h2>Blood tests</h2>
+    <section className="blood-tests">
+      <h2>Add or manage blood tests</h2>
       <p className="chart-note">
-        Every marker you have recorded is listed in the menu above, each charted over time. Use
+        Every marker you have recorded is listed in the menu on the left, each charted over time. Use
         this section to add a new blood test, or to correct or delete results by test date.
         Reference ranges (when given) come from your own lab report -- shown only to flag values
         outside the range you provided, not as medical advice.

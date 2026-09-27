@@ -49,6 +49,10 @@ export const WEIGHT_METRIC = ["weight_kg"];
 const TODAY = isoDate(new Date());
 
 const BLOOD_PREFIX = "blood:";
+const BLOOD_MANAGE_KEY = "blood-manage";
+
+/** Order of the top-level menu groups: body metrics first, blood tests last. */
+const GROUP_ORDER = ["Body composition", "Heart & vitals", "Activity & sleep", "Blood tests"];
 
 function color(logicalMetric: string): string {
   return toneColor(healthMetricStyle(logicalMetric).tone);
@@ -83,28 +87,39 @@ const wholeNumber = (unit: string) => (v: number) => `${v.toFixed(0)}${unit}`;
 // One list entry per requested metric -- combined two-line entries (Respiration, Heart rate,
 // Blood pressure) match the "Heart rate (max and resting)" combining the user asked for
 // verbatim, applied consistently to the other two paired readings this app happens to carry.
-const CHARTS: { key: string; title: string; keys: string[]; series: TrendSeries[] }[] = [
+const CHARTS: {
+  key: string;
+  title: string;
+  group: string;
+  keys: string[];
+  series: TrendSeries[];
+}[] = [
   {
     key: "weight",
+    group: "Body composition",
     title: "Weight",
     keys: ["weight_kg"],
     series: [series("weight_kg", "Weight", oneDecimal(" kg"))],
   },
-  { key: "bmi", title: "BMI", keys: ["bmi"], series: [series("bmi", "BMI", oneDecimal(""))] },
+  { key: "bmi",
+    group: "Body composition", title: "BMI", keys: ["bmi"], series: [series("bmi", "BMI", oneDecimal(""))] },
   {
     key: "sleep",
+    group: "Activity & sleep",
     title: "Sleep time",
     keys: ["sleep_hours"],
     series: [series("sleep_hours", "Sleep", oneDecimal("h"))],
   },
   {
     key: "spo2",
+    group: "Heart & vitals",
     title: "Pulse Ox",
     keys: ["spo2_average"],
     series: [series("spo2_average", "SpO2", wholeNumber("%"))],
   },
   {
     key: "respiration",
+    group: "Heart & vitals",
     title: "Respiration",
     keys: ["waking_respiration_rate", "sleep_respiration_rate"],
     series: [
@@ -114,6 +129,7 @@ const CHARTS: { key: string; title: string; keys: string[]; series: TrendSeries[
   },
   {
     key: "heart-rate",
+    group: "Heart & vitals",
     title: "Heart rate",
     keys: ["max_heart_rate", "resting_heart_rate"],
     // max_heart_rate/resting_heart_rate share one "hr" tone in metricStyle.ts (both are the
@@ -127,6 +143,7 @@ const CHARTS: { key: string; title: string; keys: string[]; series: TrendSeries[
   },
   {
     key: "blood-pressure",
+    group: "Heart & vitals",
     title: "Blood pressure",
     keys: ["blood_pressure_systolic", "blood_pressure_diastolic"],
     series: [
@@ -136,54 +153,63 @@ const CHARTS: { key: string; title: string; keys: string[]; series: TrendSeries[
   },
   {
     key: "steps",
+    group: "Activity & sleep",
     title: "Steps",
     keys: ["steps"],
     series: [series("steps", "Steps", wholeNumber(""))],
   },
   {
     key: "body-fat",
+    group: "Body composition",
     title: "Body fat %",
     keys: ["body_fat_pct"],
     series: [series("body_fat_pct", "Body fat", oneDecimal("%"))],
   },
   {
     key: "muscle-mass",
+    group: "Body composition",
     title: "Muscle mass",
     keys: ["muscle_mass_kg"],
     series: [series("muscle_mass_kg", "Muscle mass", oneDecimal(" kg"))],
   },
   {
     key: "bone-mass",
+    group: "Body composition",
     title: "Bone mass",
     keys: ["bone_mass_kg"],
     series: [series("bone_mass_kg", "Bone mass", oneDecimal(" kg"))],
   },
   {
     key: "water",
+    group: "Body composition",
     title: "Water %",
     keys: ["water_pct"],
     series: [series("water_pct", "Water", oneDecimal("%"))],
   },
   {
     key: "bmr",
+    group: "Body composition",
     title: "BMR",
     keys: ["bmr_kcal"],
     series: [series("bmr_kcal", "BMR", wholeNumber(" kcal"))],
   },
   {
     key: "visceral-fat",
+    group: "Body composition",
     title: "Visceral fat",
     keys: ["visceral_fat"],
     series: [series("visceral_fat", "Visceral fat", oneDecimal(""))],
   },
   {
     key: "metabolic-age",
+    group: "Body composition",
     title: "Metabolic age",
     keys: ["metabolic_age"],
     series: [series("metabolic_age", "Metabolic age", wholeNumber(""))],
   },
   {
     key: "protein-ratio",
+    group: "Body composition",
     title: "Protein ratio %",
     keys: ["protein_ratio_pct"],
     series: [series("protein_ratio_pct", "Protein ratio", oneDecimal("%"))],
@@ -223,7 +249,9 @@ export function HealthPage() {
   // it neither takes part in the shared window controls nor in `activeChart`'s history bounds.
   const activeChart =
     availableCharts.find((c) => c.key === selectedMetric) ??
-    (selectedMetric?.startsWith(BLOOD_PREFIX) ? null : availableCharts[0]) ??
+    (selectedMetric?.startsWith(BLOOD_PREFIX) || selectedMetric === BLOOD_MANAGE_KEY
+      ? null
+      : availableCharts[0]) ??
     null;
 
   // Scoped to the *selected* metric's own keys -- not a merge across every metric on the page --
@@ -258,13 +286,26 @@ export function HealthPage() {
 
   const bloodMetrics: ExplorerMetric[] = useMemo(
     () =>
-      bloodSeries.map((s) => ({
-        key: `${BLOOD_PREFIX}${s.marker}`,
-        title: s.marker,
-        group: `Blood · ${s.category}`,
-        hideDetailHeader: true,
-        content: <BloodMarkerChart marker={s.marker} results={s.results} />,
-      })),
+      [
+        // Adding / correcting results lives in the same menu as the charts (rather than as a
+        // differently-styled card under the page) -- and is the only Blood tests entry until the
+        // first result exists, so a brand-new athlete can still reach the add form.
+        {
+          key: BLOOD_MANAGE_KEY,
+          title: "Add or manage results",
+          group: "Blood tests",
+          hideDetailHeader: true,
+          content: <BloodTestsPanel />,
+        },
+        ...bloodSeries.map((s) => ({
+          key: `${BLOOD_PREFIX}${s.marker}`,
+          title: s.marker,
+          group: "Blood tests",
+          subgroup: s.category,
+          hideDetailHeader: true,
+          content: <BloodMarkerChart marker={s.marker} results={s.results} />,
+        })),
+      ],
     [bloodSeries],
   );
 
@@ -275,6 +316,7 @@ export function HealthPage() {
         return {
           key: chart.key,
           title: chart.title,
+          group: chart.group,
           content: (
             <ChartFullscreen title={chart.title}>
               <TrendChart points={points} series={chart.series} />
@@ -283,7 +325,7 @@ export function HealthPage() {
         };
       }),
       ...bloodMetrics,
-    ],
+    ].sort((a, b) => GROUP_ORDER.indexOf(a.group ?? "") - GROUP_ORDER.indexOf(b.group ?? "")),
     [availableCharts, window, bloodMetrics],
   );
 
@@ -294,7 +336,7 @@ export function HealthPage() {
       {isLoading && <LoadingSpinner />}
       {isError && <p role="alert">Could not load the health dashboard.</p>}
 
-      {!isLoading && !isError && metrics.length > 0 && (
+      {!isLoading && !isError && (
         <MetricExplorer
           metrics={metrics}
           selected={selectedMetric}
@@ -313,8 +355,6 @@ export function HealthPage() {
           }
         />
       )}
-
-      <BloodTestsPanel />
     </main>
   );
 }

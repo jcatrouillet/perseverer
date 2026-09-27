@@ -109,3 +109,28 @@ describe("MetricExplorer groups", () => {
     expect(screen.getByText("alt chart")).toBeInTheDocument();
   });
 });
+
+describe("MetricExplorer subgroups", () => {
+  const NESTED: ExplorerMetric[] = [
+    { key: "add", title: "Add results", group: "Blood tests", content: <p>add</p> },
+    { key: "b:ldl", title: "LDL", group: "Blood tests", subgroup: "Lipids", content: <p>ldl</p> },
+    { key: "b:alt", title: "ALT", group: "Blood tests", subgroup: "Liver", content: <p>alt</p> },
+  ];
+
+  it("nests subgroups under their group, each collapsed until opened", () => {
+    render(<MetricExplorer metrics={NESTED} selected="add" onSelect={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /Blood tests/ })).toHaveTextContent("3");
+    expect(screen.getByRole("button", { name: "Add results" })).toBeInTheDocument();
+    const lipids = screen.getByRole("button", { name: /Lipids/ });
+    expect(lipids).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "LDL" })).not.toBeInTheDocument();
+    fireEvent.click(lipids);
+    expect(screen.getByRole("button", { name: "LDL" })).toBeInTheDocument();
+  });
+
+  it("opens the group and subgroup holding the selected metric", () => {
+    render(<MetricExplorer metrics={NESTED} selected="b:alt" onSelect={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /Liver/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Lipids/ })).toHaveAttribute("aria-expanded", "false");
+  });
+});

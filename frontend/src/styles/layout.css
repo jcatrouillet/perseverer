@@ -803,15 +803,10 @@ tbody tr:last-child td {
 }
 
 .metric-explorer__list {
-  flex: 0 0 12rem;
+  flex: 0 0 14rem;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  position: sticky;
-  top: calc(3.5rem + var(--space-4));
-  /* Long once category groups are expanded -- scrolls on its own instead of running off-page. */
-  max-height: calc(100vh - 5rem - var(--space-4));
-  overflow-y: auto;
 }
 
 .metric-explorer__item {
@@ -842,43 +837,61 @@ tbody tr:last-child td {
   min-width: 0;
 }
 
-/* Collapsible category (the Health page's blood-test markers). */
+/* Collapsible category / subcategory. Items sit indented under a thin rail so the hierarchy reads
+   at a glance without the list needing its own scrollbar (groups start collapsed). */
 .metric-explorer__group {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  margin-top: var(--space-2);
 }
 
 .metric-explorer__group-toggle {
   align-items: center;
   background: none;
-  border: none;
-  color: var(--color-text-faint);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
   cursor: pointer;
   display: flex;
-  font-size: var(--font-size-xs, 0.75rem);
+  font-size: var(--font-size-sm);
   font-weight: 700;
   gap: var(--space-2);
-  letter-spacing: 0.04em;
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   text-align: left;
-  text-transform: uppercase;
 }
 
 .metric-explorer__group-toggle:hover {
-  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.metric-explorer__group-toggle--sub {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.metric-explorer__caret {
+  color: var(--color-text-faint);
+  font-size: 0.7rem;
+  width: 0.8rem;
 }
 
 .metric-explorer__count {
-  font-weight: 500;
+  background: var(--color-surface-raised);
+  border-radius: 999px;
+  color: var(--color-text-faint);
+  font-size: 0.7rem;
+  font-weight: 600;
   margin-left: auto;
+  padding: 0 var(--space-2);
 }
 
 .metric-explorer__group-items {
+  border-left: 2px solid var(--color-border);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  margin-left: var(--space-3);
+  padding-left: var(--space-2);
 }
 
 @media (max-width: 720px) {
@@ -891,37 +904,13 @@ tbody tr:last-child td {
   }
 
   .metric-explorer__list {
-    /* Overrides the desktop rule's `flex: 0 0 12rem` -- that sizes this element along
-       `.metric-explorer`'s own main axis, which just switched from horizontal to vertical
-       above, so left unset it would make this list 12rem *tall* instead of the intended 12rem
-       *wide* sidebar (confirmed live: without this, the pill row renders as one giant column-
-       height bar). `flex: none` plus an explicit `width` replaces it with sizing that means the
-       same thing again now that the axis has changed. */
+    /* Overrides the desktop rule's `flex: 0 0 14rem` -- that sizes this element along
+       `.metric-explorer`'s own main axis, which just switched from horizontal to vertical, so
+       left unset it would make this list 14rem *tall* instead of the intended sidebar width.
+       Groups are collapsible accordions now, so the list simply stacks above the chart as a
+       full-width column rather than the old sideways-scrolling pill row. */
     flex: none;
-    position: static;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    max-height: none;
     width: 100%;
-  }
-
-  .metric-explorer__item {
-    flex-shrink: 0;
-  }
-
-  /* The pill row scrolls sideways: each category sits inline as its own toggle followed by its
-     pills once open. */
-  .metric-explorer__group,
-  .metric-explorer__group-items {
-    flex-direction: row;
-    align-items: center;
-    margin-top: 0;
-  }
-
-  .metric-explorer__group-toggle {
-    flex-shrink: 0;
-    white-space: nowrap;
   }
 }
 
