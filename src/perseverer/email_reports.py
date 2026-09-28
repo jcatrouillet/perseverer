@@ -24,8 +24,12 @@ fires on, the same "logical now" this whole report is built around), never a har
 
 The HTML is deliberately email-client-safe: one inline-styled table layout, a light palette
 only, no `<style>` block, no external images or links -- with a plaintext alternative alongside.
-A send reads the local DB, whose newest Garmin data is from that morning's 04:15 sync, so the
-send day's own activities may not be counted yet -- the footer says as much.
+A send reads the local DB. The weekly job (`worker/main.py::_sync_garmin_before_report`) re-syncs
+that athlete's own Garmin data immediately before building the report, closing the gap between
+the last scheduled 04:15 sync and the 18:00 send -- best-effort, though: a sync failure (rate
+limit, no token store) never blocks the send, so the send day's own activities can still be
+missing on a bad day, which is what the footer's own caveat covers. The monthly job does not
+re-sync (see that function's own docstring for why).
 """
 
 from __future__ import annotations

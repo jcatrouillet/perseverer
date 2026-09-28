@@ -1632,6 +1632,17 @@ environment:
   (`entity_type="week"`, `entity_id` = that week's own Monday -- the exact same row the calendar's
   own week-notes panel reads and writes) -- omitted entirely, not shown empty, when the athlete
   hasn't written one.
+  **Revision: the weekly job syncs Garmin first, per athlete** — asked directly ("can you do a
+  sync with garmin before sending the weekly email?"). The report sends at 18:00, hours after the
+  daily 04:15 scheduled sync, so without this the send day's own activities were always missing
+  from "this week's" totals — the exact gap the footer's own caveat already existed to cover.
+  `worker/main.py::_sync_garmin_before_report` calls the same `sync_garmin_connect` the daily job
+  uses, with that athlete's own token store, right before `send_report_email` for each opted-in
+  athlete — best-effort, same posture as every other scheduled-job failure in this file: a sync
+  failure (rate limit, no token store yet, a vendor error) is logged and the send still goes out
+  with whatever the DB already has, never blocking or failing the email itself. Deliberately
+  weekly-only: the monthly report already has, at most, one extra unsynced day out of a whole
+  month's totals — not worth a second daily Garmin API hit per athlete for a change that small.
 - **Races on the calendar (`planned_race`, `planned_races.py`)**: a dated event with a distance
   and an optional target finish time — deliberately its own table, not a `planned_workout` sport
   tier, since a race has no step model and is never pushed to Garmin. Own id-keyed table (any

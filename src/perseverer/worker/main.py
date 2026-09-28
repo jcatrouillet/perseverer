@@ -6,6 +6,12 @@ All three schedules resolve against `schedule_timezone` (an IANA name, default U
 container's own system clock -- see that setting's own docstring in config.py for why a real
 timezone rather than a fixed hour offset matters here (DST).
 
+The weekly email job (Sunday 18:00 local, see email_reports.py) additionally re-syncs each
+opted-in athlete's own Garmin data immediately before building their report -- see
+`_sync_garmin_before_report`'s own docstring for why that job specifically needs it (a same-day
+sync gap the plain scheduled sync above can't close, being many hours earlier) and why the
+monthly report does not get the same treatment.
+
 `garmin_export` is deliberately never scheduled here — it's a one-off/occasional CLI action
 (`sync import garmin-export <path>`), not a recurring job. Same for `sync backup restore` --
 CLI-only, human-initiated, never automated (see backup.py's own docstring for why).
@@ -252,12 +258,55 @@ def run_daily_workout_push() -> None:
         logger.info("scheduled workout push finished: pushed=%d of %d due", pushed, len(due))
 
 
+def _sync_garmin_before_report(conn: Connection, settings: Settings, athlete_id: str) -> None:
+    """Best-effort Garmin sync right before building the weekly email, so it can include the
+    athlete's own send-day activities rather than only whatever the last scheduled 04:15 sync
+    already saw (the send-day gap the report's own footer has always had to warn about). Never
+    blocks the send: any failure here (rate limit, no token store yet, a vendor error) is logged
+    and the report still goes out with whatever the DB already has, same fallback the footer
+    already states -- same "one athlete's problem never stops another's" posture run_daily_sync
+    already applies to the equivalent scheduled sync."""
+    try:
+        logger.info("syncing garmin_connect for %s before weekly email", athlete_id)
+        summary = sync_garmin_connect(
+            conn,
+            settings.raw_archive_dir,
+            settings.parquet_dir,
+            settings.garmin_tokenstore_dir_for(athlete_id),
+            athlete_id=athlete_id,
+            rolling_window_days=settings.garmin_rolling_window_days,
+            rate_limits=RateLimitSettings(
+                request_interval_s=settings.garmin_request_interval_s,
+                max_requests_per_hour=settings.garmin_max_requests_per_hour,
+            ),
+        )
+        logger.info(
+            "pre-email garmin_connect sync finished for %s: seen=%d new=%d errors=%d",
+            athlete_id,
+            summary.items_seen,
+            summary.items_new,
+            len(summary.errors),
+        )
+    except GarminRateLimitAborted as e:
+        logger.warning("pre-email garmin sync for %s aborted by rate limit: %s", athlete_id, e)
+    except Exception:
+        conn.rollback()
+        logger.exception("pre-email garmin sync failed unexpectedly for athlete %s", athlete_id)
+
+
 def _run_email_reports(kind: ReportKind) -> None:
     """Shared body for the weekly/monthly email jobs. `today` is derived from
     `datetime.now(schedule_timezone)` -- the same wall clock the CronTrigger fires against -- so
     the "previous week"/"previous month" window matches the day the job actually runs on. One
     send per opted-in athlete that also has an `athlete.email`; per-athlete try/except so one
-    failure doesn't stop the rest (same shape as run_daily_sync)."""
+    failure doesn't stop the rest (same shape as run_daily_sync).
+
+    The weekly report additionally syncs that athlete's own Garmin data first (see
+    `_sync_garmin_before_report`) -- it runs at 18:00, long after the 04:15 scheduled sync, so
+    without this the whole day's own activities would be missing from "this week's" totals. The
+    monthly report keeps the plain last-scheduled-sync data: a whole month's own totals are not
+    meaningfully changed by one extra day, so it isn't worth a second daily Garmin API hit for
+    every athlete."""
     settings = get_settings()
     if not settings.smtp_configured:
         logger.info("%s email reports skipped: SMTP not configured", kind)
@@ -269,10 +318,10 @@ def _run_email_reports(kind: ReportKind) -> None:
         athlete_ids = athletes_opted_in(conn, kind=kind)
         logger.info("%s email reports: %d athlete(s) opted in", kind, len(athlete_ids))
         for athlete_id in athlete_ids:
+            if kind == "weekly":
+                _sync_garmin_before_report(conn, settings, athlete_id)
             try:
-                send_report_email(
-                    settings, conn, athlete_id=athlete_id, kind=kind, today=today
-                )
+                send_report_email(settings, conn, athlete_id=athlete_id, kind=kind, today=today)
             except ValueError as e:
                 logger.warning("%s email report skipped for %s: %s", kind, athlete_id, e)
             except Exception:

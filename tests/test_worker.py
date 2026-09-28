@@ -22,6 +22,7 @@ from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.worker.main import (
     run_daily_sync,
     run_daily_workout_push,
+    run_monthly_email_report,
     run_weekly_email_report,
 )
 
@@ -193,6 +194,179 @@ def test_weekly_email_report_skips_an_athlete_with_no_email_without_crashing(
         run_weekly_email_report()  # must not raise
 
 
+def test_weekly_email_report_syncs_garmin_first_for_each_opted_in_athlete(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.insert().values(
+                id=SECOND_ATHLETE_ID,
+                display_name="Two",
+                timezone="UTC",
+                unit_preference="metric",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+    _opt_in(engine, DEFAULT_ATHLETE_ID, weekly=True)
+    _opt_in(engine, SECOND_ATHLETE_ID, weekly=True)
+
+    synced: list[str] = []
+    sent: list[str] = []
+
+    def fake_sync_garmin_connect(
+        conn: Any,
+        raw_dir: Any,
+        parquet_dir: Any,
+        tokenstore_dir: Any,
+        *,
+        athlete_id: str,
+        **kw: Any,
+    ) -> IngestRunSummary:
+        synced.append(athlete_id)
+        return IngestRunSummary(run_id=0)
+
+    settings = Settings(
+        data_dir=tmp_path,
+        smtp_host="ssl0.ovh.net",
+        smtp_username="u",
+        smtp_password="p",
+        smtp_from="f@example.com",
+    )
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.sync_garmin_connect", side_effect=fake_sync_garmin_connect),
+        patch(
+            "perseverer.worker.main.send_report_email",
+            side_effect=lambda *a, **kw: sent.append(kw["athlete_id"]),
+        ),
+    ):
+        run_weekly_email_report()
+
+    assert set(synced) == {DEFAULT_ATHLETE_ID, SECOND_ATHLETE_ID}
+    assert set(sent) == {DEFAULT_ATHLETE_ID, SECOND_ATHLETE_ID}
+
+
+def test_weekly_email_still_sends_when_the_pre_send_garmin_sync_fails(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _opt_in(engine, DEFAULT_ATHLETE_ID, weekly=True)
+
+    sent: list[str] = []
+    settings = Settings(
+        data_dir=tmp_path,
+        smtp_host="ssl0.ovh.net",
+        smtp_username="u",
+        smtp_password="p",
+        smtp_from="f@example.com",
+    )
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch(
+            "perseverer.worker.main.sync_garmin_connect",
+            side_effect=RuntimeError("no token store yet"),
+        ),
+        patch(
+            "perseverer.worker.main.send_report_email",
+            side_effect=lambda *a, **kw: sent.append(kw["athlete_id"]),
+        ),
+    ):
+        run_weekly_email_report()  # must not raise -- the send still goes out
+
+    assert sent == [DEFAULT_ATHLETE_ID]
+
+
+def test_weekly_email_sync_rate_limit_for_one_athlete_does_not_block_anothers_send(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.insert().values(
+                id=SECOND_ATHLETE_ID,
+                display_name="Two",
+                timezone="UTC",
+                unit_preference="metric",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+    _opt_in(engine, DEFAULT_ATHLETE_ID, weekly=True)
+    _opt_in(engine, SECOND_ATHLETE_ID, weekly=True)
+
+    from perseverer.adapters.garmin_connect import GarminRateLimitAborted
+
+    sent: list[str] = []
+
+    def fake_sync_garmin_connect(
+        conn: Any,
+        raw_dir: Any,
+        parquet_dir: Any,
+        tokenstore_dir: Any,
+        *,
+        athlete_id: str,
+        **kw: Any,
+    ) -> IngestRunSummary:
+        if athlete_id == DEFAULT_ATHLETE_ID:
+            raise GarminRateLimitAborted("429")
+        return IngestRunSummary(run_id=0)
+
+    settings = Settings(
+        data_dir=tmp_path,
+        smtp_host="ssl0.ovh.net",
+        smtp_username="u",
+        smtp_password="p",
+        smtp_from="f@example.com",
+    )
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.sync_garmin_connect", side_effect=fake_sync_garmin_connect),
+        patch(
+            "perseverer.worker.main.send_report_email",
+            side_effect=lambda *a, **kw: sent.append(kw["athlete_id"]),
+        ),
+    ):
+        run_weekly_email_report()
+
+    # Both athletes still get their email even though the first one's own pre-send sync hit
+    # Garmin's rate limit.
+    assert set(sent) == {DEFAULT_ATHLETE_ID, SECOND_ATHLETE_ID}
+
+
+def test_monthly_email_report_does_not_sync_garmin_first(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete_email_report_config.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                weekly_enabled=False,
+                monthly_enabled=True,
+                updated_at=dt.datetime.now(dt.UTC).replace(tzinfo=None),
+            )
+        )
+        conn.commit()
+
+    settings = Settings(
+        data_dir=tmp_path,
+        smtp_host="ssl0.ovh.net",
+        smtp_username="u",
+        smtp_password="p",
+        smtp_from="f@example.com",
+    )
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.sync_garmin_connect") as mock_sync,
+        patch("perseverer.worker.main.send_report_email"),
+    ):
+        run_monthly_email_report()
+
+    mock_sync.assert_not_called()
+
+
 def test_rate_limit_abort_stops_the_loop_without_marking_remaining_failed(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     today = dt.datetime.now(dt.UTC).date()
@@ -334,9 +508,7 @@ def test_run_daily_sync_syncs_every_athlete_independently(tmp_path: Path) -> Non
     with (
         patch("perseverer.worker.main.get_settings", return_value=settings),
         patch("perseverer.worker.main.make_engine", return_value=engine),
-        patch(
-            "perseverer.worker.main.sync_garmin_connect", side_effect=fake_sync_garmin_connect
-        ),
+        patch("perseverer.worker.main.sync_garmin_connect", side_effect=fake_sync_garmin_connect),
     ):
         run_daily_sync()
 
@@ -377,9 +549,7 @@ def test_run_daily_sync_one_athletes_failure_does_not_block_another(tmp_path: Pa
     with (
         patch("perseverer.worker.main.get_settings", return_value=settings),
         patch("perseverer.worker.main.make_engine", return_value=engine),
-        patch(
-            "perseverer.worker.main.sync_garmin_connect", side_effect=fake_sync_garmin_connect
-        ),
+        patch("perseverer.worker.main.sync_garmin_connect", side_effect=fake_sync_garmin_connect),
     ):
         run_daily_sync()  # must not raise -- a per-athlete failure is caught and logged
 
