@@ -25,6 +25,7 @@ def _activity(
         max_cadence=None,
         elevation_gain_m=None,
         elevation_loss_m=None,
+        max_altitude_m=None,
         temperature_min_c=None,
         temperature_max_c=None,
     )
@@ -155,8 +156,6 @@ class TestComputeWindowBestInsights:
             _activity("recent_best", "2026-08-10", 5000.0, 1300.0),
         ]
         insights = compute_window_best_insights(activities, dt.date(2026, 8, 14))
-        windows = {
-            i.window for i in insights if i.subject_key == "window_best:run:5 km"
-        }
+        windows = {i.window for i in insights if i.subject_key == "window_best:run:5 km"}
         assert "30d" in windows
         assert "90d" in windows  # recent_best is still the only/fastest candidate at 90d too

@@ -76,9 +76,7 @@ def window_streak_insights(
     activities: list[InsightActivity], window: str, days: int | None, as_of: date
 ) -> list[Insight]:
     start = window_start_date(window, days, as_of)
-    windowed = [
-        a for a in activities if start.isoformat() <= a.local_date <= as_of.isoformat()
-    ]
+    windowed = [a for a in activities if start.isoformat() <= a.local_date <= as_of.isoformat()]
     dates = _distinct_dates(windowed)
     insights: list[Insight] = []
 

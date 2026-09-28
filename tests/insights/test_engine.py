@@ -230,9 +230,7 @@ def test_load_and_health_insights_are_assembled_from_real_tables(tmp_path) -> No
                     athlete_id=DEFAULT_ATHLETE_ID,
                     local_date=d.isoformat(),
                     start_time_utc=dt.datetime.combine(d, dt.time(23, 0)),
-                    end_time_utc=dt.datetime.combine(
-                        d + dt.timedelta(days=1), dt.time(6, 0)
-                    ),
+                    end_time_utc=dt.datetime.combine(d + dt.timedelta(days=1), dt.time(6, 0)),
                     total_sleep_s=25200.0,
                     sleep_score=80.0,
                     source="fit_folder",

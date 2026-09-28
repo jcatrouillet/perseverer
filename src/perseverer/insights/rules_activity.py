@@ -33,7 +33,7 @@ fields, so it's not a contradiction in the data), but if only one or two activit
 window even have weather data at all, "hottest of 2" reads as an invented-sounding claim, same
 underlying issue as a 1-day "streak." Scoped to temperature only (`_POOL_CHECKED_DIMENSIONS`) --
 weather is the one dimension with genuinely sparse coverage (not every activity has GPS/location
-to fetch it for); distance, pace, heart rate, elevation, and start time are recorded on
+to fetch it for); distance, pace, heart rate, elevation, altitude, and start time are recorded on
 essentially every activity, so the same population check would just suppress ordinary, real
 "longest run" claims for a normal-sized history.
 
@@ -102,6 +102,7 @@ _EFFORT_PHRASES: dict[str, str] = {
     "max_cadence": "Highest max cadence",
     "elevation_gain": "Most elevation gained",
     "elevation_loss": "Most elevation lost",
+    "max_altitude": "Highest point reached",
     "start_earliest": "Earliest start",
     "start_latest": "Latest start",
     "temperature_high": "Hottest run",
@@ -124,22 +125,24 @@ class _ClimbDimension:
 _CLIMB_DIMENSIONS: tuple[_ClimbDimension, ...] = (
     _ClimbDimension("route_count", "Most routes", "high", lambda a: a.climb_route_count, "routes"),
     _ClimbDimension(
-        "attempted_grade", "Highest attempted grade", "high",
-        lambda a: a.climb_max_attempted_grade, "V-grade",
+        "attempted_grade",
+        "Highest attempted grade",
+        "high",
+        lambda a: a.climb_max_attempted_grade,
+        "V-grade",
     ),
     _ClimbDimension(
-        "completed_grade", "Highest completed grade", "high",
-        lambda a: a.climb_max_completed_grade, "V-grade",
+        "completed_grade",
+        "Highest completed grade",
+        "high",
+        lambda a: a.climb_max_completed_grade,
+        "V-grade",
     ),
     _ClimbDimension("climb_time", "Longest climb time", "high", lambda a: a.climb_time_s, "s"),
     _ClimbDimension("max_hr_high", "Highest heart rate", "high", lambda a: a.max_hr, "bpm"),
     _ClimbDimension("max_hr_low", "Lowest peak heart rate", "low", lambda a: a.max_hr, "bpm"),
-    _ClimbDimension(
-        "avg_hr_high", "Highest average heart rate", "high", lambda a: a.avg_hr, "bpm"
-    ),
-    _ClimbDimension(
-        "avg_hr_low", "Lowest average heart rate", "low", lambda a: a.avg_hr, "bpm"
-    ),
+    _ClimbDimension("avg_hr_high", "Highest average heart rate", "high", lambda a: a.avg_hr, "bpm"),
+    _ClimbDimension("avg_hr_low", "Lowest average heart rate", "low", lambda a: a.avg_hr, "bpm"),
 )
 
 _CLIMB_WINDOWS: tuple[tuple[str, int | None], ...] = (
@@ -174,9 +177,7 @@ def _window_activities(
     if window == _ALL_TIME_WINDOW:
         return bounded_activities
     start = window_start_date(window, _WINDOW_DAYS_BY_NAME.get(window), as_of)
-    return [
-        a for a in bounded_activities if start.isoformat() <= a.local_date <= as_of.isoformat()
-    ]
+    return [a for a in bounded_activities if start.isoformat() <= a.local_date <= as_of.isoformat()]
 
 
 def _has_real_comparison(
@@ -301,9 +302,7 @@ def compute_activity_insights(
     already-bounded list" contract."""
     # Bouldering has route-specific records. Do not run the generic effort rules for it: those
     # would describe a bouldering session as a "run" and include irrelevant distance metrics.
-    if any(
-        a.id == activity_id and a.climb_route_count is not None for a in bounded_activities
-    ):
+    if any(a.id == activity_id and a.climb_route_count is not None for a in bounded_activities):
         return _compute_climbing_activity_insights(activity_id, bounded_activities, as_of)
 
     effort_all = compute_effort_insights(bounded_activities, as_of)
@@ -319,9 +318,7 @@ def compute_activity_insights(
         _upgrade_to_all_time(i, activity_id, bounded_activities) for i in effort_deduped
     ]
     results = (
-        effort_final
-        + _dedupe_widest_window(pb, as_of)
-        + _dedupe_widest_window(window_best, as_of)
+        effort_final + _dedupe_widest_window(pb, as_of) + _dedupe_widest_window(window_best, as_of)
     )
 
     # Restricted to running activities only -- a "run streak" (consecutive days with a run), not

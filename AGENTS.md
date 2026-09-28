@@ -1043,6 +1043,17 @@ environment:
   exactly what a "last 30 days"-style window needs). `GET /api/v1/insights` is a plain read,
   same rollup-mandate discipline as everything else. See `docs/adr/0012-phase-8-strava-merge-
   insights.md` for the exact windows/dimensions and the deliberately-adjustable thresholds.
+  **Revision: a "Highest point reached" dimension** — asked directly for the per-activity Run
+  insights panel to surface the highest altitude reached, tracked across every period the way the
+  other effort dimensions already are (30d/90d/180d/year/365d, then upgraded to "ever" by
+  `rules_activity.py::_upgrade_to_all_time` when the activity is genuinely the all-time extreme
+  with no window restriction). `activity.max_altitude_m` (already stored — FIT's
+  `enhanced_max_altitude`/`max_altitude`) is now loaded into `InsightActivity`
+  (`insights/engine.py::load_insight_activities`) and added as a `rules_efforts.py` `_Dimension`
+  ("max_altitude", sport-scoped like elevation gain/loss — a hiker's high point and a runner's
+  aren't a meaningful comparison against each other), so it flows through the exact same
+  find-extreme/dedupe-to-widest-window/relabel pipeline every other effort dimension already
+  uses, with no new code path.
 - **`garmin_connect` safety rules, non-negotiable**: it never constructs a credentialed client
   automatically — `authenticate()` only loads the token store (`data/garmin_tokens/`), and if
   that fails, raises `GarminAuthRequired` rather than falling back to credentials. Credentials

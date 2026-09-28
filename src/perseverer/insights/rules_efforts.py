@@ -1,6 +1,7 @@
 """Notable-effort extremes: for each of five time windows, find the activity that's the
 max/min for each of a fixed set of real, already-stored dimensions -- distance, duration, pace,
-avg/max heart rate (both directions), avg/max cadence, elevation gained/lost, start-time-of-day
+avg/max heart rate (both directions), avg/max cadence, elevation gained/lost, highest point
+reached, start-time-of-day
 (earliest/latest), and outside temperature (hottest/coldest). One generic `find_extreme`
 function driven by a declarative `_DIMENSIONS` table, not one hand-written function per
 combination -- see ADR 0012.
@@ -70,14 +71,15 @@ _DIMENSIONS: tuple[_Dimension, ...] = (
     _Dimension("max_hr_high", "Highest heart rate", "high", lambda a: a.max_hr, True, "bpm"),
     _Dimension("max_hr_low", "Lowest peak heart rate", "low", lambda a: a.max_hr, True, "bpm"),
     _Dimension("cadence", "Highest average cadence", "high", lambda a: a.cadence, True, "spm"),
-    _Dimension(
-        "max_cadence", "Highest max cadence", "high", lambda a: a.max_cadence, True, "spm"
-    ),
+    _Dimension("max_cadence", "Highest max cadence", "high", lambda a: a.max_cadence, True, "spm"),
     _Dimension(
         "elevation_gain", "Most elevation gained", "high", lambda a: a.elevation_gain_m, True, "m"
     ),
     _Dimension(
         "elevation_loss", "Most elevation lost", "high", lambda a: a.elevation_loss_m, True, "m"
+    ),
+    _Dimension(
+        "max_altitude", "Highest point reached", "high", lambda a: a.max_altitude_m, True, "m"
     ),
     _Dimension("start_earliest", "Earliest start", "low", _start_hour, False, "hour"),
     _Dimension("start_latest", "Latest start", "high", _start_hour, False, "hour"),
@@ -121,9 +123,7 @@ def _extreme(
     return max(scored, key=lambda pair: pair[1])
 
 
-def find_extreme(
-    activities: list[InsightActivity], dim: _Dimension, window: str
-) -> list[Insight]:
+def find_extreme(activities: list[InsightActivity], dim: _Dimension, window: str) -> list[Insight]:
     """One Insight per sport family present, for a sport-scoped dimension; at most one Insight
     overall for a non-sport-scoped dimension. Never fabricates an extreme when nothing in the
     window has a value for this dimension (AGENTS.md's never-invent-a-number rule) -- returns an

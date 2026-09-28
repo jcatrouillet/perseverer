@@ -18,6 +18,7 @@ def _activity(
     max_cadence: float | None = None,
     avg_hr: float | None = None,
     max_hr: float | None = None,
+    max_altitude_m: float | None = None,
     climb_route_count: int | None = None,
     climb_max_attempted_grade: int | None = None,
     climb_max_completed_grade: int | None = None,
@@ -39,6 +40,7 @@ def _activity(
         max_cadence=max_cadence,
         elevation_gain_m=None,
         elevation_loss_m=None,
+        max_altitude_m=max_altitude_m,
         temperature_min_c=temperature_min_c,
         temperature_max_c=temperature_max_c,
         climb_route_count=climb_route_count,
@@ -50,14 +52,30 @@ def _activity(
 
 def test_bouldering_records_use_route_metrics_and_the_widest_true_window() -> None:
     older = _activity(
-        "older", "2025-01-01", 0.0, 1800.0, sport_family="climb",
-        avg_hr=150.0, max_hr=180.0, climb_route_count=4,
-        climb_max_attempted_grade=4, climb_max_completed_grade=3, climb_time_s=600.0,
+        "older",
+        "2025-01-01",
+        0.0,
+        1800.0,
+        sport_family="climb",
+        avg_hr=150.0,
+        max_hr=180.0,
+        climb_route_count=4,
+        climb_max_attempted_grade=4,
+        climb_max_completed_grade=3,
+        climb_time_s=600.0,
     )
     target = _activity(
-        "target", "2026-06-15", 0.0, 1800.0, sport_family="climb",
-        avg_hr=120.0, max_hr=140.0, climb_route_count=8,
-        climb_max_attempted_grade=7, climb_max_completed_grade=6, climb_time_s=900.0,
+        "target",
+        "2026-06-15",
+        0.0,
+        1800.0,
+        sport_family="climb",
+        avg_hr=120.0,
+        max_hr=140.0,
+        climb_route_count=8,
+        climb_max_attempted_grade=7,
+        climb_max_completed_grade=6,
+        climb_time_s=900.0,
     )
 
     insights = compute_activity_insights("target", [older, target], dt.date(2026, 6, 15))
@@ -77,12 +95,24 @@ def test_bouldering_records_use_route_metrics_and_the_widest_true_window() -> No
 
 def test_bouldering_ties_do_not_create_a_second_record() -> None:
     earlier = _activity(
-        "earlier", "2026-06-01", 0.0, 1800.0, sport_family="climb",
-        climb_route_count=5, climb_max_attempted_grade=5, climb_time_s=300.0,
+        "earlier",
+        "2026-06-01",
+        0.0,
+        1800.0,
+        sport_family="climb",
+        climb_route_count=5,
+        climb_max_attempted_grade=5,
+        climb_time_s=300.0,
     )
     target = _activity(
-        "target", "2026-06-15", 0.0, 1800.0, sport_family="climb",
-        climb_route_count=5, climb_max_attempted_grade=5, climb_time_s=300.0,
+        "target",
+        "2026-06-15",
+        0.0,
+        1800.0,
+        sport_family="climb",
+        climb_route_count=5,
+        climb_max_attempted_grade=5,
+        climb_time_s=300.0,
     )
 
     insights = compute_activity_insights("target", [target, earlier], dt.date(2026, 6, 15))
@@ -183,9 +213,7 @@ def test_effort_and_pb_titles_state_the_covered_period() -> None:
 def test_avg_and_max_cadence_get_distinct_relabeled_titles() -> None:
     # "Highest cadence" alone would be ambiguous now that both an avg-cadence and a max-cadence
     # dimension exist -- each must relabel to a title that names which one it is.
-    target = _activity(
-        "solo", "2026-06-15", 5000.0, 1500.0, cadence=170.0, max_cadence=185.0
-    )
+    target = _activity("solo", "2026-06-15", 5000.0, 1500.0, cadence=170.0, max_cadence=185.0)
     insights = compute_activity_insights("solo", [target], dt.date(2026, 6, 15))
     avg_cadence = next(i for i in insights if i.subject_key == "cadence:run")
     max_cadence = next(i for i in insights if i.subject_key == "max_cadence:run")
@@ -202,6 +230,16 @@ def test_genuine_all_time_extreme_is_labeled_ever_not_a_window() -> None:
     insights = compute_activity_insights("target", [target, pad1, pad2], dt.date(2026, 6, 15))
     distance = next(i for i in insights if i.subject_key == "distance:run")
     assert distance.title == "Longest run ever"
+
+
+def test_highest_point_reached_is_labeled_ever_not_a_window() -> None:
+    target = _activity("target", "2026-06-15", 42000.0, 15000.0, max_altitude_m=2400.0)
+    pad1 = _activity("pad1", "2026-01-01", 10000.0, 3600.0, max_altitude_m=800.0)
+    pad2 = _activity("pad2", "2026-03-01", 10000.0, 3600.0, max_altitude_m=1200.0)
+    insights = compute_activity_insights("target", [target, pad1, pad2], dt.date(2026, 6, 15))
+    max_altitude = next(i for i in insights if i.subject_key == "max_altitude:run")
+    assert max_altitude.title == "Highest point reached ever"
+    assert max_altitude.value_num == 2400.0
 
 
 def test_temperature_insight_needs_at_least_three_comparable_activities() -> None:
@@ -282,9 +320,7 @@ def test_window_best_is_not_shown_when_it_coincides_with_the_all_time_best() -> 
 def test_window_best_dedupes_to_the_widest_window_still_true() -> None:
     all_time_best = _activity("old_pb", "2024-01-01", 5000.0, 1000.0)
     target = _activity("recent", "2026-08-14", 5000.0, 1300.0)
-    insights = compute_activity_insights(
-        "recent", [all_time_best, target], dt.date(2026, 8, 14)
-    )
+    insights = compute_activity_insights("recent", [all_time_best, target], dt.date(2026, 8, 14))
     window_best = [i for i in insights if i.kind == "window_best"]
     # "recent" is the only non-all-time-best candidate across every window here, so only the
     # single widest true claim should survive, not five near-identical repeats.

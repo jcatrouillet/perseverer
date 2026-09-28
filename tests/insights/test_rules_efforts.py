@@ -20,6 +20,7 @@ def _activity(
     max_cadence: float | None = None,
     elevation_gain_m: float | None = None,
     elevation_loss_m: float | None = None,
+    max_altitude_m: float | None = None,
     temperature_min_c: float | None = None,
     temperature_max_c: float | None = None,
     hour: int = 8,
@@ -42,6 +43,7 @@ def _activity(
         max_cadence=max_cadence,
         elevation_gain_m=elevation_gain_m,
         elevation_loss_m=elevation_loss_m,
+        max_altitude_m=max_altitude_m,
         temperature_min_c=temperature_min_c,
         temperature_max_c=temperature_max_c,
     )
@@ -160,3 +162,22 @@ def test_calendar_year_window_only_includes_this_year() -> None:
     insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
     year_insight = [i for i in insights if i.window == "year" and i.subject_key == "distance:run"]
     assert year_insight[0].activity_id == "this_year"
+
+
+def test_highest_point_reached_within_window_wins() -> None:
+    activities = [
+        _activity("a1", "2026-08-01", max_altitude_m=1200.0),
+        _activity("a2", "2026-08-05", max_altitude_m=2400.0),
+        _activity("a3", "2026-08-10", max_altitude_m=800.0),
+    ]
+    insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
+    thirty_day = [i for i in insights if i.window == "30d" and i.subject_key == "max_altitude:run"]
+    assert len(thirty_day) == 1
+    assert thirty_day[0].activity_id == "a2"
+    assert thirty_day[0].value_num == 2400.0
+
+
+def test_no_altitude_data_produces_no_max_altitude_insight() -> None:
+    activities = [_activity("a1", "2026-08-10", max_altitude_m=None)]
+    insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
+    assert not any(i.subject_key.startswith("max_altitude") for i in insights)

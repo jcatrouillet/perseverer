@@ -28,6 +28,7 @@ class InsightActivity:
     max_cadence: float | None
     elevation_gain_m: float | None
     elevation_loss_m: float | None
+    max_altitude_m: float | None
     temperature_min_c: float | None
     temperature_max_c: float | None
     # Defaults to 0 (UTC) rather than being required -- only rules_efforts.py's start-time-of-day

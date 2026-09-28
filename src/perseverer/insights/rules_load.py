@@ -71,8 +71,7 @@ def sustained_low_tsb_insight(days: list[FitnessDay], as_of: date) -> Insight | 
         window="current",
         subject_key="load:sustained_low_tsb",
         title=(
-            f"Training stress balance below {TSB_SUSTAINED_LOW_THRESHOLD:.0f} "
-            f"for {run_length} days"
+            f"Training stress balance below {TSB_SUSTAINED_LOW_THRESHOLD:.0f} for {run_length} days"
         ),
         detail={
             "start": days[start_idx].local_date,
