@@ -75,4 +75,27 @@ describe("PersonalizeCard", () => {
     expect(screen.getByLabelText("Kilometers")).toBeChecked();
     expect(screen.getByLabelText("Starting page")).toHaveValue("week");
   });
+
+  it("switches the color theme immediately, stores it on this device, and does not save it to the account", () => {
+    localStorage.removeItem("perseverer.theme");
+    render(<PersonalizeCard />);
+    // With nothing stored the card shows the OS default (dark here), so start from the other one.
+    fireEvent.click(screen.getByLabelText("Light"));
+    expect(screen.getByLabelText("Light")).toBeChecked();
+    expect(localStorage.getItem("perseverer.theme")).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    fireEvent.click(screen.getByLabelText("Dark"));
+    expect(screen.getByLabelText("Dark")).toBeChecked();
+    expect(localStorage.getItem("perseverer.theme")).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(mockSetMutate).not.toHaveBeenCalled();
+  });
+
+  it("shows the stored theme as selected", () => {
+    localStorage.setItem("perseverer.theme", "light");
+    render(<PersonalizeCard />);
+    expect(screen.getByLabelText("Light")).toBeChecked();
+    expect(screen.getByLabelText("Dark")).not.toBeChecked();
+    localStorage.removeItem("perseverer.theme");
+  });
 });

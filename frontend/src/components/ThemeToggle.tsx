@@ -1,16 +1,12 @@
 import { useState } from "react";
 
-import { getStoredTheme, setStoredTheme, type Theme } from "../theme";
+import { getEffectiveTheme, setStoredTheme, type Theme } from "../theme";
 
-function currentTheme(): Theme {
-  return (
-    getStoredTheme() ??
-    (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
-  );
-}
+// Only rendered on the sign-in screen now (AuthGate), where Settings is unreachable -- once signed
+// in, the theme choice lives in Settings > Personalize.
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(currentTheme);
+  const [theme, setTheme] = useState<Theme>(getEffectiveTheme);
 
   const toggle = () => {
     const next: Theme = theme === "dark" ? "light" : "dark";

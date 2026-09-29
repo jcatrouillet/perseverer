@@ -6,7 +6,6 @@ import { GearAlertBanner } from "./components/GearAlertBanner";
 import { Icon, type IconName } from "./components/Icon";
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import { LogoutButton } from "./components/LogoutButton";
-import { ThemeToggle } from "./components/ThemeToggle";
 import { isoDate } from "./dateUtils";
 import { usePersonalize, PersonalizeProvider } from "./PersonalizeContext";
 import "./styles/gear.css";
@@ -145,7 +144,6 @@ export function App() {
             </NavLink>
           </div>
           <div className="app-nav__actions">
-            <ThemeToggle />
             <LogoutButton />
           </div>
         </nav>

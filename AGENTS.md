@@ -1956,6 +1956,13 @@ environment:
   already existed on the table (seed-time only, never previously read anywhere in the app) rather
   than adding a redundant one. Closed enums via Pydantic `Literal`, not a free-text field + manual
   validator like `AthleteProfileIn` uses for its own open-ended strings.
+  **The light/dark theme lives here too, no longer in the top nav** (asked directly): a "Color
+  theme" Light/Dark radio in `PersonalizeCard.tsx`, backed by `theme.ts::getEffectiveTheme` (the
+  stored choice, else the OS setting). Unlike the four settings above it is a per-device browser
+  preference (`localStorage`, `perseverer.theme`), not an account setting — so it applies the
+  moment it is picked, is not part of the Save payload, and says "on this device only". The
+  sign-in screen (`AuthGate.tsx`) keeps its own small `ThemeToggle` since Settings is unreachable
+  before login.
   **The reported bug** — a scheduled workout's time-of-day control showed AM/PM instead of 24h —
   turned out to have no HTML-only fix: a native `<input type="time">`'s stored *value* is always
   24h `"HH:MM"` per spec, but its *displayed* picker follows the browser/OS locale, and neither

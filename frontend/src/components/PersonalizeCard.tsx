@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { usePersonalizeSettings, useSetPersonalizeSettings } from "../api/queries";
 import type { DefaultView, TimeFormat, UnitPreference, WeekStartDay } from "../api/types";
+import { getEffectiveTheme, setStoredTheme, type Theme } from "../theme";
 import "../styles/settings.css";
 
 export function PersonalizeCard() {
@@ -15,6 +16,15 @@ export function PersonalizeCard() {
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("24h");
   const [defaultView, setDefaultView] = useState<DefaultView>("week");
   const [unitPreference, setUnitPreference] = useState<UnitPreference>("metric");
+  // Unlike every field below, the color theme is a per-device browser setting (localStorage, see
+  // theme.ts) rather than an account setting, so it applies the moment it is picked and is not
+  // part of the Save button's payload.
+  const [theme, setTheme] = useState<Theme>(getEffectiveTheme);
+
+  const chooseTheme = (next: Theme) => {
+    setStoredTheme(next);
+    setTheme(next);
+  };
 
   useEffect(() => {
     if (!settings.data) return;
@@ -44,6 +54,29 @@ export function PersonalizeCard() {
           });
         }}
       >
+        <fieldset className="settings-form__row">
+          <legend>Color theme</legend>
+          <label>
+            <input
+              type="radio"
+              name="color_theme"
+              checked={theme === "light"}
+              onChange={() => chooseTheme("light")}
+            />
+            Light
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="color_theme"
+              checked={theme === "dark"}
+              onChange={() => chooseTheme("dark")}
+            />
+            Dark
+          </label>
+          <span className="chart-note">Applies immediately, on this device only.</span>
+        </fieldset>
+
         <fieldset className="settings-form__row">
           <legend>Week starts on</legend>
           <label>

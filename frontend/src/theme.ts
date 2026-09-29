@@ -7,6 +7,14 @@ export function getStoredTheme(): Theme | null {
   return value === "dark" || value === "light" ? value : null;
 }
 
+/** The theme actually showing: the stored choice, else the OS's own light/dark setting. */
+export function getEffectiveTheme(): Theme {
+  return (
+    getStoredTheme() ??
+    (window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark")
+  );
+}
+
 export function setStoredTheme(theme: Theme): void {
   localStorage.setItem(STORAGE_KEY, theme);
   document.documentElement.dataset.theme = theme;
