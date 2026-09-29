@@ -143,8 +143,8 @@ export function PersonalizeCard() {
           </label>
         </fieldset>
 
-        <label className="field">
-          Starting page
+        <label className="field settings-form__inline">
+          <span>Starting page</span>
           <select
             className="input"
             value={defaultView}

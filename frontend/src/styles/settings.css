@@ -64,6 +64,63 @@
   flex: none;
 }
 
+/* Personalize's radio groups: a labelled row of options, each radio sitting on the same line as
+   its own text. The general `.settings-form label`/`input` rules above (a column layout and a fixed
+   9ch width, right for the stacked number inputs elsewhere) would otherwise put every radio above
+   its label, and a bare <fieldset> keeps the browser's own heavy border. Qualified with
+   `fieldset.` so it out-ranks those rules on specificity. */
+fieldset.settings-form__row {
+  align-items: center;
+  border: none;
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  padding: 0;
+}
+
+fieldset.settings-form__row legend {
+  color: var(--color-text-muted);
+  float: left;
+  font-size: 13px;
+  min-width: 9rem;
+  padding: 0;
+}
+
+fieldset.settings-form__row label {
+  align-items: center;
+  color: var(--color-text);
+  flex-direction: row;
+  gap: var(--space-2);
+}
+
+fieldset.settings-form__row .chart-note {
+  margin: 0;
+}
+
+/* The "Starting page" select sits on the same label-left/control-right grid as the radio rows above
+   it, instead of stacking its label over the control. */
+.settings-form label.settings-form__inline {
+  align-items: center;
+  color: var(--color-text-muted);
+  flex-basis: 100%;
+  flex-direction: row;
+  gap: 0;
+}
+
+.settings-form label.settings-form__inline > span {
+  /* Legend width plus the fieldset rows' column gap, so the select lines up with the radios. */
+  min-width: calc(9rem + var(--space-5));
+}
+
+.settings-form label.settings-form__inline select {
+  width: auto;
+}
+
+fieldset.settings-form__row input {
+  flex: none;
+  margin: 0;
+  width: auto;
+}
+
 .settings-form__actions {
   display: flex;
   gap: var(--space-2);
