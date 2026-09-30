@@ -40,9 +40,10 @@ from perseverer.adapters.garmin_connect import (
     token_store_status,
 )
 from perseverer.adapters.garmin_export import import_garmin_export
-from perseverer.adapters.kaya import KayaInvalidCredentials
+from perseverer.adapters.kaya import KayaAuthRequired, KayaInvalidCredentials
 from perseverer.adapters.kaya import login_with_credentials as kaya_login
 from perseverer.adapters.kaya import token_status as kaya_token_status
+from perseverer.adapters.kaya_ingest import KayaRateLimited, import_kaya
 from perseverer.adapters.strava_export import import_strava_export
 from perseverer.auth.api_keys import generate_api_key, hash_api_key
 from perseverer.auth.passwords import hash_password
@@ -233,6 +234,29 @@ def import_apple_health_cmd(
         for e in summary.errors:
             typer.echo(f"  {e['file']}: {e['error']}", err=True)
         raise typer.Exit(code=1)
+
+
+@import_app.command("kaya")
+def import_kaya_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
+    """Pull the Kaya bouldering logbook (needs `sync auth kaya-login` first), archive it raw, and
+    combine it with Garmin bouldering sessions on the same local date -- see ADR 0016."""
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    try:
+        with engine.connect() as conn:
+            summary = import_kaya(
+                conn,
+                settings.raw_archive_dir,
+                athlete_id=athlete_id,
+                tokenstore_dir=settings.kaya_tokenstore_dir_for(athlete_id),
+            )
+    except (KayaAuthRequired, KayaRateLimited) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(
+        f"pages={summary.pages} sessions={summary.sessions} ascents={summary.ascents} "
+        f"dates_updated={summary.touched_dates}"
+    )
 
 
 @import_app.command("garmin-connect")

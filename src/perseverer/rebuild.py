@@ -17,6 +17,12 @@ from perseverer.activity_merge import apply_activity_merge_overrides
 from perseverer.activity_trim import apply_activity_trim_overrides
 from perseverer.adapters.apple_health_export import detect_weight_cutoff_from_eufy
 from perseverer.adapters.garmin_export import report_kind_from_filename
+from perseverer.adapters.kaya_ingest import (
+    KIND_ASCENTS,
+    KIND_SESSIONS,
+    apply_kaya_sessions,
+    store_page,
+)
 from perseverer.adapters.strava_export import (
     csv_row_from_raw_json,
     ingest_geometry_content,
@@ -433,6 +439,17 @@ def rebuild_database(
                 )
                 touched_dates |= dates
             continue
+        elif row.kind in (KIND_SESSIONS, KIND_ASCENTS):
+            # Durable kaya_session/kaya_ascent tables are re-upserted from the archived page
+            # here; the activities/splits derived from them are rebuilt by apply_kaya_sessions
+            # after the loop (see ADR 0016).
+            store_page(
+                conn,
+                athlete_id=athlete_id,
+                raw_object_id=row.id,
+                kind=row.kind,
+                content=content,
+            )
         elif row.kind in ("strava_export_gpx", "strava_export_tcx"):
             # Previously silently dropped here (fell into the catch-all `else: continue`
             # below) -- a real violation of "raw first, must be able to re-derive the entire
@@ -483,6 +500,11 @@ def rebuild_database(
     # apply_sport_overrides above, for the athlete's own bouldering route-status corrections and
     # manually-added routes -- see bouldering_overrides.py's own docstring.
     apply_bouldering_route_overrides(conn, athlete_id=athlete_id)
+    conn.commit()
+
+    # After the overrides above, not before: for a day Kaya covers, its route list replaces the
+    # Garmin-decoded splits those overrides were keyed to (ADR 0016), so Kaya must win.
+    touched_dates |= apply_kaya_sessions(conn, athlete_id=athlete_id)
     conn.commit()
 
     # Same durable-correction shape again, for the athlete's own car-travel trims -- see

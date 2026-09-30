@@ -248,6 +248,50 @@ duration_goal = Table(
     Index("ix_duration_goal_athlete_period", "athlete_id", "period_type", "period_start"),
 )
 
+# Kaya (kayaclimb.com) logbook, parsed from the raw GraphQL pages archived by kaya_ingest.py
+# (raw kinds kaya_sessions_json / kaya_ascents_json). Keyed by Kaya ids, never by activity.id,
+# so they survive `sync rebuild` untouched (deliberately NOT in rebuild.py's _REBUILDABLE_TABLES,
+# like the athlete-correction tables): the rebuild replay just re-upserts them from raw and
+# `apply_kaya_sessions` then re-derives the activity/split rows. See ADR 0016.
+kaya_session = Table(
+    "kaya_session",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("kaya_id", String, nullable=False),
+    Column("start_time_utc", DateTime(), nullable=False),
+    Column("end_time_utc", DateTime(), nullable=True),
+    Column("notes", Text, nullable=True),
+    Column("gym_name", String, nullable=True),
+    Column("gym_city", String, nullable=True),
+    Column("raw_object_id", Integer, ForeignKey("raw_object.id"), nullable=False),
+    UniqueConstraint("athlete_id", "kaya_id", name="uq_kaya_session_identity"),
+)
+
+kaya_ascent = Table(
+    "kaya_ascent",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("kaya_id", String, nullable=False),
+    Column("session_kaya_id", String, nullable=False),
+    Column("date_utc", DateTime(), nullable=False),
+    # Flash / Onsight / Redpoint / Repeat, as Kaya names them.
+    Column("ascent_type", String, nullable=True),
+    # Kaya's own grade string ("v3"); the app's V-scale integer is derived in kaya_ingest.
+    Column("grade_name", String, nullable=True),
+    Column("climb_kaya_id", String, nullable=True),
+    Column("climb_name", String, nullable=True),
+    Column("climb_type", String, nullable=True),
+    Column("is_lead", Boolean, nullable=True),
+    Column("attempts", Integer, nullable=True),
+    Column("rating", Integer, nullable=True),
+    Column("comment", Text, nullable=True),
+    Column("raw_object_id", Integer, ForeignKey("raw_object.id"), nullable=False),
+    UniqueConstraint("athlete_id", "kaya_id", name="uq_kaya_ascent_identity"),
+    Index("ix_kaya_ascent_session", "athlete_id", "session_kaya_id"),
+)
+
 # A bouldering goal: a number of COMPLETED routes ("sends") over a week, month or year -- either at
 # one specific V-grade ("10x V4"), at that grade or harder, or of any grade at all. Deliberately a
 # separate table from `goal` above (distance, one row per period): a period can hold several of

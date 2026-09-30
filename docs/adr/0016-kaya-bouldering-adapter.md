@@ -2,7 +2,12 @@
 
 ## Status
 
-Proposed. Only the authentication slice is built (`adapters/kaya.py`, `sync auth kaya-login` /
+Accepted; login and importer built (`sync import kaya`, `adapters/kaya_ingest.py`, migration
+`e2b7c4d19a63` adding `kaya_session`/`kaya_ascent`), with the local-date merge from decision 6.
+Deviations from the original plan: the parsed Kaya rows live in two durable tables keyed by Kaya ids
+(re-upserted by the rebuild replay) rather than being written straight into `activity`, so
+`apply_kaya_sessions` can re-derive the activities idempotently after any rebuild. The
+authentication slice was built first (`adapters/kaya.py`, `sync auth kaya-login` /
 `kaya-status`, unit-tested against a mocked HTTP layer). Endpoints and field names came from the
 open-source [dofek](https://github.com/Asherlc/dofek/pull/2852) Kaya client
 (`packages/kaya-client/src/client.ts`) and were **confirmed live on 2026-09-29**: password login
@@ -82,10 +87,12 @@ REST + GraphQL backend, which is the only automated route to the data.
    - Ambiguous matches (one Kaya session overlapping several Garmin activities or the reverse) are
      not merged automatically; they surface in the existing possible-duplicates review and the
      per-field manual merge (`activity_merge_override`).
-   - Field ownership: route list, names, grades, results, ratings and comments come from Kaya;
-     duration, heart rate and calories from Garmin. Garmin's decoded routes are kept as a
-     secondary source so provenance per field is preserved and `sync rebuild` stays reproducible.
-     Existing bouldering route corrections keyed on Garmin `split_index` remain valid for
+   - Field ownership: sends (grade, result), ratings and comments come from Kaya; duration, heart
+     rate, calories and **failed attempts** from Garmin. Found in the first dry run against real data:
+     Garmin recorded attempt rows Kaya's ascent feed simply does not have, so Kaya's sends replace
+     only Garmin's *completed* route splits and Garmin's attempt rows are kept. Both remain in the
+     raw archive, so `sync rebuild` stays reproducible. Existing bouldering route corrections keyed
+     on a replaced Garmin `split_index` no longer apply on a Kaya-covered day; they remain valid for
      Garmin-only sessions.
    - A Kaya session with no Garmin counterpart is a standalone activity and counts toward goals.
      Merge/split visibility reuses `GET /activities/{id}/sources` and split.

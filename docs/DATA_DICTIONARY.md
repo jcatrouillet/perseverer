@@ -1827,6 +1827,41 @@ the sum of `COALESCE(moving_duration_s, duration_s)` (the same "Moving time" the
 over non-deleted activities of that sport inside the period through today, with the same
 straight-line ahead/behind pace as the distance goals.
 
+## Kaya bouldering logbook (kaya_session, kaya_ascent, adapters/kaya_ingest.py)
+
+Route-level bouldering data from Kaya's private API (ADR 0016). Every GraphQL page is archived raw
+first (`raw_object.kind` `kaya_sessions_json` / `kaya_ascents_json`, source `kaya`), then parsed into
+two tables keyed by **Kaya's own ids** (not `activity.id`), so they are durable across `sync rebuild`
+(not in `_REBUILDABLE_TABLES`; the rebuild replay just re-upserts them from the archive):
+
+- `kaya_session`: `kaya_id`, `start_time_utc`/`end_time_utc` (naive UTC), `notes`, `gym_name`,
+  `gym_city`, `raw_object_id`. **Times are unreliable**: a session is logged after the fact in one
+  burst (start ~ end, hours after the workout), so they are never used for overlap matching.
+- `kaya_ascent`: `kaya_id`, `session_kaya_id`, `date_utc`, `ascent_type` (Flash / Onsight /
+  Redpoint / Repeat), `grade_name` (Kaya's string, e.g. `v3`), `climb_kaya_id`, `climb_name` (usually
+  null), `climb_type`, `is_lead`, `attempts`, `rating`, `comment`, `raw_object_id`.
+
+`apply_kaya_sessions` derives `activity`/`split`/`activity_source_link` rows (run at the end of
+`sync import kaya` and of every rebuild, after the bouldering route overrides). Only `Bouldering`
+ascents are used. Sessions are grouped by **local date** (athlete timezone):
+
+- Exactly one Garmin bouldering activity that local date: Kaya's sends **replace** that activity's
+  *completed* route splits (each ascent -> one `climb_active` split, `climb_grade` = the V number
+  from `grade_name`, `climb_result` = `completed`, `start_time_utc` = the ascent time, no
+  duration/HR, appended after the existing `split_index` values). Garmin's `attempt`/unknown route
+  rows are kept, since Kaya's feed has no failed attempts. Garmin still owns duration, heart rate
+  and calories. Kaya is linked in `activity_source_link`
+  (`source="kaya"`, `external_id="session:<id>"`). A session with no routes never touches Garmin data.
+- Zero or several Garmin candidates: each Kaya session with routes becomes its own activity
+  (`sport=rock_climbing`, `sub_sport=bouldering`, `primary_source=kaya`, id derived from the Kaya
+  session id, name = gym name, no duration). Several candidates are logged and not merged.
+
+A `Repeat` counts as a completed route within its session. Failed attempts are not in Kaya's ascent
+feed. `Kaya` ratings, comments, ascent types and attempts are stored but not yet shown in the UI.
+A manual status/grade correction on a Garmin route that Kaya replaces no longer applies (Kaya wins
+on a Kaya-covered day). A Garmin route mis-decoded as an attempt that was really a send stays as
+an extra attempt row next to Kaya's send; attempts never count toward goals.
+
 ## Bouldering goals (bouldering_goal, bouldering_goals.py)
 
 A target number of **completed** routes in a week, month or year. Unlike `goal` (distance, one row

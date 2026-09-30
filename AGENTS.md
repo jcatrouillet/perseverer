@@ -948,12 +948,19 @@ environment:
     bathroom scale picking up someone else's reading keeps working unmodified across the source
     boundary. Blood pressure itself has no dashboard chart yet (deliberately deferred — see
     `docs/DATA_DICTIONARY.md`), queryable via `GET /health/observations` only for now.
-  - `kaya` (`adapters/kaya.py`, **auth slice only, ADR 0016 proposed**) — route-level bouldering
-    logbook from Kaya's private, undocumented API (endpoints taken from the open-source dofek
-    client, not yet verified live). Only `sync auth kaya-login` / `kaya-status` exist: the login is
-    the sole use of credentials, only tokens are stored (`<data_dir>/kaya_tokens/<athlete_id>/`),
-    and refresh never falls back to credentials. Ingestion, grade mapping and time-overlap merging
-    with Garmin bouldering sessions are designed in the ADR but not built.
+  - `kaya` (`adapters/kaya.py` auth, `adapters/kaya_ingest.py` ingest; ADR 0016) — route-level
+    bouldering logbook from Kaya's private, undocumented GraphQL API (endpoints from the
+    open-source dofek client, confirmed live 2026-09-29). `sync auth kaya-login` is the sole use of
+    credentials; only tokens are stored (`<data_dir>/kaya_tokens/<athlete_id>/`) and refresh never
+    falls back to credentials. `sync import kaya` pages both queries, archives each page raw
+    (`kaya_sessions_json`/`kaya_ascents_json`), upserts `kaya_session`/`kaya_ascent` (durable,
+    keyed by Kaya ids, re-upserted by the rebuild replay) and runs `apply_kaya_sessions`, also
+    re-run at the end of every rebuild (after the bouldering route overrides). Kaya session times
+    are unusable (logged in a burst after the workout), so sessions match Garmin bouldering
+    activities by **local date**: exactly one Garmin candidate -> Kaya's sends replace its
+    *completed* route splits (Garmin keeps duration/HR/calories and its failed-attempt rows, since
+    Kaya's feed has no attempts); none or several -> a Kaya-only activity.
+    Ratings/comments/ascent types are stored but not yet shown in the UI.
   Every `.fit` file, from any adapter (except `garmin_connect`, which only ever downloads
   activity FIT files), goes through `ingest_dispatch.ingest_fit_bytes` — archives once, tries
   the shared activity parser (`fit/parser.py`), falls back to the shared health parser
