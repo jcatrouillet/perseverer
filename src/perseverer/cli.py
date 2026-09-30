@@ -40,6 +40,9 @@ from perseverer.adapters.garmin_connect import (
     token_store_status,
 )
 from perseverer.adapters.garmin_export import import_garmin_export
+from perseverer.adapters.kaya import KayaInvalidCredentials
+from perseverer.adapters.kaya import login_with_credentials as kaya_login
+from perseverer.adapters.kaya import token_status as kaya_token_status
 from perseverer.adapters.strava_export import import_strava_export
 from perseverer.auth.api_keys import generate_api_key, hash_api_key
 from perseverer.auth.passwords import hash_password
@@ -342,6 +345,33 @@ def auth_status(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
         typer.echo("No token store found - run `sync auth login`.")
         raise typer.Exit(code=1)
     typer.echo(f"Token store present at {tokenstore_dir}, last written {age_days} day(s) ago.")
+
+
+@auth_app.command("kaya-login")
+def auth_kaya_login(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
+    """Interactive Kaya login: prompts for email/password and stores only the resulting tokens
+    (never the password). The ONLY command that ever uses Kaya credentials -- see ADR 0016.
+    """
+    tokenstore_dir = get_settings().kaya_tokenstore_dir_for(athlete_id)
+    email = os.environ.get("KAYA_EMAIL") or typer.prompt("Kaya email")
+    password = os.environ.get("KAYA_PASSWORD") or typer.prompt("Kaya password", hide_input=True)
+    try:
+        kaya_login(email, password, tokenstore_dir)
+    except KayaInvalidCredentials as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+    typer.echo(f"Logged in to Kaya. Tokens saved to {tokenstore_dir}")
+
+
+@auth_app.command("kaya-status")
+def auth_kaya_status(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
+    """Whether a Kaya session is stored and how old it is (no network call)."""
+    tokenstore_dir = get_settings().kaya_tokenstore_dir_for(athlete_id)
+    present, age_days = kaya_token_status(tokenstore_dir)
+    if not present:
+        typer.echo("No Kaya session found - run `sync auth kaya-login`.")
+        raise typer.Exit(code=1)
+    typer.echo(f"Kaya session present, last saved {age_days} day(s) ago.")
 
 
 @athlete_app.command("create")

@@ -172,6 +172,10 @@ class Settings(BaseSettings):
         single-athlete deployment's existing token directory into its own namespaced subpath."""
         return self.data_dir / "garmin_tokens" / athlete_id
 
+    def kaya_tokenstore_dir_for(self, athlete_id: str) -> Path:
+        """Per-athlete Kaya token directory (tokens only, never the password); see ADR 0016."""
+        return self.data_dir / "kaya_tokens" / athlete_id
+
     @property
     def backups_dir(self) -> Path:
         return self.data_dir / "backups"
