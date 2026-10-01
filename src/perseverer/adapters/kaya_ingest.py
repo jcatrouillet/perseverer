@@ -45,6 +45,7 @@ from perseverer.db.schema import (
     kaya_ascent,
     kaya_attempt,
     kaya_session,
+    kaya_unsent_climb,
     split,
 )
 from perseverer.insights.engine import refresh_insights
@@ -55,6 +56,7 @@ logger = logging.getLogger(__name__)
 SOURCE = "kaya"
 KIND_SESSIONS = "kaya_sessions_json"
 KIND_ASCENTS = "kaya_ascents_json"
+KIND_UNSENT = "kaya_unsent_climbs_json"
 PAGE_SIZE = 50
 _REQUEST_INTERVAL_S = 0.5
 _MAX_PAGES = 400
@@ -78,6 +80,12 @@ ASCENTS_QUERY = (
 )
 
 _MIN = datetime.min
+UNSENT_QUERY = (
+    "query attemptedClimbsForUser($user_id: ID!, $offset: Int!, $count: Int!) { "
+    'attemptedClimbsForUser(user_id: $user_id, climb_type_id: "1", offset: $offset, count: $count) '
+    "{ id attempts } }"
+)
+
 _GRADE_RE = re.compile(r"^v(\d+)$", re.IGNORECASE)
 
 
@@ -116,7 +124,11 @@ def fetch_pages(tokenstore_dir: Path) -> list[tuple[str, bytes]]:
     on a 401/403; a 429 raises `KayaRateLimited`."""
     tokens = kaya.load_tokens(tokenstore_dir)
     out: list[tuple[str, bytes]] = []
-    for kind, query in ((KIND_SESSIONS, SESSIONS_QUERY), (KIND_ASCENTS, ASCENTS_QUERY)):
+    for kind, query in (
+        (KIND_SESSIONS, SESSIONS_QUERY),
+        (KIND_ASCENTS, ASCENTS_QUERY),
+        (KIND_UNSENT, UNSENT_QUERY),
+    ):
         offset = 0
         for _ in range(_MAX_PAGES):
             payload = {
@@ -167,7 +179,21 @@ def store_page(
     rows = _rows(json.loads(content))
     count = 0
     for r in rows:
-        if kind == KIND_SESSIONS:
+        if kind == KIND_UNSENT:
+            unsent = {
+                "athlete_id": athlete_id,
+                "climb_kaya_id": str(r["id"]),
+                "attempts": r.get("attempts"),
+                "raw_object_id": raw_object_id,
+            }
+            u_stmt = sqlite_insert(kaya_unsent_climb).values(**unsent)
+            conn.execute(
+                u_stmt.on_conflict_do_update(
+                    index_elements=["athlete_id", "climb_kaya_id"],
+                    set_={"attempts": unsent["attempts"], "raw_object_id": raw_object_id},
+                )
+            )
+        elif kind == KIND_SESSIONS:
             start = _parse_time(r.get("start_time"))
             if start is None:
                 continue
@@ -375,6 +401,17 @@ def apply_kaya_sessions(conn: Connection, *, athlete_id: str) -> set[str]:
     ).fetchall()
     routes_by_session: dict[str, list[_Route]] = defaultdict(list)
     for a in ascents:
+        # Kaya's per-send `attempts` counts the send itself ("4 attempts including 1 send"), so
+        # N > 1 means N-1 failed tries first -- expanded into attempt rows, like Garmin's.
+        for _ in range(max((a.attempts or 1) - 1, 0)):
+            routes_by_session[a.session_kaya_id].append(
+                _Route(
+                    None,
+                    grade_to_v(a.grade_name),
+                    "attempt",
+                    route_label(a.climb_name, a.climb_color, a.climb_wall),
+                )
+            )
         routes_by_session[a.session_kaya_id].append(
             _Route(
                 a.date_utc,
@@ -388,15 +425,31 @@ def apply_kaya_sessions(conn: Connection, *, athlete_id: str) -> set[str]:
             kaya_attempt.c.athlete_id == athlete_id, kaya_attempt.c.climb_type == "Bouldering"
         )
     ).fetchall()
-    for t in attempts:
-        routes_by_session[t.session_kaya_id].append(
-            _Route(
-                None,
-                grade_to_v(t.grade_name),
-                "attempt",
-                route_label(t.climb_name, t.climb_color, t.climb_wall),
-            )
+    lifetime = {
+        u.climb_kaya_id: u.attempts
+        for u in conn.execute(
+            select(kaya_unsent_climb).where(kaya_unsent_climb.c.athlete_id == athlete_id)
         )
+    }
+    start_by_session = {s.kaya_id: s.start_time_utc for s in sessions}
+    sessions_of_climb: dict[str, list[str]] = defaultdict(list)
+    for t in attempts:
+        sessions_of_climb[t.climb_kaya_id or ""].append(t.session_kaya_id)
+    for t in attempts:
+        # Kaya only reports a lifetime attempt count per unsent climb. Each session that listed
+        # it has at least 1; the latest one carries the remainder so the total is preserved.
+        listed = sorted(sessions_of_climb[t.climb_kaya_id or ""], key=lambda x: start_by_session[x])
+        total = lifetime.get(t.climb_kaya_id or "") or len(listed)
+        n = max(total - (len(listed) - 1), 1) if t.session_kaya_id == listed[-1] else 1
+        for _ in range(n):
+            routes_by_session[t.session_kaya_id].append(
+                _Route(
+                    None,
+                    grade_to_v(t.grade_name),
+                    "attempt",
+                    route_label(t.climb_name, t.climb_color, t.climb_wall),
+                )
+            )
 
     by_date: dict[str, list[Any]] = defaultdict(list)
     offsets: dict[str, int] = {}
@@ -505,7 +558,7 @@ def import_kaya(
         summary.pages += 1
         if kind == KIND_SESSIONS:
             summary.sessions += written
-        else:
+        elif kind == KIND_ASCENTS:
             summary.ascents += written
         conn.commit()
     touched = apply_kaya_sessions(conn, athlete_id=athlete_id)

@@ -20,6 +20,7 @@ from perseverer.adapters.garmin_export import report_kind_from_filename
 from perseverer.adapters.kaya_ingest import (
     KIND_ASCENTS,
     KIND_SESSIONS,
+    KIND_UNSENT,
     apply_kaya_sessions,
     store_page,
 )
@@ -439,7 +440,7 @@ def rebuild_database(
                 )
                 touched_dates |= dates
             continue
-        elif row.kind in (KIND_SESSIONS, KIND_ASCENTS):
+        elif row.kind in (KIND_SESSIONS, KIND_ASCENTS, KIND_UNSENT):
             # Durable kaya_session/kaya_ascent tables are re-upserted from the archived page
             # here; the activities/splits derived from them are rebuilt by apply_kaya_sessions
             # after the loop (see ADR 0016).

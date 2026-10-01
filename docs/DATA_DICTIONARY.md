@@ -1856,8 +1856,14 @@ ascents are used. Sessions are grouped by **local date** (athlete timezone):
   (`sport=rock_climbing`, `sub_sport=bouldering`, `primary_source=kaya`, id derived from the Kaya
   session id, name = gym name, no duration). Several candidates are logged and not merged.
 
-A `Repeat` counts as a completed route within its session. Unsent climbs come from each session's
-`attempted_climbs` list (stored in `kaya_attempt`, no timestamp) and become `climb_result="attempt"`
+A `Repeat` counts as a completed route within its session. Attempt counts become attempt rows, the
+same shape Garmin records: a send's `attempts` counts the send itself ("4 attempts including 1
+send"), so N > 1 adds N-1 `attempt` splits before the send. Unsent climbs come from each session's
+`attempted_climbs` list (`kaya_attempt`, no timestamp, no count); their counts come from Kaya's
+top-level `attemptedClimbsForUser` query (`kaya_unsent_climb.attempts`, a **lifetime** figure per
+climb, archived as `kaya_unsent_climbs_json`). A climb listed in several sessions gets 1 in each earlier
+session and the remainder in the latest, so the total is preserved; a climb later sent has no lifetime
+figure and counts 1 per listing (a lower bound). They become `climb_result="attempt"`
 splits; on a merged Garmin day only the surplus beyond Garmin's own attempt count is added, so an
 attempt is never counted twice. Each Kaya-derived split carries `split.climb_name`: Kaya's own route
 name when it has one (almost never for gym problems), else `"<colour> - <wall>"` from the climb's

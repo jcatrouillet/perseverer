@@ -13,6 +13,7 @@ from sqlalchemy import Connection, Engine, select
 from perseverer.adapters.kaya_ingest import (
     KIND_ASCENTS,
     KIND_SESSIONS,
+    KIND_UNSENT,
     apply_kaya_sessions,
     grade_to_v,
     route_label,
@@ -376,3 +377,24 @@ def test_split_carries_the_kaya_route_label(tmp_path: Path) -> None:
         _load(conn, tmp_path, KIND_ASCENTS, "ascentsForUser", [ascent])
         apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
         assert conn.execute(select(split.c.climb_name)).scalar_one() == "Pink - A8 - Alcove, Right"
+
+
+def test_attempt_counts_expand_into_attempt_rows(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _load(
+            conn,
+            tmp_path,
+            KIND_SESSIONS,
+            "sessionsForUser",
+            [_session("s1", "2026-09-27T03:00:00.000Z", attempted=["v4"])],
+        )
+        send = _ascent("a1", "s1", "2026-09-27T03:05:00.000Z", "v4", "Redpoint")
+        send["attempts"] = 4  # 4 tries including the send -> 3 failed + 1 send
+        _load(conn, tmp_path, KIND_ASCENTS, "ascentsForUser", [send])
+        # Unsent climb "s1_0" is climb id "0" -> Kaya says 5 lifetime attempts.
+        _load(conn, tmp_path, KIND_UNSENT, "attemptedClimbsForUser", [{"id": "0", "attempts": 5}])
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        routes = _routes(conn)
+        assert routes.count((4, "completed")) == 1
+        assert routes.count((4, "attempt")) == 3 + 5

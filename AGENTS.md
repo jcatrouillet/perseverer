@@ -960,7 +960,9 @@ environment:
     activities by **local date**: exactly one Garmin candidate -> Kaya's sends replace its
     *completed* route splits (Garmin keeps duration/HR/calories and its failed-attempt rows, since
     Kaya's feed has no attempts); none or several -> a Kaya-only activity.
-    Unsent climbs come from each session's `attempted_climbs` (`kaya_attempt`) and are combined with
+    A send's `attempts` (which includes the send) expands to N-1 attempt rows; unsent climbs get their
+    lifetime attempt count from `attemptedClimbsForUser` (`kaya_unsent_climb`, split across the
+    sessions that list them). Unsent climbs come from each session's `attempted_climbs` (`kaya_attempt`) and are combined with
     Garmin's attempts without double counting; each Kaya route carries `split.climb_name` (Kaya's
     name, else "<colour> - <wall>") shown in the activity page's Routes table, with `v?` shown as
     "V?" and excluded from grade stats. Ratings/comments/ascent types are stored but not yet shown.

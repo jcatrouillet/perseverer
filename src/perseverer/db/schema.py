@@ -289,6 +289,19 @@ kaya_attempt = Table(
     Index("ix_kaya_attempt_session", "athlete_id", "session_kaya_id"),
 )
 
+# Kaya's lifetime count of attempts on a climb the athlete has NOT sent (top-level
+# `attemptedClimbsForUser` query -- the per-session `attempted_climbs` list carries no count).
+kaya_unsent_climb = Table(
+    "kaya_unsent_climb",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("climb_kaya_id", String, nullable=False),
+    Column("attempts", Integer, nullable=True),
+    Column("raw_object_id", Integer, ForeignKey("raw_object.id"), nullable=False),
+    UniqueConstraint("athlete_id", "climb_kaya_id", name="uq_kaya_unsent_climb_identity"),
+)
+
 kaya_ascent = Table(
     "kaya_ascent",
     metadata,
