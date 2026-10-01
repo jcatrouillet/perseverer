@@ -422,3 +422,23 @@ def test_attempts_come_before_their_send_and_unsent_climbs_last(tmp_path: Path) 
             (3, "completed"),
             (5, "attempt"),
         ]
+
+
+def test_rows_of_the_same_climb_are_grouped_even_with_two_sends(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _load(
+            conn,
+            tmp_path,
+            KIND_SESSIONS,
+            "sessionsForUser",
+            [_session("s1", "2026-09-27T03:00:00.000Z")],
+        )
+        a = _ascent("a1", "s1", "2026-09-27T03:05:00.000Z", "v3", "Flash")
+        b = _ascent("a2", "s1", "2026-09-27T03:10:00.000Z", "v1")
+        c = _ascent("a3", "s1", "2026-09-27T04:00:00.000Z", "v3", "Repeat")  # same climb as a1
+        c["climb"]["id"] = a["climb"]["id"]
+        _load(conn, tmp_path, KIND_ASCENTS, "ascentsForUser", [c, b, a])
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        # The v3 climb's two sends sit together, ahead of the later-started v1 climb.
+        assert _routes(conn) == [(3, "completed"), (3, "completed"), (1, "completed")]
