@@ -87,6 +87,10 @@ REST + GraphQL backend, which is the only automated route to the data.
    - Ambiguous matches (one Kaya session overlapping several Garmin activities or the reverse) are
      not merged automatically; they surface in the existing possible-duplicates review and the
      per-field manual merge (`activity_merge_override`).
+   - **Revised (2026-10-01): Kaya now supplies the whole route list, attempts included (its
+     `attempted_climbs` + per-send `attempts` counts), and Garmin's route rows are demoted to
+     `climb_active_superseded` (grade/result cleared, duration/HR kept) rather than deleted, so climb
+     time stays Garmin's.** The paragraph below is the earlier, superseded design.
    - Field ownership: sends (grade, result), ratings and comments come from Kaya; duration, heart
      rate, calories and **failed attempts** from Garmin. Found in the first dry run against real data:
      Garmin recorded attempt rows Kaya's ascent feed simply does not have, so Kaya's sends replace

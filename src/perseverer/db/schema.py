@@ -779,6 +779,8 @@ split = Table(
     # A Kaya-sourced route's label (kaya_ingest.py): Kaya's own name when it has one (usually not),
     # else "<hold colour> - <wall>". NULL for a Garmin-recorded route.
     Column("climb_name", String, nullable=True),
+    # "kaya" for a route kaya_ingest.py wrote; NULL for every Garmin/FIT-derived or manual row.
+    Column("source", String, nullable=True),
     # Also bouldering-only, but populated on both "climb_active" and "climb_rest" splits (unlike
     # grade/result, which only mean something for the climb itself) -- confirmed against real
     # data: field 15 <= field 16 held on all 55 real splits across two files, and both fall in a

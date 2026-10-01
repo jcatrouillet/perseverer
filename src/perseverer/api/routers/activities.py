@@ -219,11 +219,14 @@ def _climb_summary_from_splits(
     issue a second query the way `list_activities`' own three subqueries (§ below) have to.
     Returns (route_count, max_completed_grade, climb_time_s), all None when this activity has no
     climb_active splits at all (i.e. isn't a bouldering activity)."""
-    climbs = [s for s in splits if s.climb_grade is not None]
-    if not climbs:
+    climbs = [s for s in splits if s.split_type == "climb_active"]
+    timed = [s for s in splits if s.split_type in ("climb_active", "climb_active_superseded")]
+    if not climbs and not timed:
         return None, None, None
-    completed_grades = [c.climb_grade for c in climbs if c.climb_result == "completed"]
-    climb_time_s = sum(c.duration_s for c in climbs if c.duration_s is not None) or None
+    completed_grades = [
+        c.climb_grade for c in climbs if c.climb_result == "completed" and c.climb_grade is not None
+    ]
+    climb_time_s = sum(c.duration_s for c in timed if c.duration_s is not None) or None
     return len(climbs), (max(completed_grades) if completed_grades else None), climb_time_s
 
 
@@ -310,7 +313,8 @@ def list_activities(
         .select_from(split_table)
         .where(
             split_table.c.activity_id == activity.c.id,
-            split_table.c.climb_grade.is_not(None),
+            # Any climb_active row, graded or not -- a Kaya "v?" route is still a route.
+            split_table.c.split_type == "climb_active",
         )
         .scalar_subquery()
     )
@@ -326,7 +330,7 @@ def list_activities(
         select(func.sum(split_table.c.duration_s))
         .where(
             split_table.c.activity_id == activity.c.id,
-            split_table.c.split_type == "climb_active",
+            split_table.c.split_type.in_(("climb_active", "climb_active_superseded")),
         )
         .scalar_subquery()
     )
@@ -574,10 +578,21 @@ def get_climbing_summary(
             split_table.c.duration_s,
         )
         .select_from(split_table.join(activity, activity.c.id == split_table.c.activity_id))
-        .where(*where_clauses, split_table.c.climb_grade.is_not(None))
+        .where(
+            *where_clauses,
+            split_table.c.climb_grade.is_not(None),
+            split_table.c.split_type == "climb_active",
+        )
     ).fetchall()
 
-    total_climb_time_s = sum(s.duration_s for s in climb_splits if s.duration_s is not None)
+    total_climb_time_s = conn.execute(
+        select(func.coalesce(func.sum(split_table.c.duration_s), 0.0))
+        .select_from(split_table.join(activity, activity.c.id == split_table.c.activity_id))
+        .where(
+            *where_clauses,
+            split_table.c.split_type.in_(("climb_active", "climb_active_superseded")),
+        )
+    ).scalar_one()
     completed_grades = [s.climb_grade for s in climb_splits if s.climb_result == "completed"]
 
     breakdown_by_grade: dict[int, dict[str, int]] = {}
@@ -1286,7 +1301,7 @@ def get_activity_climb_comparisons(
             select(func.sum(split_table.c.duration_s))
             .where(
                 split_table.c.activity_id == activity.c.id,
-                split_table.c.split_type == "climb_active",
+                split_table.c.split_type.in_(("climb_active", "climb_active_superseded")),
             )
             .scalar_subquery()
         )

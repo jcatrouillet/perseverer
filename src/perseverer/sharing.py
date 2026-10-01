@@ -1165,11 +1165,14 @@ def _climb_summary_from_splits(
     imported) because that one lives on a Row shape private to that router's own query; this
     file runs its own SELECT * FROM split. Returns (route_count, max_completed_grade,
     climb_time_s), all None when this activity has no climb_active splits at all."""
-    climbs = [s for s in splits if s.climb_grade is not None]
-    if not climbs:
+    climbs = [s for s in splits if s.split_type == "climb_active"]
+    timed = [s for s in splits if s.split_type in ("climb_active", "climb_active_superseded")]
+    if not climbs and not timed:
         return None, None, None
-    completed_grades = [c.climb_grade for c in climbs if c.climb_result == "completed"]
-    climb_time_s = sum(c.duration_s for c in climbs if c.duration_s is not None) or None
+    completed_grades = [
+        c.climb_grade for c in climbs if c.climb_result == "completed" and c.climb_grade is not None
+    ]
+    climb_time_s = sum(c.duration_s for c in timed if c.duration_s is not None) or None
     return len(climbs), (max(completed_grades) if completed_grades else None), climb_time_s
 
 

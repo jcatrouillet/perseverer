@@ -93,14 +93,22 @@ export interface ClimbSummary {
 }
 
 /** The "Climb" stats column on the activity detail page -- see ActivityStatsGrid.tsx. */
-export function climbSummary(routes: BoulderingRoute[]): ClimbSummary {
+export function climbSummary(routes: BoulderingRoute[], splits?: SplitOut[]): ClimbSummary {
   const completedGrades = routes
     .filter((r) => r.result === "completed")
     .map((r) => r.grade)
     .filter((g): g is number => g != null);
-  const durations = routes.map((r) => r.durationS).filter((d): d is number => d != null);
+  // When the activity's own splits are given, time climbing also counts Garmin's route rows that a
+  // Kaya merge demoted ("climb_active_superseded": no longer routes, but their duration is still
+  // the real time on the wall). Without them, fall back to the routes' own durations.
+  const durations = splits
+    ? splits
+        .filter((s) => s.split_type === "climb_active" || s.split_type === "climb_active_superseded")
+        .map((s) => s.duration_s)
+        .filter((d): d is number => d != null)
+    : routes.map((r) => r.durationS).filter((d): d is number => d != null);
   return {
-    routeCount: routes.filter((r) => r.grade != null).length,
+    routeCount: routes.length,
     maxCompletedGrade: completedGrades.length > 0 ? Math.max(...completedGrades) : null,
     climbTimeS: durations.length > 0 ? durations.reduce((sum, d) => sum + d, 0) : null,
   };

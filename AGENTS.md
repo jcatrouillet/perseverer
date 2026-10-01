@@ -957,9 +957,12 @@ environment:
     keyed by Kaya ids, re-upserted by the rebuild replay) and runs `apply_kaya_sessions`, also
     re-run at the end of every rebuild (after the bouldering route overrides). Kaya session times
     are unusable (logged in a burst after the workout), so sessions match Garmin bouldering
-    activities by **local date**: exactly one Garmin candidate -> Kaya's sends replace its
-    *completed* route splits (Garmin keeps duration/HR/calories and its failed-attempt rows, since
-    Kaya's feed has no attempts); none or several -> a Kaya-only activity.
+    activities by **local date**: exactly one Garmin candidate -> Kaya supplies the route list
+    (`split.source="kaya"`) and Garmin's own route rows are demoted to
+    `split_type="climb_active_superseded"` with grade/result cleared (kept for duration/HR, so climb
+    time sums both types; every grade/goal/insight query sees only `climb_active`); total time,
+    calories, HR, training effect and the HR chart stay Garmin's; none or several candidates -> a
+    Kaya-only activity.
     A send's `attempts` (which includes the send) expands to N-1 attempt rows; unsent climbs get their
     lifetime attempt count from `attemptedClimbsForUser` (`kaya_unsent_climb`, split across the
     sessions that list them). Unsent climbs come from each session's `attempted_climbs` (`kaya_attempt`) and are combined with

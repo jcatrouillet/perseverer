@@ -55,7 +55,7 @@ export function ActivityStatsGridPrimary({
   // Bouldering has no distance/pace at all -- the tiles below already skip both via their own
   // `distance_m != null` guards, so the only bouldering-specific change needed here is the
   // heading text itself (there's genuinely no "distance" in this card once that's true).
-  const climb = isBouldering ? climbSummary(boulderingRoutes(activity.splits)) : null;
+  const climb = isBouldering ? climbSummary(boulderingRoutes(activity.splits), activity.splits) : null;
 
   return (
     <div className="activity-stats">

@@ -31,7 +31,7 @@ export function ClimbComparisonTable({
   const currentDurationS = effectiveDurationS(activity);
   if (currentDurationS == null) return null;
 
-  const currentClimb = climbSummary(boulderingRoutes(activity.splits));
+  const currentClimb = climbSummary(boulderingRoutes(activity.splits), activity.splits);
   const currentRow: ComparisonRow = {
     id: activity.id,
     local_date: activity.local_date,

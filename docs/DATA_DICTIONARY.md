@@ -1845,13 +1845,18 @@ two tables keyed by **Kaya's own ids** (not `activity.id`), so they are durable 
 `sync import kaya` and of every rebuild, after the bouldering route overrides). Only `Bouldering`
 ascents are used. Sessions are grouped by **local date** (athlete timezone):
 
-- Exactly one Garmin bouldering activity that local date: Kaya's sends **replace** that activity's
-  *completed* route splits (each ascent -> one `climb_active` split, `climb_grade` = the V number
-  from `grade_name`, `climb_result` = `completed`, `start_time_utc` = the ascent time, no
-  duration/HR, appended after the existing `split_index` values). Garmin's `attempt`/unknown route
-  rows are kept, since Kaya's feed has no failed attempts. Garmin still owns duration, heart rate
-  and calories. Kaya is linked in `activity_source_link`
-  (`source="kaya"`, `external_id="session:<id>"`). A session with no routes never touches Garmin data.
+- Exactly one Garmin bouldering activity that local date: **Kaya supplies the route list** (each
+  send or failed try -> one `climb_active` split with `source="kaya"`, `climb_grade` = the V number
+  from `grade_name`, `climb_name`, `climb_result`; grouped per climb, a climb's attempts before its
+  send). Garmin's own route rows are **demoted, not deleted**: `split_type` becomes
+  `climb_active_superseded` and `climb_grade`/`climb_result` are cleared, so nothing is counted as a
+  route twice (grade/goal/insight queries only see `climb_active`), while their `duration_s`/HR stay.
+  Everything activity-level stays Garmin's: total time, calories, avg/max HR, training effect, the
+  HR chart, and **climb time** (the sum of `climb_active` and `climb_active_superseded` durations,
+  see `GET /activities` `climb_time_s`). Kaya rows have no per-route duration/HR. Kaya is linked in
+  `activity_source_link` (`source="kaya"`, `external_id="session:<id>"`). A session with no routes
+  never touches Garmin data. Re-running is idempotent (Kaya's previous rows are replaced; demoted
+  Garmin rows are left alone).
 - Zero or several Garmin candidates: each Kaya session with routes becomes its own activity
   (`sport=rock_climbing`, `sub_sport=bouldering`, `primary_source=kaya`, id derived from the Kaya
   session id, name = gym name, no duration). Several candidates are logged and not merged.
@@ -1864,14 +1869,13 @@ top-level `attemptedClimbsForUser` query (`kaya_unsent_climb.attempts`, a **life
 climb, archived as `kaya_unsent_climbs_json`). A climb listed in several sessions gets 1 in each earlier
 session and the remainder in the latest, so the total is preserved; a climb later sent has no lifetime
 figure and counts 1 per listing (a lower bound). They become `climb_result="attempt"`
-splits; on a merged Garmin day only the surplus beyond Garmin's own attempt count is added, so an
-attempt is never counted twice. Each Kaya-derived split carries `split.climb_name`: Kaya's own route
+splits. Each Kaya-derived split carries `split.climb_name`: Kaya's own route
 name when it has one (almost never for gym problems), else `"<colour> - <wall>"` from the climb's
 `color`/`wall` (stored as `climb_color`/`climb_wall`). A Kaya grade of `v?` is stored as a NULL
 `climb_grade` and shown as "V?", never counted in grade statistics. `Kaya` ratings, comments, ascent types and attempts are stored but not yet shown in the UI.
-A manual status/grade correction on a Garmin route that Kaya replaces no longer applies (Kaya wins
-on a Kaya-covered day). A Garmin route mis-decoded as an attempt that was really a send stays as
-an extra attempt row next to Kaya's send; attempts never count toward goals.
+A manual status/grade correction on a Garmin route that Kaya supersedes no longer applies (Kaya wins
+on a Kaya-covered day). A Garmin effort Kaya never logged is not shown as a route (its time still
+counts toward climb time).
 
 ## Bouldering goals (bouldering_goal, bouldering_goals.py)
 

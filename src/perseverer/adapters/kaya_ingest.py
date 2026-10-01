@@ -30,7 +30,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
-from sqlalchemy import Connection, delete, func, select
+from sqlalchemy import Connection, delete, func, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from perseverer.adapters import kaya
@@ -319,6 +319,7 @@ def _insert_route(
             climb_grade=route.grade,
             climb_result=route.result,
             climb_name=route.name,
+            source="kaya",
         )
     )
 
@@ -331,15 +332,14 @@ def _replace_splits(
     *,
     garmin_activity: bool,
 ) -> None:
-    """Writes Kaya's routes as climb_active splits.
+    """Writes Kaya's routes as climb_active splits (`source="kaya"`).
 
-    Kaya-only activity: rewritten from scratch (sends by time, then attempts).
+    Kaya-only activity: rewritten from scratch.
 
-    Garmin activity: combined, not replaced wholesale. Kaya is authoritative for sends, so
-    Garmin's *completed* splits are replaced by Kaya's. Garmin's attempt rows are kept (they are
-    physical attempts, possibly several per problem); Kaya's `attempted_climbs` are distinct unsent
-    problems, so only the surplus beyond Garmin's attempt count is added -- an attempt is never
-    counted twice, yet one Garmin missed still appears."""
+    Garmin activity: Kaya is authoritative for the route list (named, graded, with attempt counts),
+    so Garmin's own route rows are demoted to `climb_active_superseded` -- kept for their duration
+    and heart rate, no longer routes. Garmin still owns total time, calories, HR, training effect
+    and the HR chart (all activity-level); climb time sums the superseded durations too."""
     # One block per climb (its failed tries, then its send -- or two sends, e.g. a flash and a later
     # repeat), blocks ordered by when the climb was first done; unsent climbs have no time -> last.
     first_time: dict[str, datetime] = {}
@@ -355,32 +355,24 @@ def _replace_splits(
             0 if r.result == "attempt" else 1,
         ),
     )
-    where = [split.c.athlete_id == athlete_id, split.c.activity_id == activity_id]
+    base = [split.c.athlete_id == athlete_id, split.c.activity_id == activity_id]
     if garmin_activity:
-        where.append(split.c.climb_result == "completed")
-    conn.execute(delete(split).where(*where))
-    next_index = 0
-    kept_attempts = 0
-    if garmin_activity:
+        # Kaya's rows from an earlier run go; then Garmin's own route rows are demoted, not
+        # deleted: they keep their duration/HR (so climb time stays Garmin's real figure) but lose
+        # the decoded grade/result and their "climb_active" type, so no route is counted twice.
+        conn.execute(delete(split).where(*base, split.c.source == "kaya"))
+        conn.execute(
+            update(split)
+            .where(*base, split.c.split_type == "climb_active")
+            .values(split_type="climb_active_superseded", climb_grade=None, climb_result=None)
+        )
         next_index = conn.execute(
-            select(func.coalesce(func.max(split.c.split_index), -1) + 1).where(
-                split.c.athlete_id == athlete_id, split.c.activity_id == activity_id
-            )
+            select(func.coalesce(func.max(split.c.split_index), -1) + 1).where(*base)
         ).scalar_one()
-        kept_attempts = conn.execute(
-            select(func.count()).where(
-                split.c.athlete_id == athlete_id,
-                split.c.activity_id == activity_id,
-                split.c.split_type == "climb_active",
-            )
-        ).scalar_one()
-    to_insert: list[_Route] = []
-    skip = kept_attempts
-    for r in ordered:
-        if r.result == "attempt" and skip > 0:
-            skip -= 1  # Garmin already recorded this many attempts on the activity
-            continue
-        to_insert.append(r)
+    else:
+        conn.execute(delete(split).where(*base))
+        next_index = 0
+    to_insert = ordered
     for i, route in enumerate(to_insert):
         _insert_route(conn, athlete_id, activity_id, next_index + i, route)
 

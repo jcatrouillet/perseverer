@@ -119,7 +119,10 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
     )
     climb_time_s_subq = (
         select(func.sum(split.c.duration_s))
-        .where(split.c.activity_id == activity.c.id, split.c.split_type == "climb_active")
+        .where(
+            split.c.activity_id == activity.c.id,
+            split.c.split_type.in_(("climb_active", "climb_active_superseded")),
+        )
         .scalar_subquery()
     )
 

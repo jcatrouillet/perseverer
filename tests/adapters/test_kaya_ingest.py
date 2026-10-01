@@ -176,39 +176,6 @@ def test_kaya_only_session_becomes_activity(tmp_path: Path) -> None:
         assert len(conn.execute(select(split)).fetchall()) == 2
 
 
-def test_kaya_routes_replace_garmin_splits_on_same_local_date(tmp_path: Path) -> None:
-    engine = _engine(tmp_path)
-    with engine.connect() as conn:
-        _garmin_boulder(conn, "g1", "2026-05-14")
-        # Logged 04:08Z on 05-14 = 21:08 on 05-13 in LA... use a time that stays on 05-14 local.
-        _load(
-            conn,
-            tmp_path,
-            KIND_SESSIONS,
-            "sessionsForUser",
-            [_session("s1", "2026-05-14T20:00:00.000Z")],
-        )
-        _load(
-            conn,
-            tmp_path,
-            KIND_ASCENTS,
-            "ascentsForUser",
-            [_ascent("a1", "s1", "2026-05-14T20:01:00.000Z", "v1")],
-        )
-        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
-        assert len(conn.execute(select(activity)).fetchall()) == 1  # merged, no second activity
-        splits = conn.execute(select(split)).fetchall()
-        # Garmin's attempt row survives; its completed rows would be replaced by Kaya's send.
-        assert sorted((s.climb_grade, s.climb_result) for s in splits) == [
-            (1, "completed"),
-            (9, "attempt"),
-        ]
-        assert sorted(s.split_index for s in splits) == [0, 1]
-        # Re-applying is idempotent (Kaya's send is replaced, not duplicated).
-        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
-        assert len(conn.execute(select(split)).fetchall()) == 2
-
-
 def test_ambiguous_garmin_day_is_not_merged(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     with engine.connect() as conn:
@@ -305,55 +272,6 @@ def test_kaya_only_activity_includes_attempts(tmp_path: Path) -> None:
         assert _routes(conn) == [(2, "completed"), (4, "attempt"), (None, "attempt")]
 
 
-def test_garmin_and_kaya_attempts_are_combined_not_doubled(tmp_path: Path) -> None:
-    engine = _engine(tmp_path)
-    with engine.connect() as conn:
-        _garmin_boulder(conn, "g1", "2026-05-14")  # one Garmin attempt row (grade 9)
-        _load(
-            conn,
-            tmp_path,
-            KIND_SESSIONS,
-            "sessionsForUser",
-            [_session("s1", "2026-05-14T20:00:00.000Z", attempted=["v4", "v5", "v6"])],
-        )
-        _load(
-            conn,
-            tmp_path,
-            KIND_ASCENTS,
-            "ascentsForUser",
-            [_ascent("a1", "s1", "2026-05-14T20:01:00.000Z", "v1")],
-        )
-        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
-        # Garmin's 1 attempt kept; Kaya's 3 attempts add only the 2 beyond it.
-        assert sorted(_routes(conn), key=str) == sorted(
-            [(9, "attempt"), (1, "completed"), (5, "attempt"), (6, "attempt")], key=str
-        )
-        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
-        assert len(_routes(conn)) == 4  # idempotent
-
-
-def test_garmin_with_more_attempts_than_kaya_keeps_all_garmin(tmp_path: Path) -> None:
-    engine = _engine(tmp_path)
-    with engine.connect() as conn:
-        _garmin_boulder(conn, "g1", "2026-05-14")
-        _load(
-            conn,
-            tmp_path,
-            KIND_SESSIONS,
-            "sessionsForUser",
-            [_session("s1", "2026-05-14T20:00:00.000Z", attempted=["v4"])],
-        )
-        _load(
-            conn,
-            tmp_path,
-            KIND_ASCENTS,
-            "ascentsForUser",
-            [_ascent("a1", "s1", "2026-05-14T20:01:00.000Z", "v1")],
-        )
-        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
-        assert sorted(_routes(conn), key=str) == sorted([(9, "attempt"), (1, "completed")], key=str)
-
-
 def test_route_label_prefers_kaya_name_else_colour_and_wall() -> None:
     assert route_label("Dragon", "Pink", "A8") == "Dragon"
     assert route_label(None, "Pink", "A8 - Alcove, Right") == "Pink - A8 - Alcove, Right"
@@ -442,3 +360,65 @@ def test_rows_of_the_same_climb_are_grouped_even_with_two_sends(tmp_path: Path) 
         apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
         # The v3 climb's two sends sit together, ahead of the later-started v1 climb.
         assert _routes(conn) == [(3, "completed"), (3, "completed"), (1, "completed")]
+
+
+def _kaya_day(conn: Connection, tmp_path: Path, attempted: list[str]) -> None:
+    _load(
+        conn,
+        tmp_path,
+        KIND_SESSIONS,
+        "sessionsForUser",
+        [_session("s1", "2026-05-14T20:00:00.000Z", attempted=attempted)],
+    )
+    _load(
+        conn,
+        tmp_path,
+        KIND_ASCENTS,
+        "ascentsForUser",
+        [_ascent("a1", "s1", "2026-05-14T20:01:00.000Z", "v1")],
+    )
+
+
+def test_kaya_supplies_the_routes_and_garmin_rows_are_kept_for_time(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _garmin_boulder(conn, "g1", "2026-05-14")  # one Garmin climb_active row, 100 s
+        conn.execute(split.update().values(duration_s=100.0, climb_avg_hr=95.0))
+        _kaya_day(conn, tmp_path, attempted=["v4", "v5"])
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        assert len(conn.execute(select(activity)).fetchall()) == 1  # merged, no second activity
+        # Routes are Kaya's alone: its send, then its two unsent attempts.
+        routes = conn.execute(
+            select(split.c.climb_grade, split.c.climb_result, split.c.source).where(
+                split.c.split_type == "climb_active"
+            )
+        ).fetchall()
+        assert sorted((r.climb_grade, r.climb_result, r.source) for r in routes) == [
+            (1, "completed", "kaya"),
+            (4, "attempt", "kaya"),
+            (5, "attempt", "kaya"),
+        ]
+        # Garmin's own row is demoted: no longer a route, but it keeps its time and HR.
+        old = conn.execute(
+            select(split).where(split.c.split_type == "climb_active_superseded")
+        ).one()
+        assert (old.duration_s, old.climb_avg_hr, old.climb_grade, old.climb_result) == (
+            100.0,
+            95.0,
+            None,
+            None,
+        )
+
+
+def test_reapplying_a_merged_day_is_idempotent(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _garmin_boulder(conn, "g1", "2026-05-14")
+        _kaya_day(conn, tmp_path, attempted=["v4"])
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        first = conn.execute(select(split.c.split_type, split.c.climb_grade)).fetchall()
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        again = conn.execute(select(split.c.split_type, split.c.climb_grade)).fetchall()
+        assert sorted(map(tuple, first), key=str) == sorted(map(tuple, again), key=str)
+        assert [t for t, _ in again].count("climb_active_superseded") == 1
