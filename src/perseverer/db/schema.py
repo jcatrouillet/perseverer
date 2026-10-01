@@ -268,6 +268,27 @@ kaya_session = Table(
     UniqueConstraint("athlete_id", "kaya_id", name="uq_kaya_session_identity"),
 )
 
+# An unsent climb a Kaya session lists under `attempted_climbs` (sends are kaya_ascent rows).
+# `kaya_id` is Kaya's own composite "<session>_<climb>" id; no timestamp exists for an attempt.
+kaya_attempt = Table(
+    "kaya_attempt",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("kaya_id", String, nullable=False),
+    Column("session_kaya_id", String, nullable=False),
+    Column("climb_kaya_id", String, nullable=True),
+    Column("climb_name", String, nullable=True),
+    Column("climb_color", String, nullable=True),
+    Column("climb_wall", String, nullable=True),
+    Column("grade_name", String, nullable=True),
+    Column("climb_type", String, nullable=True),
+    Column("is_lead", Boolean, nullable=True),
+    Column("raw_object_id", Integer, ForeignKey("raw_object.id"), nullable=False),
+    UniqueConstraint("athlete_id", "kaya_id", name="uq_kaya_attempt_identity"),
+    Index("ix_kaya_attempt_session", "athlete_id", "session_kaya_id"),
+)
+
 kaya_ascent = Table(
     "kaya_ascent",
     metadata,
@@ -282,6 +303,8 @@ kaya_ascent = Table(
     Column("grade_name", String, nullable=True),
     Column("climb_kaya_id", String, nullable=True),
     Column("climb_name", String, nullable=True),
+    Column("climb_color", String, nullable=True),
+    Column("climb_wall", String, nullable=True),
     Column("climb_type", String, nullable=True),
     Column("is_lead", Boolean, nullable=True),
     Column("attempts", Integer, nullable=True),
@@ -740,6 +763,9 @@ split = Table(
     # yet is never silently discarded.
     Column("climb_grade", Integer, nullable=True),
     Column("climb_result", String, nullable=True),
+    # A Kaya-sourced route's label (kaya_ingest.py): Kaya's own name when it has one (usually not),
+    # else "<hold colour> - <wall>". NULL for a Garmin-recorded route.
+    Column("climb_name", String, nullable=True),
     # Also bouldering-only, but populated on both "climb_active" and "climb_rest" splits (unlike
     # grade/result, which only mean something for the climb itself) -- confirmed against real
     # data: field 15 <= field 16 held on all 55 real splits across two files, and both fall in a

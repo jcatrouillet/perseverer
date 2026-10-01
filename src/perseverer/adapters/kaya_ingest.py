@@ -43,6 +43,7 @@ from perseverer.db.schema import (
     athlete,
     insight,
     kaya_ascent,
+    kaya_attempt,
     kaya_session,
     split,
 )
@@ -62,7 +63,9 @@ SESSIONS_QUERY = (
     "query sessionsForUser($user_id: ID!, $offset: Int!, $count: Int!) { "
     "sessionsForUser(user_id: $user_id, offset: $offset, count: $count) { "
     "id start_time end_time notes gym { id name address city region country latitude longitude } "
-    "board { id name latitude longitude } destination { id name latitude longitude } } }"
+    "board { id name latitude longitude } destination { id name latitude longitude } "
+    "attempted_climbs { id name lead climb_type { id name } "
+    "grade { id name climb_type_group } color { id name } wall { id name } } } }"
 )
 ASCENTS_QUERY = (
     "query ascentsForUser($user_id: ID!, $offset: Int!, $count: Int!) { "
@@ -70,14 +73,25 @@ ASCENTS_QUERY = (
     "id session_id date comment rating stiffness attempts ascent_type { id name } "
     "gym { id name address city region country latitude longitude } "
     "climb { id name lead climb_type { id name } grade { id name climb_type_group } "
+    "color { id name } wall { id name } "
     "gym { id name address city region country latitude longitude } } } }"
 )
 
+_MIN = datetime.min
 _GRADE_RE = re.compile(r"^v(\d+)$", re.IGNORECASE)
 
 
 class KayaRateLimited(Exception):
     """Kaya answered 429; the run stops immediately, no retry."""
+
+
+def route_label(name: str | None, color: str | None, wall: str | None) -> str | None:
+    """Kaya's own route name when it has one (rare for gym problems); otherwise the hold colour
+    and wall, which is how a gym problem is actually identified ("Pink - A8 - Alcove, Right")."""
+    if name:
+        return name
+    parts = [p for p in (color, wall) if p]
+    return " - ".join(parts) if parts else None
 
 
 def grade_to_v(grade_name: str | None) -> int | None:
@@ -175,6 +189,29 @@ def store_page(
                     set_={k: v for k, v in values.items() if k not in ("athlete_id", "kaya_id")},
                 )
             )
+            for c in r.get("attempted_climbs") or []:
+                attempt = {
+                    "athlete_id": athlete_id,
+                    "kaya_id": str(c["id"]),
+                    "session_kaya_id": str(r["id"]),
+                    "climb_kaya_id": str(c["id"]).split("_")[-1],
+                    "climb_name": c.get("name"),
+                    "climb_color": (c.get("color") or {}).get("name"),
+                    "climb_wall": (c.get("wall") or {}).get("name"),
+                    "grade_name": (c.get("grade") or {}).get("name"),
+                    "climb_type": (c.get("climb_type") or {}).get("name"),
+                    "is_lead": c.get("lead"),
+                    "raw_object_id": raw_object_id,
+                }
+                a_stmt = sqlite_insert(kaya_attempt).values(**attempt)
+                conn.execute(
+                    a_stmt.on_conflict_do_update(
+                        index_elements=["athlete_id", "kaya_id"],
+                        set_={
+                            k: v for k, v in attempt.items() if k not in ("athlete_id", "kaya_id")
+                        },
+                    )
+                )
         else:
             when = _parse_time(r.get("date"))
             if when is None:
@@ -189,6 +226,8 @@ def store_page(
                 "grade_name": (climb.get("grade") or {}).get("name"),
                 "climb_kaya_id": str(climb["id"]) if climb.get("id") is not None else None,
                 "climb_name": climb.get("name"),
+                "climb_color": (climb.get("color") or {}).get("name"),
+                "climb_wall": (climb.get("wall") or {}).get("name"),
                 "climb_type": (climb.get("climb_type") or {}).get("name"),
                 "is_lead": climb.get("lead"),
                 "attempts": r.get("attempts"),
@@ -212,9 +251,10 @@ def store_page(
 
 @dataclass
 class _Route:
-    when: datetime
+    when: datetime | None  # None for an attempt: Kaya gives unsent climbs no timestamp
     grade: int | None
-    ascent_type: str | None
+    result: str  # "completed" | "attempt"
+    name: str | None = None
 
 
 def _athlete_tz(conn: Connection, athlete_id: str) -> ZoneInfo:
@@ -235,44 +275,64 @@ def _delete_activity(conn: Connection, athlete_id: str, activity_id: str) -> Non
     conn.execute(delete(activity).where(activity.c.id == activity_id))
 
 
+def _insert_route(
+    conn: Connection, athlete_id: str, activity_id: str, index: int, route: _Route
+) -> None:
+    conn.execute(
+        split.insert().values(
+            athlete_id=athlete_id,
+            activity_id=activity_id,
+            split_index=index,
+            split_type="climb_active",
+            start_time_utc=route.when,
+            climb_grade=route.grade,
+            climb_result=route.result,
+            climb_name=route.name,
+        )
+    )
+
+
 def _replace_splits(
     conn: Connection,
     athlete_id: str,
     activity_id: str,
     routes: list[_Route],
     *,
-    keep_garmin_attempts: bool,
+    garmin_activity: bool,
 ) -> None:
-    """Writes Kaya's routes as climb_active splits. For a Garmin activity only its *completed*
-    splits are replaced (Kaya is authoritative for sends); Garmin's attempt / unknown rows are
-    kept, because Kaya's ascent feed has no failed attempts at all. A Kaya-only activity is
-    rewritten from scratch."""
+    """Writes Kaya's routes as climb_active splits.
+
+    Kaya-only activity: rewritten from scratch (sends by time, then attempts).
+
+    Garmin activity: combined, not replaced wholesale. Kaya is authoritative for sends, so
+    Garmin's *completed* splits are replaced by Kaya's. Garmin's attempt rows are kept (they are
+    physical attempts, possibly several per problem); Kaya's `attempted_climbs` are distinct unsent
+    problems, so only the surplus beyond Garmin's attempt count is added -- an attempt is never
+    counted twice, yet one Garmin missed still appears."""
+    sends = sorted((r for r in routes if r.result == "completed"), key=lambda r: r.when or _MIN)
+    attempts = [r for r in routes if r.result == "attempt"]
     where = [split.c.athlete_id == athlete_id, split.c.activity_id == activity_id]
-    if keep_garmin_attempts:
+    if garmin_activity:
         where.append(split.c.climb_result == "completed")
     conn.execute(delete(split).where(*where))
-    next_index = (
-        conn.execute(
+    next_index = 0
+    kept_attempts = 0
+    if garmin_activity:
+        next_index = conn.execute(
             select(func.coalesce(func.max(split.c.split_index), -1) + 1).where(
                 split.c.athlete_id == athlete_id, split.c.activity_id == activity_id
             )
         ).scalar_one()
-        if keep_garmin_attempts
-        else 0
-    )
-    for i, route in enumerate(sorted(routes, key=lambda x: x.when)):
-        conn.execute(
-            split.insert().values(
-                athlete_id=athlete_id,
-                activity_id=activity_id,
-                split_index=next_index + i,
-                split_type="climb_active",
-                start_time_utc=route.when,
-                climb_grade=route.grade,
-                # Flash/Onsight/Redpoint/Repeat are all a completed top.
-                climb_result="completed",
+        kept_attempts = conn.execute(
+            select(func.count()).where(
+                split.c.athlete_id == athlete_id,
+                split.c.activity_id == activity_id,
+                split.c.split_type == "climb_active",
             )
-        )
+        ).scalar_one()
+    to_insert = sends + attempts[kept_attempts:]
+    for i, route in enumerate(to_insert):
+        _insert_route(conn, athlete_id, activity_id, next_index + i, route)
 
 
 def _link(
@@ -316,7 +376,26 @@ def apply_kaya_sessions(conn: Connection, *, athlete_id: str) -> set[str]:
     routes_by_session: dict[str, list[_Route]] = defaultdict(list)
     for a in ascents:
         routes_by_session[a.session_kaya_id].append(
-            _Route(a.date_utc, grade_to_v(a.grade_name), a.ascent_type)
+            _Route(
+                a.date_utc,
+                grade_to_v(a.grade_name),
+                "completed",
+                route_label(a.climb_name, a.climb_color, a.climb_wall),
+            )
+        )
+    attempts = conn.execute(
+        select(kaya_attempt).where(
+            kaya_attempt.c.athlete_id == athlete_id, kaya_attempt.c.climb_type == "Bouldering"
+        )
+    ).fetchall()
+    for t in attempts:
+        routes_by_session[t.session_kaya_id].append(
+            _Route(
+                None,
+                grade_to_v(t.grade_name),
+                "attempt",
+                route_label(t.climb_name, t.climb_color, t.climb_wall),
+            )
         )
 
     by_date: dict[str, list[Any]] = defaultdict(list)
@@ -349,7 +428,7 @@ def apply_kaya_sessions(conn: Connection, *, athlete_id: str) -> set[str]:
             for s in group:
                 _delete_activity(conn, athlete_id, standalone_ids[s.kaya_id])
             if routes:
-                _replace_splits(conn, athlete_id, target, routes, keep_garmin_attempts=True)
+                _replace_splits(conn, athlete_id, target, routes, garmin_activity=True)
                 for s in group:
                     _link(conn, athlete_id, target, s.kaya_id, s.raw_object_id, now)
                 touched.add(d)
@@ -383,7 +462,7 @@ def apply_kaya_sessions(conn: Connection, *, athlete_id: str) -> set[str]:
                 conn.execute(activity.insert().values(id=act_id, created_at=now, **values))
             else:
                 conn.execute(activity.update().where(activity.c.id == act_id).values(**values))
-            _replace_splits(conn, athlete_id, act_id, routes, keep_garmin_attempts=False)
+            _replace_splits(conn, athlete_id, act_id, routes, garmin_activity=False)
             _link(conn, athlete_id, act_id, s.kaya_id, s.raw_object_id, now)
             touched.add(d)
     return touched
@@ -445,5 +524,6 @@ __all__ = [
     "apply_kaya_sessions",
     "grade_to_v",
     "import_kaya",
+    "route_label",
     "store_page",
 ]

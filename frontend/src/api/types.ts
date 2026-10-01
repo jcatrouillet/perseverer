@@ -42,6 +42,9 @@ export interface SplitOut {
   // boulderingRoutes.ts for how these two undocumented FIT fields were reverse-engineered.
   climb_grade: number | null;
   climb_result: string | null;
+  // A Kaya-sourced route's label (Kaya's own name, else "<hold colour> - <wall>"); null for a
+  // Garmin-recorded route.
+  climb_name?: string | null;
   // Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
   climb_avg_hr: number | null;
   climb_max_hr: number | null;

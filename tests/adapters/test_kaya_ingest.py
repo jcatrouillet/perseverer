@@ -15,6 +15,7 @@ from perseverer.adapters.kaya_ingest import (
     KIND_SESSIONS,
     apply_kaya_sessions,
     grade_to_v,
+    route_label,
     store_page,
 )
 from perseverer.archive import archive_raw_bytes
@@ -40,8 +41,18 @@ def _engine(tmp_path: Path) -> Engine:
     return engine
 
 
-def _session(sid: str, start: str) -> dict[str, Any]:
+def _session(sid: str, start: str, attempted: list[str] | None = None) -> dict[str, Any]:
     return {
+        "attempted_climbs": [
+            {
+                "id": f"{sid}_{i}",
+                "name": None,
+                "lead": False,
+                "climb_type": {"id": "1", "name": "Bouldering"},
+                "grade": {"id": "1", "name": g, "climb_type_group": "3"},
+            }
+            for i, g in enumerate(attempted or [])
+        ],
         "id": sid,
         "start_time": start,
         "end_time": start,
@@ -265,3 +276,103 @@ def test_kaya_only_activity_is_removed_when_a_garmin_match_appears(tmp_path: Pat
         _garmin_boulder(conn, "g1", "2026-05-14")
         apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
         assert conn.execute(select(activity.c.primary_source)).scalar_one() == "garmin_connect"
+
+
+def _routes(conn: Connection) -> list[tuple[int | None, str | None]]:
+    rows = conn.execute(select(split).order_by(split.c.split_index)).fetchall()
+    return [(r.climb_grade, r.climb_result) for r in rows]
+
+
+def test_kaya_only_activity_includes_attempts(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _load(
+            conn,
+            tmp_path,
+            KIND_SESSIONS,
+            "sessionsForUser",
+            [_session("s1", "2026-09-27T03:00:00.000Z", attempted=["v4", "v?"])],
+        )
+        _load(
+            conn,
+            tmp_path,
+            KIND_ASCENTS,
+            "ascentsForUser",
+            [_ascent("a1", "s1", "2026-09-27T03:05:00.000Z", "v2")],
+        )
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        assert _routes(conn) == [(2, "completed"), (4, "attempt"), (None, "attempt")]
+
+
+def test_garmin_and_kaya_attempts_are_combined_not_doubled(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _garmin_boulder(conn, "g1", "2026-05-14")  # one Garmin attempt row (grade 9)
+        _load(
+            conn,
+            tmp_path,
+            KIND_SESSIONS,
+            "sessionsForUser",
+            [_session("s1", "2026-05-14T20:00:00.000Z", attempted=["v4", "v5", "v6"])],
+        )
+        _load(
+            conn,
+            tmp_path,
+            KIND_ASCENTS,
+            "ascentsForUser",
+            [_ascent("a1", "s1", "2026-05-14T20:01:00.000Z", "v1")],
+        )
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        # Garmin's 1 attempt kept; Kaya's 3 attempts add only the 2 beyond it.
+        assert sorted(_routes(conn), key=str) == sorted(
+            [(9, "attempt"), (1, "completed"), (5, "attempt"), (6, "attempt")], key=str
+        )
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        assert len(_routes(conn)) == 4  # idempotent
+
+
+def test_garmin_with_more_attempts_than_kaya_keeps_all_garmin(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _garmin_boulder(conn, "g1", "2026-05-14")
+        _load(
+            conn,
+            tmp_path,
+            KIND_SESSIONS,
+            "sessionsForUser",
+            [_session("s1", "2026-05-14T20:00:00.000Z", attempted=["v4"])],
+        )
+        _load(
+            conn,
+            tmp_path,
+            KIND_ASCENTS,
+            "ascentsForUser",
+            [_ascent("a1", "s1", "2026-05-14T20:01:00.000Z", "v1")],
+        )
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        assert sorted(_routes(conn), key=str) == sorted([(9, "attempt"), (1, "completed")], key=str)
+
+
+def test_route_label_prefers_kaya_name_else_colour_and_wall() -> None:
+    assert route_label("Dragon", "Pink", "A8") == "Dragon"
+    assert route_label(None, "Pink", "A8 - Alcove, Right") == "Pink - A8 - Alcove, Right"
+    assert route_label(None, None, "A8") == "A8"
+    assert route_label(None, None, None) is None
+
+
+def test_split_carries_the_kaya_route_label(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _load(
+            conn,
+            tmp_path,
+            KIND_SESSIONS,
+            "sessionsForUser",
+            [_session("s1", "2026-09-27T03:00:00.000Z")],
+        )
+        ascent = _ascent("a1", "s1", "2026-09-27T03:05:00.000Z", "v2")
+        ascent["climb"]["color"] = {"id": "1", "name": "Pink"}
+        ascent["climb"]["wall"] = {"id": "2", "name": "A8 - Alcove, Right"}
+        _load(conn, tmp_path, KIND_ASCENTS, "ascentsForUser", [ascent])
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        assert conn.execute(select(split.c.climb_name)).scalar_one() == "Pink - A8 - Alcove, Right"

@@ -40,6 +40,33 @@ describe("BoulderingRoutesTable", () => {
     expect(screen.queryByText(/routes completed/)).not.toBeInTheDocument();
   });
 
+  it("shows a Kaya route's name and an ungraded route as V?", () => {
+    render(
+      <BoulderingRoutesTable
+        splits={[
+          split({ split_index: 0, climb_grade: 2, climb_name: "Pink - A8 - Alcove, Right" }),
+          split({
+            split_index: 1,
+            climb_grade: null,
+            climb_result: "attempt",
+            climb_name: "Blue - A1 - Intro Area",
+          }),
+          split({ split_index: 2, climb_grade: 3, climb_name: null }),
+        ]}
+        onSetStatus={noop}
+        onSetGrade={noop}
+        onAddRoute={noop}
+        onDeleteRoute={noop}
+        isSaving={false}
+        isError={false}
+      />,
+    );
+    expect(screen.getByText("Pink - A8 - Alcove, Right")).toBeInTheDocument();
+    const ungraded = screen.getByText("Blue - A1 - Intro Area").closest("tr")!;
+    expect(within(ungraded).getByRole("option", { name: "V?" })).toBeInTheDocument();
+    expect(screen.getByText("2 of 3 routes completed.")).toBeInTheDocument();
+  });
+
   it("lists one row per route, in order, with grade/status/HR", () => {
     render(
       <BoulderingRoutesTable

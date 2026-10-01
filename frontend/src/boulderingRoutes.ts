@@ -20,7 +20,11 @@ export interface BoulderingRoute {
    * same thing as routeNumber below, which is purely a display position. */
   splitIndex: number;
   routeNumber: number;
-  grade: number;
+  /** null for an ungraded route (Kaya's "v?") -- shown as "?" in the routes table, never counted
+   * toward any grade statistic. */
+  grade: number | null;
+  /** A Kaya-sourced route's own label (name, else hold colour + wall); null for Garmin's. */
+  name: string | null;
   result: string;
   durationS: number | null;
   avgHr: number | null;
@@ -36,11 +40,13 @@ export interface BoulderingRoute {
  * shows one row per route, so only the climb's own HR is surfaced here. */
 export function boulderingRoutes(splits: SplitOut[]): BoulderingRoute[] {
   return splits
-    .filter((s) => s.split_type === "climb_active" && s.climb_grade != null)
+    // A graded Garmin route, or any Kaya-sourced one (which may be ungraded, "v?").
+    .filter((s) => s.split_type === "climb_active" && (s.climb_grade != null || s.climb_name))
     .map((s, i) => ({
       splitIndex: s.split_index,
       routeNumber: i + 1,
-      grade: s.climb_grade!,
+      grade: s.climb_grade,
+      name: s.climb_name ?? null,
       result: s.climb_result ?? "unknown",
       durationS: s.duration_s,
       avgHr: s.climb_avg_hr,
@@ -49,8 +55,8 @@ export function boulderingRoutes(splits: SplitOut[]): BoulderingRoute[] {
     }));
 }
 
-export function formatGrade(grade: number): string {
-  return `V${grade}`;
+export function formatGrade(grade: number | null): string {
+  return grade == null ? "V?" : `V${grade}`;
 }
 
 /** "completed"/"attempt" are the only two raw values confirmed against real data (see this
@@ -88,10 +94,13 @@ export interface ClimbSummary {
 
 /** The "Climb" stats column on the activity detail page -- see ActivityStatsGrid.tsx. */
 export function climbSummary(routes: BoulderingRoute[]): ClimbSummary {
-  const completedGrades = routes.filter((r) => r.result === "completed").map((r) => r.grade);
+  const completedGrades = routes
+    .filter((r) => r.result === "completed")
+    .map((r) => r.grade)
+    .filter((g): g is number => g != null);
   const durations = routes.map((r) => r.durationS).filter((d): d is number => d != null);
   return {
-    routeCount: routes.length,
+    routeCount: routes.filter((r) => r.grade != null).length,
     maxCompletedGrade: completedGrades.length > 0 ? Math.max(...completedGrades) : null,
     climbTimeS: durations.length > 0 ? durations.reduce((sum, d) => sum + d, 0) : null,
   };
@@ -108,6 +117,7 @@ export function climbSummary(routes: BoulderingRoute[]): ClimbSummary {
 export function gradeBreakdownFromRoutes(routes: BoulderingRoute[]): ClimbGradeBreakdownOut[] {
   const byGrade = new Map<number, { attempted: number; completed: number }>();
   for (const r of routes) {
+    if (r.grade == null) continue;
     const bucket = byGrade.get(r.grade) ?? { attempted: 0, completed: 0 };
     if (r.result === "completed") bucket.completed += 1;
     else bucket.attempted += 1;

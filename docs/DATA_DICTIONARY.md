@@ -1856,8 +1856,13 @@ ascents are used. Sessions are grouped by **local date** (athlete timezone):
   (`sport=rock_climbing`, `sub_sport=bouldering`, `primary_source=kaya`, id derived from the Kaya
   session id, name = gym name, no duration). Several candidates are logged and not merged.
 
-A `Repeat` counts as a completed route within its session. Failed attempts are not in Kaya's ascent
-feed. `Kaya` ratings, comments, ascent types and attempts are stored but not yet shown in the UI.
+A `Repeat` counts as a completed route within its session. Unsent climbs come from each session's
+`attempted_climbs` list (stored in `kaya_attempt`, no timestamp) and become `climb_result="attempt"`
+splits; on a merged Garmin day only the surplus beyond Garmin's own attempt count is added, so an
+attempt is never counted twice. Each Kaya-derived split carries `split.climb_name`: Kaya's own route
+name when it has one (almost never for gym problems), else `"<colour> - <wall>"` from the climb's
+`color`/`wall` (stored as `climb_color`/`climb_wall`). A Kaya grade of `v?` is stored as a NULL
+`climb_grade` and shown as "V?", never counted in grade statistics. `Kaya` ratings, comments, ascent types and attempts are stored but not yet shown in the UI.
 A manual status/grade correction on a Garmin route that Kaya replaces no longer applies (Kaya wins
 on a Kaya-covered day). A Garmin route mis-decoded as an attempt that was really a send stays as
 an extra attempt row next to Kaya's send; attempts never count toward goals.

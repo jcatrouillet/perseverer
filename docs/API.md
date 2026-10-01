@@ -2044,6 +2044,7 @@ Returned by `GET /activities/{id}`.
 | `duration_s`, `distance_m` | number, nullable |
 | `climb_grade` | integer, nullable — bouldering only, V-scale grade, only set on a `climb_active` split. Reverse-engineered from an undocumented FIT field (see `docs/DATA_DICTIONARY.md`) |
 | `climb_result` | string, nullable — bouldering only, `"attempt"`/`"completed"` (or `"unknown_<n>"` for a raw value not yet confirmed), only set on a `climb_active` split |
+| `climb_name` | string, nullable — a Kaya-sourced route's label: Kaya's own name, else `"<hold colour> - <wall>"` (e.g. `"Pink - A8 - Alcove, Right"`); null for a Garmin-recorded route. `climb_grade` is null for an ungraded Kaya route (`v?`) |
 | `climb_avg_hr`, `climb_max_hr` | number, nullable — bouldering only, set on both `climb_active` and `climb_rest` splits |
 
 ### RouteOut

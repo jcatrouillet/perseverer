@@ -66,6 +66,7 @@ export function BoulderingRoutesTable({
           <thead>
             <tr>
               <th>Route</th>
+              <th>Name</th>
               <th>Grade</th>
               <th>Status</th>
               <th>Duration</th>
@@ -84,14 +85,15 @@ export function BoulderingRoutesTable({
                 }
               >
                 <td>{r.routeNumber}</td>
+                <td>{r.name ?? "—"}</td>
                 <td>
                   <select
-                    value={r.grade}
+                    value={r.grade ?? ""}
                     disabled={isSaving}
                     onChange={(e) => onSetGrade(r.splitIndex, Number(e.target.value))}
                   >
-                    {!GRADE_OPTIONS.includes(r.grade) && (
-                      <option value={r.grade} disabled>
+                    {(r.grade == null || !GRADE_OPTIONS.includes(r.grade)) && (
+                      <option value={r.grade ?? ""} disabled>
                         {formatGrade(r.grade)}
                       </option>
                     )}
@@ -137,6 +139,7 @@ export function BoulderingRoutesTable({
             ))}
             <tr className="bouldering-routes-table__add-row">
               <td>+</td>
+              <td />
               <td>
                 <select value={newGrade} onChange={(e) => setNewGrade(Number(e.target.value))}>
                   {GRADE_OPTIONS.map((g) => (

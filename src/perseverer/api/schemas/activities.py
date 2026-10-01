@@ -45,6 +45,9 @@ class SplitOut(BaseModel):
     # comment for how these two undocumented FIT fields were reverse-engineered.
     climb_grade: int | None
     climb_result: str | None
+    # A Kaya-sourced route's label (Kaya's own name, else "<hold colour> - <wall>"); null for a
+    # Garmin-recorded route. See kaya_ingest.py.
+    climb_name: str | None = None
     # Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
     climb_avg_hr: float | None
     climb_max_hr: float | None
