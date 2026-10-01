@@ -79,7 +79,7 @@ ASCENTS_QUERY = (
     "gym { id name address city region country latitude longitude } } } }"
 )
 
-_MIN = datetime.min
+_LAST = datetime.max
 UNSENT_QUERY = (
     "query attemptedClimbsForUser($user_id: ID!, $offset: Int!, $count: Int!) { "
     'attemptedClimbsForUser(user_id: $user_id, climb_type_id: "1", offset: $offset, count: $count) '
@@ -281,6 +281,9 @@ class _Route:
     grade: int | None
     result: str  # "completed" | "attempt"
     name: str | None = None
+    # Where it sorts: a failed attempt takes its own send's time so it lands just before it; an
+    # unsent climb has no time and goes last.
+    order: datetime | None = None
 
 
 def _athlete_tz(conn: Connection, athlete_id: str) -> ZoneInfo:
@@ -335,8 +338,10 @@ def _replace_splits(
     physical attempts, possibly several per problem); Kaya's `attempted_climbs` are distinct unsent
     problems, so only the surplus beyond Garmin's attempt count is added -- an attempt is never
     counted twice, yet one Garmin missed still appears."""
-    sends = sorted((r for r in routes if r.result == "completed"), key=lambda r: r.when or _MIN)
-    attempts = [r for r in routes if r.result == "attempt"]
+    ordered = sorted(
+        routes,
+        key=lambda r: (r.order or r.when or _LAST, 0 if r.result == "attempt" else 1),
+    )
     where = [split.c.athlete_id == athlete_id, split.c.activity_id == activity_id]
     if garmin_activity:
         where.append(split.c.climb_result == "completed")
@@ -356,7 +361,13 @@ def _replace_splits(
                 split.c.split_type == "climb_active",
             )
         ).scalar_one()
-    to_insert = sends + attempts[kept_attempts:]
+    to_insert: list[_Route] = []
+    skip = kept_attempts
+    for r in ordered:
+        if r.result == "attempt" and skip > 0:
+            skip -= 1  # Garmin already recorded this many attempts on the activity
+            continue
+        to_insert.append(r)
     for i, route in enumerate(to_insert):
         _insert_route(conn, athlete_id, activity_id, next_index + i, route)
 
@@ -410,6 +421,7 @@ def apply_kaya_sessions(conn: Connection, *, athlete_id: str) -> set[str]:
                     grade_to_v(a.grade_name),
                     "attempt",
                     route_label(a.climb_name, a.climb_color, a.climb_wall),
+                    order=a.date_utc,
                 )
             )
         routes_by_session[a.session_kaya_id].append(

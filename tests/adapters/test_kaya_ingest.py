@@ -398,3 +398,27 @@ def test_attempt_counts_expand_into_attempt_rows(tmp_path: Path) -> None:
         routes = _routes(conn)
         assert routes.count((4, "completed")) == 1
         assert routes.count((4, "attempt")) == 3 + 5
+
+
+def test_attempts_come_before_their_send_and_unsent_climbs_last(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _load(
+            conn,
+            tmp_path,
+            KIND_SESSIONS,
+            "sessionsForUser",
+            [_session("s1", "2026-09-27T03:00:00.000Z", attempted=["v5"])],
+        )
+        first = _ascent("a1", "s1", "2026-09-27T03:05:00.000Z", "v2", "Redpoint")
+        first["attempts"] = 3  # 2 failed tries, then the send
+        second = _ascent("a2", "s1", "2026-09-27T03:10:00.000Z", "v3")
+        _load(conn, tmp_path, KIND_ASCENTS, "ascentsForUser", [second, first])
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        assert _routes(conn) == [
+            (2, "attempt"),
+            (2, "attempt"),
+            (2, "completed"),
+            (3, "completed"),
+            (5, "attempt"),
+        ]
