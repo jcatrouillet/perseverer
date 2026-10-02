@@ -25,6 +25,8 @@ export interface BoulderingRoute {
   grade: number | null;
   /** A Kaya-sourced route's own label (name, else hold colour + wall); null for Garmin's. */
   name: string | null;
+  /** "kaya" when this route was imported from Kaya (no per-route duration/HR). */
+  source: string | null;
   result: string;
   durationS: number | null;
   avgHr: number | null;
@@ -47,6 +49,7 @@ export function boulderingRoutes(splits: SplitOut[]): BoulderingRoute[] {
       routeNumber: i + 1,
       grade: s.climb_grade,
       name: s.climb_name ?? null,
+      source: s.source ?? null,
       result: s.climb_result ?? "unknown",
       durationS: s.duration_s,
       avgHr: s.climb_avg_hr,

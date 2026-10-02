@@ -67,6 +67,27 @@ describe("BoulderingRoutesTable", () => {
     expect(screen.getByText("2 of 3 routes completed.")).toBeInTheDocument();
   });
 
+  it("hides the per-route Duration and Avg HR columns when the routes come from Kaya", () => {
+    render(
+      <BoulderingRoutesTable
+        splits={[
+          split({ split_index: 0, climb_name: "Pink - A8", source: "kaya", duration_s: null }),
+          split({ split_index: 1, climb_name: "Blue - A1", source: "kaya", duration_s: null }),
+        ]}
+        onSetStatus={noop}
+        onSetGrade={noop}
+        onAddRoute={noop}
+        onDeleteRoute={noop}
+        isSaving={false}
+        isError={false}
+      />,
+    );
+    expect(screen.queryByRole("columnheader", { name: "Duration" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Avg HR" })).not.toBeInTheDocument();
+    expect(screen.getByText("Pink - A8")).toBeInTheDocument();
+    expect(screen.getByText("Add route")).toBeInTheDocument();
+  });
+
   it("lists one row per route, in order, with grade/status/HR", () => {
     render(
       <BoulderingRoutesTable
@@ -85,6 +106,7 @@ describe("BoulderingRoutesTable", () => {
     );
     const rows = screen.getAllByRole("row");
     expect(within(rows[2]!).getByText("150 bpm")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Duration" })).toBeInTheDocument();
     // Grade and status are both editable <select>s, not plain text -- confirm via their current
     // values instead. Grade is the first combobox in the row, status the second.
     const row1Selects = within(rows[1]!).getAllByRole("combobox");

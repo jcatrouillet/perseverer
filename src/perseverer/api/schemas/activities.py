@@ -48,6 +48,9 @@ class SplitOut(BaseModel):
     # A Kaya-sourced route's label (Kaya's own name, else "<hold colour> - <wall>"); null for a
     # Garmin-recorded route. See kaya_ingest.py.
     climb_name: str | None = None
+    # "kaya" for a route imported from Kaya (kaya_ingest.py); null for a Garmin/FIT-derived or
+    # manually-added row. Lets the UI hide per-route duration/HR, which Kaya rows never carry.
+    source: str | None = None
     # Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
     climb_avg_hr: float | None
     climb_max_hr: float | None

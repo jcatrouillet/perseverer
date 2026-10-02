@@ -45,6 +45,8 @@ export interface SplitOut {
   // A Kaya-sourced route's label (Kaya's own name, else "<hold colour> - <wall>"); null for a
   // Garmin-recorded route.
   climb_name?: string | null;
+  // "kaya" for a Kaya-imported route; null for a Garmin/FIT-derived or manual one.
+  source?: string | null;
   // Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
   climb_avg_hr: number | null;
   climb_max_hr: number | null;

@@ -48,6 +48,8 @@ export function BoulderingRoutesTable({
   isError: boolean;
 }) {
   const routes = boulderingRoutes(splits);
+  // Kaya routes carry no per-route duration or heart rate, so those columns are Garmin-only.
+  const showTiming = !routes.some((r) => r.source === "kaya");
   const [newGrade, setNewGrade] = useState(0);
   const [newResult, setNewResult] = useState<string>("completed");
 
@@ -69,8 +71,8 @@ export function BoulderingRoutesTable({
               <th>Name</th>
               <th>Grade</th>
               <th>Status</th>
-              <th>Duration</th>
-              <th>Avg HR</th>
+              {showTiming && <th>Duration</th>}
+              {showTiming && <th>Avg HR</th>}
               <th />
             </tr>
           </thead>
@@ -119,8 +121,12 @@ export function BoulderingRoutesTable({
                     <option value="completed">Completed</option>
                   </select>
                 </td>
-                <td>{r.durationS != null ? formatClockDuration(r.durationS) : "—"}</td>
-                <td>{r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : "—"}</td>
+                {showTiming && (
+                  <td>{r.durationS != null ? formatClockDuration(r.durationS) : "—"}</td>
+                )}
+                {showTiming && (
+                  <td>{r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : "—"}</td>
+                )}
                 <td>
                   {r.isManual && (
                     <button
@@ -155,7 +161,7 @@ export function BoulderingRoutesTable({
                   <option value="completed">Completed</option>
                 </select>
               </td>
-              <td colSpan={3}>
+              <td colSpan={showTiming ? 3 : 1}>
                 <button
                   type="button"
                   disabled={isSaving}
