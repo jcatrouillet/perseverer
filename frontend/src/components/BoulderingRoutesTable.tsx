@@ -48,8 +48,9 @@ export function BoulderingRoutesTable({
   isError: boolean;
 }) {
   const routes = boulderingRoutes(splits);
-  // Kaya routes carry no per-route duration or heart rate, so those columns are Garmin-only.
-  const showTiming = !routes.some((r) => r.source === "kaya");
+  // Kaya routes carry no per-route duration or heart rate, so those columns only appear when at
+  // least one route has Garmin timing (a Garmin-only activity, or Garmin efforts Kaya never logged).
+  const showTiming = routes.some((r) => r.source !== "kaya");
   const [newGrade, setNewGrade] = useState(0);
   const [newResult, setNewResult] = useState<string>("completed");
 

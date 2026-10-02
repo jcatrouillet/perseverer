@@ -961,8 +961,10 @@ environment:
     (`split.source="kaya"`) and Garmin's own route rows are demoted to
     `split_type="climb_active_superseded"` with grade/result cleared (kept for duration/HR, so climb
     time sums both types; every grade/goal/insight query sees only `climb_active`); total time,
-    calories, HR, training effect and the HR chart stay Garmin's; none or several candidates -> a
-    Kaya-only activity.
+    calories, HR, training effect and the HR chart stay Garmin's; Garmin efforts Kaya has no entry
+    for (coach-set problems, say) are promoted back to routes (`source="garmin_extra"`, matched by
+    grade+result against Kaya's, original decode kept in `split.garmin_grade`/`garmin_result`);
+    none or several candidates -> a Kaya-only activity.
     A send's `attempts` (which includes the send) expands to N-1 attempt rows; unsent climbs get their
     lifetime attempt count from `attemptedClimbsForUser` (`kaya_unsent_climb`, split across the
     sessions that list them). Unsent climbs come from each session's `attempted_climbs` (`kaya_attempt`) and are combined with

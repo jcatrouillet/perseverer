@@ -781,6 +781,11 @@ split = Table(
     Column("climb_name", String, nullable=True),
     # "kaya" for a route kaya_ingest.py wrote; NULL for every Garmin/FIT-derived or manual row.
     Column("source", String, nullable=True),
+    # Garmin's own decoded grade/result, remembered when a Kaya merge demotes the row (it then
+    # clears climb_grade/climb_result so nothing is counted twice), so an effort Kaya never logged
+    # can be promoted back to a route. NULL for every row that was never demoted.
+    Column("garmin_grade", Integer, nullable=True),
+    Column("garmin_result", String, nullable=True),
     # Also bouldering-only, but populated on both "climb_active" and "climb_rest" splits (unlike
     # grade/result, which only mean something for the climb itself) -- confirmed against real
     # data: field 15 <= field 16 held on all 55 real splits across two files, and both fall in a

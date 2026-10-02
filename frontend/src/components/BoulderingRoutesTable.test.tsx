@@ -88,6 +88,24 @@ describe("BoulderingRoutesTable", () => {
     expect(screen.getByText("Add route")).toBeInTheDocument();
   });
 
+  it("keeps the timing columns when Garmin efforts sit alongside Kaya routes", () => {
+    render(
+      <BoulderingRoutesTable
+        splits={[
+          split({ split_index: 0, climb_name: "Pink - A8", source: "kaya", duration_s: null }),
+          split({ split_index: 1, climb_grade: 4, source: "garmin_extra", duration_s: 80 }),
+        ]}
+        onSetStatus={noop}
+        onSetGrade={noop}
+        onAddRoute={noop}
+        onDeleteRoute={noop}
+        isSaving={false}
+        isError={false}
+      />,
+    );
+    expect(screen.getByRole("columnheader", { name: "Duration" })).toBeInTheDocument();
+  });
+
   it("lists one row per route, in order, with grade/status/HR", () => {
     render(
       <BoulderingRoutesTable

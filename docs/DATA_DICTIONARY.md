@@ -1851,6 +1851,12 @@ ascents are used. Sessions are grouped by **local date** (athlete timezone):
   send). Garmin's own route rows are **demoted, not deleted**: `split_type` becomes
   `climb_active_superseded` and `climb_grade`/`climb_result` are cleared, so nothing is counted as a
   route twice (grade/goal/insight queries only see `climb_active`), while their `duration_s`/HR stay.
+  The decoded values are remembered in `split.garmin_grade`/`garmin_result`. **Efforts Garmin recorded
+  that Kaya has no entry for** (e.g. coach-set problems that cannot be logged in Kaya) are promoted
+  back to routes (`split_type="climb_active"`, `source="garmin_extra"`, with Garmin's duration/HR):
+  Garmin's efforts are matched to Kaya's by (grade, result), each Kaya route claims one, and the
+  leftovers are the extras; a Kaya ungraded (`v?`) route absorbs one leftover (same result first).
+  Re-evaluated on every run.
   Everything activity-level stays Garmin's: total time, calories, avg/max HR, training effect, the
   HR chart, and **climb time** (the sum of `climb_active` and `climb_active_superseded` durations,
   see `GET /activities` `climb_time_s`). Kaya rows have no per-route duration/HR. Kaya is linked in

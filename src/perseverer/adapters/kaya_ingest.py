@@ -22,7 +22,7 @@ import json
 import logging
 import re
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -357,14 +357,32 @@ def _replace_splits(
     )
     base = [split.c.athlete_id == athlete_id, split.c.activity_id == activity_id]
     if garmin_activity:
-        # Kaya's rows from an earlier run go; then Garmin's own route rows are demoted, not
-        # deleted: they keep their duration/HR (so climb time stays Garmin's real figure) but lose
-        # the decoded grade/result and their "climb_active" type, so no route is counted twice.
+        # Kaya's rows from an earlier run go, and so does any earlier promotion of a Garmin effort
+        # (re-decided below). Then Garmin's own fresh route rows are demoted, not deleted: they keep
+        # their duration/HR (so climb time stays Garmin's real figure) but lose the decoded
+        # grade/result (remembered in garmin_grade/garmin_result) and their "climb_active" type, so
+        # no route is counted twice.
         conn.execute(delete(split).where(*base, split.c.source == "kaya"))
         conn.execute(
             update(split)
+            .where(*base, split.c.source == "garmin_extra")
+            .values(
+                split_type="climb_active_superseded",
+                climb_grade=None,
+                climb_result=None,
+                source=None,
+            )
+        )
+        conn.execute(
+            update(split)
             .where(*base, split.c.split_type == "climb_active")
-            .values(split_type="climb_active_superseded", climb_grade=None, climb_result=None)
+            .values(
+                garmin_grade=split.c.climb_grade,
+                garmin_result=split.c.climb_result,
+                split_type="climb_active_superseded",
+                climb_grade=None,
+                climb_result=None,
+            )
         )
         next_index = conn.execute(
             select(func.coalesce(func.max(split.c.split_index), -1) + 1).where(*base)
@@ -375,6 +393,52 @@ def _replace_splits(
     to_insert = ordered
     for i, route in enumerate(to_insert):
         _insert_route(conn, athlete_id, activity_id, next_index + i, route)
+    if garmin_activity:
+        _promote_unlogged_garmin_efforts(conn, base, routes, next_index + len(to_insert))
+
+
+def _promote_unlogged_garmin_efforts(
+    conn: Connection, base: list[Any], routes: list[_Route], next_index: int
+) -> None:
+    """Garmin recorded efforts Kaya has no entry for (e.g. coach-set problems that cannot be logged
+    in Kaya) are added back to the route list. Garmin's efforts are matched to Kaya's by (grade,
+    result); Garmin's that are left over after every Kaya route has claimed one are the extras.
+    A Kaya route with no grade ("v?") could be any grade, so each one absorbs one leftover (same
+    result first). Extras keep Garmin's duration/HR and are marked source="garmin_extra"."""
+    garmin = conn.execute(
+        select(split.c.id, split.c.garmin_grade, split.c.garmin_result)
+        .where(
+            *base,
+            split.c.split_type == "climb_active_superseded",
+            split.c.garmin_result.is_not(None),
+        )
+        .order_by(split.c.split_index)
+    ).fetchall()
+    claimed = Counter((r.grade, r.result) for r in routes if r.grade is not None)
+    leftover = []
+    for g in garmin:
+        key = (g.garmin_grade, g.garmin_result)
+        if claimed[key] > 0:
+            claimed[key] -= 1
+        else:
+            leftover.append(g)
+    for r in (r for r in routes if r.grade is None):
+        same = next((g for g in leftover if g.garmin_result == r.result), None)
+        pick = same if same is not None else (leftover[0] if leftover else None)
+        if pick is not None:
+            leftover.remove(pick)
+    for offset, g in enumerate(leftover):
+        conn.execute(
+            update(split)
+            .where(split.c.id == g.id)
+            .values(
+                split_type="climb_active",
+                climb_grade=g.garmin_grade,
+                climb_result=g.garmin_result,
+                source="garmin_extra",
+                split_index=next_index + offset,
+            )
+        )
 
 
 def _link(

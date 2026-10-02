@@ -382,32 +382,64 @@ def _kaya_day(conn: Connection, tmp_path: Path, attempted: list[str]) -> None:
 def test_kaya_supplies_the_routes_and_garmin_rows_are_kept_for_time(tmp_path: Path) -> None:
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        _garmin_boulder(conn, "g1", "2026-05-14")  # one Garmin climb_active row, 100 s
+        _garmin_boulder(conn, "g1", "2026-05-14")  # one Garmin effort: V9 attempt, 100 s
         conn.execute(split.update().values(duration_s=100.0, climb_avg_hr=95.0))
         _kaya_day(conn, tmp_path, attempted=["v4", "v5"])
         apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
         assert len(conn.execute(select(activity)).fetchall()) == 1  # merged, no second activity
-        # Routes are Kaya's alone: its send, then its two unsent attempts.
         routes = conn.execute(
             select(split.c.climb_grade, split.c.climb_result, split.c.source).where(
                 split.c.split_type == "climb_active"
             )
         ).fetchall()
+        # Kaya's send and two attempts, plus Garmin's V9 effort that Kaya never logged.
         assert sorted((r.climb_grade, r.climb_result, r.source) for r in routes) == [
             (1, "completed", "kaya"),
             (4, "attempt", "kaya"),
             (5, "attempt", "kaya"),
+            (9, "attempt", "garmin_extra"),
         ]
-        # Garmin's own row is demoted: no longer a route, but it keeps its time and HR.
+        extra = conn.execute(select(split).where(split.c.source == "garmin_extra")).one()
+        assert (extra.duration_s, extra.climb_avg_hr) == (100.0, 95.0)  # keeps Garmin timing
+
+
+def test_garmin_efforts_kaya_already_has_are_not_duplicated(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _garmin_boulder(conn, "g1", "2026-05-14")  # Garmin effort: V9 attempt
+        conn.execute(
+            split.update().values(climb_grade=1, climb_result="completed", duration_s=50.0)
+        )
+        _kaya_day(conn, tmp_path, attempted=[])  # Kaya: one V1 send
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        routes = conn.execute(
+            select(split.c.climb_grade, split.c.source).where(split.c.split_type == "climb_active")
+        ).fetchall()
+        assert [(r.climb_grade, r.source) for r in routes] == [(1, "kaya")]
+        # The matched Garmin row is kept (demoted) so its duration still counts toward climb time.
         old = conn.execute(
             select(split).where(split.c.split_type == "climb_active_superseded")
         ).one()
-        assert (old.duration_s, old.climb_avg_hr, old.climb_grade, old.climb_result) == (
-            100.0,
-            95.0,
-            None,
-            None,
+        assert (old.duration_s, old.garmin_grade, old.garmin_result) == (50.0, 1, "completed")
+
+
+def test_ungraded_kaya_routes_absorb_leftover_garmin_efforts(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _garmin_boulder(conn, "g1", "2026-05-14")  # Garmin effort: V9 attempt
+        _load(
+            conn,
+            tmp_path,
+            KIND_SESSIONS,
+            "sessionsForUser",
+            [_session("s1", "2026-05-14T20:00:00.000Z", attempted=["v?"])],
         )
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        # Kaya's one ungraded attempt stands in for Garmin's one attempt: no extra is added.
+        routes = conn.execute(
+            select(split.c.climb_grade, split.c.source).where(split.c.split_type == "climb_active")
+        ).fetchall()
+        assert [(r.climb_grade, r.source) for r in routes] == [(None, "kaya")]
 
 
 def test_reapplying_a_merged_day_is_idempotent(tmp_path: Path) -> None:
@@ -421,4 +453,5 @@ def test_reapplying_a_merged_day_is_idempotent(tmp_path: Path) -> None:
         apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
         again = conn.execute(select(split.c.split_type, split.c.climb_grade)).fetchall()
         assert sorted(map(tuple, first), key=str) == sorted(map(tuple, again), key=str)
-        assert [t for t, _ in again].count("climb_active_superseded") == 1
+        # Kaya's send and attempt, plus Garmin's unlogged V9 effort -- stable across re-runs.
+        assert [t for t, _ in again].count("climb_active") == 3
