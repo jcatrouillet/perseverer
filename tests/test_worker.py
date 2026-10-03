@@ -554,3 +554,61 @@ def test_run_daily_sync_one_athletes_failure_does_not_block_another(tmp_path: Pa
         run_daily_sync()  # must not raise -- a per-athlete failure is caught and logged
 
     assert synced_athletes == [SECOND_ATHLETE_ID]
+
+
+# --- scheduled Kaya import -----------------------------------------------------------------
+
+
+def _run_sync_with_kaya(tmp_path: Path, *, with_tokens: bool, kaya_effect: Any = None) -> list[str]:
+    from perseverer.adapters.kaya import KayaTokens, save_tokens
+    from perseverer.adapters.kaya_ingest import KayaImportSummary
+
+    engine = _engine(tmp_path)
+    settings = Settings(data_dir=tmp_path)
+    if with_tokens:
+        save_tokens(
+            settings.kaya_tokenstore_dir_for(DEFAULT_ATHLETE_ID),
+            KayaTokens("t", "r", "1", dt.datetime.now(dt.UTC).isoformat()),
+        )
+    called: list[str] = []
+
+    def fake_import(conn: Any, raw_dir: Any, *, athlete_id: str, tokenstore_dir: Any) -> Any:
+        called.append(athlete_id)
+        if kaya_effect is not None:
+            raise kaya_effect
+        return KayaImportSummary(pages=1, sessions=2, ascents=3, touched_dates=1)
+
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch(
+            "perseverer.worker.main.sync_garmin_connect",
+            side_effect=lambda *a, **k: IngestRunSummary(run_id=0),
+        ),
+        patch("perseverer.worker.main.import_kaya", side_effect=fake_import),
+    ):
+        run_daily_sync()
+    return called
+
+
+def test_daily_sync_imports_kaya_after_garmin_for_an_athlete_who_logged_in(tmp_path: Path) -> None:
+    assert _run_sync_with_kaya(tmp_path, with_tokens=True) == [DEFAULT_ATHLETE_ID]
+
+
+def test_daily_sync_skips_kaya_for_an_athlete_who_never_logged_in(tmp_path: Path) -> None:
+    assert _run_sync_with_kaya(tmp_path, with_tokens=False) == []
+
+
+def test_a_kaya_failure_never_breaks_the_daily_sync(tmp_path: Path) -> None:
+    from perseverer.adapters.kaya import KayaAuthRequired
+    from perseverer.adapters.kaya_ingest import KayaRateLimited
+
+    for i, effect in enumerate(
+        (KayaAuthRequired("expired"), KayaRateLimited("429"), RuntimeError("boom"))
+    ):
+        run_dir = tmp_path / f"run{i}"
+        run_dir.mkdir()
+        # must not raise: logged, and the staleness check that follows still runs
+        assert _run_sync_with_kaya(run_dir, with_tokens=True, kaya_effect=effect) == [
+            DEFAULT_ATHLETE_ID
+        ]

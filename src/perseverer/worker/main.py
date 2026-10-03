@@ -36,6 +36,9 @@ from perseverer.adapters.garmin_connect import (
     RateLimitSettings,
     sync_garmin_connect,
 )
+from perseverer.adapters.kaya import KayaAuthRequired
+from perseverer.adapters.kaya import token_status as kaya_token_status
+from perseverer.adapters.kaya_ingest import KayaRateLimited, import_kaya
 from perseverer.backup import create_backup
 from perseverer.config import Settings, get_settings
 from perseverer.db.engine import make_engine
@@ -107,6 +110,8 @@ def _sync_one_athlete(
     except Exception:
         logger.exception("eufy sync failed unexpectedly for athlete %s", athlete_id)
 
+    _import_kaya_for_athlete(conn, settings, athlete_id)
+
     alerts = check_staleness(
         conn,
         athlete_id,
@@ -123,6 +128,43 @@ def _sync_one_athlete(
         )
         if settings.staleness_webhook_url:
             notify_webhook(settings.staleness_webhook_url, alert)
+
+
+def _import_kaya_for_athlete(conn: Connection, settings: Settings, athlete_id: str) -> None:
+    """The Kaya bouldering logbook, right after the Garmin sync so a same-day Garmin session is
+    there to merge into (docs/adr/0016-kaya-bouldering-adapter.md). Only for an athlete who has
+    logged in to Kaya (`sync auth kaya-login`); never uses credentials, only the saved tokens.
+    Best-effort like the Eufy step: a dead session, a rate limit or any Kaya-side change is logged
+    and never blocks the staleness check that follows."""
+    tokenstore_dir = settings.kaya_tokenstore_dir_for(athlete_id)
+    if not kaya_token_status(tokenstore_dir)[0]:
+        return
+    try:
+        logger.info("starting scheduled kaya import for %s", athlete_id)
+        summary = import_kaya(
+            conn, settings.raw_archive_dir, athlete_id=athlete_id, tokenstore_dir=tokenstore_dir
+        )
+        logger.info(
+            "kaya import finished for %s: sessions=%d ascents=%d dates_updated=%d",
+            athlete_id,
+            summary.sessions,
+            summary.ascents,
+            summary.touched_dates,
+        )
+    except KayaAuthRequired:
+        conn.rollback()
+        logger.warning(
+            "kaya session for athlete %s has expired -- run `sync auth kaya-login` again",
+            athlete_id,
+        )
+    except KayaRateLimited:
+        conn.rollback()
+        logger.warning(
+            "kaya rate-limited the import for athlete %s; next run continues", athlete_id
+        )
+    except Exception:
+        conn.rollback()
+        logger.exception("kaya import failed unexpectedly for athlete %s", athlete_id)
 
 
 def run_daily_sync() -> None:
