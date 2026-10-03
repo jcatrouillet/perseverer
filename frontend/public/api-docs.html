@@ -1350,6 +1350,13 @@ const SCHEMAS = [
       ["completed_at","string(date-time)|null","The athlete's own manual \"I did this\" marker -- null until marked complete (POST .../{workout_id}/complete)."],
       ["matched_activity_id","string|null","A same-day, matching-sport recorded activity, if one exists. Computed at read time, never stored, never overriding completed_at. The Week view's compliance stat counts a workout done when either field is non-null."],
     ] },
+  { name: "PlannedRouteOut", note: "The GPX route attached to a planned running workout (POST /planned-workouts/{workout_id}/route).", fields: [
+      ["name","string|null","The GPX's own name, else the file name."],
+      ["distance_m","number",""],
+      ["elevation_gain_m","number|null","Approximate; ignores sub-metre wobble."],
+      ["polyline","string","Google-encoded polyline (precision 5), thinned to at most ~600 points."],
+      ["uploaded_at","string(date-time)",""],
+    ] },
   { name: "PlannedWorkoutOut", note: "Returned by POST/GET/PUT /planned-workouts and GET .../by-date/{local_date}. available is always true here — a nonexistent workout_id is a 404, not an available:false object.", fields: [
       ["available","boolean","required — always true"],
       ["id","integer|null","optional","opt"],
@@ -1368,6 +1375,7 @@ const SCHEMAS = [
       ["garmin_scheduled_at","string(date-time)|null","","opt"],
       ["completed_at","string(date-time)|null","The athlete's own manual \"I did this\" marker, set/cleared via POST .../{workout_id}/complete|.../uncomplete. null until marked.","opt"],
       ["matched_activity_id","string|null","A same-day, matching-sport recorded activity, if one exists. Computed at read time, never stored, never overriding completed_at.","opt"],
+      ["route","PlannedRouteOut|null","The attached GPX route (running only), or null.","opt"],
       ["estimated_distance_m","number|null","running only — always null for yoga/bouldering/hiit/strength_training, and for running itself until a running-load threshold pace is configured.","opt"],
       ["estimated_load","number|null","running only, same threshold-pace caveat as estimated_distance_m.","opt"],
       ["segments","array<PlannedWorkoutSegmentOut>","Defaults to []. Repeat-expanded (unlike steps), running only.","opt"],
@@ -2258,6 +2266,28 @@ const GROUPS = [
       responses: [ { code: 200, note: "No response body of interest." }, { code: 404, note: 'detail: "planned workout not found"' } ],
       example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID} \\
   -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/planned-workouts/{workout_id}/route", summary: "Attach (or replace) a GPX route on a planned running workout.",
+      description: "multipart/form-data with one file field. The original GPX is archived verbatim (raw_object, source athlete_upload, kind planned_workout_gpx); the workout stores only a display summary (PlannedRouteOut: name, distance, elevation gain, a thinned polyline). Shown on the calendar for reference — not sent to the watch. Entity/DOCTYPE declarations are refused.",
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."], ["file","body","req","file","—","A .gpx track (or route), 5 MB maximum, at least two points."] ],
+      responses: [ { code: 200, ref: "PlannedWorkoutOut", note: "route now set." }, { code: 400, note: "Not a running workout, or an unusable GPX (detail says why)." }, { code: 404, note: 'detail: "planned workout not found"' }, { code: 413, note: "Over 5 MB." } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID}/route \\
+  -H "X-API-Key: YOUR_API_KEY" \\
+  -F "file=@dam-loop.gpx"` }
+    },
+    { method: "DELETE", path: "/api/v1/planned-workouts/{workout_id}/route", summary: "Detach the GPX route from a planned workout.",
+      description: "The archived GPX itself is kept — nothing in this app deletes raw data.",
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."] ],
+      responses: [ { code: 200, ref: "PlannedWorkoutOut", note: "route is null." }, { code: 404, note: 'detail: "planned workout not found"' } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID}/route \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "GET", path: "/api/v1/planned-workouts/{workout_id}/route.gpx", summary: "Download the original GPX exactly as uploaded.",
+      description: "application/gpx+xml, sent as an attachment.",
+      params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."] ],
+      responses: [ { code: 200, note: "The GPX file." }, { code: 404, note: "No such workout, or it has no route." } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID}/route.gpx \\
+  -H "X-API-Key: YOUR_API_KEY" -o route.gpx` }
     },
     { method: "POST", path: "/api/v1/planned-workouts/{workout_id}/push", summary: "Push one workout to Garmin now.",
       description: "The manual override alongside the worker's own automatic push for anything due within the coming week (PERSEVERER_PLANNED_WORKOUT_PUSH_WINDOW_DAYS, default 7). Runs in the background; poll GET /planned-workouts/{workout_id} afterward for the updated push_status/push_error.",

@@ -17,7 +17,8 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from sqlalchemy import Connection, Row, select
 from sqlalchemy.engine import Engine
 
@@ -25,6 +26,7 @@ from perseverer.adapters.garmin_connect import GarminConnectAdapter, RateLimiter
 from perseverer.api.dependencies import SettingsDep, get_conn, get_engine, require_api_key
 from perseverer.api.schemas.planned_workouts import (
     ParseErrorOut,
+    PlannedRouteOut,
     PlannedWorkoutCreateIn,
     PlannedWorkoutIn,
     PlannedWorkoutListItemOut,
@@ -36,11 +38,13 @@ from perseverer.api.schemas.planned_workouts import (
     RecurringWorkoutOut,
 )
 from perseverer.api.schemas.settings import JobTriggerOut
+from perseverer.archive import archive_raw_bytes, read_raw_bytes
 from perseverer.db.schema import (
     athlete_hr_zone_config,
     athlete_running_load_config,
     planned_workout,
     planned_workout_step,
+    raw_object,
 )
 from perseverer.planned_workout_stats import WorkoutEstimate, estimate_workout
 from perseverer.planned_workouts import (
@@ -51,6 +55,7 @@ from perseverer.planned_workouts import (
     push_planned_workout,
     save_planned_workout,
 )
+from perseverer.workout_route import MAX_GPX_BYTES, InvalidRouteError, parse_gpx_route
 from perseverer.workout_syntax import ParsedStep, ParseError, parse_workout_syntax
 
 logger = logging.getLogger(__name__)
@@ -234,6 +239,15 @@ def _to_out(
         ]
         if estimate is not None
         else [],
+        route=PlannedRouteOut(
+            name=row.route_name,
+            distance_m=row.route_distance_m,
+            elevation_gain_m=row.route_elevation_gain_m,
+            polyline=row.route_polyline,
+            uploaded_at=row.route_uploaded_at.isoformat(),
+        )
+        if row.route_polyline and row.route_distance_m is not None and row.route_uploaded_at
+        else None,
     )
 
 
@@ -438,6 +452,113 @@ def _set_completed(
     )
     conn.commit()
     return _fetch_full_out(conn, athlete_id, workout_id)
+
+
+def _running_workout_row(conn: Connection, athlete_id: str, workout_id: int) -> Row:  # type: ignore[type-arg]
+    row = conn.execute(
+        select(planned_workout).where(
+            planned_workout.c.id == workout_id, planned_workout.c.athlete_id == athlete_id
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="planned workout not found")
+    return row
+
+
+@router.post("/planned-workouts/{workout_id}/route")
+def post_planned_workout_route(
+    workout_id: int,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    settings: SettingsDep,
+    file: UploadFile,
+    conn: Connection = Depends(get_conn),
+) -> PlannedWorkoutOut:
+    """Attach (or replace) a GPX route on a planned running workout. The original file is archived
+    raw; only a display summary (name, distance, elevation gain, thinned polyline) is stored on the
+    workout. 400 for a non-running workout or an unusable file, 413 over 5 MB."""
+    row = _running_workout_row(conn, athlete_id, workout_id)
+    if row.sport != "running":
+        raise HTTPException(
+            status_code=400, detail="a GPX route can only be attached to a running workout"
+        )
+    content = file.file.read(MAX_GPX_BYTES + 1)
+    if len(content) > MAX_GPX_BYTES:
+        raise HTTPException(status_code=413, detail="GPX file is too large (5 MB maximum)")
+    try:
+        summary = parse_gpx_route(content)
+    except InvalidRouteError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    raw_id = archive_raw_bytes(
+        conn,
+        settings.raw_archive_dir,
+        athlete_id=athlete_id,
+        source="athlete_upload",
+        kind="planned_workout_gpx",
+        content=content,
+        external_id=str(workout_id),
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    conn.execute(
+        planned_workout.update()
+        .where(planned_workout.c.id == workout_id)
+        .values(
+            route_raw_object_id=raw_id,
+            route_name=summary.name or (file.filename or "").rsplit(".", 1)[0] or None,
+            route_distance_m=summary.distance_m,
+            route_elevation_gain_m=summary.elevation_gain_m,
+            route_polyline=summary.encoded_polyline,
+            route_uploaded_at=now,
+            updated_at=now,
+        )
+    )
+    conn.commit()
+    return _fetch_full_out(conn, athlete_id, workout_id)
+
+
+@router.delete("/planned-workouts/{workout_id}/route")
+def delete_planned_workout_route(
+    workout_id: int,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> PlannedWorkoutOut:
+    """Detach the route. The archived GPX itself is kept (nothing in this app deletes raw data)."""
+    _running_workout_row(conn, athlete_id, workout_id)
+    conn.execute(
+        planned_workout.update()
+        .where(planned_workout.c.id == workout_id)
+        .values(
+            route_raw_object_id=None,
+            route_name=None,
+            route_distance_m=None,
+            route_elevation_gain_m=None,
+            route_polyline=None,
+            route_uploaded_at=None,
+            updated_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+    )
+    conn.commit()
+    return _fetch_full_out(conn, athlete_id, workout_id)
+
+
+@router.get("/planned-workouts/{workout_id}/route.gpx")
+def get_planned_workout_route_gpx(
+    workout_id: int,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    settings: SettingsDep,
+    conn: Connection = Depends(get_conn),
+) -> Response:
+    """The original GPX exactly as uploaded."""
+    row = _running_workout_row(conn, athlete_id, workout_id)
+    if row.route_raw_object_id is None:
+        raise HTTPException(status_code=404, detail="this workout has no route")
+    storage_path = conn.execute(
+        select(raw_object.c.storage_path).where(raw_object.c.id == row.route_raw_object_id)
+    ).scalar_one()
+    return Response(
+        content=read_raw_bytes(settings.raw_archive_dir, storage_path),
+        media_type="application/gpx+xml",
+        headers={"Content-Disposition": f'attachment; filename="workout-{workout_id}.gpx"'},
+    )
 
 
 @router.post("/planned-workouts/{workout_id}/complete")

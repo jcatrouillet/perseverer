@@ -13,6 +13,8 @@ const mockPush = vi.fn();
 const mockComplete = vi.fn();
 const mockUncomplete = vi.fn();
 const mockRecurring = vi.fn();
+const mockAttachRoute = vi.fn();
+const mockRemoveRoute = vi.fn();
 
 vi.mock("../api/queries", () => ({
   usePlannedWorkoutsForDate: (...args: unknown[]) => mockUsePlannedWorkoutsForDate(...args),
@@ -22,6 +24,8 @@ vi.mock("../api/queries", () => ({
   usePushPlannedWorkout: () => ({ mutate: mockPush, isPending: false }),
   useCompletePlannedWorkout: () => ({ mutate: mockComplete, isPending: false }),
   useUncompletePlannedWorkout: () => ({ mutate: mockUncomplete, isPending: false }),
+  useAttachPlannedWorkoutRoute: () => ({ mutate: mockAttachRoute, isPending: false, error: null }),
+  useRemovePlannedWorkoutRoute: () => ({ mutate: mockRemoveRoute, isPending: false, error: null }),
   useCreateRecurringPlannedWorkouts: () => ({
     mutate: mockRecurring,
     isPending: false,
@@ -259,6 +263,20 @@ describe("ScheduleWorkoutForm", () => {
     fireEvent.click(screen.getByText("Push to Garmin"));
 
     expect(mockPush).toHaveBeenCalledWith(1);
+  });
+
+  it("offers the GPX route control for a running workout but not for yoga", () => {
+    mockUsePlannedWorkoutsForDate.mockReturnValue({ ...NONE, data: [SCHEDULED] });
+    const { unmount } = render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    expect(screen.getByRole("button", { name: "Attach GPX route" })).toBeInTheDocument();
+    unmount();
+
+    mockUsePlannedWorkoutsForDate.mockReturnValue({
+      ...NONE,
+      data: [{ ...SCHEDULED, sport: "yoga", name: "Yoga" }],
+    });
+    render(<ScheduleWorkoutForm localDate="2026-09-01" />);
+    expect(screen.queryByRole("button", { name: "Attach GPX route" })).not.toBeInTheDocument();
   });
 
   it("shows Push to Garmin for a scheduled yoga workout too", () => {

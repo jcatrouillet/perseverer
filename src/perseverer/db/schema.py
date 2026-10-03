@@ -930,6 +930,15 @@ planned_workout = Table(
     # workout's own `description` field (garminconnect.workout.BaseWorkout), which every workout
     # class subclasses -- see planned_workouts.py::push_planned_workout.
     Column("comment", Text, nullable=True),
+    # The athlete's own GPX route for this workout (running only; workout_route.py). The original
+    # file is archived verbatim as a raw_object (source "athlete_upload", kind
+    # "planned_workout_gpx"); these columns are only its display summary, re-derivable from it.
+    Column("route_raw_object_id", Integer, ForeignKey("raw_object.id"), nullable=True),
+    Column("route_name", String, nullable=True),
+    Column("route_distance_m", Float, nullable=True),
+    Column("route_elevation_gain_m", Float, nullable=True),
+    Column("route_polyline", Text, nullable=True),
+    Column("route_uploaded_at", DateTime(), nullable=True),
     Column("created_at", DateTime(), nullable=False),
     Column("updated_at", DateTime(), nullable=False),
 )

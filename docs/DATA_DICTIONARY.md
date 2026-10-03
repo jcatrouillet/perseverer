@@ -1827,6 +1827,20 @@ the sum of `COALESCE(moving_duration_s, duration_s)` (the same "Moving time" the
 over non-deleted activities of that sport inside the period through today, with the same
 straight-line ahead/behind pace as the distance goals.
 
+## Planned-workout GPX route (planned_workout.route_*, workout_route.py)
+
+A planned **running** workout can carry the athlete's own GPX route (`POST
+/planned-workouts/{id}/route`). The uploaded file is athlete input, archived byte-for-byte as a
+`raw_object` (`source="athlete_upload"`, `kind="planned_workout_gpx"`, `external_id` = the workout
+id) and referenced by `planned_workout.route_raw_object_id`; the other columns are only its display
+summary and can always be re-derived from the archive: `route_name` (the GPX's own name, else the
+file name), `route_distance_m` (haversine over the points), `route_elevation_gain_m` (sum of rises of
+at least 1 m between consecutive points — approximate, null without elevation data),
+`route_polyline` (Google-encoded, thinned to <= ~600 points), `route_uploaded_at`. Removing the route
+nulls these columns; the archived file stays. Entity/DOCTYPE declarations are refused and files are
+capped at 5 MB. The route is shown on the calendar for reference and is **not** sent to Garmin (see
+`docs/adr/0017-planned-workout-gpx-route.md`).
+
 ## Kaya bouldering logbook (kaya_session, kaya_ascent, adapters/kaya_ingest.py)
 
 Route-level bouldering data from Kaya's private API (ADR 0016). Every GraphQL page is archived raw

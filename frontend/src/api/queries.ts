@@ -1436,6 +1436,32 @@ export function usePushPlannedWorkout() {
   });
 }
 
+// Attach (or replace) a GPX route on a planned running workout, or detach it.
+export function useAttachPlannedWorkoutRoute() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ workoutId, file }: { workoutId: number; file: File }) => {
+      const form = new FormData();
+      form.append("file", file);
+      return apiPostForm<PlannedWorkoutOut>(`/api/v1/planned-workouts/${workoutId}/route`, form);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-workouts"] });
+    },
+  });
+}
+
+export function useRemovePlannedWorkoutRoute() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (workoutId: number) =>
+      apiDelete<PlannedWorkoutOut>(`/api/v1/planned-workouts/${workoutId}/route`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["planned-workouts"] });
+    },
+  });
+}
+
 // The athlete's own manual "I did this" marker -- independent of push_status entirely, so it
 // works even for a workout never pushed to (or recorded by) Garmin at all.
 export function useCompletePlannedWorkout() {

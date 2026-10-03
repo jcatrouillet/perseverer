@@ -1295,6 +1295,34 @@ delete.
 
 **Responses:** `200` (no response body). `404` → `detail: "planned workout not found"`.
 
+### `POST /planned-workouts/{workout_id}/route`
+
+Attaches (or replaces) a **GPX route** on a planned **running** workout — `multipart/form-data` with
+one `file` field. The original file is archived verbatim (`raw_object`, source `athlete_upload`,
+kind `planned_workout_gpx`); the workout stores only a display summary (`PlannedRouteOut`: name,
+distance, elevation gain, a thinned polyline). The route is shown on the calendar for reference; it
+is **not** sent to the watch. Entity/DOCTYPE declarations are refused.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `workout_id` | path | **required** | integer | From `PlannedWorkoutOut.id`. |
+| `file` | body (multipart) | **required** | file | A `.gpx` track (or route), 5 MB maximum, at least two points. |
+
+**Responses:** `200` → `PlannedWorkoutOut` (with `route` set). `400` → not a running workout, or an
+unusable GPX (`detail` says why). `404` → `detail: "planned workout not found"`. `413` → over 5 MB.
+
+### `DELETE /planned-workouts/{workout_id}/route`
+
+Detaches the route (the archived GPX itself is kept — nothing in this app deletes raw data).
+
+**Responses:** `200` → `PlannedWorkoutOut` (`route: null`). `404` → `detail: "planned workout not found"`.
+
+### `GET /planned-workouts/{workout_id}/route.gpx`
+
+The original GPX exactly as uploaded (`application/gpx+xml`, as an attachment).
+
+**Responses:** `200` → the file. `404` → no such workout, or it has no route.
+
 ### `POST /planned-workouts/{workout_id}/push`
 
 Manually pushes one workout to Garmin right now, regardless of date — the override alongside the
@@ -2582,6 +2610,11 @@ always addressed by id rather than by date:
 | `matched_activity_id` | string, nullable | A same-day, matching-sport recorded activity, if one exists. Computed at read time, never stored, never overriding `completed_at` — a companion "this looks done" signal for a workout already confirmed by a synced Garmin activity. |
 | `estimated_distance_m`, `estimated_load` | number, nullable | `running` only — always `null` for `yoga`/`bouldering`/`hiit`/`strength_training`, and for `running` itself until the athlete configures a running-load threshold pace (`estimated_load` only). |
 | `segments` | array\<`PlannedWorkoutSegmentOut`\> | Defaults to `[]`. Repeat-expanded (unlike `steps`), `running` only. |
+| `route` | `PlannedRouteOut`, nullable | The attached GPX route (`POST .../route`), `running` only; `null` when none. |
+
+### PlannedRouteOut
+
+`name` (string, nullable — the GPX's own name, else the file name), `distance_m` (number), `elevation_gain_m` (number, nullable — approximate, ignores sub-metre wobble), `polyline` (string — Google-encoded, precision 5, thinned to at most ~600 points), `uploaded_at` (string).
 
 ### PlannedWorkoutSegmentOut
 

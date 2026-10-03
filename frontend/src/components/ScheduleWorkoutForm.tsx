@@ -13,12 +13,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
+  useAttachPlannedWorkoutRoute,
   useCompletePlannedWorkout,
   useCreatePlannedWorkout,
   useCreateRecurringPlannedWorkouts,
   useDeletePlannedWorkout,
   usePlannedWorkoutsForDate,
   usePushPlannedWorkout,
+  useRemovePlannedWorkoutRoute,
   useUncompletePlannedWorkout,
   useUpdatePlannedWorkout,
 } from "../api/queries";
@@ -45,6 +47,7 @@ import { Icon } from "./Icon";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { useTimeFormat } from "../formatTime";
 import { plannedWorkoutSportStyle } from "../metricStyle";
+import { PlannedWorkoutRoute } from "./PlannedWorkoutRoute";
 import { StepBuilderModal } from "./StepBuilderModal";
 import { TimeOfDayField } from "./TimeOfDayField";
 import { WorkoutLoadBar } from "./WorkoutLoadBar";
@@ -158,6 +161,8 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
   const push = usePushPlannedWorkout();
   const complete = useCompletePlannedWorkout();
   const uncomplete = useUncompletePlannedWorkout();
+  const attachRoute = useAttachPlannedWorkoutRoute();
+  const removeRoute = useRemovePlannedWorkoutRoute();
   const { formatHHMM } = useTimeFormat();
   const duration = formatDurationMinutes(workout.estimated_duration_s);
   const [copied, setCopied] = useState(false);
@@ -221,6 +226,21 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
       )}
       <WorkoutLoadBar workout={workout} />
       <WorkoutDetails workout={workout} />
+      {workout.sport === "running" && (
+        <PlannedWorkoutRoute
+          route={workout.route ?? null}
+          isBusy={attachRoute.isPending || removeRoute.isPending}
+          error={
+            attachRoute.error instanceof Error
+              ? attachRoute.error.message
+              : removeRoute.error instanceof Error
+                ? removeRoute.error.message
+                : null
+          }
+          onAttach={(file) => attachRoute.mutate({ workoutId: workout.id, file })}
+          onRemove={() => removeRoute.mutate(workout.id)}
+        />
+      )}
       {workout.push_error && (
         <p className="chart-note" role="alert">
           {workout.push_error}

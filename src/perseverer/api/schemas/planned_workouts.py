@@ -128,6 +128,17 @@ class PlannedWorkoutSegmentOut(BaseModel):
     intensity_factor: float | None  # continuous speed-to-threshold ratio; None iff zone is None
 
 
+class PlannedRouteOut(BaseModel):
+    """The GPX route attached to a planned running workout (POST .../route)."""
+
+    name: str | None = None
+    distance_m: float
+    elevation_gain_m: float | None = None
+    # Google-encoded polyline (precision 5), thinned to a few hundred points for drawing.
+    polyline: str
+    uploaded_at: str
+
+
 class PlannedWorkoutOut(BaseModel):
     # False whenever no workout is scheduled for this date yet -- every field below is null/
     # empty in that case, same "no-404-for-absence" idiom GET /goals already uses.
@@ -164,6 +175,8 @@ class PlannedWorkoutOut(BaseModel):
     estimated_distance_m: float | None = None
     estimated_load: float | None = None
     segments: list[PlannedWorkoutSegmentOut] = []
+    # The attached GPX route, or null (running workouts only).
+    route: PlannedRouteOut | None = None
 
 
 class PlannedWorkoutListItemOut(BaseModel):

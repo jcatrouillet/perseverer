@@ -682,6 +682,16 @@ export interface PlannedWorkoutSegmentOut {
   intensity_factor: number | null; // continuous speed-to-threshold ratio; null iff zone is null
 }
 
+// The GPX route attached to a planned running workout (backend: workout_route.py).
+export interface PlannedRouteOut {
+  name: string | null;
+  distance_m: number;
+  elevation_gain_m: number | null;
+  // Google-encoded polyline (precision 5), thinned to a few hundred points for drawing.
+  polyline: string;
+  uploaded_at: string;
+}
+
 export interface PlannedWorkoutOut {
   available: boolean;
   id: number | null;
@@ -716,6 +726,8 @@ export interface PlannedWorkoutOut {
   estimated_distance_m: number | null;
   estimated_load: number | null;
   segments: PlannedWorkoutSegmentOut[];
+  // The attached GPX route (running only), or null.
+  route?: PlannedRouteOut | null;
 }
 
 export interface PlannedWorkoutListItemOut {

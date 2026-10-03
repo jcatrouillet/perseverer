@@ -1160,6 +1160,13 @@ environment:
   `PlannedWorkoutFields`/`RecurringPlannedWorkoutInput` → the one `WorkoutEditForm`), and
   included (ahead of the existing per-sport text) in both the iCal feed's event description
   (`calendar_feed.py`) and the weekly email's coming-workouts section (`email_reports.py`).
+  **A GPX route on a running workout** (`workout_route.py`, `POST/DELETE
+  /planned-workouts/{id}/route`, `GET .../route.gpx`, `PlannedWorkoutRoute.tsx`): the athlete attaches
+  a GPX file to a planned run; it is archived raw (`athlete_upload`/`planned_workout_gpx`) and only a
+  display summary (name, distance, climb, thinned polyline) lives on `planned_workout.route_*`,
+  drawn with the existing `ActivityMap`. It is a reference on the calendar — **not** pushed to the
+  watch (Garmin's workout builder cannot link a course to a workout, and `garminconnect` has no
+  course call); see `docs/adr/0017-planned-workout-gpx-route.md`.
   **Revision**: a day originally held at most one `planned_workout` row (`UniqueConstraint` on
   `(athlete_id, local_date)`) -- lifted once the athlete asked to schedule more than one workout
   on the same day (e.g. a morning run plus an evening strength session). Every workout is now
