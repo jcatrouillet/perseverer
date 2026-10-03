@@ -20,6 +20,7 @@ import {
   useAddClimbRoute,
   useClearActivityTrim,
   useDeleteClimbRoute,
+  useSetClimbNote,
   useHrZoneConfig,
   useMergeActivity,
   useSetClimbRouteStatus,
@@ -159,6 +160,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const setClimbRouteStatus = useSetClimbRouteStatus(id);
   const addClimbRoute = useAddClimbRoute(id);
   const deleteClimbRoute = useDeleteClimbRoute(id);
+  const setClimbNote = useSetClimbNote();
   const trimActivity = useTrimActivity(id);
   const clearActivityTrim = useClearActivityTrim(id);
   const mergePreview = useActivityMergePreview(
@@ -544,6 +546,9 @@ export function ActivityDetailPage({ id }: { id: string }) {
           )}
           <BoulderingRoutesTable
             splits={a.splits}
+            onSaveNote={(climbKayaId, note) => setClimbNote.mutate({ climbKayaId, note })}
+            isSavingNote={setClimbNote.isPending}
+            isNoteError={setClimbNote.isError}
             onSetStatus={(splitIndex, result) => setClimbRouteStatus.mutate({ splitIndex, result })}
             onSetGrade={(splitIndex, grade) => setClimbRouteStatus.mutate({ splitIndex, grade })}
             onAddRoute={(grade, result) => addClimbRoute.mutate({ grade, result })}

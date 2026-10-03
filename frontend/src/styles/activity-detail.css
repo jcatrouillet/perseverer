@@ -757,3 +757,38 @@
   gap: var(--space-2);
   margin-top: var(--space-4);
 }
+
+/* BoulderingRoutesTable.tsx -- the per-route note: a small button in the Note column, and an inline
+   editor row under the route being edited. A route with a note is marked so it reads at a glance
+   (the note itself shows on hover, on every row of that route). */
+.bouldering-routes-table__note-btn {
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--color-border, currentColor);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-text-muted, inherit);
+  font-size: var(--font-size-sm, 0.85em);
+  cursor: pointer;
+}
+
+.bouldering-routes-table__note-btn--set {
+  border-style: solid;
+  color: var(--color-accent, var(--color-text));
+  font-weight: 600;
+}
+
+.bouldering-routes-table__note-row td {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-3);
+}
+
+.bouldering-routes-table__note-row textarea {
+  width: 100%;
+  max-width: 40rem;
+}
+
+.bouldering-routes-table__note-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}

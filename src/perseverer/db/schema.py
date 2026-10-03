@@ -302,6 +302,20 @@ kaya_unsent_climb = Table(
     UniqueConstraint("athlete_id", "climb_kaya_id", name="uq_kaya_unsent_climb_identity"),
 )
 
+# The athlete's own note on a Kaya route ("hold the sloper left-handed", "heel hook at the top"),
+# keyed by Kaya's id for the route so it follows that route into every session it is repeated in.
+# Athlete input, not derived from any vendor payload: durable, never wiped by `sync rebuild`.
+kaya_climb_note = Table(
+    "kaya_climb_note",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("climb_kaya_id", String, nullable=False),
+    Column("note", Text, nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    UniqueConstraint("athlete_id", "climb_kaya_id", name="uq_kaya_climb_note_identity"),
+)
+
 kaya_ascent = Table(
     "kaya_ascent",
     metadata,
@@ -781,6 +795,9 @@ split = Table(
     Column("climb_name", String, nullable=True),
     # "kaya" for a route kaya_ingest.py wrote; NULL for every Garmin/FIT-derived or manual row.
     Column("source", String, nullable=True),
+    # Kaya's id for the route (the problem itself, stable across every session it appears in) --
+    # what a note on a route is keyed by. NULL for a Garmin-recorded or manual row.
+    Column("climb_kaya_id", String, nullable=True),
     # Garmin's own decoded grade/result, remembered when a Kaya merge demotes the row (it then
     # clears climb_grade/climb_result so nothing is counted twice), so an effort Kaya never logged
     # can be promoted back to a route. NULL for every row that was never demoted.

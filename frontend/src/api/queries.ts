@@ -524,6 +524,22 @@ export function useAddClimbRoute(activityId: string) {
   });
 }
 
+/** The athlete's own note on a Kaya route (an empty string removes it). The note follows the route
+ * into every activity it appears in, so every cached activity is refreshed, not just this one. */
+export function useSetClimbNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ climbKayaId, note }: { climbKayaId: string; note: string }) =>
+      apiPut<{ climb_kaya_id: string; note: string | null }>(
+        `/api/v1/kaya-climbs/${encodeURIComponent(climbKayaId)}/note`,
+        { note },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity"] });
+    },
+  });
+}
+
 /** Removes a manually-added route -- never a FIT-derived one (see
  * bouldering_overrides.py::delete_manual_route's own docstring). Same invalidation set as
  * useAddClimbRoute, its own inverse. */

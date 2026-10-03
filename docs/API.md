@@ -277,6 +277,21 @@ session yet.
 
 **Responses:** `200` → `ClimbComparisonsOut`. `404`.
 
+### `PUT /kaya-climbs/{climb_kaya_id}/note`
+
+Sets (or removes) the athlete's own note on a **Kaya route**. A route is a Kaya *problem*; its id
+(`SplitOut.climb_kaya_id`) is stable across every session it is repeated in, so the one note follows
+the route into every activity and comes back as `SplitOut.note` on each of its rows. The Routes
+table shows it on hover. Garmin-only rows have no such identity and carry no notes.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `climb_kaya_id` | path | **required** | string | From `SplitOut.climb_kaya_id`. |
+| `note` | body | **required** | string | Up to 2,000 characters; trimmed. An empty/whitespace note **removes** the note. |
+
+**Responses:** `200` → `{"climb_kaya_id": "...", "note": "..." | null}`. `404` → `detail: "route not
+found"` (not a route this athlete has). `422` → note too long.
+
 ### `PATCH /activities/{activity_id}/climb-routes/{split_index}`
 
 Corrects a bouldering route's logged result and/or grade — for a route the watch misread (e.g.
@@ -2099,6 +2114,8 @@ Returned by `GET /activities/{id}`.
 | `climb_grade` | integer, nullable — bouldering only, V-scale grade, only set on a `climb_active` split. Reverse-engineered from an undocumented FIT field (see `docs/DATA_DICTIONARY.md`) |
 | `climb_result` | string, nullable — bouldering only, `"attempt"`/`"completed"` (or `"unknown_<n>"` for a raw value not yet confirmed), only set on a `climb_active` split |
 | `climb_name` | string, nullable — a Kaya-sourced route's label: Kaya's own name, else `"<hold colour> - <wall>"` (e.g. `"Pink - A8 - Alcove, Right"`); null for a Garmin-recorded route. `climb_grade` is null for an ungraded Kaya route (`v?`) |
+| `climb_kaya_id` | string, nullable — Kaya's id for the route (the problem itself), stable across every session it appears in; null for a Garmin-derived or manual row |
+| `note` | string, nullable — the athlete's own note on that route (`PUT /kaya-climbs/{climb_kaya_id}/note`); the same on every row of the route, in every activity |
 | `source` | string, nullable — `"kaya"` for a route imported from Kaya (it has no per-route duration or heart rate); null for a Garmin-derived or manually-added row |
 | `climb_avg_hr`, `climb_max_hr` | number, nullable — bouldering only, set on both `climb_active` and `climb_rest` splits |
 

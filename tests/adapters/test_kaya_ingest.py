@@ -296,6 +296,8 @@ def test_split_carries_the_kaya_route_label(tmp_path: Path) -> None:
         _load(conn, tmp_path, KIND_ASCENTS, "ascentsForUser", [ascent])
         apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
         assert conn.execute(select(split.c.climb_name)).scalar_one() == "Pink - A8 - Alcove, Right"
+        # The split remembers Kaya's id for the route -- what a note on it is keyed by.
+        assert conn.execute(select(split.c.climb_kaya_id)).scalar_one() == "ca1"
 
 
 def test_attempt_counts_expand_into_attempt_rows(tmp_path: Path) -> None:

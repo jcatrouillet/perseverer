@@ -88,6 +88,7 @@ from perseverer.db.schema import (
     activity_workout,
     activity_workout_step,
     health_observation,
+    kaya_climb_note,
     lap,
     merge_decision,
     raw_object,
@@ -373,8 +374,10 @@ def list_activities(
     # Counted directly against `activity` -- not `select(func.count()).select_from(query.
     # subquery())`, which would force the engine to evaluate the avg/max heart rate correlated
     # subqueries (and stream_exists) for every matching row a second time just to discard them.
-    count_query = select(func.count()).select_from(activity).where(
-        activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None)
+    count_query = (
+        select(func.count())
+        .select_from(activity)
+        .where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
     )
     if start_date is not None:
         count_query = count_query.where(activity.c.local_date >= start_date.isoformat())
@@ -438,15 +441,19 @@ def list_activity_years(
     just to read `local_date`'s year off each one (which is what this replaced -- with activity
     count now in the thousands, that full-history fetch had become the single slowest thing on
     every calendar page navigation, since DateNavigator renders on every one of them)."""
-    rows = conn.execute(
-        select(func.substr(activity.c.local_date, 1, 4))
-        .where(
-            activity.c.athlete_id == athlete_id,
-            activity.c.deleted_at.is_(None),
-            activity.c.local_date.is_not(None),
+    rows = (
+        conn.execute(
+            select(func.substr(activity.c.local_date, 1, 4))
+            .where(
+                activity.c.athlete_id == athlete_id,
+                activity.c.deleted_at.is_(None),
+                activity.c.local_date.is_not(None),
+            )
+            .distinct()
         )
-        .distinct()
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return sorted({int(y) for y in rows if y}, reverse=True)
 
 
@@ -536,8 +543,7 @@ def list_activity_routes(
         )
     ).fetchall()
     return [
-        ActivityRouteOut(id=r.activity_id, simplified_polyline=r.simplified_polyline)
-        for r in rows
+        ActivityRouteOut(id=r.activity_id, simplified_polyline=r.simplified_polyline) for r in rows
     ]
 
 
@@ -642,9 +648,7 @@ def list_trim_candidates(
             activity.c.duration_s,
             activity_stream.c.parquet_path,
         )
-        .select_from(
-            activity.join(activity_stream, activity_stream.c.activity_id == activity.c.id)
-        )
+        .select_from(activity.join(activity_stream, activity_stream.c.activity_id == activity.c.id))
         .where(
             activity.c.athlete_id == athlete_id,
             activity.c.deleted_at.is_(None),
@@ -666,9 +670,7 @@ def list_trim_candidates(
     for row in rows:
         if row.start_time_utc in trimmed_start_times:
             continue
-        result = detect_transport_mix(
-            con, settings.parquet_dir / row.parquet_path, sport=row.sport
-        )
+        result = detect_transport_mix(con, settings.parquet_dir / row.parquet_path, sport=row.sport)
         if result is None:
             continue
         candidates.append(
@@ -823,6 +825,7 @@ def get_activity(
         .where(split_table.c.activity_id == activity_id)
         .order_by(split_table.c.split_index)
     ).fetchall()
+    climb_notes = _climb_notes(conn, athlete_id, [s.climb_kaya_id for s in splits])
     route_row = conn.execute(
         select(route_geom).where(route_geom.c.activity_id == activity_id)
     ).fetchone()
@@ -839,9 +842,7 @@ def get_activity(
         activity_end = row.start_time_utc + timedelta(seconds=row.duration_s)
         estimated_sweat_loss_ml = _estimated_sweat_loss_ml(conn, athlete_id, activity_end)
 
-    climb_route_count, climb_max_completed_grade, climb_time_s = _climb_summary_from_splits(
-        splits
-    )
+    climb_route_count, climb_max_completed_grade, climb_time_s = _climb_summary_from_splits(splits)
 
     return ActivityDetail(
         id=row.id,
@@ -913,6 +914,8 @@ def get_activity(
                 climb_result=split_row.climb_result,
                 climb_name=split_row.climb_name,
                 source=split_row.source,
+                climb_kaya_id=split_row.climb_kaya_id,
+                note=climb_notes.get(split_row.climb_kaya_id) if split_row.climb_kaya_id else None,
                 climb_avg_hr=split_row.climb_avg_hr,
                 climb_max_hr=split_row.climb_max_hr,
                 is_manual=split_row.is_manual,
@@ -1460,10 +1463,29 @@ def _get_split_out(
         climb_result=row.climb_result,
         climb_name=row.climb_name,
         source=row.source,
+        climb_kaya_id=row.climb_kaya_id,
+        note=_climb_notes(conn, athlete_id, [row.climb_kaya_id]).get(row.climb_kaya_id)
+        if row.climb_kaya_id
+        else None,
         climb_avg_hr=row.climb_avg_hr,
         climb_max_hr=row.climb_max_hr,
         is_manual=row.is_manual,
     )
+
+
+def _climb_notes(
+    conn: Connection, athlete_id: str, climb_kaya_ids: Sequence[str | None]
+) -> dict[str, str]:
+    """The athlete's notes for the given Kaya route ids, keyed by id (one query)."""
+    ids = sorted({i for i in climb_kaya_ids if i})
+    if not ids:
+        return {}
+    rows = conn.execute(
+        select(kaya_climb_note.c.climb_kaya_id, kaya_climb_note.c.note).where(
+            kaya_climb_note.c.athlete_id == athlete_id, kaya_climb_note.c.climb_kaya_id.in_(ids)
+        )
+    ).fetchall()
+    return {r.climb_kaya_id: r.note for r in rows}
 
 
 @router.get("/activities/{activity_id}/insights")
@@ -1581,8 +1603,7 @@ def get_activity_weather(
         conn, settings.raw_archive_dir, athlete_id=athlete_id, activity_id=activity_id
     )
     hourly = (
-        parse_open_meteo_hourly_series(raw, start_time_utc, end_time_utc) if raw is not None
-        else []
+        parse_open_meteo_hourly_series(raw, start_time_utc, end_time_utc) if raw is not None else []
     )
 
     sunset_during_run = (
@@ -2211,9 +2232,7 @@ def get_activity_stream(
     # still only ever see the kept window, so this filters at read time rather than trusting
     # every caller to already know about the trim.
     trim_row = conn.execute(
-        select(
-            activity_trim_override.c.trim_start_s, activity_trim_override.c.trim_end_s
-        ).where(
+        select(activity_trim_override.c.trim_start_s, activity_trim_override.c.trim_end_s).where(
             activity_trim_override.c.athlete_id == athlete_id,
             activity_trim_override.c.activity_start_time_utc == activity_row.start_time_utc,
         )

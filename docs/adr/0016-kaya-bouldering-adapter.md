@@ -104,6 +104,14 @@ REST + GraphQL backend, which is the only automated route to the data.
 7. **Rollups and insights** follow the standing contract: touched `local_date`s are collected and
    `refresh_daily_rollup`, insights and period rollups run once per date after the loop.
 
+## Route notes (2026-10-04)
+
+A note on a route is keyed by Kaya's route id (`split.climb_kaya_id`), not by the session's split row
+(which a rebuild or re-import rewrites), so it survives re-imports and follows the route into every
+session where it is repeated. Stored in `kaya_climb_note`, one note per route; it reaches the UI as
+`SplitOut.note` and the Routes table shows it on hover. Garmin-only routes have no identity to attach
+it to.
+
 ## Settings page (2026-10-03)
 
 Settings -> External tools has a Kaya card mirroring Garmin's: login (email/password, used once, only

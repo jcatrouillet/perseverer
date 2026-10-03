@@ -637,6 +637,8 @@ const F = {
     ["distance_m","number|null",""],
     ["climb_grade","integer|null","Bouldering only, V-scale grade, only set on a climb_active split. Reverse-engineered from an undocumented FIT field — see the data dictionary."],
     ["climb_result","string|null","Bouldering only, \"attempt\"/\"completed\" (or \"unknown_<n>\" for an unconfirmed raw value), only set on a climb_active split."],
+    ["climb_kaya_id","string|null","Kaya's id for the route (the problem itself), stable across every session it appears in; null for a Garmin-derived or manual row."],
+    ["note","string|null","The athlete's own note on that route (PUT /kaya-climbs/{climb_kaya_id}/note); the same on every row of the route, in every activity."],
     ["climb_name","string|null","A Kaya-sourced route's label: Kaya's own name, else \"<hold colour> - <wall>\"; null for a Garmin-recorded route. climb_grade is null for an ungraded Kaya route."],
     ["source","string|null","\"kaya\" for a route imported from Kaya (no per-route duration or heart rate); null for a Garmin-derived or manually-added row."],
     ["climb_avg_hr","number|null","Bouldering only, set on both climb_active and climb_rest splits."],
@@ -1555,6 +1557,14 @@ const GROUPS = [
       params: [ ["activity_id","path","req","string","—",""] ],
       responses: [ { code: 200, ref: "ClimbComparisonsOut" }, { code: 404, note: "" } ],
       example: {}
+    },
+    { method: "PUT", path: "/api/v1/kaya-climbs/{climb_kaya_id}/note", summary: "Set or remove the athlete's note on a Kaya route.",
+      description: "A route is a Kaya problem; its id (SplitOut.climb_kaya_id) is stable across every session it is repeated in, so the one note follows the route into every activity and comes back as SplitOut.note on each of its rows. An empty note removes it. Garmin-only rows carry no notes.",
+      params: [ ["climb_kaya_id","path","req","string","—","From SplitOut.climb_kaya_id."], ["note","body","req","string","—","Up to 2,000 characters; trimmed. Empty removes the note."] ],
+      responses: [ { code: 200, note: '{"climb_kaya_id": "...", "note": "..." | null}' }, { code: 404, note: 'detail: "route not found"' }, { code: 422, note: "Note too long." } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/kaya-climbs/1711256/note \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"note": "Start low, heel hook on the green volume."}'` }
     },
     { method: "PATCH", path: "/api/v1/activities/{activity_id}/climb-routes/{split_index}", summary: "Correct a bouldering route's logged result and/or grade.",
       description: "For a route the watch misread (e.g. scored an attempt as completed). Durable, rebuild-safe override; updates a different underlying table than POST .../climb-routes below depending on whether split_index refers to a FIT-derived route or one added by hand. Send just one field to correct only that one, leaving any separately-recorded correction on the same route untouched.",

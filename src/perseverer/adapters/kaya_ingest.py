@@ -321,6 +321,7 @@ def _insert_route(
             climb_result=route.result,
             climb_name=route.name,
             source="kaya",
+            climb_kaya_id=route.climb_id,
         )
     )
 

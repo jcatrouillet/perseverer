@@ -1885,6 +1885,13 @@ ascents are used. Sessions are grouped by **local date** (athlete timezone):
   (`sport=rock_climbing`, `sub_sport=bouldering`, `primary_source=kaya`, id derived from the Kaya
   session id, name = gym name, no duration). Several candidates are logged and not merged.
 
+Each Kaya-derived split also carries `split.climb_kaya_id` (Kaya's id for the route — the problem
+itself, the same in every session it is repeated in). The athlete's own **notes on a route** are keyed
+by it in `kaya_climb_note` (`athlete_id`, `climb_kaya_id`, `note`, `updated_at`; one note per route,
+athlete input, never wiped by a rebuild) and come back as `SplitOut.note` on every row of that route
+in every activity; the Routes table shows it on hover. Garmin-only rows have no identity and no
+notes.
+
 A `Repeat` counts as a completed route within its session. Attempt counts become attempt rows, the
 same shape Garmin records: a send's `attempts` counts the send itself ("4 attempts including 1
 send"), so N > 1 adds N-1 `attempt` splits before the send. Unsent climbs come from each session's

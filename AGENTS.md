@@ -970,7 +970,12 @@ environment:
     session is there to merge into) for every athlete who has logged in to Kaya (a token store
     exists); best-effort — an expired session (`KayaAuthRequired`: a warning to run `sync auth
     kaya-login` again), a rate limit, or any other failure is logged and never blocks the staleness
-    check. **Settings page**: `KayaCard.tsx` under Settings -> External tools
+    check. **Route notes**: a Kaya route (problem) has a stable id (`split.climb_kaya_id`); the athlete's
+    note on it lives in `kaya_climb_note` (`PUT /kaya-climbs/{id}/note`, empty removes it, athlete
+    input so never wiped by a rebuild) and is returned as `SplitOut.note` on every row of that route
+    in every activity — the Routes table (`BoulderingRoutesTable.tsx`, a Note column + inline editor,
+    shown only when a row has a Kaya id) sets it as the row's hover title, so a note written once
+    appears whenever the route is repeated. Garmin-only rows carry no notes. **Settings page**: `KayaCard.tsx` under Settings -> External tools
     (`GET /settings/kaya/status`, `POST /settings/kaya/login` -- a wrong password is a 400, never a
     401 -- and `POST /settings/kaya/sync`, polled via `GET /settings/jobs/latest?source=kaya`); the
     password is used once and never stored. `import_kaya` writes an `ingest_run` row (source

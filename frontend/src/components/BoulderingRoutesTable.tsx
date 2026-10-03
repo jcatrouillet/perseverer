@@ -13,7 +13,7 @@
 // a table with several routes to correct at once would make a reveal-per-row tedious), and "add
 // a route" is a trailing form row rather than a modal, matching this table's own dense,
 // single-surface feel.
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import type { SplitOut } from "../api/types";
 import {
@@ -36,6 +36,9 @@ export function BoulderingRoutesTable({
   onSetGrade,
   onAddRoute,
   onDeleteRoute,
+  onSaveNote,
+  isSavingNote = false,
+  isNoteError = false,
   isSaving,
   isError,
 }: {
@@ -44,6 +47,11 @@ export function BoulderingRoutesTable({
   onSetGrade: (splitIndex: number, grade: number) => void;
   onAddRoute: (grade: number, result: string) => void;
   onDeleteRoute: (splitIndex: number) => void;
+  /** Saves the athlete's note on a Kaya route (an empty string removes it). The note belongs to
+   * the route itself, so it appears on every row of that route, in every activity. */
+  onSaveNote?: (climbKayaId: string, note: string) => void;
+  isSavingNote?: boolean;
+  isNoteError?: boolean;
   isSaving: boolean;
   isError: boolean;
 }) {
@@ -51,6 +59,10 @@ export function BoulderingRoutesTable({
   // Kaya routes carry no per-route duration or heart rate, so those columns only appear when at
   // least one route has Garmin timing (a Garmin-only activity, or Garmin efforts Kaya never logged).
   const showTiming = routes.some((r) => r.source !== "kaya");
+  // Only a Kaya route has an identity a note can follow; a Garmin-only activity has no Note column.
+  const showNotes = onSaveNote != null && routes.some((r) => r.climbKayaId != null);
+  const [editing, setEditing] = useState<{ splitIndex: number; climbKayaId: string } | null>(null);
+  const [draft, setDraft] = useState("");
   const [newGrade, setNewGrade] = useState(0);
   const [newResult, setNewResult] = useState<string>("completed");
 
@@ -74,75 +86,144 @@ export function BoulderingRoutesTable({
               <th>Status</th>
               {showTiming && <th>Duration</th>}
               {showTiming && <th>Avg HR</th>}
+              {showNotes && <th>Note</th>}
               <th />
             </tr>
           </thead>
           <tbody>
             {routes.map((r) => (
-              <tr
-                key={r.splitIndex}
-                className={
-                  r.result === "completed"
-                    ? "bouldering-routes-table__row--completed"
-                    : undefined
-                }
-              >
-                <td>{r.routeNumber}</td>
-                <td>{r.name ?? "—"}</td>
-                <td>
-                  <select
-                    value={r.grade ?? ""}
-                    disabled={isSaving}
-                    onChange={(e) => onSetGrade(r.splitIndex, Number(e.target.value))}
-                  >
-                    {(r.grade == null || !GRADE_OPTIONS.includes(r.grade)) && (
-                      <option value={r.grade ?? ""} disabled>
-                        {formatGrade(r.grade)}
-                      </option>
-                    )}
-                    {GRADE_OPTIONS.map((g) => (
-                      <option key={g} value={g}>
-                        {formatGrade(g)}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <select
-                    value={r.result}
-                    disabled={isSaving}
-                    onChange={(e) => onSetStatus(r.splitIndex, e.target.value)}
-                  >
-                    {!KNOWN_RESULTS.includes(r.result as (typeof KNOWN_RESULTS)[number]) && (
-                      <option value={r.result} disabled>
-                        {formatResult(r.result)}
-                      </option>
-                    )}
-                    <option value="attempt">Attempt</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </td>
-                {showTiming && (
-                  <td>{r.durationS != null ? formatClockDuration(r.durationS) : "—"}</td>
-                )}
-                {showTiming && (
-                  <td>{r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : "—"}</td>
-                )}
-                <td>
-                  {r.isManual && (
-                    <button
-                      type="button"
-                      className="bouldering-routes-table__delete-btn"
-                      title="Remove this route"
-                      aria-label="Remove this route"
+              <Fragment key={r.splitIndex}>
+                <tr
+                  // The note shows on hover, on every row of the route -- also in any later session
+                  // where this route is repeated.
+                  title={r.note ?? undefined}
+                  className={
+                    r.result === "completed" ? "bouldering-routes-table__row--completed" : undefined
+                  }
+                >
+                  <td>{r.routeNumber}</td>
+                  <td>{r.name ?? "—"}</td>
+                  <td>
+                    <select
+                      value={r.grade ?? ""}
                       disabled={isSaving}
-                      onClick={() => onDeleteRoute(r.splitIndex)}
+                      onChange={(e) => onSetGrade(r.splitIndex, Number(e.target.value))}
                     >
-                      ×
-                    </button>
+                      {(r.grade == null || !GRADE_OPTIONS.includes(r.grade)) && (
+                        <option value={r.grade ?? ""} disabled>
+                          {formatGrade(r.grade)}
+                        </option>
+                      )}
+                      {GRADE_OPTIONS.map((g) => (
+                        <option key={g} value={g}>
+                          {formatGrade(g)}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <select
+                      value={r.result}
+                      disabled={isSaving}
+                      onChange={(e) => onSetStatus(r.splitIndex, e.target.value)}
+                    >
+                      {!KNOWN_RESULTS.includes(r.result as (typeof KNOWN_RESULTS)[number]) && (
+                        <option value={r.result} disabled>
+                          {formatResult(r.result)}
+                        </option>
+                      )}
+                      <option value="attempt">Attempt</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </td>
+                  {showTiming && (
+                    <td>{r.durationS != null ? formatClockDuration(r.durationS) : "—"}</td>
                   )}
-                </td>
-              </tr>
+                  {showTiming && <td>{r.avgHr != null ? `${Math.round(r.avgHr)} bpm` : "—"}</td>}
+                  {showNotes && (
+                    <td>
+                      {r.climbKayaId != null && (
+                        <button
+                          type="button"
+                          className={
+                            r.note
+                              ? "bouldering-routes-table__note-btn bouldering-routes-table__note-btn--set"
+                              : "bouldering-routes-table__note-btn"
+                          }
+                          aria-label={r.note ? "Edit note" : "Add note"}
+                          disabled={isSavingNote}
+                          onClick={() => {
+                            setEditing({ splitIndex: r.splitIndex, climbKayaId: r.climbKayaId! });
+                            setDraft(r.note ?? "");
+                          }}
+                        >
+                          {r.note ? "Note" : "+ Note"}
+                        </button>
+                      )}
+                    </td>
+                  )}
+                  <td>
+                    {r.isManual && (
+                      <button
+                        type="button"
+                        className="bouldering-routes-table__delete-btn"
+                        title="Remove this route"
+                        aria-label="Remove this route"
+                        disabled={isSaving}
+                        onClick={() => onDeleteRoute(r.splitIndex)}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </td>
+                </tr>
+                {editing?.splitIndex === r.splitIndex && onSaveNote && (
+                  <tr className="bouldering-routes-table__note-row">
+                    <td colSpan={5 + (showTiming ? 2 : 0) + (showNotes ? 1 : 0)}>
+                      <label className="field">
+                        Note on this route — shown whenever you repeat it
+                        <textarea
+                          className="input"
+                          rows={3}
+                          maxLength={2000}
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          autoFocus
+                        />
+                      </label>
+                      <div className="bouldering-routes-table__note-actions">
+                        <button
+                          type="button"
+                          className="button button--primary"
+                          disabled={isSavingNote}
+                          onClick={() => {
+                            onSaveNote(editing.climbKayaId, draft);
+                            setEditing(null);
+                          }}
+                        >
+                          {isSavingNote ? "Saving…" : "Save note"}
+                        </button>
+                        {r.note && (
+                          <button
+                            type="button"
+                            className="button"
+                            disabled={isSavingNote}
+                            onClick={() => {
+                              onSaveNote(editing.climbKayaId, "");
+                              setEditing(null);
+                            }}
+                          >
+                            Remove note
+                          </button>
+                        )}
+                        <button type="button" className="button" onClick={() => setEditing(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
             <tr className="bouldering-routes-table__add-row">
               <td>+</td>
@@ -162,7 +243,7 @@ export function BoulderingRoutesTable({
                   <option value="completed">Completed</option>
                 </select>
               </td>
-              <td colSpan={showTiming ? 3 : 1}>
+              <td colSpan={(showTiming ? 3 : 1) + (showNotes ? 1 : 0)}>
                 <button
                   type="button"
                   disabled={isSaving}
@@ -175,7 +256,7 @@ export function BoulderingRoutesTable({
           </tbody>
         </table>
       </div>
-      {isError && (
+      {(isError || isNoteError) && (
         <p role="alert" className="bouldering-routes__error">
           Could not save that change.
         </p>

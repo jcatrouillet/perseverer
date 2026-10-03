@@ -47,6 +47,10 @@ export interface SplitOut {
   climb_name?: string | null;
   // "kaya" for a Kaya-imported route; null for a Garmin/FIT-derived or manual one.
   source?: string | null;
+  // Kaya's id for the route (stable across every session it appears in) and the athlete's own note
+  // on it (PUT /kaya-climbs/{id}/note) -- the same note on every row of that route, everywhere.
+  climb_kaya_id?: string | null;
+  note?: string | null;
   // Also bouldering only, but set on both "climb_active" and "climb_rest" splits.
   climb_avg_hr: number | null;
   climb_max_hr: number | null;

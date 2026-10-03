@@ -106,12 +106,86 @@ describe("BoulderingRoutesTable", () => {
     expect(screen.getByRole("columnheader", { name: "Duration" })).toBeInTheDocument();
   });
 
+  describe("route notes", () => {
+    const KAYA = (overrides: Partial<SplitOut>) =>
+      split({ source: "kaya", duration_s: null, ...overrides });
+
+    function renderWith(splits: SplitOut[], onSaveNote = vi.fn()) {
+      render(
+        <BoulderingRoutesTable
+          splits={splits}
+          onSetStatus={noop}
+          onSetGrade={noop}
+          onAddRoute={noop}
+          onDeleteRoute={noop}
+          onSaveNote={onSaveNote}
+          isSaving={false}
+          isError={false}
+        />,
+      );
+      return onSaveNote;
+    }
+
+    it("has no Note column for an activity without Kaya routes", () => {
+      renderWith([split({ split_index: 0 })]);
+      expect(screen.queryByRole("columnheader", { name: "Note" })).not.toBeInTheDocument();
+    });
+
+    it("shows a route's note on hover, on every row of that route", () => {
+      renderWith([
+        KAYA({ split_index: 0, climb_kaya_id: "111", climb_name: "Pink", note: "heel hook" }),
+        KAYA({ split_index: 1, climb_kaya_id: "111", climb_name: "Pink", note: "heel hook" }),
+        KAYA({ split_index: 2, climb_kaya_id: "222", climb_name: "Blue", note: null }),
+      ]);
+      const rows = screen.getAllByRole("row");
+      expect(rows[1]).toHaveAttribute("title", "heel hook");
+      expect(rows[2]).toHaveAttribute("title", "heel hook");
+      expect(rows[3]).not.toHaveAttribute("title");
+      expect(within(rows[1]!).getByRole("button", { name: "Edit note" })).toBeInTheDocument();
+      expect(within(rows[3]!).getByRole("button", { name: "Add note" })).toBeInTheDocument();
+    });
+
+    it("adds a note to a route", () => {
+      const onSave = renderWith([KAYA({ split_index: 0, climb_kaya_id: "111" })]);
+      fireEvent.click(screen.getByRole("button", { name: "Add note" }));
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "  keep your hips in " } });
+      fireEvent.click(screen.getByRole("button", { name: "Save note" }));
+      expect(onSave).toHaveBeenCalledWith("111", "  keep your hips in ");
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument(); // editor closes
+    });
+
+    it("edits and removes an existing note, and cancel changes nothing", () => {
+      const onSave = renderWith([KAYA({ split_index: 0, climb_kaya_id: "111", note: "old note" })]);
+      fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
+      expect(screen.getByRole("textbox")).toHaveValue("old note");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(onSave).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
+      fireEvent.click(screen.getByRole("button", { name: "Remove note" }));
+      expect(onSave).toHaveBeenCalledWith("111", "");
+    });
+
+    it("offers no note control on a Garmin row that has no Kaya identity", () => {
+      renderWith([
+        KAYA({ split_index: 0, climb_kaya_id: "111" }),
+        split({ split_index: 1, climb_kaya_id: null, source: "garmin_extra" }),
+      ]);
+      expect(screen.getAllByRole("button", { name: "Add note" })).toHaveLength(1);
+    });
+  });
+
   it("lists one row per route, in order, with grade/status/HR", () => {
     render(
       <BoulderingRoutesTable
         splits={[
           split({ split_index: 0, climb_grade: 2, climb_result: "completed" }),
-          split({ split_index: 1, split_type: "climb_rest", climb_grade: null, climb_result: null }),
+          split({
+            split_index: 1,
+            split_type: "climb_rest",
+            climb_grade: null,
+            climb_result: null,
+          }),
           split({ split_index: 2, climb_grade: 4, climb_result: "attempt", climb_avg_hr: 150 }),
         ]}
         onSetStatus={noop}
