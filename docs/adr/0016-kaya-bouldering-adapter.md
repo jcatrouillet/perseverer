@@ -104,6 +104,13 @@ REST + GraphQL backend, which is the only automated route to the data.
 7. **Rollups and insights** follow the standing contract: touched `local_date`s are collected and
    `refresh_daily_rollup`, insights and period rollups run once per date after the loop.
 
+## Settings page (2026-10-03)
+
+Settings -> External tools has a Kaya card mirroring Garmin's: login (email/password, used once, only
+the tokens saved), session status, and "Sync now". `import_kaya` records an `ingest_run` row
+(source `kaya`) so the page, the CLI and the daily job share one "last import" status; a failed
+import is stored there with its error. The CLI login remains for anyone without the web UI.
+
 ## Scheduling (2026-10-03)
 
 The import runs inside the worker's daily sync, right after the Garmin sync, for each athlete with a

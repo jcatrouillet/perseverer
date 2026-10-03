@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from sqlalchemy import Connection, Engine, select
 
 from perseverer.adapters.kaya_ingest import (
@@ -455,3 +456,44 @@ def test_reapplying_a_merged_day_is_idempotent(tmp_path: Path) -> None:
         assert sorted(map(tuple, first), key=str) == sorted(map(tuple, again), key=str)
         # Kaya's send and attempt, plus Garmin's unlogged V9 effort -- stable across re-runs.
         assert [t for t, _ in again].count("climb_active") == 3
+
+
+def test_import_records_an_ingest_run_on_success_and_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from perseverer.adapters import kaya_ingest
+    from perseverer.adapters.kaya import KayaAuthRequired
+    from perseverer.db.schema import ingest_run
+
+    sessions = json.dumps(
+        {"data": {"sessionsForUser": [_session("s1", "2026-09-27T03:00:00.000Z")]}}
+    ).encode()
+    ascents = json.dumps(
+        {"data": {"ascentsForUser": [_ascent("a1", "s1", "2026-09-27T03:05:00.000Z", "v2")]}}
+    ).encode()
+    monkeypatch.setattr(
+        kaya_ingest,
+        "fetch_pages",
+        lambda _dir: [(KIND_SESSIONS, sessions), (KIND_ASCENTS, ascents)],
+    )
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        summary = kaya_ingest.import_kaya(
+            conn, tmp_path / "raw", athlete_id=DEFAULT_ATHLETE_ID, tokenstore_dir=tmp_path
+        )
+        assert (summary.sessions, summary.ascents, summary.touched_dates) == (1, 1, 1)
+        run = conn.execute(select(ingest_run)).one()
+        assert (run.source, run.status, run.items_seen, run.items_new) == ("kaya", "success", 2, 1)
+        assert run.finished_at is not None
+
+        def boom(_dir: Path) -> list[tuple[str, bytes]]:
+            raise KayaAuthRequired("Kaya session expired")
+
+        monkeypatch.setattr(kaya_ingest, "fetch_pages", boom)
+        with pytest.raises(KayaAuthRequired):
+            kaya_ingest.import_kaya(
+                conn, tmp_path / "raw", athlete_id=DEFAULT_ATHLETE_ID, tokenstore_dir=tmp_path
+            )
+        runs = conn.execute(select(ingest_run).order_by(ingest_run.c.id)).fetchall()
+        assert [r.status for r in runs] == ["success", "failed"]
+        assert "Kaya session expired" in runs[1].errors

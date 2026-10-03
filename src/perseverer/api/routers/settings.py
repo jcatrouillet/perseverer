@@ -55,6 +55,7 @@ create-key`, same one-standing-secret-per-athlete shape as the calendar-feed end
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -84,6 +85,10 @@ from perseverer.adapters.garmin_connect import (
     token_store_status,
 )
 from perseverer.adapters.garmin_export import import_garmin_export
+from perseverer.adapters.kaya import KayaInvalidCredentials
+from perseverer.adapters.kaya import login_with_credentials as kaya_login
+from perseverer.adapters.kaya import token_status as kaya_token_status
+from perseverer.adapters.kaya_ingest import import_kaya
 from perseverer.adapters.strava_export import import_strava_export
 from perseverer.api.dependencies import get_conn, get_engine, require_api_key
 from perseverer.api.schemas.settings import (
@@ -107,6 +112,9 @@ from perseverer.api.schemas.settings import (
     HrZoneConfigOut,
     JobStatusOut,
     JobTriggerOut,
+    KayaLoginIn,
+    KayaLoginOut,
+    KayaStatusOut,
     PersonalizeSettingsIn,
     PersonalizeSettingsOut,
     RunningLoadConfigIn,
@@ -136,6 +144,7 @@ from perseverer.staleness import check_garmin_connect_staleness
 # api/routers/auth.py's own _DUMMY_HASH.
 _DUMMY_PASSWORD_HASH = hash_password("")
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -216,9 +225,7 @@ def set_running_load_config(
         "updated_at": now,
     }
     if existing is None:
-        conn.execute(
-            athlete_running_load_config.insert().values(athlete_id=athlete_id, **values)
-        )
+        conn.execute(athlete_running_load_config.insert().values(athlete_id=athlete_id, **values))
     else:
         conn.execute(
             athlete_running_load_config.update()
@@ -394,9 +401,7 @@ def set_email_report_config(
         "updated_at": now,
     }
     if existing is None:
-        conn.execute(
-            athlete_email_report_config.insert().values(athlete_id=athlete_id, **values)
-        )
+        conn.execute(athlete_email_report_config.insert().values(athlete_id=athlete_id, **values))
     else:
         conn.execute(
             athlete_email_report_config.update()
@@ -518,7 +523,9 @@ def get_personalize_settings(
     ).fetchone()
     if row is None:
         return PersonalizeSettingsOut(
-            week_start_day="monday", time_format="24h", default_view="week",
+            week_start_day="monday",
+            time_format="24h",
+            default_view="week",
             unit_preference="metric",
         )
     return PersonalizeSettingsOut(
@@ -607,9 +614,7 @@ def get_eufy_status(
     conn: Connection = Depends(get_conn),
 ) -> EufyStatusOut:
     row = conn.execute(
-        select(athlete_eufy_config.c.email).where(
-            athlete_eufy_config.c.athlete_id == athlete_id
-        )
+        select(athlete_eufy_config.c.email).where(athlete_eufy_config.c.athlete_id == athlete_id)
     ).fetchone()
     if row is None:
         return EufyStatusOut(configured=False, email=None)
@@ -636,9 +641,7 @@ def post_eufy_login(
     except EufyAuthError as e:
         raise HTTPException(status_code=400, detail="Incorrect Eufy email or password.") from e
     except requests.RequestException as e:
-        raise HTTPException(
-            status_code=502, detail="Could not reach Eufy -- try again."
-        ) from e
+        raise HTTPException(status_code=502, detail="Could not reach Eufy -- try again.") from e
 
     now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
     existing = conn.execute(
@@ -742,9 +745,7 @@ def post_garmin_login(
                     "`sync auth login` in a terminal instead."
                 ),
             ) from e
-        raise HTTPException(
-            status_code=400, detail="Incorrect Garmin username or password."
-        ) from e
+        raise HTTPException(status_code=400, detail="Incorrect Garmin username or password.") from e
     return GarminLoginOut(success=True)
 
 
@@ -774,6 +775,76 @@ def post_garmin_sync(
                     max_requests_per_hour=settings.garmin_max_requests_per_hour,
                 ),
             )
+
+    background_tasks.add_task(_run)
+    return JobTriggerOut(triggered=True)
+
+
+@router.get("/settings/kaya/status")
+def get_kaya_status(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+    settings: Settings = Depends(get_settings),
+) -> KayaStatusOut:
+    present, age_days = kaya_token_status(settings.kaya_tokenstore_dir_for(athlete_id))
+    latest = _latest_ingest_run(conn, athlete_id, "kaya")
+    return KayaStatusOut(
+        session_present=present,
+        session_age_days=age_days,
+        last_sync_status=latest.status if latest else None,
+        last_sync_at=(latest.finished_at or latest.started_at) if latest else None,
+        last_sync_error=_first_error(latest.errors) if latest else None,
+    )
+
+
+@router.post("/settings/kaya/login")
+def post_kaya_login(
+    payload: KayaLoginIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    settings: Settings = Depends(get_settings),
+) -> KayaLoginOut:
+    """A human-initiated, one-shot Kaya login, the web counterpart of `sync auth kaya-login`: only
+    the resulting tokens are saved, never the password (see adapters/kaya.py). A wrong password is
+    a 400, deliberately not a 401 -- this app's client treats any 401 as "your own Perseverer
+    session expired" and logs the athlete out (the same reason POST /settings/garmin/login does
+    this)."""
+    try:
+        kaya_login(payload.email, payload.password, settings.kaya_tokenstore_dir_for(athlete_id))
+    except KayaInvalidCredentials as e:
+        raise HTTPException(status_code=400, detail="Incorrect Kaya email or password.") from e
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail="Could not reach Kaya -- try again.") from e
+    return KayaLoginOut(success=True)
+
+
+@router.post("/settings/kaya/sync")
+def post_kaya_sync(
+    background_tasks: BackgroundTasks,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    engine: Engine = Depends(get_engine),
+    settings: Settings = Depends(get_settings),
+) -> JobTriggerOut:
+    """The same import `sync import kaya` and the daily worker run, once, now. Runs in the
+    background -- poll GET /settings/jobs/latest?source=kaya; import_kaya writes its own
+    ingest_run row. 400 if the athlete hasn't logged in to Kaya yet."""
+    tokenstore_dir = settings.kaya_tokenstore_dir_for(athlete_id)
+    if not kaya_token_status(tokenstore_dir)[0]:
+        raise HTTPException(status_code=400, detail="Log in to Kaya first.")
+
+    def _run() -> None:
+        with engine.connect() as bg_conn:
+            try:
+                import_kaya(
+                    bg_conn,
+                    settings.raw_archive_dir,
+                    athlete_id=athlete_id,
+                    tokenstore_dir=tokenstore_dir,
+                )
+            except Exception:
+                # Already recorded on the ingest_run row import_kaya wrote.
+                logger.warning(
+                    "manual Kaya import failed for athlete %s", athlete_id, exc_info=True
+                )
 
     background_tasks.add_task(_run)
     return JobTriggerOut(triggered=True)
@@ -875,7 +946,7 @@ async def post_bulk_export_import(
 @router.get("/settings/jobs/latest")
 def get_latest_job(
     source: Annotated[
-        Literal["garmin_connect", "rebuild", "garmin_export", "strava_export"], Query()
+        Literal["garmin_connect", "kaya", "rebuild", "garmin_export", "strava_export"], Query()
     ],
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),

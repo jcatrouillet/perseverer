@@ -41,6 +41,7 @@ from perseverer.db.schema import (
     activity_metric,
     activity_source_link,
     athlete,
+    ingest_run,
     insight,
     kaya_ascent,
     kaya_attempt,
@@ -623,7 +624,55 @@ def import_kaya(
     athlete_id: str,
     tokenstore_dir: Path,
 ) -> KayaImportSummary:
-    """Fetch all pages, archive each raw, store, then derive activities and refresh rollups."""
+    """Fetch all pages, archive each raw, store, then derive activities and refresh rollups.
+
+    Writes one `ingest_run` row (source "kaya"; items_seen = sessions + ascents stored, items_new =
+    local dates updated) so the Settings page, the CLI and the daily job all share one "last
+    import" status -- a failure is recorded there and then re-raised."""
+    run_id = conn.execute(
+        ingest_run.insert().values(
+            athlete_id=athlete_id,
+            source=SOURCE,
+            started_at=datetime.now(UTC).replace(tzinfo=None),
+            status="running",
+            items_seen=0,
+            items_new=0,
+        )
+    ).inserted_primary_key
+    assert run_id is not None
+    conn.commit()
+    try:
+        summary = _import_kaya(conn, archive_root, athlete_id, tokenstore_dir)
+    except Exception as exc:
+        conn.rollback()
+        conn.execute(
+            ingest_run.update()
+            .where(ingest_run.c.id == run_id[0])
+            .values(
+                status="failed",
+                finished_at=datetime.now(UTC).replace(tzinfo=None),
+                errors=json.dumps([{"error": str(exc)}]),
+            )
+        )
+        conn.commit()
+        raise
+    conn.execute(
+        ingest_run.update()
+        .where(ingest_run.c.id == run_id[0])
+        .values(
+            status="success",
+            finished_at=datetime.now(UTC).replace(tzinfo=None),
+            items_seen=summary.sessions + summary.ascents,
+            items_new=summary.touched_dates,
+        )
+    )
+    conn.commit()
+    return summary
+
+
+def _import_kaya(
+    conn: Connection, archive_root: Path, athlete_id: str, tokenstore_dir: Path
+) -> KayaImportSummary:
     summary = KayaImportSummary()
     for kind, content in fetch_pages(tokenstore_dir):
         raw_id = archive_raw_bytes(

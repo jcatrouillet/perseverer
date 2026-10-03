@@ -1796,6 +1796,31 @@ source=garmin_connect` for progress; this call itself returns immediately.
 
 **Response `200`:** `JobTriggerOut` — `{"triggered": true}`.
 
+### `GET /settings/kaya/status`
+
+Whether the athlete has a saved Kaya session and how the last Kaya import went — read-only, no
+network call to Kaya.
+
+**Response `200`:** `KayaStatusOut` — `session_present` (boolean), `session_age_days` (integer,
+nullable), `last_sync_status` (`"running"|"success"|"failed"`, nullable), `last_sync_at`
+(nullable), `last_sync_error` (string, nullable).
+
+### `POST /settings/kaya/login`
+
+A human-initiated, one-shot Kaya login — the web counterpart of `sync auth kaya-login`. Body:
+`{"email": "...", "password": "..."}`. Only the resulting tokens are saved; the password never is.
+
+**Response `200`:** `{"success": true}`. **`400`** — wrong email/password (deliberately not `401`,
+for the same reason as `POST /settings/garmin/login`). **`502`** — Kaya could not be reached.
+
+### `POST /settings/kaya/sync`
+
+Runs the Kaya import (`sync import kaya`, also part of the daily worker) once, now. Runs in the
+background — poll `GET /settings/jobs/latest?source=kaya`; this call returns immediately.
+
+**Response `200`:** `JobTriggerOut` — `{"triggered": true}`. **`400`** — not logged in to Kaya yet
+(`detail: "Log in to Kaya first."`).
+
 ### `POST /settings/rebuild`
 
 Web counterpart of `sync rebuild`. Never destructive — only derived tables are wiped and
@@ -1824,8 +1849,9 @@ The most recent `ingest_run` row for one source — generic status polling share
 triggers above (and, incidentally, every other sync/import entrypoint that writes to the same
 table).
 
-**Query params:** `source` (`"garmin_connect"|"rebuild"|"garmin_export"|"strava_export"`,
-required).
+**Query params:** `source` (`"garmin_connect"|"kaya"|"rebuild"|"garmin_export"|"strava_export"`,
+required). For `kaya`, `items_seen` is sessions + ascents stored and `items_new` is the number of
+local dates updated.
 
 **Response `200`:** `JobStatusOut | null` — `null` if that source has never run.
 `JobStatusOut`: `source`, `status` (`"running"|"success"|"failed"`), `started_at`,

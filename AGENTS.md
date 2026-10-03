@@ -970,7 +970,12 @@ environment:
     session is there to merge into) for every athlete who has logged in to Kaya (a token store
     exists); best-effort — an expired session (`KayaAuthRequired`: a warning to run `sync auth
     kaya-login` again), a rate limit, or any other failure is logged and never blocks the staleness
-    check.
+    check. **Settings page**: `KayaCard.tsx` under Settings -> External tools
+    (`GET /settings/kaya/status`, `POST /settings/kaya/login` -- a wrong password is a 400, never a
+    401 -- and `POST /settings/kaya/sync`, polled via `GET /settings/jobs/latest?source=kaya`); the
+    password is used once and never stored. `import_kaya` writes an `ingest_run` row (source
+    `kaya`: `items_seen` = sessions + ascents stored, `items_new` = local dates updated) so the
+    CLI, the daily job and the Settings button share one "last import" status.
     A send's `attempts` (which includes the send) expands to N-1 attempt rows; unsent climbs get their
     lifetime attempt count from `attemptedClimbsForUser` (`kaya_unsent_climb`, split across the
     sessions that list them). Unsent climbs come from each session's `attempted_climbs` (`kaya_attempt`) and are combined with

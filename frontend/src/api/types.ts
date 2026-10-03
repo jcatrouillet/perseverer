@@ -570,13 +570,29 @@ export interface GarminLoginOut {
   success: boolean;
 }
 
+// GET /settings/kaya/status, POST /settings/kaya/login (docs/adr/0016-kaya-bouldering-adapter.md)
+export interface KayaStatusOut {
+  session_present: boolean;
+  session_age_days: number | null;
+  last_sync_status: string | null;
+  last_sync_at: string | null;
+  last_sync_error: string | null;
+}
+export interface KayaLoginIn {
+  email: string;
+  password: string;
+}
+export interface KayaLoginOut {
+  success: boolean;
+}
+
 // POST /settings/garmin/sync, POST /settings/rebuild, POST /settings/import/bulk-export
 export interface JobTriggerOut {
   triggered: boolean;
 }
 
 // GET /settings/jobs/latest
-export type JobSource = "garmin_connect" | "rebuild" | "garmin_export" | "strava_export";
+export type JobSource = "garmin_connect" | "kaya" | "rebuild" | "garmin_export" | "strava_export";
 
 export interface JobStatusOut {
   source: string;

@@ -30,6 +30,7 @@ import { BulkImportCard } from "../components/BulkImportCard";
 import { CalendarFeedCard } from "../components/CalendarFeedCard";
 import { EmailReportsCard } from "../components/EmailReportsCard";
 import { EufyCard } from "../components/EufyCard";
+import { KayaCard } from "../components/KayaCard";
 import { GarminConnectCard } from "../components/GarminConnectCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricExplorer, type ExplorerMetric } from "../components/MetricExplorer";
@@ -576,6 +577,7 @@ export function SettingsPage() {
       content: (
         <>
           <GarminConnectCard />
+          <KayaCard />
           <EufyCard />
           <CalendarFeedCard />
           <EmailReportsCard />

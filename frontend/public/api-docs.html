@@ -1296,11 +1296,18 @@ const SCHEMAS = [
       ["staleness_severity","string|null","warning | critical; null whenever the last sync succeeded."],
       ["staleness_message","string|null",""],
     ] },
+  { name: "KayaStatusOut", note: "Returned by GET /settings/kaya/status.", fields: [
+      ["session_present","boolean","Whether a Kaya session is saved."],
+      ["session_age_days","integer|null",""],
+      ["last_sync_status","string|null","running | success | failed."],
+      ["last_sync_at","string(date-time)|null",""],
+      ["last_sync_error","string|null",""],
+    ] },
   { name: "JobTriggerOut", note: "Returned by POST /settings/garmin/sync, /settings/rebuild, /settings/import/bulk-export.", fields: [
       ["triggered","boolean","Always true — a failure to trigger raises an HTTP error instead."],
     ] },
   { name: "JobStatusOut", note: "Returned by GET /settings/jobs/latest.", fields: [
-      ["source","string","garmin_connect | rebuild | garmin_export | strava_export"],
+      ["source","string","garmin_connect | kaya | rebuild | garmin_export | strava_export"],
       ["status","string","running | success | failed"],
       ["started_at","string(date-time)",""],
       ["finished_at","string(date-time)|null",""],
@@ -2576,6 +2583,27 @@ const GROUPS = [
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/garmin/sync \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
+    { method: "GET", path: "/api/v1/settings/kaya/status", summary: "Kaya session and last-import status.",
+      description: "Read-only; no network call to Kaya.",
+      params: [],
+      responses: [ { code: 200, ref: "KayaStatusOut" } ],
+      example: { curl: `curl https://your-perseverer-host/api/v1/settings/kaya/status \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
+    { method: "POST", path: "/api/v1/settings/kaya/login", summary: "Log in to Kaya (one-shot; the password is never stored).",
+      description: "The web counterpart of `sync auth kaya-login`. Only the resulting tokens are saved. A wrong password is a 400, deliberately not a 401 (a 401 would log you out of Perseverer itself).",
+      params: [ ["email","body","req","string","—","Your Kaya email."], ["password","body","req","string","—","Your Kaya password."] ],
+      responses: [ { code: 200, note: '{"success": true}' }, { code: 400, note: "Incorrect Kaya email or password." }, { code: 502, note: "Kaya could not be reached." } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/kaya/login \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"email": "me@example.com", "password": "..."}'` }
+    },
+    { method: "POST", path: "/api/v1/settings/kaya/sync", summary: "Run the Kaya import right now.",
+      description: "The same import `sync import kaya` and the daily worker run. Runs in the background — this returns immediately; poll GET /settings/jobs/latest?source=kaya for progress.",
+      responses: [ { code: 200, ref: "JobTriggerOut" }, { code: 400, note: 'detail: "Log in to Kaya first."' } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/kaya/sync \\
+  -H "X-API-Key: YOUR_API_KEY"` }
+    },
     { method: "POST", path: "/api/v1/settings/rebuild", summary: "Rebuild the database from the raw archive.",
       description: "The web counterpart of `sync rebuild`. Never destructive — only derived tables are wiped and replayed from the raw archive. Runs in the background — poll GET /settings/jobs/latest?source=rebuild for progress. Can take several minutes on a large archive.",
       responses: [ { code: 200, ref: "JobTriggerOut" } ],
@@ -2598,7 +2626,7 @@ const GROUPS = [
     },
     { method: "GET", path: "/api/v1/settings/jobs/latest", summary: "Status of the most recent triggered job for one source.",
       description: "Generic status polling shared by the sync/rebuild/import triggers above — all write to the same ingest_run table every sync/import entrypoint in this project already uses.",
-      params: [ ["source","query","req","string","—","garmin_connect | rebuild | garmin_export | strava_export"] ],
+      params: [ ["source","query","req","string","—","garmin_connect | kaya | rebuild | garmin_export | strava_export"] ],
       responses: [ { code: 200, ref: "JobStatusOut", note: "null if that source has never run." } ],
       example: { qs: "?source=rebuild" }
     },

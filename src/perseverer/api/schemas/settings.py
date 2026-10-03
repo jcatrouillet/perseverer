@@ -253,6 +253,26 @@ class GarminLoginOut(BaseModel):
     success: bool
 
 
+# GET /settings/kaya/status, POST /settings/kaya/login, POST /settings/kaya/sync -- the Kaya
+# bouldering logbook (docs/adr/0016-kaya-bouldering-adapter.md). Sync progress is polled through
+# GET /settings/jobs/latest?source=kaya like the other triggers.
+class KayaLoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class KayaLoginOut(BaseModel):
+    success: bool
+
+
+class KayaStatusOut(BaseModel):
+    session_present: bool
+    session_age_days: int | None
+    last_sync_status: str | None
+    last_sync_at: datetime | None
+    last_sync_error: str | None
+
+
 # POST /settings/garmin/sync, POST /settings/rebuild, POST /settings/import/bulk-export -- all
 # three return this immediately (the real work runs via BackgroundTasks); progress is polled
 # via GET /settings/jobs/latest below.

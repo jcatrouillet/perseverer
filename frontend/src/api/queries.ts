@@ -67,6 +67,9 @@ import type {
   InsightOut,
   JobSource,
   JobStatusOut,
+  KayaLoginIn,
+  KayaLoginOut,
+  KayaStatusOut,
   JobTriggerOut,
   NoteCreate,
   NoteOut,
@@ -1127,6 +1130,36 @@ export function useGarminLogin() {
 export function useTriggerGarminSync() {
   return useMutation({
     mutationFn: () => apiPost<JobTriggerOut>("/api/v1/settings/garmin/sync", {}),
+  });
+}
+
+/** Session presence/age + the most recent Kaya import result -- read-only, no network call. */
+export function useKayaStatus() {
+  return useQuery({
+    queryKey: ["kaya-status"],
+    queryFn: () => apiGet<KayaStatusOut>("/api/v1/settings/kaya/status"),
+  });
+}
+
+/** A human-initiated, one-shot Kaya login -- only the resulting tokens are saved. */
+export function useKayaLogin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: KayaLoginIn) => apiPost<KayaLoginOut>("/api/v1/settings/kaya/login", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["kaya-status"] });
+    },
+  });
+}
+
+/** Runs the Kaya import once, now, in the background -- see useLatestJob("kaya", ...) for progress. */
+export function useTriggerKayaSync() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<JobTriggerOut>("/api/v1/settings/kaya/sync", {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["kaya-status"] });
+    },
   });
 }
 
