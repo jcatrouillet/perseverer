@@ -104,6 +104,13 @@ REST + GraphQL backend, which is the only automated route to the data.
 7. **Rollups and insights** follow the standing contract: touched `local_date`s are collected and
    `refresh_daily_rollup`, insights and period rollups run once per date after the loop.
 
+## Scheduling (2026-10-03)
+
+The import runs inside the worker's daily sync, right after the Garmin sync, for each athlete with a
+Kaya token store. It is best-effort and never blocks the rest of the job; a dead Kaya session shows
+up as a worker log warning asking for `sync auth kaya-login`. Kaya's refresh token lifetime is not
+known, so expect to log in again occasionally.
+
 ## Consequences
 
 - The bouldering data becomes route-accurate and covers sessions without a watch.

@@ -964,7 +964,13 @@ environment:
     calories, HR, training effect and the HR chart stay Garmin's; Garmin efforts Kaya has no entry
     for (coach-set problems, say) are promoted back to routes (`source="garmin_extra"`, matched by
     grade+result against Kaya's, original decode kept in `split.garmin_grade`/`garmin_result`);
-    none or several candidates -> a Kaya-only activity.
+    none or several candidates -> a Kaya-only activity. **Scheduled**:
+    `worker/main.py::_import_kaya_for_athlete` runs the import inside the daily sync
+    (`_sync_one_athlete`, right after the Garmin sync and the Eufy step, so a same-day Garmin
+    session is there to merge into) for every athlete who has logged in to Kaya (a token store
+    exists); best-effort — an expired session (`KayaAuthRequired`: a warning to run `sync auth
+    kaya-login` again), a rate limit, or any other failure is logged and never blocks the staleness
+    check.
     A send's `attempts` (which includes the send) expands to N-1 attempt rows; unsent climbs get their
     lifetime attempt count from `attemptedClimbsForUser` (`kaya_unsent_climb`, split across the
     sessions that list them). Unsent climbs come from each session's `attempted_climbs` (`kaya_attempt`) and are combined with
