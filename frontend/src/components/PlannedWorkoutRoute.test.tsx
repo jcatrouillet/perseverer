@@ -60,6 +60,43 @@ describe("PlannedWorkoutRoute", () => {
     expect(onRemove).toHaveBeenCalled();
   });
 
+  it("says where the route is on Garmin: not yet, on the watch, or failed", () => {
+    const { rerender } = render(
+      <PlannedWorkoutRoute
+        route={ROUTE}
+        onAttach={vi.fn()}
+        onRemove={vi.fn()}
+        isBusy={false}
+        error={null}
+      />,
+    );
+    expect(
+      screen.getByText(/Sent to Garmin as a private course when you push/),
+    ).toBeInTheDocument();
+
+    rerender(
+      <PlannedWorkoutRoute
+        route={{ ...ROUTE, garmin_course_id: 520851263 }}
+        onAttach={vi.fn()}
+        onRemove={vi.fn()}
+        isBusy={false}
+        error={null}
+      />,
+    );
+    expect(screen.getByText(/On your Garmin as a private course/)).toBeInTheDocument();
+
+    rerender(
+      <PlannedWorkoutRoute
+        route={{ ...ROUTE, garmin_course_error: "Garmin saved the course with privacy 'public'" }}
+        onAttach={vi.fn()}
+        onRemove={vi.fn()}
+        isBusy={false}
+        error={null}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("privacy 'public'");
+  });
+
   it("disables the buttons while busy and surfaces an upload error", () => {
     render(
       <PlannedWorkoutRoute

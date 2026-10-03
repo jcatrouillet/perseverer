@@ -690,6 +690,11 @@ export interface PlannedRouteOut {
   // Google-encoded polyline (precision 5), thinned to a few hundred points for drawing.
   polyline: string;
   uploaded_at: string;
+  // The route pushed to Garmin as a private course alongside the workout push (null until then).
+  garmin_course_id?: number | null;
+  garmin_course_pushed_at?: string | null;
+  // The last failed course push (the workout push itself still succeeded).
+  garmin_course_error?: string | null;
 }
 
 export interface PlannedWorkoutOut {

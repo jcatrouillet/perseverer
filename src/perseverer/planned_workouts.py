@@ -58,11 +58,13 @@ from perseverer.adapters.garmin_connect import (
     RateLimiter,
     RateLimitSettings,
 )
+from perseverer.archive import read_raw_bytes
 from perseverer.db.schema import (
     activity,
     athlete_hr_zone_config,
     planned_workout,
     planned_workout_step,
+    raw_object,
 )
 from perseverer.hr_zones import compute_hr_zone_boundaries, resolve_hr_zone_bpm
 from perseverer.merge.engine import sport_family
@@ -562,6 +564,7 @@ def push_planned_workout(
     tokenstore_dir: Path,
     rate_limits: RateLimitSettings,
     client_factory: Any = Garmin,
+    raw_archive_dir: Path | None = None,
 ) -> PushResult:
     """Loads one `planned_workout` + its steps, builds the Garmin `RunningWorkout`, and pushes
     it -- called from both `POST /planned-workouts/{workout_id}/push` (manual, one workout) and the
@@ -576,6 +579,10 @@ def push_planned_workout(
     a multi-workout loop entirely (matching `sync_garmin_connect`'s own "break, don't mark
     anything failed, let the next scheduled run retry" convention) rather than being recorded
     against this one workout.
+
+    When the workout carries a GPX route and `raw_archive_dir` is given, the route is pushed to
+    Garmin as a private course right after the workout succeeds (`_push_route_course`); a course
+    failure is recorded on the row and never fails the workout.
     """
     row = conn.execute(
         select(planned_workout).where(
@@ -586,6 +593,7 @@ def push_planned_workout(
         raise ValueError(f"planned_workout {planned_workout_id} not found")
 
     now = datetime.now(UTC).replace(tzinfo=None)
+    adapter: GarminConnectAdapter | None = None
 
     def _mark_failed(message: str) -> PushResult:
         conn.rollback()
@@ -671,7 +679,71 @@ def push_planned_workout(
         )
     )
     conn.commit()
+    if (
+        row.sport == "running"
+        and row.route_raw_object_id is not None
+        and raw_archive_dir is not None
+        and adapter is not None
+    ):
+        _push_route_course(conn, adapter, row, raw_archive_dir)
     return PushResult(success=True, garmin_workout_id=workout_id, error=None)
+
+
+def _push_route_course(
+    conn: Connection,
+    adapter: GarminConnectAdapter,
+    row: Any,
+    raw_archive_dir: Path,
+) -> None:
+    """Pushes the workout's GPX to Garmin as a private course, once per route (a re-push of an
+    unchanged route is a no-op; a replaced route deletes the stale course first). Failures are
+    recorded in `garmin_course_error` -- the workout itself already succeeded. Only
+    `GarminRateLimitAborted` propagates (the whole session is rate limited; stop the loop)."""
+    if (
+        row.garmin_course_id is not None
+        and row.garmin_course_pushed_at is not None
+        and row.route_uploaded_at is not None
+        and row.route_uploaded_at <= row.garmin_course_pushed_at
+    ):
+        return
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        storage_path = conn.execute(
+            select(raw_object.c.storage_path).where(raw_object.c.id == row.route_raw_object_id)
+        ).scalar_one()
+        gpx = read_raw_bytes(raw_archive_dir, storage_path)
+        course_id = adapter.push_course(
+            gpx,
+            f"{row.name or 'Run'} {row.local_date} (Perseverer)",
+            existing_course_id=row.garmin_course_id,
+        )
+    except GarminRateLimitAborted:
+        raise
+    except Exception as e:  # deliberately broad -- a course failure must not fail the workout
+        conn.rollback()
+        conn.execute(
+            planned_workout.update()
+            .where(planned_workout.c.id == row.id)
+            .values(
+                garmin_course_id=None,
+                garmin_course_pushed_at=None,
+                garmin_course_error=str(e),
+                updated_at=now,
+            )
+        )
+        conn.commit()
+        return
+    conn.execute(
+        planned_workout.update()
+        .where(planned_workout.c.id == row.id)
+        .values(
+            garmin_course_id=course_id,
+            garmin_course_pushed_at=now,
+            garmin_course_error=None,
+            updated_at=now,
+        )
+    )
+    conn.commit()
 
 
 # --- Save (parse + insert/update) -- shared by POST/PUT /planned-workouts and the

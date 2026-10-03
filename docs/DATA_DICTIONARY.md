@@ -1838,8 +1838,12 @@ file name), `route_distance_m` (haversine over the points), `route_elevation_gai
 at least 1 m between consecutive points — approximate, null without elevation data),
 `route_polyline` (Google-encoded, thinned to <= ~600 points), `route_uploaded_at`. Removing the route
 nulls these columns; the archived file stays. Entity/DOCTYPE declarations are refused and files are
-capped at 5 MB. The route is shown on the calendar for reference and is **not** sent to Garmin (see
-`docs/adr/0017-planned-workout-gpx-route.md`).
+capped at 5 MB. The route is shown on the calendar and is also pushed to Garmin as a **private course**
+alongside the workout push (`garmin_course.py`, `GarminConnectAdapter.push_course`): `garmin_course_id`
+(the Garmin course), `garmin_course_pushed_at`, `garmin_course_error` (the last failed attempt — a course
+failure never fails the workout push). A course is a separate Garmin object, not linked to the
+workout; the athlete picks it on the watch. Re-pushed only when the route changes (the stale course is
+deleted first); see `docs/adr/0017-planned-workout-gpx-route.md`.
 
 ## Kaya bouldering logbook (kaya_session, kaya_ascent, adapters/kaya_ingest.py)
 

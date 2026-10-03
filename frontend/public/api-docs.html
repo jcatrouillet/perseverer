@@ -1356,6 +1356,9 @@ const SCHEMAS = [
       ["elevation_gain_m","number|null","Approximate; ignores sub-metre wobble."],
       ["polyline","string","Google-encoded polyline (precision 5), thinned to at most ~600 points."],
       ["uploaded_at","string(date-time)",""],
+      ["garmin_course_id","integer|null","The private Garmin course this route was pushed as (set when the workout is pushed)."],
+      ["garmin_course_pushed_at","string(date-time)|null",""],
+      ["garmin_course_error","string|null","The last failed course push; the workout push itself still succeeded."],
     ] },
   { name: "PlannedWorkoutOut", note: "Returned by POST/GET/PUT /planned-workouts and GET .../by-date/{local_date}. available is always true here — a nonexistent workout_id is a 404, not an available:false object.", fields: [
       ["available","boolean","required — always true"],
@@ -2268,7 +2271,7 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "POST", path: "/api/v1/planned-workouts/{workout_id}/route", summary: "Attach (or replace) a GPX route on a planned running workout.",
-      description: "multipart/form-data with one file field. The original GPX is archived verbatim (raw_object, source athlete_upload, kind planned_workout_gpx); the workout stores only a display summary (PlannedRouteOut: name, distance, elevation gain, a thinned polyline). Shown on the calendar for reference — not sent to the watch. Entity/DOCTYPE declarations are refused.",
+      description: "multipart/form-data with one file field. The original GPX is archived verbatim (raw_object, source athlete_upload, kind planned_workout_gpx); the workout stores only a display summary (PlannedRouteOut: name, distance, elevation gain, a thinned polyline). Also pushed to Garmin as a private course when the workout is pushed (a separate Garmin object — pick it on the watch under Courses). Entity/DOCTYPE declarations are refused.",
       params: [ ["workout_id","path","req","integer","—","From PlannedWorkoutOut.id."], ["file","body","req","file","—","A .gpx track (or route), 5 MB maximum, at least two points."] ],
       responses: [ { code: 200, ref: "PlannedWorkoutOut", note: "route now set." }, { code: 400, note: "Not a running workout, or an unusable GPX (detail says why)." }, { code: 404, note: 'detail: "planned workout not found"' }, { code: 413, note: "Over 5 MB." } ],
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/planned-workouts/${EX.PLANNED_WORKOUT_ID}/route \\

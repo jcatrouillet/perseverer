@@ -1301,7 +1301,7 @@ Attaches (or replaces) a **GPX route** on a planned **running** workout — `mul
 one `file` field. The original file is archived verbatim (`raw_object`, source `athlete_upload`,
 kind `planned_workout_gpx`); the workout stores only a display summary (`PlannedRouteOut`: name,
 distance, elevation gain, a thinned polyline). The route is shown on the calendar for reference; it
-is **not** sent to the watch. Entity/DOCTYPE declarations are refused.
+is also pushed to Garmin as a private course when the workout is pushed (see `PlannedRouteOut`). Entity/DOCTYPE declarations are refused.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
@@ -2614,7 +2614,9 @@ always addressed by id rather than by date:
 
 ### PlannedRouteOut
 
-`name` (string, nullable — the GPX's own name, else the file name), `distance_m` (number), `elevation_gain_m` (number, nullable — approximate, ignores sub-metre wobble), `polyline` (string — Google-encoded, precision 5, thinned to at most ~600 points), `uploaded_at` (string).
+`name` (string, nullable — the GPX's own name, else the file name), `distance_m` (number), `elevation_gain_m` (number, nullable — approximate, ignores sub-metre wobble), `polyline` (string — Google-encoded, precision 5, thinned to at most ~600 points), `uploaded_at` (string), `garmin_course_id` (integer, nullable — the private Garmin course this route was pushed as, set when the workout is pushed), `garmin_course_pushed_at` (string, nullable), `garmin_course_error` (string, nullable — the last failed course push; the workout push itself still succeeded).
+
+A course is a **separate Garmin object**: Garmin has no link between a course and a scheduled workout, so the athlete picks the course on the watch (Courses). It is created **private** and the push verifies that Garmin reports it private, deleting it again otherwise. Detaching the route or deleting the workout deletes the Garmin course best-effort.
 
 ### PlannedWorkoutSegmentOut
 

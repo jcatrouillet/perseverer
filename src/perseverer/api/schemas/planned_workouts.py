@@ -137,6 +137,11 @@ class PlannedRouteOut(BaseModel):
     # Google-encoded polyline (precision 5), thinned to a few hundred points for drawing.
     polyline: str
     uploaded_at: str
+    # The route pushed to Garmin as a private course alongside the workout push (null until then).
+    garmin_course_id: int | None = None
+    garmin_course_pushed_at: str | None = None
+    # The last failed course push (the workout push itself still succeeded).
+    garmin_course_error: str | None = None
 
 
 class PlannedWorkoutOut(BaseModel):

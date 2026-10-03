@@ -2,9 +2,10 @@
 
 ## Status
 
-Step 1 (store and show the route) is built. Step 2 (push it to Garmin as a course) is an
-**experiment**, not a decision: nothing below about Garmin's course API is verified until the live
-test recorded in "Live verification" has been run.
+Step 1 (store and show the route) and step 2 (push it to Garmin as a private course) are both built.
+Step 2 rests on an undocumented Garmin API, verified live on the athlete's own account on
+2026-10-03 (see "Live verification"); it can break without notice, and the failure mode is a
+recorded `garmin_course_error`, never a failed workout push.
 
 ## Context
 
@@ -34,27 +35,50 @@ form with browser cookies and is almost certainly dead.
    rejected with a 400 that says why. Only running workouts accept a route.
 3. **Elevation gain is approximate and says so**: rises under 1 m between points are ignored so a flat
    route doesn't accrue a phantom climb; `null` when the file has no elevation.
-4. **Shown, not pushed (yet).** The route is drawn on the workout card with the existing
+4. **Shown on the workout card.** The route is drawn on the workout card with the existing
    `ActivityMap` (CARTO raster thumbnail). Reusing it keeps one map component and avoids spinning
-   up a WebGL canvas per card (see that component's own docstring). Pushing it to Garmin is step 2.
+   up a WebGL canvas per card (see that component's own docstring).
 5. **Not exposed through MCP**: attaching a file isn't something an agent can usefully do; the
    `route` summary is already on every `PlannedWorkoutOut` an agent reads.
 
-## Step 2 — pushing the course to Garmin (experiment)
+## Step 2 — pushing the course to Garmin
 
-To be decided only after a single, human-approved live test on the athlete's own account, run with
-the saved token store under the same rules as every Garmin call (never credentials, rate-limited,
-abort on a 429 with no retry). The test uploads one small clearly-labelled GPX as a course, records
-the exact endpoint, request shape and response, and the athlete deletes the test course afterwards.
-If it works, the result is written below and a push can ride alongside the existing workout push; if
-it doesn't, step 1 stands on its own and this ADR says why the push was abandoned.
+6. **Push the route as a private Garmin course, alongside the workout push** (`planned_workouts.py::
+   _push_route_course` after the workout succeeds; `GarminConnectAdapter.push_course`). Once per
+   route: an unchanged route is not re-uploaded, a replaced one deletes the stale course first. The
+   course name is `"<workout name> <date> (Perseverer)"`.
+7. **Fail closed on privacy.** The athlete's existing courses are public (`privacyRule.typeId 1`)
+   and a course carries the route's start location, so the push sends `rulePK 2`, then reads the
+   course list and requires `privacyRule.typeKey == "private"`; anything else (or the course not
+   being listed) deletes it again and raises `CourseError`.
+8. **A course failure never fails the workout push** — it lands in `planned_workout.garmin_course_error`
+   (shown on the card). Only a Garmin 429 propagates, to stop a multi-workout loop, exactly like the
+   workout push. Detaching the route, or deleting the workout, deletes the Garmin course best-effort.
+9. **Same safety contract as every Garmin call**: token store only, never credentials, one
+   rate-limited call per request, a 429 aborts with no retry.
 
-## Live verification
+## Live verification (2026-10-03, the athlete's own account)
 
-_Not yet run._
+Run by hand with the saved token store, a handful of calls, a labelled test GPX
+("PERSEVERER TEST - delete me") that was deleted afterwards:
+
+- `POST /course-service/course/import` (multipart `file`) → 200 with a *draft* course
+  (`courseId: null`, `geoPoints`, `courseLines`); nothing is created yet.
+- `POST /course-service/course` with the draft → 400 `'createCourse.arg3.sourceTypeId' must not be
+  null`; retried with `sourceTypeId: 3` (the value the athlete's existing imported courses carry),
+  `activityTypePk: 1`, `rulePK: 2`, `distanceMeter`, `startPoint` → 200, `courseId` returned. Garmin
+  filled the elevation gain from its own model.
+- `GET /course-service/course/{id}` → 200; `DELETE` the same → 204.
+- A second run through the real `push_course` code path created a course, `GET
+  /course-service/course` listed it with `privacyRule.typeKey == "private"`, and it was deleted.
+- `GET /course-service/course` also showed the athlete's existing courses as
+  `privacyRule {typeId: 1, typeKey: "public"}`, which is why the push verifies privacy every time.
 
 ## Consequences
 
-- A running workout can carry a reference route today, with zero Garmin dependency.
-- Even if step 2 works, a Garmin course is a separate object from the scheduled workout; the athlete
-  would still choose the course on the watch.
+- A running workout can carry a route with zero Garmin dependency; the Garmin push is an add-on.
+- A Garmin course is a separate object from the scheduled workout; the athlete chooses the course on
+  the watch (Courses). Whether a given watch lets you follow a course during a structured workout is
+  not known.
+- The `course-service` API is undocumented and may change; the blast radius is `garmin_course.py` and
+  `push_course`.

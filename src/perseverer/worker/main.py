@@ -237,6 +237,7 @@ def run_daily_workout_push() -> None:
                     planned_workout_id=row.id,
                     tokenstore_dir=settings.garmin_tokenstore_dir_for(row.athlete_id),
                     rate_limits=rate_limits,
+                    raw_archive_dir=settings.raw_archive_dir,
                 )
                 if result.success:
                     pushed += 1

@@ -939,6 +939,13 @@ planned_workout = Table(
     Column("route_elevation_gain_m", Float, nullable=True),
     Column("route_polyline", Text, nullable=True),
     Column("route_uploaded_at", DateTime(), nullable=True),
+    # The route pushed to the athlete's Garmin as a private *course* (garmin_course.py), alongside
+    # the workout push. A course is a separate Garmin object: there is no link to the workout, so
+    # the athlete picks it on the watch. garmin_course_error is the last failed attempt (a course
+    # failure never fails the workout push).
+    Column("garmin_course_id", Integer, nullable=True),
+    Column("garmin_course_pushed_at", DateTime(), nullable=True),
+    Column("garmin_course_error", Text, nullable=True),
     Column("created_at", DateTime(), nullable=False),
     Column("updated_at", DateTime(), nullable=False),
 )

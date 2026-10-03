@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, date, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -245,6 +245,11 @@ def _to_out(
             elevation_gain_m=row.route_elevation_gain_m,
             polyline=row.route_polyline,
             uploaded_at=row.route_uploaded_at.isoformat(),
+            garmin_course_id=row.garmin_course_id,
+            garmin_course_pushed_at=row.garmin_course_pushed_at.isoformat()
+            if row.garmin_course_pushed_at
+            else None,
+            garmin_course_error=row.garmin_course_error,
         )
         if row.route_polyline and row.route_distance_m is not None and row.route_uploaded_at
         else None,
@@ -399,9 +404,11 @@ def delete_planned_workout(
     conn: Connection = Depends(get_conn),
 ) -> None:
     row = conn.execute(
-        select(planned_workout.c.id, planned_workout.c.garmin_workout_id).where(
-            planned_workout.c.id == workout_id, planned_workout.c.athlete_id == athlete_id
-        )
+        select(
+            planned_workout.c.id,
+            planned_workout.c.garmin_workout_id,
+            planned_workout.c.garmin_course_id,
+        ).where(planned_workout.c.id == workout_id, planned_workout.c.athlete_id == athlete_id)
     ).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="planned workout not found")
@@ -428,6 +435,8 @@ def delete_planned_workout(
                 exc_info=True,
             )
 
+    if row.garmin_course_id is not None:
+        _best_effort_delete_garmin_course(settings, athlete_id, row.garmin_course_id)
     conn.execute(
         planned_workout_step.delete().where(planned_workout_step.c.planned_workout_id == row.id)
     )
@@ -463,6 +472,20 @@ def _running_workout_row(conn: Connection, athlete_id: str, workout_id: int) -> 
     if row is None:
         raise HTTPException(status_code=404, detail="planned workout not found")
     return row
+
+
+def _best_effort_delete_garmin_course(settings: Any, athlete_id: str, course_id: int) -> None:
+    try:
+        adapter = GarminConnectAdapter(
+            settings.garmin_tokenstore_dir_for(athlete_id),
+            RateLimiter(settings.garmin_request_interval_s, settings.garmin_max_requests_per_hour),
+        )
+        adapter.authenticate()
+        adapter.delete_course(course_id)
+    except Exception:
+        logger.warning(
+            "best-effort Garmin course delete failed for course %s", course_id, exc_info=True
+        )
 
 
 @router.post("/planned-workouts/{workout_id}/route")
@@ -519,10 +542,15 @@ def post_planned_workout_route(
 def delete_planned_workout_route(
     workout_id: int,
     athlete_id: Annotated[str, Depends(require_api_key)],
+    settings: SettingsDep,
     conn: Connection = Depends(get_conn),
 ) -> PlannedWorkoutOut:
-    """Detach the route. The archived GPX itself is kept (nothing in this app deletes raw data)."""
-    _running_workout_row(conn, athlete_id, workout_id)
+    """Detach the route. The archived GPX itself is kept (nothing in this app deletes raw data).
+    A course already pushed to Garmin is deleted there best-effort (a Garmin-side failure never
+    blocks detaching locally -- a leftover private course is harmless clutter)."""
+    row = _running_workout_row(conn, athlete_id, workout_id)
+    if row.garmin_course_id is not None:
+        _best_effort_delete_garmin_course(settings, athlete_id, row.garmin_course_id)
     conn.execute(
         planned_workout.update()
         .where(planned_workout.c.id == workout_id)
@@ -533,6 +561,9 @@ def delete_planned_workout_route(
             route_elevation_gain_m=None,
             route_polyline=None,
             route_uploaded_at=None,
+            garmin_course_id=None,
+            garmin_course_pushed_at=None,
+            garmin_course_error=None,
             updated_at=datetime.now(UTC).replace(tzinfo=None),
         )
     )
@@ -619,6 +650,7 @@ def post_push_planned_workout(
                     request_interval_s=settings.garmin_request_interval_s,
                     max_requests_per_hour=settings.garmin_max_requests_per_hour,
                 ),
+                raw_archive_dir=settings.raw_archive_dir,
             )
 
     background_tasks.add_task(_run)

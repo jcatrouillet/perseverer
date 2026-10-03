@@ -1165,8 +1165,18 @@ environment:
   a GPX file to a planned run; it is archived raw (`athlete_upload`/`planned_workout_gpx`) and only a
   display summary (name, distance, climb, thinned polyline) lives on `planned_workout.route_*`,
   drawn with the existing `ActivityMap`. It is a reference on the calendar — **not** pushed to the
-  watch (Garmin's workout builder cannot link a course to a workout, and `garminconnect` has no
-  course call); see `docs/adr/0017-planned-workout-gpx-route.md`.
+  watch as part of the workout (Garmin's workout builder cannot link a course to one). It is also
+  pushed to Garmin as a **private course** alongside the workout push
+  (`GarminConnectAdapter.push_course`, `garmin_course.py`): `garminconnect` has no course call, so
+  this uses the library's generic authenticated request against Garmin's undocumented
+  `course-service` (`POST .../course/import` parses the GPX, `POST .../course` saves it, then
+  `GET .../course` must report `privacyRule.typeKey == "private"` or the course is deleted and the
+  push refused — fail closed, since the athlete's existing courses are public and a route carries
+  their start location). **Live-verified 2026-10-03 on the athlete's own account** (see the ADR's
+  "Live verification"); the same safety rules as every Garmin call apply (rate-limited, a 429
+  aborts with no retry, never credentials). A course failure is recorded on the workout
+  (`garmin_course_error`) and never fails the workout push; detaching the route or deleting the
+  workout deletes the Garmin course best-effort.
   **Revision**: a day originally held at most one `planned_workout` row (`UniqueConstraint` on
   `(athlete_id, local_date)`) -- lifted once the athlete asked to schedule more than one workout
   on the same day (e.g. a morning run plus an evening strength session). Every workout is now

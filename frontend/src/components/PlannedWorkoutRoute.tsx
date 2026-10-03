@@ -43,6 +43,19 @@ export function PlannedWorkoutRoute({
             {route.elevation_gain_m != null && ` · +${Math.round(route.elevation_gain_m)} m`}
           </p>
           <ActivityMap encodedPolyline={route.polyline} color={toneColor("pace")} />
+          {route.garmin_course_id != null ? (
+            <p className="chart-note">
+              On your Garmin as a private course — on the watch, open Courses to follow it.
+            </p>
+          ) : route.garmin_course_error ? (
+            <p className="chart-note" role="alert">
+              Could not send the route to Garmin: {route.garmin_course_error}
+            </p>
+          ) : (
+            <p className="chart-note">
+              Sent to Garmin as a private course when you push the workout.
+            </p>
+          )}
         </>
       )}
       <div className="planned-workout__actions">

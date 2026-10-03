@@ -23,6 +23,7 @@ dl_fmt=Garmin.ActivityDownloadFormat.ORIGINAL)`.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import io
 import json
@@ -37,6 +38,8 @@ from typing import Any
 from garminconnect import (
     Garmin,
     GarminConnectAuthenticationError,
+    GarminConnectConnectionError,
+    GarminConnectNotFoundError,
     GarminConnectTooManyRequestsError,
 )
 from garminconnect.workout import BaseWorkout
@@ -50,6 +53,12 @@ from perseverer.fit.parser import parse_fit
 from perseverer.fitness import refresh_fitness_rollup
 from perseverer.gap import refresh_avg_gap
 from perseverer.garmin_connect_activity_name import backfill_garmin_activity_names
+from perseverer.garmin_course import (
+    PRIVATE_TYPE_KEY,
+    CourseError,
+    build_course_payload,
+    course_privacy_key,
+)
 from perseverer.health.ingest import HealthIngestResult, ingest_health_batch
 from perseverer.health.json_parser import (
     parse_daily_hrv_json,
@@ -588,9 +597,7 @@ class GarminConnectAdapter:
                 latest=False, start_date=start_date, end_date=end_date, aggregation="daily"
             )
         except GarminConnectTooManyRequestsError as e:
-            raise GarminRateLimitAborted(
-                "429 from Garmin while fetching lactate threshold"
-            ) from e
+            raise GarminRateLimitAborted("429 from Garmin while fetching lactate threshold") from e
 
         content = json.dumps(thresholds).encode("utf-8")
         archive_raw_bytes(
@@ -668,6 +675,73 @@ class GarminConnectAdapter:
             raise GarminRateLimitAborted(
                 f"429 from Garmin while deleting workout {workout_id}"
             ) from e
+
+    def _course_request(self, method: str, path: str, **kwargs: Any) -> Any:
+        """One rate-limited Garmin `course-service` call. Garmin's library has no course methods,
+        so this goes through its generic authenticated request -- which reports a 429 as a plain
+        connection error whose text says so, hence the explicit check: a 429 aborts, never retries
+        (same contract as every other call on this class)."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            return self._client.client.request(method, "connectapi", path, **kwargs)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(f"429 from Garmin on {method} {path}") from e
+        except GarminConnectConnectionError as e:
+            if "429" in str(e):
+                raise GarminRateLimitAborted(f"429 from Garmin on {method} {path}") from e
+            raise
+
+    def delete_course(self, course_id: int) -> None:
+        """Deletes one course from the athlete's Garmin account. An already-gone course (404) is
+        not an error -- the goal is "this course no longer exists"."""
+        try:
+            self._course_request("DELETE", f"/course-service/course/{course_id}")
+        except GarminConnectNotFoundError:
+            return
+
+    def push_course(
+        self, gpx: bytes, course_name: str, *, existing_course_id: int | None = None
+    ) -> int:
+        """Uploads a GPX route to the athlete's Garmin account as a **private running course**
+        and returns the new Garmin course id. Verified live, not documented anywhere official --
+        see `garmin_course.py` and docs/adr/0017-planned-workout-gpx-route.md.
+
+        Three steps, each its own rate-limited call: Garmin parses the GPX into a draft, the draft
+        is saved, then the saved course is **checked to really be private** (a course carries the
+        athlete's start location, and the athlete's own existing courses are public). If it isn't
+        private -- or can't be found in the course list to check -- it is deleted again and
+        `CourseError` is raised: fail closed, never leave a public route behind. A stale copy
+        (`existing_course_id`, from an earlier push of a since-edited route) is deleted first.
+        """
+        if existing_course_id is not None:
+            self.delete_course(existing_course_id)
+        parsed = self._course_request(
+            "POST",
+            "/course-service/course/import",
+            files={"file": ("route.gpx", gpx, "application/gpx+xml")},
+        )
+        payload = build_course_payload(parsed.json(), course_name)
+        created = self._course_request("POST", "/course-service/course", json=payload)
+        course_id = int(created.json()["courseId"])
+
+        try:
+            listing = self._course_request("GET", "/course-service/course")
+            privacy = course_privacy_key(listing.json(), course_id)
+        except GarminRateLimitAborted:
+            self._best_effort_delete_course(course_id)
+            raise
+        if privacy != PRIVATE_TYPE_KEY:
+            self.delete_course(course_id)
+            raise CourseError(
+                f"Garmin saved the course with privacy {privacy!r}, not 'private' -- "
+                "it was deleted again"
+            )
+        return course_id
+
+    def _best_effort_delete_course(self, course_id: int) -> None:
+        with contextlib.suppress(Exception):  # cleanup after another failure; never mask it
+            self.delete_course(course_id)
 
     def push_planned_workout(
         self, workout: BaseWorkout, local_date: str, *, existing_workout_id: int | None = None
