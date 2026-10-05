@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 
 import { usePerformance } from "../api/queries";
 import type { PerformanceDailyRollupOut } from "../api/types";
-import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../dateUtils";
+import { EARLIEST_PLAUSIBLE_DATE, localIsoDate } from "../dateUtils";
 import { toneColor } from "../metricStyle";
 import {
   bucketSeriesToWindow,
@@ -31,7 +31,7 @@ import { LoadingSpinner } from "./LoadingSpinner";
 import { TrendChart, type TrendSeries } from "./TrendChart";
 import { TrendControls } from "./TrendControls";
 
-const TODAY = isoDate(new Date());
+const TODAY = localIsoDate();
 const VO2MAX_KEY = "vo2max";
 
 function performanceToDailyPoints(rows: PerformanceDailyRollupOut[]): DailyPoint[] {

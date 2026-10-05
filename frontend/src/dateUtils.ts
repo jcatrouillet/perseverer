@@ -19,6 +19,13 @@ export function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** The browser's own local calendar date as YYYY-MM-DD. `isoDate(new Date())` is the UTC date,
+ * which already reads as tomorrow for hours every evening west of UTC (and as yesterday early
+ * morning east of it) -- so anything meaning "today for this athlete" must use this instead. */
+export function localIsoDate(date: Date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export function parseIsoDate(iso: string): Date {
   const [year, month, day] = iso.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day));

@@ -9,7 +9,7 @@ import { useActivities, useActivityRoutes, useHealthDashboard, useSleep } from "
 import { ActivityCard } from "../components/ActivityCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricChip } from "../components/StatTile";
-import { isoDate } from "../dateUtils";
+import { localIsoDate } from "../dateUtils";
 import { valueForDate } from "../healthStats";
 import { healthMetricStyle, KNOWN_SPORTS } from "../metricStyle";
 import { groupByLocalDate } from "../yearStats";
@@ -49,7 +49,7 @@ export function ActivityListPage() {
     .map((g) => g.localDate)
     .slice()
     .sort();
-  const today = isoDate(new Date());
+  const today = localIsoDate();
   const rangeStart = sortedDates[0] ?? today;
   const rangeEnd = sortedDates[sortedDates.length - 1] ?? today;
 

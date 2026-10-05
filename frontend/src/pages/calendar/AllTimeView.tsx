@@ -23,7 +23,7 @@ import { PeriodStatsCard } from "../../components/PeriodStatsCard";
 import { PeriodShareButton } from "../../components/ShareButton";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
-import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../../dateUtils";
+import { EARLIEST_PLAUSIBLE_DATE, localIsoDate } from "../../dateUtils";
 import { anyMetricHasData, monthlyAverageSleepHours } from "../../healthStats";
 import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
 import { busiestYear } from "../../yearStats";
@@ -58,7 +58,7 @@ export function AllTimeView() {
     (a) => a.local_date != null && a.local_date >= EARLIEST_PLAUSIBLE_DATE,
   );
   const dates = all.map((a) => a.local_date!).sort();
-  const today = isoDate(new Date());
+  const today = localIsoDate();
   const start = dates[0] ?? today;
   const end = dates[dates.length - 1] ?? today;
 

@@ -17,11 +17,11 @@ import {
 } from "../api/queries";
 import type { BloodTestMarkerIn, BloodTestResultOut } from "../api/types";
 import { formatDate, formatRange, isOutOfRange } from "../bloodMarkers";
-import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../dateUtils";
+import { EARLIEST_PLAUSIBLE_DATE, localIsoDate } from "../dateUtils";
 import { LoadingSpinner } from "./LoadingSpinner";
 import "../styles/blood-tests.css";
 
-const TODAY = isoDate(new Date());
+const TODAY = localIsoDate();
 
 interface Panel {
   localDate: string;

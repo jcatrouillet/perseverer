@@ -23,6 +23,7 @@ def _activity(
     max_altitude_m: float | None = None,
     temperature_min_c: float | None = None,
     temperature_max_c: float | None = None,
+    calories: float | None = None,
     hour: int = 8,
     utc_offset_s: int = 0,
 ) -> InsightActivity:
@@ -46,6 +47,7 @@ def _activity(
         max_altitude_m=max_altitude_m,
         temperature_min_c=temperature_min_c,
         temperature_max_c=temperature_max_c,
+        calories=calories,
     )
 
 
@@ -123,15 +125,43 @@ def test_max_cadence_is_a_distinct_dimension_from_avg_cadence() -> None:
 
 def test_non_sport_scoped_dimension_ignores_sport_family() -> None:
     activities = [
-        _activity("morning", "2026-08-10", sport="running", sport_family="run", hour=6),
-        _activity("evening", "2026-08-11", sport="cycling", sport_family="ride", hour=20),
+        _activity(
+            "cold_run", "2026-08-10", sport="running", sport_family="run", temperature_min_c=-3.0
+        ),
+        _activity(
+            "cold_ride", "2026-08-11", sport="cycling", sport_family="ride", temperature_min_c=-8.0
+        ),
     ]
     insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
-    earliest = [i for i in insights if i.window == "30d" and i.subject_key == "start_earliest"]
-    latest = [i for i in insights if i.window == "30d" and i.subject_key == "start_latest"]
-    assert len(earliest) == 1  # not split by sport family
-    assert earliest[0].activity_id == "morning"
-    assert latest[0].activity_id == "evening"
+    coldest = [i for i in insights if i.window == "30d" and i.subject_key == "temperature_low"]
+    assert len(coldest) == 1  # not split by sport family
+    assert coldest[0].activity_id == "cold_ride"
+
+
+def test_start_time_is_scoped_to_the_sport_so_a_late_ride_does_not_hide_the_latest_run() -> None:
+    activities = [
+        _activity("morning_run", "2026-08-10", sport="running", sport_family="run", hour=6),
+        _activity("evening_run", "2026-08-12", sport="running", sport_family="run", hour=19),
+        _activity("night_ride", "2026-08-11", sport="cycling", sport_family="ride", hour=22),
+    ]
+    insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
+    by_key = {i.subject_key: i for i in insights if i.window == "30d"}
+    assert by_key["start_latest:run"].activity_id == "evening_run"
+    assert by_key["start_earliest:run"].activity_id == "morning_run"
+    assert by_key["start_latest:ride"].activity_id == "night_ride"
+
+
+def test_most_calories_burned_is_a_sport_scoped_dimension() -> None:
+    activities = [
+        _activity("easy", "2026-08-10", calories=400.0),
+        _activity("long", "2026-08-11", calories=1200.0),
+        _activity("no_data", "2026-08-12", calories=None),
+    ]
+    insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
+    most = next(i for i in insights if i.window == "30d" and i.subject_key == "calories:run")
+    assert most.activity_id == "long"
+    assert most.value_num == 1200.0
+    assert most.detail["unit"] == "kcal"
 
 
 def test_start_hour_dimensions_compare_local_time_not_raw_utc() -> None:
@@ -144,7 +174,9 @@ def test_start_hour_dimensions_compare_local_time_not_raw_utc() -> None:
         _activity("genuinely_early_local", "2026-08-11", hour=6, utc_offset_s=0),
     ]
     insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
-    earliest = next(i for i in insights if i.window == "30d" and i.subject_key == "start_earliest")
+    earliest = next(
+        i for i in insights if i.window == "30d" and i.subject_key == "start_earliest:run"
+    )
     assert earliest.activity_id == "genuinely_early_local"
 
 

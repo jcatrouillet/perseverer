@@ -1,14 +1,14 @@
 """Notable-effort extremes: for each of five time windows, find the activity that's the
 max/min for each of a fixed set of real, already-stored dimensions -- distance, duration, pace,
 avg/max heart rate (both directions), avg/max cadence, elevation gained/lost, highest point
-reached, start-time-of-day
+reached, calories burned, start-time-of-day
 (earliest/latest), and outside temperature (hottest/coldest). One generic `find_extreme`
 function driven by a declarative `_DIMENSIONS` table, not one hand-written function per
 combination -- see ADR 0012.
 
 Distance/duration/pace/HR/cadence/elevation dimensions are scoped within the same sport family
 (comparing a hike's elevation gain to a run's is not a meaningful "record") -- one insight per
-sport family present in the window. Start-time-of-day and temperature are not sport-scoped --
+sport family present in the window. Temperature is not sport-scoped --
 one insight across all of that window's activities regardless of sport.
 """
 
@@ -81,8 +81,11 @@ _DIMENSIONS: tuple[_Dimension, ...] = (
     _Dimension(
         "max_altitude", "Highest point reached", "high", lambda a: a.max_altitude_m, True, "m"
     ),
-    _Dimension("start_earliest", "Earliest start", "low", _start_hour, False, "hour"),
-    _Dimension("start_latest", "Latest start", "high", _start_hour, False, "hour"),
+    _Dimension("calories", "Most calories burned", "high", lambda a: a.calories, True, "kcal"),
+    # Sport-scoped like the other per-activity dimensions: a late bike ride must not hide the
+    # latest *run* (the run page compares a run only against other runs).
+    _Dimension("start_earliest", "Earliest start", "low", _start_hour, True, "hour"),
+    _Dimension("start_latest", "Latest start", "high", _start_hour, True, "hour"),
     _Dimension(
         "temperature_high", "Hottest conditions", "high", lambda a: a.temperature_max_c, False, "c"
     ),

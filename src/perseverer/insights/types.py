@@ -42,6 +42,8 @@ class InsightActivity:
     climb_max_attempted_grade: int | None = None
     climb_max_completed_grade: int | None = None
     climb_time_s: float | None = None
+    # Energy burned (kcal) as recorded by the device.
+    calories: float | None = None
 
 
 @dataclass(frozen=True)

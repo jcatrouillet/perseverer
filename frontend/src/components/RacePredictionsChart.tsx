@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 
 import { usePerformance } from "../api/queries";
 import type { PerformanceDailyRollupOut } from "../api/types";
-import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../dateUtils";
+import { EARLIEST_PLAUSIBLE_DATE, localIsoDate } from "../dateUtils";
 import { toneColor } from "../metricStyle";
 import {
   bucketSeriesToWindow,
@@ -33,7 +33,7 @@ function hasAnyRawValue(points: DailyPoint[], keys: string[]): boolean {
   return points.some((p) => keys.some((k) => typeof p[k] === "number"));
 }
 
-const TODAY = isoDate(new Date());
+const TODAY = localIsoDate();
 
 function performanceToDailyPoints(rows: PerformanceDailyRollupOut[]): DailyPoint[] {
   return rows.map((r) => ({

@@ -103,6 +103,7 @@ _EFFORT_PHRASES: dict[str, str] = {
     "elevation_gain": "Most elevation gained",
     "elevation_loss": "Most elevation lost",
     "max_altitude": "Highest point reached",
+    "calories": "Most calories burned",
     "start_earliest": "Earliest start",
     "start_latest": "Latest start",
     "temperature_high": "Hottest run",

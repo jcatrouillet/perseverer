@@ -19,7 +19,7 @@ import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricExplorer, type ExplorerMetric } from "../components/MetricExplorer";
 import { TrendChart, type TrendSeries } from "../components/TrendChart";
 import { TrendControls } from "../components/TrendControls";
-import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../dateUtils";
+import { EARLIEST_PLAUSIBLE_DATE, localIsoDate } from "../dateUtils";
 import { mergeTrendSeries } from "../healthStats";
 import { healthMetricStyle, toneColor } from "../metricStyle";
 import {
@@ -46,7 +46,7 @@ export const CORE_METRICS = [
 export const HRV_METRIC = ["hrv_nightly_average"];
 export const WEIGHT_METRIC = ["weight_kg"];
 
-const TODAY = isoDate(new Date());
+const TODAY = localIsoDate();
 
 const BLOOD_PREFIX = "blood:";
 const BLOOD_MANAGE_KEY = "blood-manage";

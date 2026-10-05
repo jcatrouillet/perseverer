@@ -139,6 +139,7 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
             activity.c.moving_duration_s,
             activity.c.elevation_gain_m,
             activity.c.max_altitude_m,
+            activity.c.calories,
             avg_hr_subq.label("avg_hr"),
             max_hr_subq.label("max_hr"),
             elevation_loss_subq.label("elevation_loss_m"),
@@ -188,6 +189,7 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
                 elevation_gain_m=r.elevation_gain_m,
                 elevation_loss_m=r.elevation_loss_m,
                 max_altitude_m=r.max_altitude_m,
+                calories=r.calories,
                 temperature_min_c=r.temperature_min_c,
                 temperature_max_c=r.temperature_max_c,
                 # SQL COUNT returns zero rather than NULL for ordinary activities. Treat that

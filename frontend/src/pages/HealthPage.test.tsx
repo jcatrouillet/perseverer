@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { localIsoDate } from "../dateUtils";
 import { HealthPage } from "./HealthPage";
 
 const mockUseHealthDashboard = vi.fn();
@@ -35,12 +36,12 @@ function dashboardDay(local_date: string, value: number) {
 const EMPTY = { data: undefined, isLoading: false, isError: false };
 // The page's own default resolution is "week" anchored on today -- sample data has to fall
 // inside today's own week for the "data present" tests to actually see it.
-const TODAY = new Date().toISOString().slice(0, 10);
+const TODAY = localIsoDate();
 
 function daysBeforeToday(n: number): string {
   const d = new Date();
-  d.setUTCDate(d.getUTCDate() - n);
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() - n);
+  return localIsoDate(d);
 }
 
 describe("HealthPage", () => {

@@ -1093,6 +1093,15 @@ environment:
   aren't a meaningful comparison against each other), so it flows through the exact same
   find-extreme/dedupe-to-widest-window/relabel pipeline every other effort dimension already
   uses, with no new code path.
+  **Revision: calories burned, and start time scoped per sport** — asked for a "most calories
+  burned" record (30d/90d/…/ever) and noticed no "latest run" one. `calories` (the device's
+  `activity.calories`) is a sport-scoped `rules_efforts.py` dimension like distance/duration. The
+  start-time dimensions (`start_earliest`/`start_latest`) existed but were *not* sport-scoped, so a
+  late bike ride or hike hid the latest *run* and the run page never showed it; they are now
+  sport-scoped (`start_latest:run`). Temperature stays cross-sport.
+  **"Today" in the frontend is the browser's local date** (`dateUtils.ts::localIsoDate`), never
+  `isoDate(new Date())` (UTC) — the latter made the default calendar landing page (and the Fitness/
+  Health/Settings/Activities defaults) jump to tomorrow for the evening hours west of UTC.
 - **`garmin_connect` safety rules, non-negotiable**: it never constructs a credentialed client
   automatically — `authenticate()` only loads the token store (`data/garmin_tokens/`), and if
   that fails, raises `GarminAuthRequired` rather than falling back to credentials. Credentials

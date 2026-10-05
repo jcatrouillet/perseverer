@@ -4,6 +4,7 @@ import type { DayRollupOut } from "./api/types";
 import {
   eachDate,
   isoWeekNumber,
+  localIsoDate,
   mondayOf,
   monthGridWeeks,
   monthRange,
@@ -200,5 +201,14 @@ describe("isoWeekNumber", () => {
   it("matches a known mid-year week number", () => {
     // Counting Mondays from 2024-12-30 (week 1) by sevens lands on 2025-06-02 at week 23.
     expect(isoWeekNumber("2025-06-02")).toBe(23);
+  });
+});
+
+describe("localIsoDate", () => {
+  it("is the browser's local calendar date, not the UTC one", () => {
+    // 23:30 local on Oct 3 is already Oct 4 in UTC for anyone west of UTC (the test environment
+    // runs in America/Los_Angeles) -- the calendar must still say Oct 3.
+    const lateEvening = new Date(2026, 9, 3, 23, 30);
+    expect(localIsoDate(lateEvening)).toBe("2026-10-03");
   });
 });

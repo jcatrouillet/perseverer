@@ -6,7 +6,7 @@ import { GearAlertBanner } from "./components/GearAlertBanner";
 import { Icon, type IconName } from "./components/Icon";
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import { LogoutButton } from "./components/LogoutButton";
-import { isoDate } from "./dateUtils";
+import { localIsoDate } from "./dateUtils";
 import { usePersonalize, PersonalizeProvider } from "./PersonalizeContext";
 import "./styles/gear.css";
 import { MonthView } from "./pages/calendar/MonthView";
@@ -75,12 +75,12 @@ function DefaultLandingPage() {
     return <MonthView year={today.getFullYear()} month={today.getMonth() + 1} />;
   }
   if (defaultView === "day") {
-    return <DayViewPage date={isoDate(today)} />;
+    return <DayViewPage date={localIsoDate(today)} />;
   }
   if (defaultView === "activities") {
     return <ActivityListPage />;
   }
-  return <WeekView date={isoDate(today)} />;
+  return <WeekView date={localIsoDate(today)} />;
 }
 
 function NavLink({
@@ -164,7 +164,7 @@ export function App() {
               <Route path="/settings" component={SettingsPage} />
               <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>
               <Route path="/calendar/week/:date">
-                {(params) => <WeekView date={params.date ?? isoDate(new Date())} />}
+                {(params) => <WeekView date={params.date ?? localIsoDate()} />}
               </Route>
               <Route path="/calendar/all" component={AllTimeView} />
               <Route path="/calendar/:year/:month">

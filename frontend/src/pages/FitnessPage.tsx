@@ -14,7 +14,7 @@ import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricExplorer, type ExplorerMetric } from "../components/MetricExplorer";
 import { TrendChart, type TrendSeries } from "../components/TrendChart";
 import { TrendControls } from "../components/TrendControls";
-import { EARLIEST_PLAUSIBLE_DATE, isoDate } from "../dateUtils";
+import { EARLIEST_PLAUSIBLE_DATE, localIsoDate } from "../dateUtils";
 import { mergeTrendSeries } from "../healthStats";
 import { toneColor } from "../metricStyle";
 import {
@@ -37,7 +37,7 @@ function hasAnyRawValue(points: DailyPoint[], keys: string[]): boolean {
   return points.some((p) => keys.some((k) => typeof p[k] === "number"));
 }
 
-const TODAY = isoDate(new Date());
+const TODAY = localIsoDate();
 
 function fitnessToDailyPoints(series: FitnessDailyRollupOut[]): DailyPoint[] {
   return series.map((s) => ({

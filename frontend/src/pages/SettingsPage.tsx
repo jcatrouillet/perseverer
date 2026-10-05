@@ -21,7 +21,7 @@ import {
 } from "../api/queries";
 import type { DuplicateCandidateOut, TrimCandidateOut } from "../api/types";
 import { hrZoneRangeLabel } from "../activityMetrics";
-import { isoDate } from "../dateUtils";
+import { isoDate, localIsoDate } from "../dateUtils";
 import { useDistanceFormat } from "../formatDistance";
 import { formatDurationHM, formatMinPerKm } from "../runningStats";
 import { ApiDocsCard } from "../components/ApiDocsCard";
@@ -145,7 +145,7 @@ export function SettingsPage() {
   const { formatDistance } = useDistanceFormat();
   const duplicatePairs = useDuplicatePairs();
 
-  const today = isoDate(new Date());
+  const today = localIsoDate();
   const suggestionWindowStart = isoDate(
     new Date(Date.now() - SUGGESTION_WINDOW_DAYS * 24 * 60 * 60 * 1000),
   );
