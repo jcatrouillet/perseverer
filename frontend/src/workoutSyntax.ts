@@ -16,7 +16,7 @@
 // of exactly this mistake -- this file mirrors that parser's behavior token-for-token.
 import type { PlannedWorkoutStepOut } from "./api/types";
 
-export const INTENSITY_WORDS = new Set(["warmup", "cooldown", "recovery", "rest", "active"]);
+const INTENSITY_WORDS = new Set(["warmup", "cooldown", "recovery", "rest", "active"]);
 
 const REPEAT_MARKER_RE = /^(\d+)\s*[xX]$/;
 

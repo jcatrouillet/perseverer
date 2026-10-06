@@ -21,15 +21,12 @@ import {
 import type { TooltipContentProps } from "recharts";
 
 import type { GoalProgressOut } from "../api/types";
+import { parseIsoUtc } from "./GoalLineChart";
 import { useDistanceFormat } from "../formatDistance";
 import "../styles/goals.css";
 
 const GOLD = "var(--color-load)";
 const GREY = "var(--color-text-faint)";
-
-function parseIsoUtc(iso: string): number {
-  return new Date(`${iso}T00:00:00Z`).getTime();
-}
 
 function formatDateTick(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, {

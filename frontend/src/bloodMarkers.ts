@@ -40,7 +40,7 @@ export function formatDate(localDate: string): string {
 /** Heading a marker is listed under in the Health page's left-hand list -- a navigation aid only
  * (there are dozens of markers once a CBC with differential is in the mix), never a clinical
  * classification. First matching rule wins; anything unrecognised lands in "Other". */
-export const MARKER_CATEGORIES = [
+const MARKER_CATEGORIES = [
   "Lipids",
   "Glucose & thyroid",
   "Electrolytes & kidney",

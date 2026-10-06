@@ -35,7 +35,6 @@ import type {
   CalendarResponse,
   ChangePasswordIn,
   ChangePasswordOut,
-  ClimbComparisonsOut,
   ClimbingSummaryOut,
   DuplicatePairOut,
   EmailReportConfigIn,
@@ -89,7 +88,6 @@ import type {
   PlannedWorkoutStepIn,
   RaceReadinessOut,
   RecurringWorkoutOut,
-  RevokeShareOut,
   RunningLoadConfigIn,
   RunningLoadConfigOut,
   ShareLinkOut,
@@ -126,16 +124,6 @@ export function useCalendar(startDate: string, endDate: string) {
     queryFn: () =>
       apiGet<CalendarResponse>(
         `/api/v1/calendar${buildQuery({ start_date: startDate, end_date: endDate })}`,
-      ),
-  });
-}
-
-export function useCalendarWeeks(startDate: string, endDate: string) {
-  return useQuery({
-    queryKey: ["calendar-weeks", startDate, endDate],
-    queryFn: () =>
-      apiGet<PeriodCalendarResponse>(
-        `/api/v1/calendar/weeks${buildQuery({ start_date: startDate, end_date: endDate })}`,
       ),
   });
 }
@@ -447,18 +435,6 @@ export function useActivityComparisons(activityId: string, enabled: boolean) {
   return useQuery({
     queryKey: ["activity-comparisons", activityId],
     queryFn: () => apiGet<ActivityComparisonsOut>(`/api/v1/activities/${activityId}/comparisons`),
-    enabled,
-  });
-}
-
-/** The 10 most recent bouldering sessions of about the same total duration
- * (GET /activities/{id}/climb-comparisons) -- `enabled` should be gated on
- * `isBoulderingActivity`, same reasoning as `useActivityComparisons` above being running-only. */
-export function useActivityClimbComparisons(activityId: string, enabled: boolean) {
-  return useQuery({
-    queryKey: ["activity-climb-comparisons", activityId],
-    queryFn: () =>
-      apiGet<ClimbComparisonsOut>(`/api/v1/activities/${activityId}/climb-comparisons`),
     enabled,
   });
 }
@@ -797,13 +773,6 @@ export function useSetFuelingOverride(activityId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
     },
-  });
-}
-
-export function useInsights() {
-  return useQuery({
-    queryKey: ["insights"],
-    queryFn: () => apiGet<InsightOut[]>("/api/v1/insights"),
   });
 }
 
@@ -1691,11 +1660,5 @@ export function useCreatePeriodShare(
       const qs = periodStart ? `?period_start=${encodeURIComponent(periodStart)}` : "";
       return apiPost<ShareLinkOut>(`/api/v1/periods/${periodType}/share${qs}`, {});
     },
-  });
-}
-
-export function useRevokeShare() {
-  return useMutation({
-    mutationFn: (id: number) => apiPost<RevokeShareOut>(`/api/v1/share/${id}/revoke`, {}),
   });
 }

@@ -9,7 +9,7 @@ import { createContext, useContext } from "react";
 import { usePersonalizeSettings } from "./api/queries";
 import type { PersonalizeSettingsOut } from "./api/types";
 
-export const DEFAULT_PERSONALIZE_SETTINGS: PersonalizeSettingsOut = {
+const DEFAULT_PERSONALIZE_SETTINGS: PersonalizeSettingsOut = {
   week_start_day: "monday",
   time_format: "24h",
   default_view: "week",

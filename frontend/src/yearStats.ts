@@ -178,7 +178,7 @@ export function displaySport(activity: ActivitySummary): string {
 // below always just uses activity.name for those. Shared by every place that shows an activity's
 // own title (ActivityCard, ActivityDetailPage) so a plain device default like "Run" never gets
 // shown as if it were a real chosen title.
-export const GENERIC_DEFAULT_NAME_BY_SPORT: Record<string, string> = {
+const GENERIC_DEFAULT_NAME_BY_SPORT: Record<string, string> = {
   running: "Run",
   walking: "Walk",
   hiking: "Hike",

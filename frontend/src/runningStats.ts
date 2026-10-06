@@ -428,7 +428,7 @@ export function longestStreakAndBreak(sortedDates: string[]): StreakInfo {
   };
 }
 
-export function dailyDistanceM(activities: ActivitySummary[]): Map<string, number> {
+function dailyDistanceM(activities: ActivitySummary[]): Map<string, number> {
   const byDate = new Map<string, number>();
   for (const a of activities) {
     if (!a.local_date || a.distance_m == null) continue;
@@ -553,7 +553,7 @@ export function longRunPieDeg(km: number, scale: HeatmapScale): number {
 }
 
 /** Every reference distance in the legend, in ascending order. */
-export function legendKm(scale: HeatmapScale): number[] {
+function legendKm(scale: HeatmapScale): number[] {
   return [...scale.gradientLegendKm, ...scale.pieLegendKm];
 }
 
@@ -572,7 +572,7 @@ export interface StandardDistance {
 
 // Common race distances, matching the rows Strava/intervals.icu show on their own "personal
 // records" pages.
-export const STANDARD_DISTANCES: StandardDistance[] = [
+const STANDARD_DISTANCES: StandardDistance[] = [
   { label: "1 mile", meters: 1609.34 },
   { label: "3 km", meters: 3000 },
   { label: "5 km", meters: 5000 },

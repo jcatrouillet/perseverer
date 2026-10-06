@@ -56,11 +56,3 @@ export function readWorkoutClipboard(): WorkoutClipboardItem | null {
     return null;
   }
 }
-
-export function clearWorkoutClipboard(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // best-effort, see copyWorkoutToClipboard
-  }
-}

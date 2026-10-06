@@ -552,13 +552,6 @@ def _format_axis_pace(minutes: float) -> str:
     return f"{m}:{s:02d}"
 
 
-def _format_elapsed_hms(seconds: float) -> str:
-    total = int(seconds)
-    h, rem = divmod(total, 3600)
-    m, s = divmod(rem, 60)
-    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
-
-
 def _svg_series_chart(
     values: list[float | None],
     elapsed_s: list[float],

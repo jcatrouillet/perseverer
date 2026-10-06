@@ -84,7 +84,7 @@ export function prProgress(activities: ActivitySummary[], today: string) {
 
 /** Exact-distance frontier: no equally long or longer run is as fast. Prefer older on
  * an exact tie so an unchanged record never becomes a blue improvement. */
-export function recordFrontier(points: PrPoint[]): PrPoint[] {
+function recordFrontier(points: PrPoint[]): PrPoint[] {
   const sorted = [...points].sort(
     (a, b) =>
       b.distanceKm - a.distanceKm ||

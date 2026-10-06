@@ -103,17 +103,6 @@ def resolve_activity_shoe(
     return (row.shoe_id, True) if row is not None else (None, False)
 
 
-def default_shoes(conn: Connection, athlete_id: str) -> dict[str, str]:
-    return {
-        str(row.sport): str(row.shoe_id)
-        for row in conn.execute(
-            select(athlete_default_shoe.c.sport, athlete_default_shoe.c.shoe_id).where(
-                athlete_default_shoe.c.athlete_id == athlete_id
-            )
-        ).fetchall()
-    }
-
-
 def over_limit_shoes(conn: Connection, athlete_id: str) -> list[tuple[Any, ShoeMileage]]:
     mileages = shoe_mileages(conn, athlete_id)
     rows = conn.execute(
