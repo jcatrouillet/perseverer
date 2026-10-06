@@ -38,7 +38,7 @@ import calendar as _calendar
 import html
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Literal
 
@@ -71,8 +71,18 @@ logger = logging.getLogger(__name__)
 ReportKind = Literal["weekly", "monthly"]
 
 _MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ]
 _SPORT_LABELS = {
     "running": "Running",
@@ -200,6 +210,8 @@ class WeeklyReport:
     coming_forecast: list[ForecastDay]  # coming_start..coming_end only; [] with no home location
     coming_races: list[PlannedRaceLine]  # races in the coming week only
     future_races: list[PlannedRaceLine]  # every race after today, however far out
+    # Every individual run in the Mon..Sun before prev_start, so the two weeks sit side by side.
+    week_before_runs: list[RunLine] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -247,9 +259,7 @@ def _totals_from_rollup(
     )
 
 
-def _sport_breakdown(
-    conn: Connection, athlete_id: str, start: str, end: str
-) -> list[SportTotals]:
+def _sport_breakdown(conn: Connection, athlete_id: str, start: str, end: str) -> list[SportTotals]:
     # Grouped in Python by _display_sport, not a SQL GROUP BY on the raw activity.c.sport column
     # -- a recorded yoga/strength/breathwork session's real type lives in sub_sport, not sport
     # (sport is just Garmin's generic "training" container for all three). A week's/month's worth
@@ -259,9 +269,7 @@ def _sport_breakdown(
             activity.c.sport,
             activity.c.sub_sport,
             activity.c.distance_m,
-            func.coalesce(activity.c.moving_duration_s, activity.c.duration_s).label(
-                "duration_s"
-            ),
+            func.coalesce(activity.c.moving_duration_s, activity.c.duration_s).label("duration_s"),
         ).where(
             and_(
                 activity.c.athlete_id == athlete_id,
@@ -383,9 +391,7 @@ def _week_runs(conn: Connection, athlete_id: str, start: str, end: str) -> list[
         select(
             activity.c.local_date,
             activity.c.distance_m,
-            func.coalesce(activity.c.moving_duration_s, activity.c.duration_s).label(
-                "duration_s"
-            ),
+            func.coalesce(activity.c.moving_duration_s, activity.c.duration_s).label("duration_s"),
         )
         .where(
             and_(
@@ -682,9 +688,7 @@ def build_weekly_report(
         coming_start=coming_start,
         coming_end=coming_end,
         totals=_totals_from_rollup(conn, athlete_id, "week", prev_start.isoformat()),
-        sports=_sport_breakdown(
-            conn, athlete_id, prev_start.isoformat(), prev_end.isoformat()
-        ),
+        sports=_sport_breakdown(conn, athlete_id, prev_start.isoformat(), prev_end.isoformat()),
         running_distance_by_day=_running_distance_by_day(
             conn, athlete_id, prev_start.isoformat(), prev_end.isoformat()
         ),
@@ -695,9 +699,7 @@ def build_weekly_report(
             conn, athlete_id, week_before_start.isoformat(), week_before_end.isoformat()
         ),
         week_runs=_week_runs(conn, athlete_id, prev_start.isoformat(), prev_end.isoformat()),
-        steps_by_day=_steps_by_day(
-            conn, athlete_id, prev_start.isoformat(), prev_end.isoformat()
-        ),
+        steps_by_day=_steps_by_day(conn, athlete_id, prev_start.isoformat(), prev_end.isoformat()),
         sleep_hours_by_day=_sleep_hours_by_day(
             conn, athlete_id, prev_start.isoformat(), prev_end.isoformat()
         ),
@@ -712,6 +714,9 @@ def build_weekly_report(
             conn, athlete_id, coming_start.isoformat(), coming_end.isoformat()
         ),
         future_races=_future_races(conn, athlete_id, today.isoformat()),
+        week_before_runs=_week_runs(
+            conn, athlete_id, week_before_start.isoformat(), week_before_end.isoformat()
+        ),
     )
 
 
@@ -726,9 +731,7 @@ def build_monthly_report(conn: Connection, *, athlete_id: str, today: date) -> M
         month_start=month_start,
         month_end=month_end,
         totals=_totals_from_rollup(conn, athlete_id, "month", month_start.isoformat()),
-        sports=_sport_breakdown(
-            conn, athlete_id, month_start.isoformat(), month_end.isoformat()
-        ),
+        sports=_sport_breakdown(conn, athlete_id, month_start.isoformat(), month_end.isoformat()),
     )
 
 
@@ -911,17 +914,29 @@ def _highlight_cell(text: str, highlighted: bool) -> str:
 _RUN_TABLE_HEADERS = ("Day", "Distance", "Pace", "Duration")
 
 
+def _week_range_label(monday: date) -> str:
+    sunday = monday + timedelta(days=6)
+    return (
+        f"{_WEEKDAYS[monday.weekday()]} {monday.day} {_MONTH_NAMES[monday.month - 1][:3]} - "
+        f"{_WEEKDAYS[sunday.weekday()]} {sunday.day} {_MONTH_NAMES[sunday.month - 1][:3]}"
+    )
+
+
 def _run_rows(runs: list[RunLine]) -> str:
     """One row per individual run (see `RunLine`'s own docstring for why this isn't a per-day
     sum), with the week's own farthest distance, fastest pace (the *lowest* seconds/km), and
     longest duration each bolded in their own column -- ties bold every tied run, not just the
     first, since "fastest run of the week" genuinely describes all of them equally."""
-    header = "<tr>" + "".join(
-        f'<th style="padding:6px 14px;border:1px solid {_BORDER};color:{_MUTED};'
-        f'font-size:12px;text-transform:uppercase;letter-spacing:.04em;'
-        f'text-align:{"left" if h == "Day" else "right"}">{h}</th>'
-        for h in _RUN_TABLE_HEADERS
-    ) + "</tr>"
+    header = (
+        "<tr>"
+        + "".join(
+            f'<th style="padding:6px 14px;border:1px solid {_BORDER};color:{_MUTED};'
+            f"font-size:12px;text-transform:uppercase;letter-spacing:.04em;"
+            f'text-align:{"left" if h == "Day" else "right"}">{h}</th>'
+            for h in _RUN_TABLE_HEADERS
+        )
+        + "</tr>"
+    )
     if not runs:
         return header + (
             f'<tr><td colspan="4" style="padding:10px 14px;border:1px solid {_BORDER};'
@@ -938,11 +953,11 @@ def _run_rows(runs: list[RunLine]) -> str:
             f'<tr><td style="padding:8px 14px;border:1px solid {_BORDER};color:{_TEXT}">'
             f"{html.escape(day)}</td>"
             f'<td style="padding:8px 14px;border:1px solid {_BORDER};text-align:right">'
-            f'{_highlight_cell(_km(r.distance_m), r.distance_m == max_distance)}</td>'
+            f"{_highlight_cell(_km(r.distance_m), r.distance_m == max_distance)}</td>"
             f'<td style="padding:8px 14px;border:1px solid {_BORDER};text-align:right">'
-            f'{_highlight_cell(_pace(r.pace_s_per_km), r.pace_s_per_km == min_pace)}</td>'
+            f"{_highlight_cell(_pace(r.pace_s_per_km), r.pace_s_per_km == min_pace)}</td>"
             f'<td style="padding:8px 14px;border:1px solid {_BORDER};text-align:right">'
-            f'{_highlight_cell(_hm(r.duration_s), r.duration_s == max_duration)}</td>'
+            f"{_highlight_cell(_hm(r.duration_s), r.duration_s == max_duration)}</td>"
             "</tr>"
         )
     return rows
@@ -1145,7 +1160,7 @@ def _future_race_rows(races: list[PlannedRaceLine], today: date) -> str:
 def _shell(title: str, subtitle: str, inner: str) -> str:
     return (
         f'<div style="background:{_BG};padding:24px 0;font-family:-apple-system,'
-        f'BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif">'
+        f"BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif\">"
         f'<table role="presentation" width="600" cellpadding="0" cellspacing="0" '
         f'style="margin:0 auto;background:{_CARD};border:1px solid {_BORDER};border-radius:8px">'
         f'<tr><td style="padding:20px 24px;border-bottom:1px solid {_BORDER}">'
@@ -1210,6 +1225,15 @@ def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
     runs_section = (
         _section("Runs this week", _run_rows(report.week_runs)) if report.week_runs else ""
     )
+    week_before_runs_section = (
+        _section(
+            "Runs the week before",
+            _run_rows(report.week_before_runs),
+            caption=_week_range_label(report.prev_start - timedelta(days=7)),
+        )
+        if report.week_before_runs
+        else ""
+    )
     steps_section = (
         _section("Steps this week", _bar_rows(report.steps_by_day, _steps_fmt))
         if any(p.value for p in report.steps_by_day)
@@ -1237,6 +1261,7 @@ def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
         _section("Last week", _stat_cells(t))
         + running_section
         + runs_section
+        + week_before_runs_section
         + _section("By sport", _sport_rows(report.sports))
         + steps_section
         + sleep_section
@@ -1255,8 +1280,7 @@ def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
     )
     html_body = _shell(
         "Your training week",
-        f"{_date_range_label(report.prev_start, report.prev_end)} · "
-        f"for {report.athlete_name}",
+        f"{_date_range_label(report.prev_start, report.prev_end)} · for {report.athlete_name}",
         inner,
     )
     return RenderedEmail(subject=subject, html=html_body, text=_weekly_text(report))
@@ -1332,6 +1356,11 @@ def _weekly_text(report: WeeklyReport) -> str:
         lines.append(_daily_points_text(report.running_distance_by_day, _km))
         lines.append("Runs this week")
         lines.append(_run_rows_text(report.week_runs))
+    if report.week_before_runs:
+        lines.append(
+            f"Runs the week before ({_week_range_label(report.prev_start - timedelta(days=7))})"
+        )
+        lines.append(_run_rows_text(report.week_before_runs))
     lines.append("By sport")
     lines.append(_sports_text(report.sports))
     if any(p.value for p in report.steps_by_day):

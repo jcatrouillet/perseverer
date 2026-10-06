@@ -1668,6 +1668,9 @@ environment:
   run" genuinely describes all of them equally. An activity missing either distance or duration
   is skipped from this table (never a fabricated pace), and the whole section is omitted, not
   shown empty, on a week with no qualifying runs.
+  **The week before, side by side**: a "Runs the week before" table (`week_before_runs`, the same
+  `_week_runs`/`_run_rows` as "Runs this week", captioned with its Mon–Sun range) follows the table for
+  the week just ended; omitted when that week had no qualifying run.
   **Future races**: a further section listing every `planned_race` after today, however far out
   on the calendar (`_future_races`, unbounded — unlike `coming_races`, which stays scoped to just
   the coming Mon–Sun week) — a quick-glance date/days-until/name/goal-pace line per race (`Sun 06

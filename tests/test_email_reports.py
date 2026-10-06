@@ -389,8 +389,14 @@ def test_coming_week_forecast_fetches_in_the_athletes_own_timezone_and_days(
     raw = {
         "daily": {
             "time": [
-                "2026-09-13", "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17",
-                "2026-09-18", "2026-09-19", "2026-09-20",
+                "2026-09-13",
+                "2026-09-14",
+                "2026-09-15",
+                "2026-09-16",
+                "2026-09-17",
+                "2026-09-18",
+                "2026-09-19",
+                "2026-09-20",
             ],
             "weathercode": [0, 3, 3, 61, 0, 0, 2, 3],
             "temperature_2m_max": [25.0, 26.0, 27.0, 20.0, 24.0, 23.0, 22.0, 21.0],
@@ -411,8 +417,13 @@ def test_coming_week_forecast_fetches_in_the_athletes_own_timezone_and_days(
     assert captured["forecast_days"] == "8"
     # Sept 13 (today, day offset 0) is dropped -- only the coming Mon..Sun week itself.
     assert [f.local_date.isoformat() for f in forecast] == [
-        "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17",
-        "2026-09-18", "2026-09-19", "2026-09-20",
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20",
     ]
 
 
@@ -422,9 +433,7 @@ def test_build_weekly_report_includes_coming_forecast(
     _set_home_location(conn, lat=48.8566, lon=2.3522)
     conn.commit()
     fake_days = [ForecastDay(COMING_WEEK_START, 3, 12.0, 20.0)]
-    monkeypatch.setattr(
-        "perseverer.email_reports.fetch_forecast", lambda *a, **kw: fake_days
-    )
+    monkeypatch.setattr("perseverer.email_reports.fetch_forecast", lambda *a, **kw: fake_days)
     report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
     assert report.coming_forecast == fake_days
 
@@ -518,6 +527,36 @@ def test_build_weekly_report_includes_week_runs(conn: Connection) -> None:
     _seed_week_rollup(conn)
     report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
     assert [r.local_date for r in report.week_runs] == ["2026-09-08", "2026-09-10"]
+
+
+def test_weekly_email_shows_runs_of_the_week_before_next_to_the_week_just_ended(
+    conn: Connection,
+) -> None:
+    _seed_week_rollup(conn)  # runs on 2026-09-08 and 2026-09-10 (the week just ended)
+    _activity(
+        conn,
+        activity_id="old-run",
+        local_date="2026-09-02",
+        sport="running",
+        distance_m=7000.0,
+        duration_s=2100.0,
+    )
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert [r.local_date for r in report.week_before_runs] == ["2026-09-02"]
+
+    rendered = render_weekly_email(report)
+    assert "Runs this week" in rendered.html
+    assert "Runs the week before" in rendered.html
+    assert "Mon 31 Aug - Sun 6 Sep" in rendered.html
+    assert "Runs the week before (Mon 31 Aug - Sun 6 Sep)" in rendered.text
+
+
+def test_weekly_email_omits_the_week_before_table_without_runs(conn: Connection) -> None:
+    _seed_week_rollup(conn)
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert report.week_before_runs == []
+    assert "Runs the week before" not in render_weekly_email(report).html
 
 
 def test_steps_by_day_prefers_the_higher_priority_alias_on_a_shared_date(
@@ -618,9 +657,7 @@ def test_future_race_goal_and_date_label_match_the_worked_example() -> None:
         predicted_duration_s=None,
     )
     assert _future_race_goal(race) == "4:00 goal (5:41 /km)"
-    assert _future_race_date_label(race, dt.date(2026, 9, 13)) == (
-        "Sun 06 Dec 2026 (84d)"
-    )
+    assert _future_race_date_label(race, dt.date(2026, 9, 13)) == ("Sun 06 Dec 2026 (84d)")
 
 
 def test_future_race_goal_is_none_without_a_target() -> None:
@@ -739,9 +776,7 @@ def test_weekly_email_shows_a_weather_icon_and_range_for_each_coming_day(
         ForecastDay(dt.date(2026, 9, 15), 61, 12.0, 18.0),  # Tue: rain
         ForecastDay(dt.date(2026, 9, 18), 0, 10.0, 22.0),  # Fri: clear
     ]
-    monkeypatch.setattr(
-        "perseverer.email_reports.fetch_forecast", lambda *a, **kw: fake_days
-    )
+    monkeypatch.setattr("perseverer.email_reports.fetch_forecast", lambda *a, **kw: fake_days)
     report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
     rendered = render_weekly_email(report)
 
@@ -959,9 +994,7 @@ def test_render_monthly_email_has_no_planned_section(conn: Connection) -> None:
         )
     )
     conn.commit()
-    report = build_monthly_report(
-        conn, athlete_id=DEFAULT_ATHLETE_ID, today=dt.date(2026, 9, 30)
-    )
+    report = build_monthly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=dt.date(2026, 9, 30))
     assert report.month_label == "September 2026"
     rendered = render_monthly_email(report)
     assert "September 2026" in rendered.subject
@@ -1019,9 +1052,7 @@ def _reset_fake_smtp() -> None:
     _FakeSMTP.instances.clear()
 
 
-def test_send_report_email_starttls_path(
-    conn: Connection, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_send_report_email_starttls_path(conn: Connection, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed_week_rollup(conn)
     monkeypatch.setattr("perseverer.email_delivery.smtplib.SMTP", _FakeSMTP)
     settings = Settings(
@@ -1032,9 +1063,7 @@ def test_send_report_email_starttls_path(
         smtp_from="me@example.com",
         smtp_security="starttls",
     )
-    send_report_email(
-        settings, conn, athlete_id=DEFAULT_ATHLETE_ID, kind="weekly", today=SUNDAY
-    )
+    send_report_email(settings, conn, athlete_id=DEFAULT_ATHLETE_ID, kind="weekly", today=SUNDAY)
     smtp = _FakeSMTP.instances[0]
     assert (smtp.host, smtp.port) == ("ssl0.ovh.net", 587)
     assert smtp.started_tls is True
@@ -1043,9 +1072,7 @@ def test_send_report_email_starttls_path(
     assert smtp.sent["To"] == "jerome@example.com"  # type: ignore[index]
 
 
-def test_send_report_email_ssl_path(
-    conn: Connection, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_send_report_email_ssl_path(conn: Connection, monkeypatch: pytest.MonkeyPatch) -> None:
     _seed_week_rollup(conn)
     monkeypatch.setattr("perseverer.email_delivery.smtplib.SMTP_SSL", _FakeSMTP)
     settings = Settings(
@@ -1056,18 +1083,14 @@ def test_send_report_email_ssl_path(
         smtp_from="me@example.com",
         smtp_security="ssl",
     )
-    send_report_email(
-        settings, conn, athlete_id=DEFAULT_ATHLETE_ID, kind="weekly", today=SUNDAY
-    )
+    send_report_email(settings, conn, athlete_id=DEFAULT_ATHLETE_ID, kind="weekly", today=SUNDAY)
     smtp = _FakeSMTP.instances[0]
     assert smtp.port == 465
     assert smtp.started_tls is False
     assert smtp.logged_in == ("me@example.com", "secret")
 
 
-def test_send_report_email_raises_without_a_recipient(
-    conn: Connection, engine: Engine
-) -> None:
+def test_send_report_email_raises_without_a_recipient(conn: Connection, engine: Engine) -> None:
     conn.execute(athlete.update().where(athlete.c.id == DEFAULT_ATHLETE_ID).values(email=None))
     conn.commit()
     with pytest.raises(ValueError, match="no email"):
