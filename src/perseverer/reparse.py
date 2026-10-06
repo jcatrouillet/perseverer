@@ -51,6 +51,7 @@ def _parse_manual_entry(content: bytes) -> CanonicalBatch:
 
 
 def reparse_raw_object(kind: str, content: bytes) -> CanonicalBatch:
+    """Re-parses archived bytes with the parser for their `kind` -- no vendor contact."""
     if kind == "strava_export_manual_entry":
         return _parse_manual_entry(content)
     parser = _PARSERS.get(kind)

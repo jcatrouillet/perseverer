@@ -99,6 +99,7 @@ def _route_endpoints(points: list[_LatLon]) -> tuple[_LatLon | None, _LatLon | N
 
 
 def parse_gpx(content: bytes) -> CanonicalBatch:
+    """Pure parse of a GPX track (geometry plus any sensor extensions) into a `CanonicalBatch`."""
     # A real minority of the sample archive's files (an older export path -- the one confirmed
     # case was a 2020 activity) have literal leading whitespace before the <?xml ...?>
     # declaration, which Python's expat parser rejects outright ("XML or text declaration not

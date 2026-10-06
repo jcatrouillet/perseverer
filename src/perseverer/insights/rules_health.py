@@ -32,6 +32,9 @@ def _trailing_baseline(
 
 
 def resting_hr_anomaly(series: list[tuple[str, float]], as_of: date) -> Insight | None:
+    """An insight when today's resting HR sits well above the trailing baseline; None without enough
+    history or without a reading today.
+    """
     if not series or series[-1][0] != as_of.isoformat():
         return None
     latest_value = series[-1][1]
@@ -58,6 +61,9 @@ def resting_hr_anomaly(series: list[tuple[str, float]], as_of: date) -> Insight 
 
 
 def sleep_score_anomaly(series: list[tuple[str, float]], as_of: date) -> Insight | None:
+    """An insight when today's sleep score drops well below the trailing baseline; None without
+    enough history or without a score today.
+    """
     if not series or series[-1][0] != as_of.isoformat():
         return None
     latest_value = series[-1][1]
@@ -88,6 +94,7 @@ def compute_health_insights(
     sleep_score_series: list[tuple[str, float]],
     as_of: date,
 ) -> list[Insight]:
+    """Every health anomaly insight that applies as of `as_of`."""
     insights: list[Insight] = []
     hr = resting_hr_anomaly(resting_hr_series, as_of)
     if hr is not None:

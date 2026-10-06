@@ -206,6 +206,7 @@ def _build_sleep(
 
 
 def parse_health_fit(raw_bytes: bytes) -> HealthBatch:
+    """Pure parse of a non-activity (wellness/monitoring/sleep) FIT file into a `HealthBatch`."""
     stream = Stream.from_bytes_io(io.BytesIO(raw_bytes))
     decoder = Decoder(stream)
     messages, errors = decoder.read()

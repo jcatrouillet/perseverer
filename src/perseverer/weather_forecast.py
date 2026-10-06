@@ -128,6 +128,7 @@ def parse_resolved_timezone(raw: dict[str, Any]) -> str | None:
 def fetch_forecast(
     lat: float, lon: float, days: int, *, tz: str = "UTC", client: httpx.Client | None = None
 ) -> list[ForecastDay] | None:
+    """Daily forecast for a location (never archived or cached); None when Open-Meteo fails."""
     result = fetch_forecast_with_timezone(lat, lon, days, tz=tz, client=client)
     return None if result is None else result[0]
 

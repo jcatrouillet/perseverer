@@ -37,6 +37,9 @@ def ingest_health_batch(
     source: str,
     batch: HealthBatch,
 ) -> HealthIngestResult:
+    """Upserts a parsed `HealthBatch` (observations, intraday streams, sleep) and registers every
+    metric key it carries, known or not.
+    """
     result = HealthIngestResult()
 
     for key in batch.unrecognized_field_keys:

@@ -505,6 +505,9 @@ def import_from_folder(
     folder: Path,
     since: datetime | None = None,
 ) -> IngestRunSummary:
+    """One-shot import of every FIT file (and the two recognized Garmin health JSON shapes) in
+    `folder`, recorded as one `ingest_run`. Idempotent: an already-archived file is a no-op.
+    """
     # Local import: ingest_dispatch imports IngestResult/ingest_canonical_batch from this
     # module, so importing it at module level here would be circular.
     from perseverer.ingest_dispatch import ingest_fit_bytes

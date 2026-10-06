@@ -100,6 +100,7 @@ DIMENSIONS = _DIMENSIONS
 
 
 def window_start_date(window: str, days: int | None, as_of: date) -> date:
+    """First day of a named insight window (`year` = 1 January of `as_of`'s year)."""
     if days is not None:
         return as_of - timedelta(days=days)
     return date(as_of.year, 1, 1)  # "year": calendar-year-to-date
@@ -173,6 +174,7 @@ def find_extreme(activities: list[InsightActivity], dim: _Dimension, window: str
 
 
 def compute_effort_insights(activities: list[InsightActivity], as_of: date) -> list[Insight]:
+    """Every effort extreme (longest, fastest, latest start...) for every window."""
     insights: list[Insight] = []
     for window, days in WINDOWS:
         windowed = _activities_in_window(activities, window, days, as_of)

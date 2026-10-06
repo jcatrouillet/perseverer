@@ -116,6 +116,7 @@ def _parse_generic(
 
 
 def parse_daily_summary_json(raw_bytes: bytes) -> HealthBatch:
+    """Garmin Connect daily summary -> `garmin.daily_summary.*` observations."""
     return _parse_generic(
         raw_bytes,
         key_prefix="garmin.daily_summary",
@@ -125,6 +126,7 @@ def parse_daily_summary_json(raw_bytes: bytes) -> HealthBatch:
 
 
 def parse_hydration_json(raw_bytes: bytes) -> HealthBatch:
+    """Garmin Connect hydration -> `garmin.hydration.*` observations."""
     return _parse_generic(
         raw_bytes, key_prefix="garmin.hydration", date_field="calendarDate", anchor_field=None
     )
@@ -490,6 +492,9 @@ _LACTATE_THRESHOLD_FIELD_METRIC_KEYS = {
 
 
 def parse_daily_lactate_threshold_json(raw_bytes: bytes) -> HealthBatch:
+    """Garmin's lactate-threshold range response -> one observation per day Garmin recomputed it
+    (speed is stored raw; see FitnessPage for the x10 conversion).
+    """
     data: Any = json.loads(raw_bytes)
     if not isinstance(data, dict):
         return HealthBatch()

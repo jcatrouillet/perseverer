@@ -15,12 +15,16 @@ _SALT_BYTES = 16
 
 
 def hash_password(password: str) -> str:
+    """PBKDF2-SHA256 with a random salt, encoded as `algorithm$iterations$salt$digest`."""
     salt = secrets.token_bytes(_SALT_BYTES)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _ITERATIONS)
     return f"{_ALGORITHM}${_ITERATIONS}${salt.hex()}${digest.hex()}"
 
 
 def verify_password(password: str, encoded: str) -> bool:
+    """Constant-time check of `password` against `hash_password`'s encoding; a malformed or foreign
+    encoding is simply False.
+    """
     try:
         algorithm, iterations_str, salt_hex, digest_hex = encoded.split("$")
     except ValueError:

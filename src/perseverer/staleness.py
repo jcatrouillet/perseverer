@@ -74,6 +74,7 @@ def check_garmin_connect_staleness(
 def check_export_freshness(
     conn: Connection, athlete_id: str, *, freshness_days: int
 ) -> StalenessAlert | None:
+    """An alert when the last full Garmin export is missing or older than `freshness_days`."""
     last_export_at = conn.execute(
         select(athlete.c.last_full_export_at).where(athlete.c.id == athlete_id)
     ).scalar_one_or_none()
@@ -102,6 +103,7 @@ def check_export_freshness(
 def check_staleness(
     conn: Connection, athlete_id: str, *, escalate_after_days: int, freshness_days: int
 ) -> list[StalenessAlert]:
+    """Every staleness alert currently raised for the athlete."""
     alerts = [
         check_garmin_connect_staleness(conn, athlete_id, escalate_after_days=escalate_after_days),
         check_export_freshness(conn, athlete_id, freshness_days=freshness_days),

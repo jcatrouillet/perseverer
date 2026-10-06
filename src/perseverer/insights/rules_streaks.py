@@ -25,6 +25,7 @@ def _activity_for_date(activities: list[InsightActivity], d: date) -> InsightAct
 
 
 def current_streak(activities: list[InsightActivity], as_of: date) -> Insight | None:
+    """Consecutive active days ending on `as_of`, or None if `as_of` had no activity."""
     active_dates = {date.fromisoformat(a.local_date) for a in activities}
     streak = 0
     d = as_of
@@ -75,6 +76,7 @@ def _longest_gap(dates: list[date]) -> tuple[date, date, int] | None:
 def window_streak_insights(
     activities: list[InsightActivity], window: str, days: int | None, as_of: date
 ) -> list[Insight]:
+    """The longest active streak and the longest rest gap inside one window."""
     start = window_start_date(window, days, as_of)
     windowed = [a for a in activities if start.isoformat() <= a.local_date <= as_of.isoformat()]
     dates = _distinct_dates(windowed)
@@ -120,6 +122,7 @@ def window_streak_insights(
 
 
 def compute_streak_insights(activities: list[InsightActivity], as_of: date) -> list[Insight]:
+    """Streak insights for every standard window."""
     insights: list[Insight] = []
     current = current_streak(activities, as_of)
     if current is not None:

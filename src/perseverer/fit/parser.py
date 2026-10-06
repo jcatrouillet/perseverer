@@ -507,6 +507,10 @@ def _derive_route_endpoints(
 
 
 def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
+    """Pure parse of one activity FIT file into a `CanonicalBatch`. A file that isn't an activity
+    comes back `kind='unrecognized'` (the caller then tries the health parser); every unmapped field
+    is cataloged, never dropped.
+    """
     stream = Stream.from_bytes_io(io.BytesIO(raw_bytes))
     decoder = Decoder(stream)
     messages, errors = decoder.read()

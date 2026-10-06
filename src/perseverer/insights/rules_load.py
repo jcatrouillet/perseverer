@@ -112,6 +112,7 @@ def load_jump_insight(days: list[FitnessDay], as_of: date) -> Insight | None:
 
 
 def compute_load_insights(days: list[FitnessDay], as_of: date) -> list[Insight]:
+    """Training-load insights from the fitness rollup: sustained low TSB and sudden load jumps."""
     insights: list[Insight] = []
     sustained = sustained_low_tsb_insight(days, as_of)
     if sustained is not None:

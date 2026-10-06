@@ -168,6 +168,9 @@ def _import_kaya_for_athlete(conn: Connection, settings: Settings, athlete_id: s
 
 
 def run_daily_sync() -> None:
+    """The daily job: per athlete, Garmin + Eufy + Kaya sync and the staleness check, then gear
+    alerts. One athlete's failure never stops the others.
+    """
     settings = get_settings()
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
@@ -380,6 +383,7 @@ def run_monthly_email_report() -> None:
 
 
 def main() -> None:
+    """Starts the scheduler with every daily/weekly/monthly job and blocks."""
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
     logger.info("worker started (environment=%s)", settings.environment)

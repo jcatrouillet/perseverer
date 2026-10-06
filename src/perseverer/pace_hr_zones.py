@@ -456,6 +456,9 @@ def _sample_evenly(runs: list[ZoneRunSample], cap: int) -> list[ZoneRunSample]:
 
 
 def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> PaceHrZonesResult:
+    """The five pace/HR zones from the athlete's best VDOT (races preferred) and max HR in their
+    lookback windows, with the qualifying runs behind each zone's HR range.
+    """
     profile_vdot, vdot_activity = _best_vdot_in_window(
         conn, athlete_id=athlete_id, as_of=as_of, window_days=RACE_WINDOW_DAYS, races_only=True
     )

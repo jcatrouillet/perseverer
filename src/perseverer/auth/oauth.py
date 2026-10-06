@@ -77,6 +77,9 @@ def create_request_token(secret: str, payload: dict[str, Any]) -> str:
 
 
 def decode_request_token(secret: str, token: str) -> dict[str, Any] | None:
+    """The pending OAuth authorization request carried in the login page's signed token, or None
+    when it is invalid or expired.
+    """
     try:
         decoded: dict[str, Any] = jwt.decode(
             token, secret, algorithms=[_ALGORITHM], audience=_REQUEST_AUDIENCE

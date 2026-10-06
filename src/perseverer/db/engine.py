@@ -17,6 +17,9 @@ _BUSY_TIMEOUT_MS = 10_000
 
 
 def make_engine(db_path: Path) -> Engine:
+    """SQLite engine with WAL, foreign keys and a busy timeout set on every connection; creates the
+    database's directory if needed.
+    """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(f"sqlite:///{db_path}")
 

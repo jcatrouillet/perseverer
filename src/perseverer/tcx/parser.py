@@ -153,6 +153,7 @@ def _parse_trackpoint(trkpt: ET.Element) -> tuple[StreamPoint, _LatLon | None] |
 
 
 def parse_tcx(content: bytes) -> CanonicalBatch:
+    """Pure parse of a TCX file (laps, trackpoints, sensor extensions) into a `CanonicalBatch`."""
     # A real minority of the sample archive's files (an older export path -- the confirmed
     # failing case was a 2020 activity) have literal leading whitespace before the <?xml ...?>
     # declaration, which Python's expat parser rejects outright ("XML or text declaration not

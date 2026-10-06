@@ -104,6 +104,7 @@ def resolve_activity_shoe(
 
 
 def over_limit_shoes(conn: Connection, athlete_id: str) -> list[tuple[Any, ShoeMileage]]:
+    """Active shoes whose live mileage has reached their own limit, with that mileage."""
     mileages = shoe_mileages(conn, athlete_id)
     rows = conn.execute(
         select(shoe).where(
@@ -121,6 +122,7 @@ def over_limit_shoes(conn: Connection, athlete_id: str) -> list[tuple[Any, ShoeM
 
 
 def mark_alert_emailed(conn: Connection, shoe_id: str) -> None:
+    """Records that a shoe's over-limit email went out, so the daily job sends it only once."""
     conn.execute(
         shoe.update()
         .where(shoe.c.id == shoe_id)

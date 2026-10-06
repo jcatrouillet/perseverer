@@ -72,6 +72,7 @@ def _bands_present(activities: list[InsightActivity]) -> list[int]:
 
 
 def compute_pb_insights(activities: list[InsightActivity], as_of: date) -> list[Insight]:
+    """All-time best pace per sport family and whole-km distance band."""
     insights: list[Insight] = []
     families = sorted({a.sport_family for a in activities})
     for family in families:

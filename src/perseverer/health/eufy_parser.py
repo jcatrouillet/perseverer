@@ -43,6 +43,9 @@ _WEIGHT_DIVISOR = 10.0
 
 
 def parse_eufy_scale_reading(raw_bytes: bytes) -> HealthBatch:
+    """One archived Eufy reading into `eufy.scale.<field>` observations -- every scalar field, not
+    just the ones the app charts.
+    """
     record: dict[str, Any] = json.loads(raw_bytes)
 
     create_time = record.get("create_time")

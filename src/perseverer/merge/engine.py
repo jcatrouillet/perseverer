@@ -45,6 +45,9 @@ _SPORT_FAMILIES: dict[str, str] = {
 
 
 def sport_family(sport: str) -> str:
+    """Groups sport names that describe the same activity (running and trail_running are both
+    `run`).
+    """
     return _SPORT_FAMILIES.get(sport.lower(), sport.lower())
 
 
@@ -108,6 +111,9 @@ def is_same_activity(
     b: ActivityCandidate,
     thresholds: MergeThresholds = DEFAULT_MERGE_THRESHOLDS,
 ) -> MergeDecision:
+    """Decides whether two candidates record the same activity (start time, sport family, duration),
+    with a human-readable reason per check.
+    """
     reasons = []
 
     a_start = _as_naive_utc(a.start_time_utc)

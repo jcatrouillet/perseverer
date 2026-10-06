@@ -69,6 +69,9 @@ def ingest_fit_bytes(
     locator: str | None = None,
     external_id_hint: str | None = None,
 ) -> DispatchResult:
+    """Archives one FIT file, then ingests it as an activity or, failing that, as health data -- the
+    single entry point every FIT-reading adapter shares.
+    """
     raw_id = archive_raw_bytes(
         conn,
         archive_root,

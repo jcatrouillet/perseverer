@@ -1439,6 +1439,7 @@ _CHART_CHANNELS: tuple[tuple[str, str, str, bool, str, int], ...] = (
 
 
 def render_activity_share_html(conn: Connection, settings: Settings, activity_id: str) -> str:
+    """The public share page for one activity, or the 'unavailable' page if it no longer exists."""
     row = conn.execute(
         select(activity).where(activity.c.id == activity_id, activity.c.deleted_at.is_(None))
     ).fetchone()
@@ -2765,6 +2766,7 @@ def _format_duration_hm(seconds: float) -> str:
 def render_period_share_html(
     conn: Connection, athlete_id: str, period_type: str, period_start: str | None
 ) -> str:
+    """The public share page for a week/month/year/all-time summary."""
     if period_type not in VALID_PERIOD_TYPES:
         return render_unavailable_html()
     start, end = _period_date_range(period_type, period_start)

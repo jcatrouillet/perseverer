@@ -119,10 +119,12 @@ def _interpolate(distance_m: float, anchors: list[tuple[float, float]]) -> float
 
 
 def weekly_distance_target_m(race_distance_m: float) -> float:
+    """Target weekly running distance for a race of this distance."""
     return _interpolate(race_distance_m, _WEEKLY_TARGET_ANCHORS)
 
 
 def long_run_target_m(race_distance_m: float) -> float:
+    """Target long-run distance for a race of this distance."""
     return _interpolate(race_distance_m, _LONG_RUN_TARGET_ANCHORS)
 
 

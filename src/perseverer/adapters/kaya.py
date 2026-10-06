@@ -66,6 +66,7 @@ def _post(path: str, body: dict[str, Any], base_url: str) -> requests.Response:
 
 
 def save_tokens(tokenstore_dir: Path, tokens: KayaTokens) -> None:
+    """Persists the Kaya access/refresh tokens -- never the password."""
     tokenstore_dir.mkdir(parents=True, exist_ok=True)
     path = tokenstore_dir / TOKEN_FILENAME
     path.write_text(json.dumps(asdict(tokens)), encoding="utf-8")
@@ -74,6 +75,9 @@ def save_tokens(tokenstore_dir: Path, tokens: KayaTokens) -> None:
 
 
 def load_tokens(tokenstore_dir: Path) -> KayaTokens:
+    """Loads the stored Kaya session; raises `KayaAuthRequired` when there is none (the import never
+    falls back to credentials).
+    """
     path = tokenstore_dir / TOKEN_FILENAME
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

@@ -355,6 +355,8 @@ def build_running_workout(
     hr_boundaries: tuple[int, int, int, int] | None,
     max_hr_bpm: float | None,
 ) -> RunningWorkout:
+    """A Garmin `RunningWorkout` from parsed running steps, ready to upload."""
+
     def step_builder(step: PlannedStepLike, step_order: int) -> ExecutableStep:
         return _build_executable_step(
             step, step_order, hr_boundaries=hr_boundaries, max_hr_bpm=max_hr_bpm

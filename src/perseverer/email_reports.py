@@ -1193,6 +1193,7 @@ def _section(title: str, table_inner: str, *, caption: str | None = None) -> str
 
 
 def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
+    """Weekly report as an email-client-safe HTML body plus a plaintext alternative."""
     t = report.totals
     subject = (
         f"Perseverer — your week: {_km(t.distance_m)} across "
@@ -1287,6 +1288,7 @@ def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
 
 
 def render_monthly_email(report: MonthlyReport) -> RenderedEmail:
+    """Monthly report (totals and per-sport split) as HTML plus plaintext."""
     t = report.totals
     subject = (
         f"Perseverer — {report.month_label}: {_km(t.distance_m)} across "

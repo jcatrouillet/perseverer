@@ -22,6 +22,7 @@ class InvalidSessionToken(Exception):
 
 
 def create_session_token(athlete_id: str, secret: str, expiry_days: int) -> tuple[str, dt.datetime]:
+    """A signed JWT for `POST /auth/login`; returns it and its expiry."""
     now = dt.datetime.now(dt.UTC)
     expires_at = now + dt.timedelta(days=expiry_days)
     payload = {"sub": athlete_id, "iat": now, "exp": expires_at}
@@ -30,6 +31,7 @@ def create_session_token(athlete_id: str, secret: str, expiry_days: int) -> tupl
 
 
 def verify_session_token(token: str, secret: str) -> str:
+    """The athlete id (`sub`) of a valid session token; raises `InvalidSessionToken` otherwise."""
     try:
         payload = jwt.decode(token, secret, algorithms=[_ALGORITHM])
     except jwt.InvalidTokenError as exc:

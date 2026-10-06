@@ -136,6 +136,9 @@ def sync_eufy(
     customer_id: str | None,
     client_factory: Callable[[str, str, str, str], EufyClient] = EufyClient,
 ) -> IngestRunSummary:
+    """Logs in to Eufy and ingests the athlete's whole scale-reading history (the API always returns
+    all of it). Skips quietly when any credential is missing.
+    """
     summary = IngestRunSummary(run_id=0)
 
     if not (email and password and device_id and customer_id):
