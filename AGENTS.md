@@ -1098,7 +1098,8 @@ environment:
   `activity.calories`) is a sport-scoped `rules_efforts.py` dimension like distance/duration. The
   start-time dimensions (`start_earliest`/`start_latest`) existed but were *not* sport-scoped, so a
   late bike ride or hike hid the latest *run* and the run page never showed it; they are now
-  sport-scoped (`start_latest:run`). Temperature stays cross-sport.
+  sport-scoped (`start_latest:run`). Hottest/coldest are sport-scoped too (a cold ride must not hide the coldest run), so no
+  effort dimension is cross-sport any more.
   **"Today" in the frontend is the browser's local date** (`dateUtils.ts::localIsoDate`), never
   `isoDate(new Date())` (UTC) — the latter made the default calendar landing page (and the Fitness/
   Health/Settings/Activities defaults) jump to tomorrow for the evening hours west of UTC.

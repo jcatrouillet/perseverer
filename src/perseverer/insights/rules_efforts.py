@@ -8,8 +8,7 @@ combination -- see ADR 0012.
 
 Distance/duration/pace/HR/cadence/elevation dimensions are scoped within the same sport family
 (comparing a hike's elevation gain to a run's is not a meaningful "record") -- one insight per
-sport family present in the window. Temperature is not sport-scoped --
-one insight across all of that window's activities regardless of sport.
+sport family present in the window. Temperature is sport-scoped too (a hot ride is not a hot run).
 """
 
 from __future__ import annotations
@@ -87,10 +86,10 @@ _DIMENSIONS: tuple[_Dimension, ...] = (
     _Dimension("start_earliest", "Earliest start", "low", _start_hour, True, "hour"),
     _Dimension("start_latest", "Latest start", "high", _start_hour, True, "hour"),
     _Dimension(
-        "temperature_high", "Hottest conditions", "high", lambda a: a.temperature_max_c, False, "c"
+        "temperature_high", "Hottest conditions", "high", lambda a: a.temperature_max_c, True, "c"
     ),
     _Dimension(
-        "temperature_low", "Coldest conditions", "low", lambda a: a.temperature_min_c, False, "c"
+        "temperature_low", "Coldest conditions", "low", lambda a: a.temperature_min_c, True, "c"
     ),
 )
 

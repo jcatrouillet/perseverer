@@ -123,7 +123,7 @@ def test_max_cadence_is_a_distinct_dimension_from_avg_cadence() -> None:
     assert by_key["max_cadence:run"].title == "Highest max cadence (run)"
 
 
-def test_non_sport_scoped_dimension_ignores_sport_family() -> None:
+def test_temperature_extremes_are_scoped_to_the_sport() -> None:
     activities = [
         _activity(
             "cold_run", "2026-08-10", sport="running", sport_family="run", temperature_min_c=-3.0
@@ -133,9 +133,13 @@ def test_non_sport_scoped_dimension_ignores_sport_family() -> None:
         ),
     ]
     insights = compute_effort_insights(activities, dt.date(2026, 8, 14))
-    coldest = [i for i in insights if i.window == "30d" and i.subject_key == "temperature_low"]
-    assert len(coldest) == 1  # not split by sport family
-    assert coldest[0].activity_id == "cold_ride"
+    coldest = {
+        i.subject_key: i.activity_id
+        for i in insights
+        if i.window == "30d" and i.subject_key.startswith("temperature_low")
+    }
+    # One per sport family: the colder ride must not hide the coldest run.
+    assert coldest == {"temperature_low:run": "cold_run", "temperature_low:ride": "cold_ride"}
 
 
 def test_start_time_is_scoped_to_the_sport_so_a_late_ride_does_not_hide_the_latest_run() -> None:
