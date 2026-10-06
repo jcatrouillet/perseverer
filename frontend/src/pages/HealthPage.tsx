@@ -3,10 +3,6 @@
 // (TrendControls) above the chart -- the exact same pattern as FitnessPage.tsx, per the user's
 // own request to pick one metric from a list rather than see every chart stacked at once. See
 // components/MetricExplorer.tsx for the list+chart split itself.
-//
-// `CORE_METRICS`/`HRV_METRIC`/`WEIGHT_METRIC` stay exported unchanged -- MonthView/YearView/
-// AllTimeView's own embedded "Health" calendar cards import these for their own (unrelated,
-// untouched) tile-grid/trend-chart rendering, which this rewrite doesn't touch.
 import { useMemo, useState } from "react";
 
 import { useBloodTests, useHealthDashboard, useSleep } from "../api/queries";
@@ -32,19 +28,6 @@ import {
   type DailyPoint,
   type Resolution,
 } from "../trendWindow";
-
-// Exported so other pages (e.g. YearView's year-in-review stats) can reuse the exact same
-// categorization rather than maintaining a second, driftable copy of this list.
-export const CORE_METRICS = [
-  "steps",
-  "calories",
-  "resting_heart_rate",
-  "max_heart_rate",
-  "floors_ascended",
-  "vo2max",
-];
-export const HRV_METRIC = ["hrv_nightly_average"];
-export const WEIGHT_METRIC = ["weight_kg"];
 
 const TODAY = localIsoDate();
 

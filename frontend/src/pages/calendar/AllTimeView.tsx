@@ -25,7 +25,7 @@ import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { EARLIEST_PLAUSIBLE_DATE, localIsoDate } from "../../dateUtils";
 import { anyMetricHasData, monthlyAverageSleepHours } from "../../healthStats";
-import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
+import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../../healthMetricGroups";
 import { busiestYear } from "../../yearStats";
 import "../../styles/calendar.css";
 

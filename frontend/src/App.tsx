@@ -10,11 +10,6 @@ import { localIsoDate } from "./dateUtils";
 import { usePersonalize, PersonalizeProvider } from "./PersonalizeContext";
 import "./styles/gear.css";
 import { MonthView } from "./pages/calendar/MonthView";
-// Statically imported (not lazy) despite being routed elsewhere: MonthView/AllTimeView/YearView
-// already import CORE_METRICS/HRV_METRIC/WEIGHT_METRIC from here, so it's pulled into the main
-// chunk regardless -- lazy-wrapping it would only add a pointless Suspense flash with zero
-// bundle-size benefit (confirmed via vite's own "ineffective dynamic import" build warning).
-import { HealthPage } from "./pages/HealthPage";
 // Also statically imported: this is what the default "/" route (CurrentWeek() below) renders, so
 // lazy-wrapping it would mean a loading-spinner flash on literally every login/app-open -- unlike
 // the routes below, it genuinely IS needed for the default route's first paint. Pulls its own
@@ -53,6 +48,9 @@ const InsightsPage = lazy(() =>
   import("./pages/InsightsPage").then((m) => ({ default: m.InsightsPage })),
 );
 const GearPage = lazy(() => import("./pages/GearPage").then((m) => ({ default: m.GearPage })));
+const HealthPage = lazy(() =>
+  import("./pages/HealthPage").then((m) => ({ default: m.HealthPage })),
+);
 const MapExplorerPage = lazy(() =>
   import("./pages/MapExplorerPage").then((m) => ({ default: m.MapExplorerPage })),
 );

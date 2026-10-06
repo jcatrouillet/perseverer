@@ -25,7 +25,7 @@ import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { monthName, yearRange } from "../../dateUtils";
 import { useDistanceFormat } from "../../formatDistance";
 import { anyMetricHasData, weeklyAverageSleepHours } from "../../healthStats";
-import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
+import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../../healthMetricGroups";
 import { personalRecords } from "../../runningStats";
 import { busiestMonth } from "../../yearStats";
 import "../../styles/calendar.css";

@@ -42,7 +42,7 @@ import {
 import { useDistanceFormat } from "../../formatDistance";
 import { useTimeFormat } from "../../formatTime";
 import { anyMetricHasData } from "../../healthStats";
-import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../HealthPage";
+import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../../healthMetricGroups";
 import { plannedWorkoutSportStyle } from "../../metricStyle";
 import { usePersonalize } from "../../PersonalizeContext";
 import { personalRecords } from "../../runningStats";

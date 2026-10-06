@@ -309,7 +309,8 @@ environment:
   `HealthMetricTiles.tsx`/`SleepDurationChart.tsx` are untouched and still power the Fitness &
   Form/Health cards embedded in the calendar's own Month/Year/All-time views (a different,
   calendar-period-scoped use case this redesign didn't touch) — `CORE_METRICS`/`HRV_METRIC`/
-  `WEIGHT_METRIC` stay exported from `HealthPage.tsx` unchanged since those views import them.
+  `WEIGHT_METRIC` live in `healthMetricGroups.ts` (moved out of `HealthPage.tsx` so those views no
+  longer drag the whole Health page into the main bundle; the Health route is now lazy-loaded).
   `earliestDateForKeys` (`trendWindow.ts`) scopes "All time" (and `canGoPrevious`) to the
   *selected* metric's own keys, not a merge across every metric the page fetches — both pages
   fetch one combined series per data source (all of `LOGICAL_METRICS` in one `GET
