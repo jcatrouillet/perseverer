@@ -118,12 +118,14 @@ function buildQuery(params: Record<string, string | number | undefined>): string
   return qs ? `?${qs}` : "";
 }
 
+// The calendar views never read the per-day/per-period `health_metrics` (~120 raw metrics a day,
+// ~97% of the payload), so they ask the API to leave them out.
 export function useCalendar(startDate: string, endDate: string) {
   return useQuery({
     queryKey: ["calendar", startDate, endDate],
     queryFn: () =>
       apiGet<CalendarResponse>(
-        `/api/v1/calendar${buildQuery({ start_date: startDate, end_date: endDate })}`,
+        `/api/v1/calendar${buildQuery({ start_date: startDate, end_date: endDate, include_health_metrics: "false" })}`,
       ),
   });
 }
@@ -133,7 +135,7 @@ export function useCalendarMonths(startDate: string, endDate: string) {
     queryKey: ["calendar-months", startDate, endDate],
     queryFn: () =>
       apiGet<PeriodCalendarResponse>(
-        `/api/v1/calendar/months${buildQuery({ start_date: startDate, end_date: endDate })}`,
+        `/api/v1/calendar/months${buildQuery({ start_date: startDate, end_date: endDate, include_health_metrics: "false" })}`,
       ),
   });
 }
@@ -795,12 +797,13 @@ export function usePaceBandsByActivity() {
   });
 }
 
+// Nightly totals only: no screen reads the per-stage breakdown, which is most of the payload.
 export function useSleep(startDate: string, endDate: string) {
   return useQuery({
     queryKey: ["sleep", startDate, endDate],
     queryFn: () =>
       apiGet<SleepSessionOut[]>(
-        `/api/v1/sleep${buildQuery({ start_date: startDate, end_date: endDate })}`,
+        `/api/v1/sleep${buildQuery({ start_date: startDate, end_date: endDate, include_stages: "false" })}`,
       ),
   });
 }

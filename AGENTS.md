@@ -2221,6 +2221,17 @@ systemctl --user enable --now perseverer-api perseverer-worker perseverer-fronte
   `rebuild`) accumulates which `local_date`s it touched and calls `refresh_daily_rollup` once
   per distinct date after its loop — bounded by dates touched, not files processed. A future
   adapter must honor this same contract. See `docs/adr/0006-phase-3-read-api-and-rollups.md`.
+- **Index every "by parent id alone" lookup.** Child tables keyed `(athlete_id, <parent>_id, ...)`
+  can't serve a query filtering on the parent id alone, and SQLite then scans the whole table per
+  lookup. `lap`/`split`/`activity_workout_step` (`activity_id`) and `planned_workout_step`
+  (`planned_workout_id`) have their own index for this (migration `n1e6f3a08d52`): without it the
+  per-activity insight panel (`GET /activities/{id}/insights`, whose loader runs four `split`
+  subqueries per activity) took 5.6 s on bercy on every activity page view. Check `EXPLAIN QUERY
+  PLAN` for a new child table's access pattern before shipping it.
+- **The web app asks for lean payloads.** `GET /calendar`, `/calendar/weeks`, `/calendar/months`
+  take `include_health_metrics` and `GET /sleep` takes `include_stages`, both default `true` so
+  API/MCP callers keep the full data; the frontend sends `false` since no screen reads the
+  per-day health rollups (~97% of a month view's payload) or the per-night sleep stages.
 - **Windows dev, Linux prod.** LF enforced via `.gitattributes`. `pathlib` everywhere. The
   `fit_folder` watcher polls (no reliance on inotify — SMB/rsync-written files don't reliably
   fire inotify events inside a container).

@@ -47,6 +47,14 @@ def test_list_sleep_returns_sessions_with_nested_stages(
     assert len(body[0]["stages"]) == 1
     assert body[0]["stages"][0]["stage"] == "deep"
 
+    # Nightly totals only (what the web app asks for): same night, no stage breakdown.
+    lean = client.get(
+        "/api/v1/sleep?start_date=2025-05-25&end_date=2025-06-05&include_stages=false",
+        headers=auth_headers,
+    ).json()
+    assert lean[0]["total_sleep_s"] == 25000.0
+    assert lean[0]["stages"] == []
+
 
 def test_list_sleep_assigns_each_sessions_stages_correctly_not_cross_mixed(
     client: TestClient, auth_headers: dict[str, str], engine: Engine

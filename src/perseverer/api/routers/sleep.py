@@ -1,4 +1,8 @@
-"""GET /sleep."""
+"""GET /sleep.
+
+`include_stages` (default true) can drop each night's per-stage breakdown: the web app only
+ever reads the nightly totals, and the stages are most of an all-time response's ~3.5 MB.
+"""
 
 from __future__ import annotations
 
@@ -41,6 +45,7 @@ def list_sleep(
     athlete_id: Annotated[str, Depends(require_api_key)],
     start_date: date = Query(...),
     end_date: date = Query(...),
+    include_stages: bool = Query(True),
     conn: Connection = Depends(get_conn),
 ) -> list[SleepSessionOut]:
     rows = conn.execute(
@@ -66,7 +71,7 @@ def list_sleep(
     # (itself uncovered by any index on sleep_session_id, so each one was a full scan), the
     # dominant cost in this endpoint by far. See the new ix_sleep_stage_session index.
     stages_by_session_id: dict[int, list[Any]] = {}
-    if sessions:
+    if sessions and include_stages:
         for stage in conn.execute(
             select(sleep_stage)
             .where(sleep_stage.c.sleep_session_id.in_([s.id for s in sessions]))

@@ -129,6 +129,14 @@ def test_calendar_filters_health_metrics_by_metric_keys(
     assert len(body["days"][0]["health_metrics"]) == 1
     assert body["days"][0]["health_metrics"][0]["metric_key"] == "steps"
 
+    # The web app opts out of the health rollups entirely; the day itself is still returned.
+    lean = client.get(
+        "/api/v1/calendar?start_date=2025-06-01&end_date=2025-06-01&include_health_metrics=false",
+        headers=auth_headers,
+    ).json()
+    assert lean["days"][0]["local_date"] == "2025-06-01"
+    assert lean["days"][0]["health_metrics"] == []
+
 
 def test_calendar_weeks_returns_period_and_health_period_rollups(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
@@ -180,6 +188,14 @@ def test_calendar_weeks_returns_period_and_health_period_rollups(
     assert period["activity_days_count"] == 2
     assert len(period["health_metrics"]) == 1
     assert period["health_metrics"][0]["value_avg"] == 50.0
+
+    lean = client.get(
+        "/api/v1/calendar/weeks?start_date=2025-06-01&end_date=2025-06-30"
+        "&include_health_metrics=false",
+        headers=auth_headers,
+    ).json()
+    assert lean["periods"][0]["activity_count"] == 3
+    assert lean["periods"][0]["health_metrics"] == []
 
 
 def test_calendar_months_scoped_to_period_type_month(

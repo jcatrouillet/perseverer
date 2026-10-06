@@ -1862,7 +1862,7 @@ const GROUPS = [
   { id: "sleep", title: "Sleep", endpoints: [
     { method: "GET", path: "/api/v1/sleep", summary: "Sleep sessions in a date range.",
       description: "Each session includes its stage breakdown (light/deep/rem/awake) when the source device reported one.",
-      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""], ["include_stages","query","opt","boolean","true","false returns every stages list empty (nightly totals only, as the web app asks for)."] ],
       responses: [ { code: 200, ref: "array&lt;SleepSessionOut&gt;" } ],
       example: { qs: "?start_date=2026-08-01&end_date=2026-08-19" }
     },
@@ -1875,19 +1875,20 @@ const GROUPS = [
         ["start_date","query","req","string(date)","—",""],
         ["end_date","query","req","string(date)","—",""],
         ["metric_keys","query","opt","array&lt;string&gt;","—","Restrict which health_metrics entries come back per day. Omit for every rolled-up key."],
+        ["include_health_metrics","query","opt","boolean","true","false leaves every health_metrics list empty and skips the query; the web app's calendar views do this."],
       ],
       responses: [ { code: 200, ref: "CalendarResponse" } ],
       example: { qs: "?start_date=2026-08-01&end_date=2026-08-31" }
     },
     { method: "GET", path: "/api/v1/calendar/weeks", summary: "Weekly rollups for a date range.",
       description: "Weeks start Monday. period_type in the response is always \"week\".",
-      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""], ["include_health_metrics","query","opt","boolean","true","false leaves every health_metrics list empty and skips the query; the web app's calendar views do this."] ],
       responses: [ { code: 200, ref: "PeriodCalendarResponse" } ],
       example: { qs: "?start_date=2026-07-01&end_date=2026-08-19" }
     },
     { method: "GET", path: "/api/v1/calendar/months", summary: "Monthly rollups for a date range.",
       description: "period_type in the response is always \"month\".",
-      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""] ],
+      params: [ ["start_date","query","req","string(date)","—",""], ["end_date","query","req","string(date)","—",""], ["include_health_metrics","query","opt","boolean","true","false leaves every health_metrics list empty and skips the query; the web app's calendar views do this."] ],
       responses: [ { code: 200, ref: "PeriodCalendarResponse" } ],
       example: { qs: "?start_date=2026-01-01&end_date=2026-08-19" }
     },

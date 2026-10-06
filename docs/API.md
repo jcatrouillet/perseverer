@@ -697,6 +697,7 @@ when the source device reported one.
 |---|---|---|---|
 | `start_date` | query | **required** | string (date) |
 | `end_date` | query | **required** | string (date) |
+| `include_stages` | query | optional | boolean -- default `true`; `false` returns every `stages` list empty (nightly totals only, as the web app asks for) |
 
 **Response `200`:** `array<SleepSessionOut>`.
 
@@ -714,6 +715,7 @@ precomputed rollup tables, never a live aggregate over raw history.
 | `start_date` | query | **required** | string (date) | |
 | `end_date` | query | **required** | string (date) | |
 | `metric_keys` | query | optional | array\<string\> | Restrict which `health_metrics` entries come back per day. Omit for every rolled-up key. |
+| `include_health_metrics` | query | optional | boolean | Default `true`. `false` leaves every `health_metrics` list empty (and skips the query) -- the web app's calendar views do this, since they never read them and they are ~97% of the payload. |
 
 **Response `200`:** `CalendarResponse`.
 
@@ -730,7 +732,8 @@ Monthly rollups for a date range. `period_type` in the response is always `"mont
 
 **Response `200`:** `PeriodCalendarResponse`.
 
-(Both take the same `start_date`/`end_date` required query parameters as `GET /calendar`.)
+(Both take the same `start_date`/`end_date` required query parameters and the optional
+`include_health_metrics` flag as `GET /calendar`.)
 
 ---
 

@@ -765,6 +765,9 @@ lap = Table(
     Column("max_hr", Float, nullable=True),
     Column("avg_speed_mps", Float, nullable=True),
     UniqueConstraint("athlete_id", "activity_id", "lap_index", name="uq_lap_identity"),
+    # Looked up by activity_id alone (e.g. one activity's detail page, the insight loader's
+    # per-activity subqueries) -- the unique key leads with athlete_id, so it can't serve that.
+    Index("ix_lap_activity", "activity_id"),
 )
 
 split = Table(
@@ -816,6 +819,9 @@ split = Table(
     # has no such backing and really would be gone for good.
     Column("is_manual", Boolean, nullable=True),
     UniqueConstraint("athlete_id", "activity_id", "split_index", name="uq_split_identity"),
+    # Looked up by activity_id alone (e.g. one activity's detail page, the insight loader's
+    # per-activity subqueries) -- the unique key leads with athlete_id, so it can't serve that.
+    Index("ix_split_activity", "activity_id"),
 )
 
 route_geom = Table(
@@ -877,6 +883,9 @@ activity_workout_step = Table(
     UniqueConstraint(
         "athlete_id", "activity_id", "step_index", name="uq_activity_workout_step_identity"
     ),
+    # Looked up by activity_id alone (e.g. one activity's detail page, the insight loader's
+    # per-activity subqueries) -- the unique key leads with athlete_id, so it can't serve that.
+    Index("ix_activity_workout_step_activity", "activity_id"),
 )
 
 # A *future*, athlete-authored workout scheduled on the calendar (Phase 10-ish, "scheduled
@@ -1020,6 +1029,9 @@ planned_workout_step = Table(
         "step_index",
         name="uq_planned_workout_step_identity",
     ),
+    # Looked up by planned_workout_id alone (e.g. one activity's detail page, the insight loader's
+    # per-activity subqueries) -- the unique key leads with athlete_id, so it can't serve that.
+    Index("ix_planned_workout_step_workout", "planned_workout_id"),
 )
 
 # --- Health (schema created now; population starts Phase 2) --------------------

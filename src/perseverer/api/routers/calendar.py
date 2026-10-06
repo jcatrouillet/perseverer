@@ -1,16 +1,21 @@
 """GET /calendar -- reads day_rollup/health_metric_daily_rollup only, no DuckDB, no
 request-time scan (AGENTS.md's rollup mandate). See
 docs/adr/0006-phase-3-read-api-and-rollups.md.
+
+Every endpoint here takes `include_health_metrics` (default true, so API/MCP callers keep the
+full per-day/per-period health rollups). The web app passes false: it never reads them, and they
+are ~120 metrics a day -- about 97% of a month view's payload.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection, Row, select
 
 from perseverer.api.dependencies import get_conn, require_api_key
 from perseverer.api.schemas.calendar import (
@@ -37,6 +42,7 @@ def get_calendar(
     start_date: date = Query(...),
     end_date: date = Query(...),
     metric_keys: list[str] | None = Query(None),
+    include_health_metrics: bool = Query(True),
     conn: Connection = Depends(get_conn),
 ) -> CalendarResponse:
     day_rows = conn.execute(
@@ -49,16 +55,20 @@ def get_calendar(
         .order_by(day_rollup.c.local_date)
     ).fetchall()
 
-    health_query = select(health_metric_daily_rollup).where(
-        health_metric_daily_rollup.c.athlete_id == athlete_id,
-        health_metric_daily_rollup.c.local_date >= start_date.isoformat(),
-        health_metric_daily_rollup.c.local_date <= end_date.isoformat(),
-    )
-    if metric_keys:
-        health_query = health_query.where(health_metric_daily_rollup.c.metric_key.in_(metric_keys))
-    health_rows = conn.execute(health_query).fetchall()
-
     by_date: dict[str, list[HealthMetricRollupOut]] = defaultdict(list)
+    health_rows: Sequence[Row[Any]] = []
+    if include_health_metrics:
+        health_query = select(health_metric_daily_rollup).where(
+            health_metric_daily_rollup.c.athlete_id == athlete_id,
+            health_metric_daily_rollup.c.local_date >= start_date.isoformat(),
+            health_metric_daily_rollup.c.local_date <= end_date.isoformat(),
+        )
+        if metric_keys:
+            health_query = health_query.where(
+                health_metric_daily_rollup.c.metric_key.in_(metric_keys)
+            )
+        health_rows = conn.execute(health_query).fetchall()
+
     for r in health_rows:
         by_date[r.local_date].append(
             HealthMetricRollupOut(
@@ -91,7 +101,13 @@ def get_calendar(
 
 
 def _get_period_calendar(
-    conn: Connection, *, athlete_id: str, period_type: str, start_date: date, end_date: date
+    conn: Connection,
+    *,
+    athlete_id: str,
+    period_type: str,
+    start_date: date,
+    end_date: date,
+    include_health_metrics: bool,
 ) -> PeriodCalendarResponse:
     period_rows = conn.execute(
         select(period_rollup)
@@ -104,14 +120,18 @@ def _get_period_calendar(
         .order_by(period_rollup.c.period_start)
     ).fetchall()
 
-    health_rows = conn.execute(
-        select(health_metric_period_rollup).where(
-            health_metric_period_rollup.c.athlete_id == athlete_id,
-            health_metric_period_rollup.c.period_type == period_type,
-            health_metric_period_rollup.c.period_start >= start_date.isoformat(),
-            health_metric_period_rollup.c.period_start <= end_date.isoformat(),
-        )
-    ).fetchall()
+    health_rows = (
+        conn.execute(
+            select(health_metric_period_rollup).where(
+                health_metric_period_rollup.c.athlete_id == athlete_id,
+                health_metric_period_rollup.c.period_type == period_type,
+                health_metric_period_rollup.c.period_start >= start_date.isoformat(),
+                health_metric_period_rollup.c.period_start <= end_date.isoformat(),
+            )
+        ).fetchall()
+        if include_health_metrics
+        else []
+    )
 
     by_period: dict[str, list[PeriodHealthMetricRollupOut]] = defaultdict(list)
     for r in health_rows:
@@ -153,10 +173,16 @@ def get_calendar_weeks(
     athlete_id: Annotated[str, Depends(require_api_key)],
     start_date: date = Query(...),
     end_date: date = Query(...),
+    include_health_metrics: bool = Query(True),
     conn: Connection = Depends(get_conn),
 ) -> PeriodCalendarResponse:
     return _get_period_calendar(
-        conn, athlete_id=athlete_id, period_type="week", start_date=start_date, end_date=end_date
+        conn,
+        athlete_id=athlete_id,
+        period_type="week",
+        start_date=start_date,
+        end_date=end_date,
+        include_health_metrics=include_health_metrics,
     )
 
 
@@ -165,8 +191,14 @@ def get_calendar_months(
     athlete_id: Annotated[str, Depends(require_api_key)],
     start_date: date = Query(...),
     end_date: date = Query(...),
+    include_health_metrics: bool = Query(True),
     conn: Connection = Depends(get_conn),
 ) -> PeriodCalendarResponse:
     return _get_period_calendar(
-        conn, athlete_id=athlete_id, period_type="month", start_date=start_date, end_date=end_date
+        conn,
+        athlete_id=athlete_id,
+        period_type="month",
+        start_date=start_date,
+        end_date=end_date,
+        include_health_metrics=include_health_metrics,
     )
