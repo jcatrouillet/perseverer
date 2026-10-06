@@ -95,7 +95,8 @@ function gradeAt(
   while (left > 0 && distanceM[left] != null && center - distanceM[left]! < halfWindowM) left--;
   let right = i;
   const n = distanceM.length;
-  while (right < n - 1 && distanceM[right] != null && distanceM[right]! - center < halfWindowM) right++;
+  while (right < n - 1 && distanceM[right] != null && distanceM[right]! - center < halfWindowM)
+    right++;
 
   const d0 = distanceM[left];
   const d1 = distanceM[right];

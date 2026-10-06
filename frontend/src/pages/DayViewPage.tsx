@@ -169,7 +169,8 @@ export function DayViewPage({ date }: { date: string }) {
       {newPrsToday.length > 0 && (
         <p className="running-records__new-prs">
           <Icon name="trophy" /> {newPrsToday.length} all-time PR
-          {newPrsToday.length === 1 ? "" : "s"} set today: {newPrsToday.map((r) => r.label).join(", ")}
+          {newPrsToday.length === 1 ? "" : "s"} set today:{" "}
+          {newPrsToday.map((r) => r.label).join(", ")}
         </p>
       )}
 
@@ -263,7 +264,12 @@ export function DayViewPage({ date }: { date: string }) {
               />
             )}
             {sleepToday?.sleep_score != null && (
-              <StatTile label="Sleep score" value={sleepToday.sleep_score} icon="moon" tone="cadence" />
+              <StatTile
+                label="Sleep score"
+                value={sleepToday.sleep_score}
+                icon="moon"
+                tone="cadence"
+              />
             )}
             {restingHr != null && (
               <StatTile

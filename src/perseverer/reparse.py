@@ -55,7 +55,5 @@ def reparse_raw_object(kind: str, content: bytes) -> CanonicalBatch:
         return _parse_manual_entry(content)
     parser = _PARSERS.get(kind)
     if parser is None:
-        return CanonicalBatch(
-            kind="unrecognized", activity=None, unrecognized_message_types=[kind]
-        )
+        return CanonicalBatch(kind="unrecognized", activity=None, unrecognized_message_types=[kind])
     return parser(content)

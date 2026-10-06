@@ -169,12 +169,8 @@ def test_profile_vdot_prefers_a_marked_race_over_a_faster_training_run(tmp_path:
     is longer."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        _add_run(
-            conn, activity_id="hard-training-segment", local_date=_RECENT, vdot=55.0
-        )
-        _add_run(
-            conn, activity_id="real-race", local_date=_MID_RANGE, vdot=44.5, is_race=True
-        )
+        _add_run(conn, activity_id="hard-training-segment", local_date=_RECENT, vdot=55.0)
+        _add_run(conn, activity_id="real-race", local_date=_MID_RANGE, vdot=44.5, is_race=True)
         conn.commit()
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
     assert result.profile_vdot == 44.5
@@ -189,9 +185,7 @@ def test_race_vdot_ignores_a_race_outside_the_race_window(tmp_path: Path) -> Non
     exactly as if no race existed at all."""
     engine = _engine(tmp_path)
     with engine.connect() as conn:
-        _add_run(
-            conn, activity_id="too-old-race", local_date=_TOO_OLD, vdot=44.5, is_race=True
-        )
+        _add_run(conn, activity_id="too-old-race", local_date=_TOO_OLD, vdot=44.5, is_race=True)
         _add_run(conn, activity_id="recent-training", local_date=_RECENT, vdot=38.0)
         conn.commit()
         result = compute_pace_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)

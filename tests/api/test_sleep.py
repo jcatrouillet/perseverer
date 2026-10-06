@@ -38,9 +38,7 @@ def test_list_sleep_returns_sessions_with_nested_stages(
         )
         conn.commit()
 
-    r = client.get(
-        "/api/v1/sleep?start_date=2025-05-25&end_date=2025-06-05", headers=auth_headers
-    )
+    r = client.get("/api/v1/sleep?start_date=2025-05-25&end_date=2025-06-05", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1
@@ -97,9 +95,7 @@ def test_list_sleep_assigns_each_sessions_stages_correctly_not_cross_mixed(
         # a real, common case (e.g. a device that reported total sleep time but no stage detail).
         conn.commit()
 
-    r = client.get(
-        "/api/v1/sleep?start_date=2025-05-25&end_date=2025-06-05", headers=auth_headers
-    )
+    r = client.get("/api/v1/sleep?start_date=2025-05-25&end_date=2025-06-05", headers=auth_headers)
     assert r.status_code == 200
     by_date = {s["local_date"]: s for s in r.json()}
     assert [st["stage"] for st in by_date["2025-06-01"]["stages"]] == ["deep"]
@@ -110,9 +106,7 @@ def test_list_sleep_assigns_each_sessions_stages_correctly_not_cross_mixed(
 def test_list_sleep_empty_range_returns_empty_list(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    r = client.get(
-        "/api/v1/sleep?start_date=2020-01-01&end_date=2020-01-31", headers=auth_headers
-    )
+    r = client.get("/api/v1/sleep?start_date=2020-01-01&end_date=2020-01-31", headers=auth_headers)
     assert r.status_code == 200
     assert r.json() == []
 
@@ -149,9 +143,7 @@ def test_list_sleep_dedupes_overlapping_sources_preferring_garmin_connect(
         )
         conn.commit()
 
-    r = client.get(
-        "/api/v1/sleep?start_date=2025-05-25&end_date=2025-06-05", headers=auth_headers
-    )
+    r = client.get("/api/v1/sleep?start_date=2025-05-25&end_date=2025-06-05", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1

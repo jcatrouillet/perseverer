@@ -77,13 +77,7 @@ function ValueDot(props: { cx?: number; cy?: number; payload?: Row; index?: numb
   );
 }
 
-function MarkerTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: { payload: Row }[];
-}) {
+function MarkerTooltip({ active, payload }: { active?: boolean; payload?: { payload: Row }[] }) {
   const row = active ? payload?.[0]?.payload : undefined;
   if (!row) return null;
   const r = row.result;
@@ -151,7 +145,12 @@ export function BloodMarkerChart({
             stroke="var(--color-text-muted)"
             fontSize={11}
           />
-          <YAxis stroke="var(--color-text-muted)" fontSize={11} width={48} domain={["auto", "auto"]} />
+          <YAxis
+            stroke="var(--color-text-muted)"
+            fontSize={11}
+            width={48}
+            domain={["auto", "auto"]}
+          />
           <Tooltip content={<MarkerTooltip />} />
           {hasRange && (
             <Line
@@ -196,7 +195,9 @@ export function BloodMarkerChart({
       <ChartLegend
         items={[
           { label: marker, color: "var(--color-accent)" },
-          ...(hasRange ? [{ label: "Reference range (from each report)", color: "var(--color-warning)" }] : []),
+          ...(hasRange
+            ? [{ label: "Reference range (from each report)", color: "var(--color-warning)" }]
+            : []),
           { label: "Outside reference range", color: "var(--color-danger)" },
         ]}
       />

@@ -133,7 +133,10 @@ export function MetricExplorer({
                   {g.direct.map(renderItem)}
                   {g.subgroups.map((sg) => {
                     const id = `${g.name}/${sg.name}`;
-                    const subOpen = isOpen(id, g.name === active.group && sg.name === active.subgroup);
+                    const subOpen = isOpen(
+                      id,
+                      g.name === active.group && sg.name === active.subgroup,
+                    );
                     return (
                       <div key={id} className="metric-explorer__group">
                         {renderToggle(id, sg.name, sg.items.length, subOpen, true)}

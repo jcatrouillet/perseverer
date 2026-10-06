@@ -117,10 +117,7 @@ def refresh_fitness_rollup(conn: Connection, *, athlete_id: str) -> None:
 
     local_date_by_activity = {r.activity_id: r.local_date for r in rows}
     load_by_activity = _dedupe_activity_load(
-        [
-            (r.activity_id, r.local_date, r.primary_source, r.source, r.value_num)
-            for r in rows
-        ]
+        [(r.activity_id, r.local_date, r.primary_source, r.source, r.value_num) for r in rows]
     )
 
     for r in rtss_rows:

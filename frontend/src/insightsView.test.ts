@@ -21,10 +21,7 @@ function insight(overrides: Partial<InsightOut> = {}): InsightOut {
 
 describe("visibleInsights", () => {
   it("includes only the selected window for windowed kinds", () => {
-    const insights = [
-      insight({ window: "30d" }),
-      insight({ window: "90d" }),
-    ];
+    const insights = [insight({ window: "30d" }), insight({ window: "90d" })];
     expect(visibleInsights(insights, "30d")).toHaveLength(1);
     expect(visibleInsights(insights, "30d")[0].window).toBe("30d");
   });

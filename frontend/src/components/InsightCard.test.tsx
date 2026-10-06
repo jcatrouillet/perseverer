@@ -63,7 +63,9 @@ describe("InsightCard", () => {
   it("styles a window_best insight distinctly from an all-time pb", () => {
     const { container: windowBest } = render(
       <Router>
-        <InsightCard insight={insight({ kind: "window_best", title: "Fastest 5 km in the last 30 days" })} />
+        <InsightCard
+          insight={insight({ kind: "window_best", title: "Fastest 5 km in the last 30 days" })}
+        />
       </Router>,
     );
     const { container: pb } = render(

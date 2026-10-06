@@ -609,7 +609,11 @@ export function personalRecords(activities: ActivitySummary[]): PersonalRecord[]
     const minM = std.meters * 0.9;
     const maxM = std.meters * 1.3;
     const eligible = activities.filter(
-      (a) => a.distance_m != null && a.distance_m >= minM && a.distance_m <= maxM && effectiveDurationS(a) != null,
+      (a) =>
+        a.distance_m != null &&
+        a.distance_m >= minM &&
+        a.distance_m <= maxM &&
+        effectiveDurationS(a) != null,
     );
     if (eligible.length === 0) continue;
     const best = eligible.reduce((fastest, a) =>
@@ -664,7 +668,11 @@ export function bestVdot(activities: ActivitySummary[]): BestVdot | null {
   for (const a of activities) {
     if (a.vdot == null) continue;
     if (best == null || a.vdot > best.value) {
-      best = { value: a.vdot, date: a.local_date ?? a.start_time_utc.slice(0, 10), activityId: a.id };
+      best = {
+        value: a.vdot,
+        date: a.local_date ?? a.start_time_utc.slice(0, 10),
+        activityId: a.id,
+      };
     }
   }
   return best;

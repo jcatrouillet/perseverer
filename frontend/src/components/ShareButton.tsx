@@ -18,11 +18,15 @@ function ShareLinkModal({ url, onClose }: { url: string; onClose: () => void }) 
 
   return (
     <Modal open onClose={onClose} title="Share link">
-      <p className="chart-note">
-        Anyone with this link can view this — without signing in.
-      </p>
+      <p className="chart-note">Anyone with this link can view this — without signing in.</p>
       <div className="share-button__url-row">
-        <input className="input" type="text" value={url} readOnly onFocus={(e) => e.target.select()} />
+        <input
+          className="input"
+          type="text"
+          value={url}
+          readOnly
+          onFocus={(e) => e.target.select()}
+        />
         <button className="button button--primary" type="button" onClick={() => void handleCopy()}>
           {copied ? "Copied" : "Copy"}
         </button>

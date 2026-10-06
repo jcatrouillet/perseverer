@@ -568,9 +568,7 @@ activity_sport_override = Table(
     Column("carbohydrates_g", Float, nullable=True),
     Column("sodium_mg", Float, nullable=True),
     Column("created_at", DateTime(), nullable=False),
-    UniqueConstraint(
-        "athlete_id", "start_time_utc", name="uq_activity_sport_override_identity"
-    ),
+    UniqueConstraint("athlete_id", "start_time_utc", name="uq_activity_sport_override_identity"),
 )
 
 # Same "durable, never wiped by sync rebuild" shape as activity_sport_override above -- see
@@ -1141,9 +1139,7 @@ health_metric_daily_rollup = Table(
     Column("value_last", Float, nullable=True),
     Column("n_observations", Integer, nullable=False, default=0),
     Column("refreshed_at", DateTime(), nullable=False),
-    UniqueConstraint(
-        "athlete_id", "local_date", "metric_key", name="uq_health_rollup_identity"
-    ),
+    UniqueConstraint("athlete_id", "local_date", "metric_key", name="uq_health_rollup_identity"),
     Index("ix_health_rollup_athlete_date", "athlete_id", "local_date"),
 )
 
@@ -1177,9 +1173,7 @@ period_rollup = Table(
     Column("sleep_total_s", Float, nullable=True),
     Column("sleep_score", Float, nullable=True),
     Column("refreshed_at", DateTime(), nullable=False),
-    UniqueConstraint(
-        "athlete_id", "period_type", "period_start", name="uq_period_rollup_identity"
-    ),
+    UniqueConstraint("athlete_id", "period_type", "period_start", name="uq_period_rollup_identity"),
 )
 
 health_metric_period_rollup = Table(
@@ -1302,9 +1296,7 @@ insight = Table(
     Column("detail", Text, nullable=False),  # JSON
     Column("value_num", Float, nullable=True),
     Column("computed_at", DateTime(), nullable=False),
-    UniqueConstraint(
-        "athlete_id", "kind", "window", "subject_key", name="uq_insight_identity"
-    ),
+    UniqueConstraint("athlete_id", "kind", "window", "subject_key", name="uq_insight_identity"),
     Index("ix_insight_athlete_kind_window", "athlete_id", "kind", "window"),
 )
 

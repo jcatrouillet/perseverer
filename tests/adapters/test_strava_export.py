@@ -32,6 +32,7 @@ def _mock_weather_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = httpx.MockTransport(lambda r: httpx.Response(503))
     monkeypatch.setattr(httpx, "Client", lambda **kwargs: real_client(transport=transport))
 
+
 _GPX_BODY = b"""<?xml version="1.0" encoding="UTF-8"?>
 <gpx creator="StravaGPX" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
  <trk>

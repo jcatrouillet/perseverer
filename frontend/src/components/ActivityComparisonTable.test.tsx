@@ -1,7 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { ActivityComparisonRowOut, ActivityComparisonsOut, ActivityDetail, ActivityMetricOut } from "../api/types";
+import type {
+  ActivityComparisonRowOut,
+  ActivityComparisonsOut,
+  ActivityDetail,
+  ActivityMetricOut,
+} from "../api/types";
 import { ActivityComparisonTable } from "./ActivityComparisonTable";
 
 function metric(metric_key: string, value_num: number): ActivityMetricOut {
@@ -65,7 +70,10 @@ function row(overrides: Partial<ActivityComparisonRowOut> = {}): ActivityCompari
   };
 }
 
-function comparisons(rows: ActivityComparisonRowOut[], matched_count?: number): ActivityComparisonsOut {
+function comparisons(
+  rows: ActivityComparisonRowOut[],
+  matched_count?: number,
+): ActivityComparisonsOut {
   return {
     start_radius_m: 300,
     distance_band_fraction: 0.15,
@@ -77,14 +85,22 @@ function comparisons(rows: ActivityComparisonRowOut[], matched_count?: number): 
 describe("ActivityComparisonTable", () => {
   it("renders nothing when there are no comparison rows", () => {
     const { container } = render(
-      <ActivityComparisonTable activity={activity()} comparisons={comparisons([])} sport="running" />,
+      <ActivityComparisonTable
+        activity={activity()}
+        comparisons={comparisons([])}
+        sport="running"
+      />,
     );
     expect(container).toBeEmptyDOMElement();
   });
 
   it("shows the current activity as its own row, marked as such, ahead of the history", () => {
     render(
-      <ActivityComparisonTable activity={activity()} comparisons={comparisons([row()])} sport="running" />,
+      <ActivityComparisonTable
+        activity={activity()}
+        comparisons={comparisons([row()])}
+        sport="running"
+      />,
     );
     const rows = screen.getAllByRole("row");
     // rows[0] is the header row.
@@ -140,7 +156,11 @@ describe("ActivityComparisonTable", () => {
 
   it("links each history row to its own activity, but not the current row", () => {
     render(
-      <ActivityComparisonTable activity={activity()} comparisons={comparisons([row()])} sport="running" />,
+      <ActivityComparisonTable
+        activity={activity()}
+        comparisons={comparisons([row()])}
+        sport="running"
+      />,
     );
     const links = screen.getAllByRole("link");
     expect(links.map((l) => l.getAttribute("href"))).toEqual(["/activities/past1"]);
@@ -152,8 +172,15 @@ describe("ActivityComparisonTable", () => {
     // that here rather than feeding the component data the real backend would never produce.
     render(
       <ActivityComparisonTable
-        activity={activity({ sport: "cycling", distance_m: 20000, duration_s: 3600, moving_duration_s: 3600 })}
-        comparisons={comparisons([row({ distance_m: 20000, duration_s: 3000, avg_gap_speed_mps: null })])}
+        activity={activity({
+          sport: "cycling",
+          distance_m: 20000,
+          duration_s: 3600,
+          moving_duration_s: 3600,
+        })}
+        comparisons={comparisons([
+          row({ distance_m: 20000, duration_s: 3000, avg_gap_speed_mps: null }),
+        ])}
         sport="cycling"
       />,
     );

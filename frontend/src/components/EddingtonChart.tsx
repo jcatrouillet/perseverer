@@ -37,8 +37,8 @@ export function EddingtonChart() {
     <section className="card">
       <h2>Eddington number</h2>
       <p className="chart-note">
-        The largest number E such that you've run at least E times of E {unitLabel} or further,
-        that year -- a classic cycling-logging statistic (VeloViewer and others), applied here to
+        The largest number E such that you've run at least E times of E {unitLabel} or further, that
+        year -- a classic cycling-logging statistic (VeloViewer and others), applied here to
         running. Raising it from E to E+1 always needs a whole additional run of at least E+1{" "}
         {unitLabel}, not just a longer one of your existing runs.
       </p>
@@ -46,8 +46,8 @@ export function EddingtonChart() {
         <>
           <p className="chart-note">
             {currentYear}: bar height is how many runs this year reached at least that many{" "}
-            {unitLabel}. Green while the bar still clears its own threshold, red once it falls
-            short -- the crossing point with the dotted diagonal is this year's Eddington number.
+            {unitLabel}. Green while the bar still clears its own threshold, red once it falls short
+            -- the crossing point with the dotted diagonal is this year's Eddington number.
           </p>
           <EddingtonBarChart bars={currentYearBars} unitLabel={unitLabel} />
         </>

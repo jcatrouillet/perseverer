@@ -346,10 +346,11 @@ Define one interface and implement it several times:
 ```python
 class SourceAdapter(Protocol):
     name: str
+
     def health_check(self) -> AdapterHealth: ...
     def authenticate(self) -> None: ...
     def list_changed(self, since: datetime) -> Iterable[ObjectRef]: ...
-    def fetch_raw(self, ref: ObjectRef) -> RawPayload: ...      # archives, returns raw_object_id
+    def fetch_raw(self, ref: ObjectRef) -> RawPayload: ...  # archives, returns raw_object_id
     def parse(self, raw_object_id: str) -> CanonicalBatch: ...  # pure, offline, re-runnable
 ```
 

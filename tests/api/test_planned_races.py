@@ -66,9 +66,7 @@ def test_post_creates_with_defaults_and_computes_days_until(
     assert get.json()["name"] == "Paris Marathon"
 
 
-def test_post_accepts_a_non_running_sport(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
+def test_post_accepts_a_non_running_sport(client: TestClient, auth_headers: dict[str, str]) -> None:
     body = _create(
         client, auth_headers, "2026-09-01", sport="cycling", name="Gran Fondo", distance_m=100000.0
     )
@@ -206,9 +204,7 @@ def test_delete_removes_the_race(client: TestClient, auth_headers: dict[str, str
     assert after.status_code == 404
 
 
-def test_delete_404s_for_nonexistent_race(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
+def test_delete_404s_for_nonexistent_race(client: TestClient, auth_headers: dict[str, str]) -> None:
     r = client.delete("/api/v1/planned-races/999999", headers=auth_headers)
     assert r.status_code == 404
 

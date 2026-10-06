@@ -144,8 +144,7 @@ def set_route_grade_override(
         )
         if result.rowcount == 0:
             raise ValueError(
-                f"activity {activity_id!r} has no manual-route record at split_index "
-                f"{split_index}"
+                f"activity {activity_id!r} has no manual-route record at split_index {split_index}"
             )
     else:
         now = datetime.now(UTC).replace(tzinfo=None)

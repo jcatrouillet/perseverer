@@ -6,9 +6,7 @@ from sqlalchemy import Engine
 from tests.api.conftest import seed_activity
 
 
-def test_post_day_note_no_existence_check(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
+def test_post_day_note_no_existence_check(client: TestClient, auth_headers: dict[str, str]) -> None:
     r = client.post(
         "/api/v1/notes",
         json={"entity_type": "day", "entity_id": "2025-06-01", "body": "felt great today"},
@@ -37,9 +35,7 @@ def test_post_week_note_no_existence_check(
     assert body["body"] == "solid week overall"
 
 
-def test_get_notes_scoped_to_week_not_day(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
+def test_get_notes_scoped_to_week_not_day(client: TestClient, auth_headers: dict[str, str]) -> None:
     # A day note and a week note that happen to share the same date string are two distinct
     # entities -- entity_type is part of the key, not just entity_id.
     client.post(
@@ -53,9 +49,7 @@ def test_get_notes_scoped_to_week_not_day(
         headers=auth_headers,
     )
 
-    r = client.get(
-        "/api/v1/notes?entity_type=week&entity_id=2025-06-02", headers=auth_headers
-    )
+    r = client.get("/api/v1/notes?entity_type=week&entity_id=2025-06-02", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1
@@ -105,9 +99,7 @@ def test_get_notes_scoped_to_entity(client: TestClient, auth_headers: dict[str, 
         headers=auth_headers,
     )
 
-    r = client.get(
-        "/api/v1/notes?entity_type=day&entity_id=2025-06-01", headers=auth_headers
-    )
+    r = client.get("/api/v1/notes?entity_type=day&entity_id=2025-06-01", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1
@@ -123,9 +115,7 @@ def test_put_note_updates_body_and_bumps_updated_at(
         headers=auth_headers,
     ).json()
 
-    r = client.put(
-        f"/api/v1/notes/{created['id']}", json={"body": "edited"}, headers=auth_headers
-    )
+    r = client.put(f"/api/v1/notes/{created['id']}", json={"body": "edited"}, headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["id"] == created["id"]

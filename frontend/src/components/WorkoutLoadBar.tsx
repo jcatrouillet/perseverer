@@ -49,10 +49,7 @@ function zoneColor(zone: number | null): string {
 
 function segmentHeightPx(intensityFactor: number | null): number {
   if (intensityFactor == null) return NEUTRAL_HEIGHT_PX;
-  const clamped = Math.min(
-    Math.max(intensityFactor, MIN_INTENSITY_FACTOR),
-    MAX_INTENSITY_FACTOR,
-  );
+  const clamped = Math.min(Math.max(intensityFactor, MIN_INTENSITY_FACTOR), MAX_INTENSITY_FACTOR);
   const t = (clamped - MIN_INTENSITY_FACTOR) / (MAX_INTENSITY_FACTOR - MIN_INTENSITY_FACTOR);
   return NEUTRAL_HEIGHT_PX + t * (BAR_HEIGHT_PX - NEUTRAL_HEIGHT_PX);
 }
@@ -67,8 +64,8 @@ export function WorkoutLoadBar({ workout }: { workout: PlannedWorkoutOut }) {
     <div className="workout-load">
       {workout.estimated_distance_m != null && workout.estimated_duration_s != null && (
         <p className="chart-note">
-          Distance: {metersToDisplay(workout.estimated_distance_m).toFixed(1)}{unitLabel} - Duration:{" "}
-          {Math.round(workout.estimated_duration_s / 60)} minutes
+          Distance: {metersToDisplay(workout.estimated_distance_m).toFixed(1)}
+          {unitLabel} - Duration: {Math.round(workout.estimated_duration_s / 60)} minutes
         </p>
       )}
       {workout.estimated_load != null ? (

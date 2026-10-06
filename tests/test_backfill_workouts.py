@@ -162,9 +162,7 @@ class TestBackfillWorkouts:
         engine = _engine(tmp_path)
         archive_root = tmp_path / "archive"
         with engine.connect() as conn:
-            _seed_activity_with_raw_object(
-                conn, archive_root, activity_id="a1", raw_object_id=1
-            )
+            _seed_activity_with_raw_object(conn, archive_root, activity_id="a1", raw_object_id=1)
             conn.commit()
 
         with (
@@ -192,9 +190,7 @@ class TestBackfillWorkouts:
         engine = _engine(tmp_path)
         archive_root = tmp_path / "archive"
         with engine.connect() as conn:
-            _seed_activity_with_raw_object(
-                conn, archive_root, activity_id="a1", raw_object_id=1
-            )
+            _seed_activity_with_raw_object(conn, archive_root, activity_id="a1", raw_object_id=1)
             conn.commit()
             before = conn.execute(select(activity.c.updated_at)).scalar_one()
 
@@ -213,9 +209,7 @@ class TestBackfillWorkouts:
         engine = _engine(tmp_path)
         archive_root = tmp_path / "archive"
         with engine.connect() as conn:
-            _seed_activity_with_raw_object(
-                conn, archive_root, activity_id="a1", raw_object_id=1
-            )
+            _seed_activity_with_raw_object(conn, archive_root, activity_id="a1", raw_object_id=1)
             conn.commit()
 
         with patch("perseverer.backfill_workouts.parse_fit", return_value=_batch_with_workout()):
@@ -236,14 +230,13 @@ class TestBackfillWorkouts:
         engine = _engine(tmp_path)
         archive_root = tmp_path / "archive"
         with engine.connect() as conn:
-            _seed_activity_with_raw_object(
-                conn, archive_root, activity_id="a1", raw_object_id=1
-            )
+            _seed_activity_with_raw_object(conn, archive_root, activity_id="a1", raw_object_id=1)
             conn.commit()
 
-        with patch(
-            "perseverer.backfill_workouts.parse_fit", return_value=_batch_with_no_workout()
-        ), engine.connect() as conn:
+        with (
+            patch("perseverer.backfill_workouts.parse_fit", return_value=_batch_with_no_workout()),
+            engine.connect() as conn,
+        ):
             count = backfill_workouts(conn, archive_root, athlete_id=DEFAULT_ATHLETE_ID)
             conn.commit()
 

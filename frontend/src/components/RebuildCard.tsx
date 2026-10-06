@@ -15,9 +15,9 @@ export function RebuildCard() {
     <section className="card">
       <h2>Rebuild from archive</h2>
       <p className="chart-note">
-        Replays every FIT/JSON/GPX/TCX file ever ingested and recomputes everything derived from
-        it. Never destructive — raw data is never touched, only rebuilt from it — but can take
-        several minutes on a large archive.
+        Replays every FIT/JSON/GPX/TCX file ever ingested and recomputes everything derived from it.
+        Never destructive — raw data is never touched, only rebuilt from it — but can take several
+        minutes on a large archive.
       </p>
       <button
         className="button"

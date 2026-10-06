@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import type { ActivityContextOut, ActivityContextRecentOut } from "../api/types";
 import { ActivityContextStrip } from "./ActivityContextStrip";
 
-function recent(id: string, local_date: string, distance_m: number, duration_s: number): ActivityContextRecentOut {
+function recent(
+  id: string,
+  local_date: string,
+  distance_m: number,
+  duration_s: number,
+): ActivityContextRecentOut {
   return { id, local_date, distance_m, duration_s, avg_hr_bpm: null };
 }
 
@@ -52,10 +57,7 @@ describe("ActivityContextStrip", () => {
       <ActivityContextStrip
         context={context({
           percentile_rank: null,
-          recent: [
-            recent("a1", "2025-06-01", 5000, 1500),
-            recent("a2", "2025-06-02", 5200, 1560),
-          ],
+          recent: [recent("a1", "2025-06-01", 5000, 1500), recent("a2", "2025-06-02", 5200, 1560)],
         })}
         sport="running"
         currentActivityId="a1"

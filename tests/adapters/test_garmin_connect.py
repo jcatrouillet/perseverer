@@ -520,9 +520,7 @@ def test_wellness_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
     today = dt.datetime.now(dt.UTC).date().isoformat()
 
     def factory() -> FakeGarminClient:
-        return FakeGarminClient(
-            activities=[], fit_bytes_by_id={}, raise_on_stats_for={today}
-        )
+        return FakeGarminClient(activities=[], fit_bytes_by_id={}, raise_on_stats_for={today})
 
     engine = make_engine(tmp_path / "db.sqlite")
     metadata.create_all(engine)
@@ -829,9 +827,7 @@ def test_training_readiness_429_aborts_the_run_without_retrying(tmp_path: Path) 
     today = dt.datetime.now(dt.UTC).date().isoformat()
 
     def factory() -> FakeGarminClient:
-        return FakeGarminClient(
-            activities=[], fit_bytes_by_id={}, raise_on_readiness_for={today}
-        )
+        return FakeGarminClient(activities=[], fit_bytes_by_id={}, raise_on_readiness_for={today})
 
     engine = make_engine(tmp_path / "db.sqlite")
     metadata.create_all(engine)
@@ -1012,9 +1008,7 @@ def test_hydration_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
     today = dt.datetime.now(dt.UTC).date().isoformat()
 
     def factory() -> FakeGarminClient:
-        return FakeGarminClient(
-            activities=[], fit_bytes_by_id={}, raise_on_hydration_for={today}
-        )
+        return FakeGarminClient(activities=[], fit_bytes_by_id={}, raise_on_hydration_for={today})
 
     engine = make_engine(tmp_path / "db.sqlite")
     metadata.create_all(engine)
@@ -1186,9 +1180,7 @@ def test_lactate_threshold_is_fetched_archived_and_ingested_once_per_run(tmp_pat
 
 def test_lactate_threshold_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
     def factory() -> FakeGarminClient:
-        return FakeGarminClient(
-            activities=[], fit_bytes_by_id={}, raise_on_lactate_threshold=True
-        )
+        return FakeGarminClient(activities=[], fit_bytes_by_id={}, raise_on_lactate_threshold=True)
 
     engine = make_engine(tmp_path / "db.sqlite")
     metadata.create_all(engine)
@@ -1400,9 +1392,7 @@ def test_login_with_credentials_does_not_pass_tokenstore_to_login(tmp_path: Path
     def factory(username: str, password: str, prompt_mfa: Any = None) -> StrictFakeClient:
         return StrictFakeClient(username, password, prompt_mfa)
 
-    login_with_credentials(
-        "me@example.com", "hunter2", tmp_path / "tokens", client_factory=factory
-    )
+    login_with_credentials("me@example.com", "hunter2", tmp_path / "tokens", client_factory=factory)
 
     assert calls == ["login"]
 

@@ -24,18 +24,22 @@ describe("isOutOfRange", () => {
   it("judges a value against the range stored on its own result", () => {
     expect(isOutOfRange(result({ value_num: 139, reference_high: 130 }))).toBe(true);
     expect(isOutOfRange(result({ value_num: 82, reference_high: 130 }))).toBe(false);
-    expect(isOutOfRange(result({ value_num: 44, reference_low: 49, reference_high: 74 }))).toBe(true);
+    expect(isOutOfRange(result({ value_num: 44, reference_low: 49, reference_high: 74 }))).toBe(
+      true,
+    );
   });
 
   it("never flags a result with no range at all", () => {
-    expect(isOutOfRange(result({ reference_low: null, reference_high: null, value_num: 9999 }))).toBe(
-      false,
-    );
+    expect(
+      isOutOfRange(result({ reference_low: null, reference_high: null, value_num: 9999 })),
+    ).toBe(false);
   });
 
   it("treats a value exactly on a bound as in range", () => {
     expect(isOutOfRange(result({ value_num: 130, reference_high: 130 }))).toBe(false);
-    expect(isOutOfRange(result({ value_num: 40, reference_low: 40, reference_high: null }))).toBe(false);
+    expect(isOutOfRange(result({ value_num: 40, reference_low: 40, reference_high: null }))).toBe(
+      false,
+    );
   });
 });
 
@@ -76,11 +80,7 @@ describe("groupResultsByMarker", () => {
       result({ id: 3, marker: "Total Cholesterol", local_date: "2020-05-01" }),
       result({ id: 4, marker: "HDL Cholesterol", local_date: "2020-05-01" }),
     ]);
-    expect(series.map((s) => s.marker)).toEqual([
-      "HDL Cholesterol",
-      "Total Cholesterol",
-      "Sodium",
-    ]);
+    expect(series.map((s) => s.marker)).toEqual(["HDL Cholesterol", "Total Cholesterol", "Sodium"]);
     expect(series[1]!.results.map((r) => r.local_date)).toEqual(["2020-05-01", "2025-05-01"]);
   });
 });

@@ -59,9 +59,7 @@ def test_create_period_share_all_needs_no_period_start(
     r = client.post("/api/v1/periods/all/share", headers=auth_headers)
     assert r.status_code == 200
     with engine.connect() as conn:
-        row = conn.execute(
-            select(share_link).where(share_link.c.id == r.json()["id"])
-        ).one()
+        row = conn.execute(select(share_link).where(share_link.c.id == r.json()["id"])).one()
     assert row.target_type == "period"
     assert row.target_id == "all"
 
@@ -76,9 +74,7 @@ def test_create_period_share_month(
     )
     assert r.status_code == 200
     with engine.connect() as conn:
-        row = conn.execute(
-            select(share_link).where(share_link.c.id == r.json()["id"])
-        ).one()
+        row = conn.execute(select(share_link).where(share_link.c.id == r.json()["id"])).one()
     assert row.target_id == "month:2026-06"
 
 

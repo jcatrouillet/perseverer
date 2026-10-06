@@ -75,7 +75,12 @@ describe("WeekRunningStats", () => {
     const { container } = render(
       <WeekRunningStats
         runningActivities={[
-          activity("2025-06-02", { id: "real-run", distance_m: 5000, duration_s: 1800, moving_duration_s: 1800 }), // 6:00/km
+          activity("2025-06-02", {
+            id: "real-run",
+            distance_m: 5000,
+            duration_s: 1800,
+            moving_duration_s: 1800,
+          }), // 6:00/km
           activity("2025-06-03", {
             id: "mislabeled-hike",
             distance_m: 1770,

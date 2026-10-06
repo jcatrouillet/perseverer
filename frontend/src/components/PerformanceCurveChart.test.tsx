@@ -142,7 +142,11 @@ describe("PerformanceCurveChart", () => {
   it("omits reference lines when threshold values are null", () => {
     mockUsePerformanceCurve.mockReturnValue({
       ...EMPTY,
-      data: { ...PACE_AVAILABLE, threshold_pace_s_per_km: null, aerobic_threshold_pace_s_per_km: null },
+      data: {
+        ...PACE_AVAILABLE,
+        threshold_pace_s_per_km: null,
+        aerobic_threshold_pace_s_per_km: null,
+      },
     });
     const { container } = render(<PerformanceCurveChart />);
     expect(container.querySelectorAll(".recharts-reference-line").length).toBe(0);

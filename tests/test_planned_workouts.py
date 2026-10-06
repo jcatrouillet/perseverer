@@ -54,8 +54,19 @@ class TestBuildRunningWorkout:
     def test_lap_button_step_ends_on_the_button_with_a_null_condition_value(self) -> None:
         steps = [
             PlannedStepLike(
-                0, "lap_button", None, None, "heart_rate", 118.0, 128.0, None, None, None, None,
-                None, None
+                0,
+                "lap_button",
+                None,
+                None,
+                "heart_rate",
+                118.0,
+                128.0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             )
         ]
         workout = build_running_workout("Run", steps, 600, hr_boundaries=None, max_hr_bpm=None)
@@ -73,8 +84,19 @@ class TestBuildRunningWorkout:
         # targets mid-climb -- the exact failure the lap keyword exists to prevent.
         steps = [
             PlannedStepLike(
-                0, "lap_button", None, 5000, "heart_rate", 118.0, 128.0, None, None, None, None,
-                None, None
+                0,
+                "lap_button",
+                None,
+                5000,
+                "heart_rate",
+                118.0,
+                128.0,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
             )
         ]
         workout = build_running_workout("Run", steps, 600, hr_boundaries=None, max_hr_bpm=None)
@@ -752,9 +774,7 @@ class TestActivitiesByLocalDateAndMatchingActivityId:
         )
 
         with engine.connect() as conn:
-            by_date = activities_by_local_date(
-                conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14"
-            )
+            by_date = activities_by_local_date(conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14")
         assert matching_activity_id(by_date.get("2026-09-14", []), "yoga") == "a1"
 
     def test_no_match_when_the_only_activity_that_day_is_a_different_sport(
@@ -764,15 +784,11 @@ class TestActivitiesByLocalDateAndMatchingActivityId:
         _seed_activity(engine, activity_id="a1", local_date="2026-09-14", sport="running")
 
         with engine.connect() as conn:
-            by_date = activities_by_local_date(
-                conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14"
-            )
+            by_date = activities_by_local_date(conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14")
         assert matching_activity_id(by_date.get("2026-09-14", []), "yoga") is None
 
     def test_no_match_for_a_date_with_no_recorded_activity_at_all(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
         with engine.connect() as conn:
-            by_date = activities_by_local_date(
-                conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14"
-            )
+            by_date = activities_by_local_date(conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14")
         assert matching_activity_id(by_date.get("2026-09-14", []), "running") is None

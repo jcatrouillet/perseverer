@@ -39,7 +39,8 @@ export function CopyWorkoutButton({
   const [copied, setCopied] = useState(false);
 
   function handleCopy() {
-    const sourceText = steps && steps.length > 0 ? stepsToSourceText(steps.map(toRecordedStepLike)) : null;
+    const sourceText =
+      steps && steps.length > 0 ? stepsToSourceText(steps.map(toRecordedStepLike)) : null;
     copyWorkoutToClipboard({ sport, name, source_text: sourceText || null });
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);

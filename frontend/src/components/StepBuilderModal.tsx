@@ -69,7 +69,8 @@ const INTENSITIES = ["", "warmup", "cooldown", "recovery", "rest", "active"];
 function buildStepLine(draft: StepDraft): string | null {
   if (draft.durationKind === "duration" && !draft.durationValue.trim()) return null;
   const parts: string[] = [];
-  if (draft.intensity) parts.push(draft.intensity.charAt(0).toUpperCase() + draft.intensity.slice(1));
+  if (draft.intensity)
+    parts.push(draft.intensity.charAt(0).toUpperCase() + draft.intensity.slice(1));
   if (draft.durationKind === "lap") {
     // The estimate is optional (a bare "lap" is a complete, valid step on its own) and is only
     // ever the calendar's own duration/load figure -- see workout_syntax.py's own docstring for
@@ -99,7 +100,8 @@ function buildStepLine(draft: StepDraft): string | null {
   }
   if (draft.targets.has("cadence")) {
     if (draft.cadenceRange) {
-      if (draft.cadenceLow && draft.cadenceHigh) parts.push(`${draft.cadenceLow}-${draft.cadenceHigh}spm`);
+      if (draft.cadenceLow && draft.cadenceHigh)
+        parts.push(`${draft.cadenceLow}-${draft.cadenceHigh}spm`);
     } else if (draft.cadenceLow) {
       parts.push(`${draft.cadenceLow}spm`);
     }
@@ -213,8 +215,8 @@ function StepFields({
       {draft.durationKind === "lap" && (
         <p className="chart-note">
           Ends when you press the watch&apos;s lap button, not on a time or distance. The estimate
-          above (if any) only feeds this calendar&apos;s own duration/load totals -- it&apos;s
-          never sent to the watch as a threshold.
+          above (if any) only feeds this calendar&apos;s own duration/load totals -- it&apos;s never
+          sent to the watch as a threshold.
         </p>
       )}
 

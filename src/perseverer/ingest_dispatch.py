@@ -41,8 +41,7 @@ class DispatchResult:
             return self.activity_result.created
         if self.health_result is not None:
             return (
-                self.health_result.observations_new > 0
-                or self.health_result.sleep_sessions_new > 0
+                self.health_result.observations_new > 0 or self.health_result.sleep_sessions_new > 0
             )
         return False
 

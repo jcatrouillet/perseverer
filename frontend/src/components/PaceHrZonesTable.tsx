@@ -147,10 +147,9 @@ export function PaceHrZonesTable() {
             </>
           )}
           {profile_max_hr_bpm != null &&
-            ` and your highest recorded heart rate in the last 2 years (${profile_max_hr_bpm.toFixed(0)} bpm)`}
-          {" "}
-          — a reference table that follows your current fitness, not a day-to-day tracker. See
-          each zone's own "Why these numbers" below for the runs behind its heart-rate range.
+            ` and your highest recorded heart rate in the last 2 years (${profile_max_hr_bpm.toFixed(0)} bpm)`}{" "}
+          — a reference table that follows your current fitness, not a day-to-day tracker. See each
+          zone's own "Why these numbers" below for the runs behind its heart-rate range.
         </p>
         {missing.length > 0 && (
           <ul className="vo2max-factors__missing">

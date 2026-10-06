@@ -291,9 +291,7 @@ def parse_open_meteo_response(
         dew_point_min_c=min(window_dew_point) if window_dew_point else None,
         dew_point_max_c=max(window_dew_point) if window_dew_point else None,
         solar_radiation_max_wm2=max(window_solar) if window_solar else None,
-        solar_radiation_mean_wm2=(
-            sum(window_solar) / len(window_solar) if window_solar else None
-        ),
+        solar_radiation_mean_wm2=(sum(window_solar) / len(window_solar) if window_solar else None),
         cloud_cover_min_pct=min(window_cloud) if window_cloud else None,
         cloud_cover_max_pct=max(window_cloud) if window_cloud else None,
         apparent_temperature_min_c=min(window_apparent) if window_apparent else None,
@@ -461,9 +459,7 @@ def _read_cached(conn: Connection, athlete_id: str, activity_id: str) -> Weather
     )
 
 
-def _store(
-    conn: Connection, athlete_id: str, activity_id: str, summary: WeatherSummary
-) -> None:
+def _store(conn: Connection, athlete_id: str, activity_id: str, summary: WeatherSummary) -> None:
     # Delete-then-insert rather than a blind insert: safe to re-run even if an earlier attempt
     # for this activity wrote some but not all rows before failing (a partial write would
     # otherwise collide with activity_metric's (athlete_id, activity_id, metric_key, source)
@@ -495,12 +491,8 @@ def _store(
     _add_if_present(values, METRIC_SOLAR_RADIATION_MEAN_WM2, summary.solar_radiation_mean_wm2)
     _add_if_present(values, METRIC_CLOUD_COVER_MIN_PCT, summary.cloud_cover_min_pct)
     _add_if_present(values, METRIC_CLOUD_COVER_MAX_PCT, summary.cloud_cover_max_pct)
-    _add_if_present(
-        values, METRIC_APPARENT_TEMPERATURE_MIN_C, summary.apparent_temperature_min_c
-    )
-    _add_if_present(
-        values, METRIC_APPARENT_TEMPERATURE_MAX_C, summary.apparent_temperature_max_c
-    )
+    _add_if_present(values, METRIC_APPARENT_TEMPERATURE_MIN_C, summary.apparent_temperature_min_c)
+    _add_if_present(values, METRIC_APPARENT_TEMPERATURE_MAX_C, summary.apparent_temperature_max_c)
     _add_if_present(values, METRIC_PRECIPITATION_MM, summary.precipitation_mm)
 
     # Sunrise/sunset are timestamps, not floats -- activity_metric.value_num is a Float column,

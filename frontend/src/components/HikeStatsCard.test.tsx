@@ -67,7 +67,11 @@ describe("HikeStatsCard", () => {
 
   it("features one card per criterion when three different hikes win", () => {
     const activities = [
-      hike("longest-distance", { distance_m: 20000, moving_duration_s: 3600, elevation_gain_m: 100 }),
+      hike("longest-distance", {
+        distance_m: 20000,
+        moving_duration_s: 3600,
+        elevation_gain_m: 100,
+      }),
       hike("longest-time", { distance_m: 5000, moving_duration_s: 20000, elevation_gain_m: 100 }),
       hike("most-elevation", { distance_m: 5000, moving_duration_s: 3600, elevation_gain_m: 1500 }),
     ];
@@ -153,7 +157,12 @@ describe("HikeStatsCard", () => {
     // tied (and thus neutral) between the other two -- isolating elevation gain vs. peak
     // altitude as genuinely independent, separately-won criteria.
     const activities = [
-      hike("dominant", { distance_m: 50000, moving_duration_s: 50000, elevation_gain_m: 1, max_altitude_m: 1 }),
+      hike("dominant", {
+        distance_m: 50000,
+        moving_duration_s: 50000,
+        elevation_gain_m: 1,
+        max_altitude_m: 1,
+      }),
       hike("big-gain-low-peak", {
         distance_m: 5000,
         moving_duration_s: 3600,
@@ -184,7 +193,12 @@ describe("HikeStatsCard", () => {
         elevation_gain_m: 2000,
         max_altitude_m: 4000,
       }),
-      hike("other", { distance_m: 1000, moving_duration_s: 600, elevation_gain_m: 0, max_altitude_m: 100 }),
+      hike("other", {
+        distance_m: 1000,
+        moving_duration_s: 600,
+        elevation_gain_m: 0,
+        max_altitude_m: 100,
+      }),
     ];
     render(<HikeStatsCard activities={activities} />);
     expect(screen.getByText("Longest hike")).toBeInTheDocument();

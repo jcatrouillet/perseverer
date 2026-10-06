@@ -13,7 +13,8 @@ import "../styles/settings.css";
 function testErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("(400)")) return "Set your Profile email and configure SMTP first.";
-  if (message.includes("(502)")) return "The server couldn't send the email — check the SMTP settings.";
+  if (message.includes("(502)"))
+    return "The server couldn't send the email — check the SMTP settings.";
   return "Could not send the test email.";
 }
 

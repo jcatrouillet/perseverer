@@ -365,9 +365,8 @@ def _parse_device(file_id_row: dict[Any, Any] | None) -> ParsedDevice | None:
     serial = file_id_row.get("serial_number")
     return ParsedDevice(
         manufacturer=file_id_row.get("manufacturer"),
-        product=file_id_row.get("garmin_product") or (
-            str(file_id_row["product"]) if file_id_row.get("product") is not None else None
-        ),
+        product=file_id_row.get("garmin_product")
+        or (str(file_id_row["product"]) if file_id_row.get("product") is not None else None),
         serial_number=str(serial) if serial is not None else None,
     )
 

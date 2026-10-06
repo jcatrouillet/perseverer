@@ -15,6 +15,7 @@ from perseverer.auth.tokens import create_session_token
 
 router = APIRouter()
 
+
 @router.post("/auth/login")
 def login(
     payload: LoginRequest,

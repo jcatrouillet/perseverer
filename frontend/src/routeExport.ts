@@ -70,7 +70,12 @@ const TEXT_OUTLINE_WIDTH = 5;
  * (near-black-on-black) once the transparent-background PNG is laid over the user's own image,
  * or, for the GIF export, against whichever basemap tile colour happens to sit under the text.
  * Stroke drawn first so the fill sits cleanly on top of it, not the other way round. */
-export function drawOutlinedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number): void {
+export function drawOutlinedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+): void {
   ctx.lineJoin = "round";
   ctx.miterLimit = 2;
   ctx.lineWidth = TEXT_OUTLINE_WIDTH;

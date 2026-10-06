@@ -150,9 +150,7 @@ def test_athletes_own_timezone_is_passed_to_the_forecast_fetch(
 
 def test_days_query_param_is_bounded(client: TestClient, auth_headers: dict[str, str]) -> None:
     assert client.get("/api/v1/weather/forecast?days=0", headers=auth_headers).status_code == 422
-    assert (
-        client.get("/api/v1/weather/forecast?days=17", headers=auth_headers).status_code == 422
-    )
+    assert client.get("/api/v1/weather/forecast?days=17", headers=auth_headers).status_code == 422
 
 
 def test_forecast_endpoint_requires_auth(client: TestClient) -> None:
@@ -329,11 +327,13 @@ def test_last_activity_forecast_uses_the_most_recent_located_activity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_home_location(engine, 1.0, 1.0)  # must NOT be used
+    _seed_located_activity(engine, "older", start=datetime(2026, 9, 1, 8), lat=37.36, lng=-121.97)
     _seed_located_activity(
-        engine, "older", start=datetime(2026, 9, 1, 8), lat=37.36, lng=-121.97
-    )
-    _seed_located_activity(
-        engine, "newest-with-gps", start=datetime(2026, 9, 10, 8), lat=48.85, lng=2.35,
+        engine,
+        "newest-with-gps",
+        start=datetime(2026, 9, 10, 8),
+        lat=48.85,
+        lng=2.35,
         tz_name="Europe/Paris",
     )
     # More recent than both, but no GPS start point -- must be skipped, not chosen.

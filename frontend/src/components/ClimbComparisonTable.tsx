@@ -55,8 +55,8 @@ export function ClimbComparisonTable({
         {comparisons.matched_count === comparisons.rows.length
           ? `${comparisons.matched_count} `
           : `${comparisons.rows.length} of ${comparisons.matched_count} `}
-        session{comparisons.matched_count === 1 ? "" : "s"} within {bandPct}% of this session's
-        own length.
+        session{comparisons.matched_count === 1 ? "" : "s"} within {bandPct}% of this session's own
+        length.
       </p>
       <div className="table-scroll">
         <table className="comparison-table">
@@ -86,7 +86,9 @@ export function ClimbComparisonTable({
                   </td>
                   <td>{formatClockDuration(r.duration_s)}</td>
                   <td>{r.route_count}</td>
-                  <td>{r.max_completed_grade != null ? formatGrade(r.max_completed_grade) : "—"}</td>
+                  <td>
+                    {r.max_completed_grade != null ? formatGrade(r.max_completed_grade) : "—"}
+                  </td>
                   <td>{r.climb_time_s != null ? formatClockDuration(r.climb_time_s) : "—"}</td>
                 </tr>
               );

@@ -101,8 +101,13 @@ const CHARTS: {
     keys: ["weight_kg"],
     series: [series("weight_kg", "Weight", oneDecimal(" kg"))],
   },
-  { key: "bmi",
-    group: "Body composition", title: "BMI", keys: ["bmi"], series: [series("bmi", "BMI", oneDecimal(""))] },
+  {
+    key: "bmi",
+    group: "Body composition",
+    title: "BMI",
+    keys: ["bmi"],
+    series: [series("bmi", "BMI", oneDecimal(""))],
+  },
   {
     key: "sleep",
     group: "Activity & sleep",
@@ -258,7 +263,8 @@ export function HealthPage() {
   // so "All time" for Sleep starts where sleep data actually starts (e.g. 2022), not wherever
   // some unrelated metric (e.g. a 2016 weight reading) happens to begin.
   const dataStart = useMemo(
-    () => (activeChart ? earliestDateForKeys(sourceForChart(activeChart), activeChart.keys) : TODAY),
+    () =>
+      activeChart ? earliestDateForKeys(sourceForChart(activeChart), activeChart.keys) : TODAY,
     [activeChart, dashboardPoints, sleepPoints],
   );
   // Seeded lazily (only once the athlete actually switches to Custom) rather than on every
@@ -285,47 +291,47 @@ export function HealthPage() {
   }
 
   const bloodMetrics: ExplorerMetric[] = useMemo(
-    () =>
-      [
-        // Adding / correcting results lives in the same menu as the charts (rather than as a
-        // differently-styled card under the page) -- and is the only Blood tests entry until the
-        // first result exists, so a brand-new athlete can still reach the add form.
-        {
-          key: BLOOD_MANAGE_KEY,
-          title: "Add or manage results",
-          group: "Blood tests",
-          hideDetailHeader: true,
-          content: <BloodTestsPanel />,
-        },
-        ...bloodSeries.map((s) => ({
-          key: `${BLOOD_PREFIX}${s.marker}`,
-          title: s.marker,
-          group: "Blood tests",
-          subgroup: s.category,
-          hideDetailHeader: true,
-          content: <BloodMarkerChart marker={s.marker} results={s.results} />,
-        })),
-      ],
+    () => [
+      // Adding / correcting results lives in the same menu as the charts (rather than as a
+      // differently-styled card under the page) -- and is the only Blood tests entry until the
+      // first result exists, so a brand-new athlete can still reach the add form.
+      {
+        key: BLOOD_MANAGE_KEY,
+        title: "Add or manage results",
+        group: "Blood tests",
+        hideDetailHeader: true,
+        content: <BloodTestsPanel />,
+      },
+      ...bloodSeries.map((s) => ({
+        key: `${BLOOD_PREFIX}${s.marker}`,
+        title: s.marker,
+        group: "Blood tests",
+        subgroup: s.category,
+        hideDetailHeader: true,
+        content: <BloodMarkerChart marker={s.marker} results={s.results} />,
+      })),
+    ],
     [bloodSeries],
   );
 
   const metrics: ExplorerMetric[] = useMemo(
-    () => [
-      ...availableCharts.map((chart) => {
-        const points = bucketSeriesToWindow(sourceForChart(chart), chart.keys, window);
-        return {
-          key: chart.key,
-          title: chart.title,
-          group: chart.group,
-          content: (
-            <ChartFullscreen title={chart.title}>
-              <TrendChart points={points} series={chart.series} />
-            </ChartFullscreen>
-          ),
-        };
-      }),
-      ...bloodMetrics,
-    ].sort((a, b) => GROUP_ORDER.indexOf(a.group ?? "") - GROUP_ORDER.indexOf(b.group ?? "")),
+    () =>
+      [
+        ...availableCharts.map((chart) => {
+          const points = bucketSeriesToWindow(sourceForChart(chart), chart.keys, window);
+          return {
+            key: chart.key,
+            title: chart.title,
+            group: chart.group,
+            content: (
+              <ChartFullscreen title={chart.title}>
+                <TrendChart points={points} series={chart.series} />
+              </ChartFullscreen>
+            ),
+          };
+        }),
+        ...bloodMetrics,
+      ].sort((a, b) => GROUP_ORDER.indexOf(a.group ?? "") - GROUP_ORDER.indexOf(b.group ?? "")),
     [availableCharts, window, bloodMetrics],
   );
 

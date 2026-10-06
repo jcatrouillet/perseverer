@@ -57,8 +57,7 @@ function interpolateAtDistance(
     const timeS = elapsedS[i - 1]! + frac * (elapsedS[i]! - elapsedS[i - 1]!);
     const prevAlt = altitudeM?.[i - 1];
     const alt = altitudeM?.[i];
-    const altitude =
-      prevAlt != null && alt != null ? prevAlt + frac * (alt - prevAlt) : null;
+    const altitude = prevAlt != null && alt != null ? prevAlt + frac * (alt - prevAlt) : null;
     return { index: i, timeS, altitudeM: altitude };
   }
   return null;
@@ -162,9 +161,7 @@ function buildSplit(
   const elevChangeM =
     startAltitude != null && end.altitudeM != null ? end.altitudeM - startAltitude : null;
   const gapMinPerKm =
-    elevChangeM != null
-      ? gradeAdjustedPaceMinPerKm(paceMinPerKm, elevChangeM / distanceM)
-      : null;
+    elevChangeM != null ? gradeAdjustedPaceMinPerKm(paceMinPerKm, elevChangeM / distanceM) : null;
   return {
     km,
     distanceM,

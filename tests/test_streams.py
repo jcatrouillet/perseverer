@@ -62,8 +62,6 @@ def test_mixing_naive_and_tz_aware_points_across_writes_does_not_raise(tmp_path:
         value=82.0,
     )
     write_health_stream(tmp_path, ATHLETE_ID, METRIC_KEY, YEAR_MONTH, [naive_point])
-    _, n_samples = write_health_stream(
-        tmp_path, ATHLETE_ID, METRIC_KEY, YEAR_MONTH, [aware_point]
-    )
+    _, n_samples = write_health_stream(tmp_path, ATHLETE_ID, METRIC_KEY, YEAR_MONTH, [aware_point])
 
     assert n_samples == 2

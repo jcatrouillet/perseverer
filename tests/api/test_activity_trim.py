@@ -99,9 +99,7 @@ def _seed_trimmable_activity(engine: Engine, settings: Settings) -> None:
                 athlete_id=DEFAULT_ATHLETE_ID,
                 parquet_path=parquet_path.name,
                 n_samples=200,
-                channels=(
-                    '["lat", "lon", "distance_m", "altitude_m", "heart_rate", "speed_mps"]'
-                ),
+                channels=('["lat", "lon", "distance_m", "altitude_m", "heart_rate", "speed_mps"]'),
             )
         )
         conn.execute(
@@ -358,9 +356,7 @@ class TestPostActivityTrim:
     ) -> None:
         _seed_trimmable_activity(engine, test_settings)
 
-        r = client.post(
-            f"/api/v1/activities/{ACTIVITY_ID}/trim", json={}, headers=auth_headers
-        )
+        r = client.post(f"/api/v1/activities/{ACTIVITY_ID}/trim", json={}, headers=auth_headers)
         assert r.status_code == 422
 
     def test_404_for_unknown_activity(

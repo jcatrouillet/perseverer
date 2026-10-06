@@ -114,9 +114,7 @@ def test_import_uses_offset_adjusted_local_date_for_rollups(tmp_path: Path) -> N
         import_from_folder(
             conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID, folder=import_dir
         )
-        row = conn.execute(
-            select(activity.c.local_date, activity.c.utc_offset_s)
-        ).one()
+        row = conn.execute(select(activity.c.local_date, activity.c.utc_offset_s)).one()
 
     assert row.utc_offset_s == -28800
     assert row.local_date == "2024-06-01"
@@ -196,9 +194,7 @@ def test_sport_override_survives_rebuild(tmp_path: Path) -> None:
         import_from_folder(
             conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID, folder=import_dir
         )
-        original_id, original_sport = conn.execute(
-            select(activity.c.id, activity.c.sport)
-        ).one()
+        original_id, original_sport = conn.execute(select(activity.c.id, activity.c.sport)).one()
         set_sport_override(
             conn,
             athlete_id=DEFAULT_ATHLETE_ID,

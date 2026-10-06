@@ -33,7 +33,11 @@ describe("BloodMarkerChart", () => {
     render(
       <BloodMarkerChart
         marker="ALT"
-        results={[result(1, "2015-10-14", 81), result(2, "2016-02-26", 57), result(3, "2018-03-19", 25)]}
+        results={[
+          result(1, "2015-10-14", 81),
+          result(2, "2016-02-26", 57),
+          result(3, "2018-03-19", 25),
+        ]}
       />,
     );
     expect(screen.getByRole("heading", { name: /ALT/ })).toBeInTheDocument();

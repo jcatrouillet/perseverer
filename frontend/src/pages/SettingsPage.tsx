@@ -379,9 +379,9 @@ export function SettingsPage() {
               estimates with a formula when there isn't enough of your own real data yet; your own
               observed max HR and any Eufy-scale readings always take priority once they exist.
               Email is where the weekly/monthly summaries go, if you enable them under External
-              tools. Home latitude/longitude is what the Week view's weather forecast is fetched
-              for -- set both, or leave both blank. Timezone is used for that same forecast (so
-              its days land on your own local dates) and for the calendar feed.
+              tools. Home latitude/longitude is what the Week view's weather forecast is fetched for
+              -- set both, or leave both blank. Timezone is used for that same forecast (so its days
+              land on your own local dates) and for the calendar feed.
             </p>
             <form
               className="settings-form"

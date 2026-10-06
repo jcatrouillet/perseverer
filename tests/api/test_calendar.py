@@ -97,7 +97,9 @@ def test_calendar_filters_health_metrics_by_metric_keys(
     with engine.connect() as conn:
         conn.execute(
             day_rollup.insert().values(
-                athlete_id=DEFAULT_ATHLETE_ID, local_date="2025-06-01", activity_count=0,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date="2025-06-01",
+                activity_count=0,
                 refreshed_at=now,
             )
         )
@@ -120,8 +122,7 @@ def test_calendar_filters_health_metrics_by_metric_keys(
         conn.commit()
 
     r = client.get(
-        "/api/v1/calendar?start_date=2025-06-01&end_date=2025-06-01"
-        "&metric_keys=steps",
+        "/api/v1/calendar?start_date=2025-06-01&end_date=2025-06-01&metric_keys=steps",
         headers=auth_headers,
     )
     body = r.json()

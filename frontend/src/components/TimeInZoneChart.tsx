@@ -40,7 +40,12 @@ export function TimeInZoneChart({
 }) {
   const zones =
     configuredZoneBoundaries != null && heartRateStream != null && timestamps != null
-      ? computeHrZonesFromStream(heartRateStream, timestamps, configuredZoneBoundaries, speedMpsStream)
+      ? computeHrZonesFromStream(
+          heartRateStream,
+          timestamps,
+          configuredZoneBoundaries,
+          speedMpsStream,
+        )
       : extractHrZones(metrics);
   if (!zones || zones.every((z) => z.seconds === 0)) return null;
 
@@ -73,7 +78,9 @@ export function TimeInZoneChart({
           </span>
         </div>
       ))}
-      <p className="chart-note">Total {formatDurationHM(totalSeconds)} across {zones.length} zones.</p>
+      <p className="chart-note">
+        Total {formatDurationHM(totalSeconds)} across {zones.length} zones.
+      </p>
     </div>
   );
 }

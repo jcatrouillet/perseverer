@@ -156,11 +156,7 @@ export function ExerciseLibraryPage() {
           </summary>
           <ul className="exercise-library__list">
             {list.map((e) => (
-              <ExerciseCard
-                key={`${e.category}-${e.exercise}`}
-                entry={e}
-                onEnlarge={setLightbox}
-              />
+              <ExerciseCard key={`${e.category}-${e.exercise}`} entry={e} onEnlarge={setLightbox} />
             ))}
           </ul>
         </details>

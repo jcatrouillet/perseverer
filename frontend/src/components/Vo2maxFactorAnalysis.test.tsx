@@ -59,9 +59,7 @@ describe("Vo2maxFactorAnalysis", () => {
     mockUseVo2maxFactorAnalysis.mockReturnValue({
       ...EMPTY,
       data: analysis({
-        other_contributors: [
-          contributor({ activity_id: "act2", name: "Tempo run", vdot: 48.0 }),
-        ],
+        other_contributors: [contributor({ activity_id: "act2", name: "Tempo run", vdot: 48.0 })],
       }),
     });
     render(<Vo2maxFactorAnalysis />);

@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { ActivityMetricOut } from "./api/types";
-import { computeHrZonesFromStream, extractHrZones, hrZoneRangeLabel, metricValue } from "./activityMetrics";
+import {
+  computeHrZonesFromStream,
+  extractHrZones,
+  hrZoneRangeLabel,
+  metricValue,
+} from "./activityMetrics";
 
 function metric(metric_key: string, value_num: number | null): ActivityMetricOut {
   return { metric_key, value_num, value_text: null, unit: null, source: "test" };
@@ -75,9 +80,9 @@ describe("hrZoneRangeLabel", () => {
   });
 
   it("formats a bounded zone", () => {
-    expect(
-      hrZoneRangeLabel({ index: 1, seconds: 1, lowBoundary: 87, highBoundary: 106 }),
-    ).toBe("87 – 106");
+    expect(hrZoneRangeLabel({ index: 1, seconds: 1, lowBoundary: 87, highBoundary: 106 })).toBe(
+      "87 – 106",
+    );
   });
 
   it("formats an open-top zone", () => {
@@ -135,7 +140,9 @@ describe("computeHrZonesFromStream", () => {
   });
 
   it("returns null when the stream has no usable HR data at all", () => {
-    expect(computeHrZonesFromStream([null, null], ts("2026-01-01T00:00:00Z", [0, 10]), boundaries)).toBeNull();
+    expect(
+      computeHrZonesFromStream([null, null], ts("2026-01-01T00:00:00Z", [0, 10]), boundaries),
+    ).toBeNull();
   });
 
   it("returns null for empty or mismatched-length arrays", () => {

@@ -163,9 +163,7 @@ def _start_time_for(conn: Connection, *, athlete_id: str, activity_id: str) -> d
     return cast(datetime, row.start_time_utc)
 
 
-def _stream_location(
-    conn: Connection, *, activity_id: str
-) -> tuple[Path, frozenset[str]] | None:
+def _stream_location(conn: Connection, *, activity_id: str) -> tuple[Path, frozenset[str]] | None:
     row = conn.execute(
         select(activity_stream.c.parquet_path, activity_stream.c.channels).where(
             activity_stream.c.activity_id == activity_id

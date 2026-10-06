@@ -161,9 +161,7 @@ def test_vo2max_analysis_identifies_the_driving_activity_and_other_contributors(
             conn, activity_id="race", local_date="2025-06-05", name="5k race", vdot=55.0
         )
 
-    r = client.get(
-        "/api/v1/performance/vo2max-analysis?as_of=2025-06-10", headers=auth_headers
-    )
+    r = client.get("/api/v1/performance/vo2max-analysis?as_of=2025-06-10", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["rolling_vdot"] == 55.0
@@ -301,9 +299,7 @@ def test_race_readiness_for_the_nearest_upcoming_race(
         )
         conn.commit()
 
-    r = client.get(
-        "/api/v1/performance/race-readiness?as_of=2026-09-13", headers=auth_headers
-    )
+    r = client.get("/api/v1/performance/race-readiness?as_of=2026-09-13", headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["available"] is True

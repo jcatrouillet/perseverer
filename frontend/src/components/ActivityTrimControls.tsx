@@ -21,7 +21,8 @@ function lapElapsedRange(
   lap: LapOut,
   activityStartTimeUtc: string,
 ): { startS: number; endS: number } {
-  const startS = (new Date(lap.start_time_utc).getTime() - new Date(activityStartTimeUtc).getTime()) / 1000;
+  const startS =
+    (new Date(lap.start_time_utc).getTime() - new Date(activityStartTimeUtc).getTime()) / 1000;
   const durationS = lap.moving_duration_s ?? lap.duration_s ?? 0;
   return { startS, endS: startS + durationS };
 }
@@ -79,7 +80,8 @@ export function ActivityTrimControls({
 
   const firstDistance = previewDistanceM.find((d) => d != null) ?? null;
   const lastDistance = [...previewDistanceM].reverse().find((d) => d != null) ?? null;
-  const keptDistanceM = firstDistance != null && lastDistance != null ? lastDistance - firstDistance : null;
+  const keptDistanceM =
+    firstDistance != null && lastDistance != null ? lastDistance - firstDistance : null;
   const keptDurationS = valid ? trimEndS - trimStartS : 0;
 
   const lapRows = laps.map((lap) => {
@@ -100,9 +102,8 @@ export function ActivityTrimControls({
       <h2>Trim this activity</h2>
       <p className="activity-trim__hint">
         Drag either handle to preview what you'd keep, then save. Distance, duration, elevation
-        gain, and heart rate are recomputed for the kept window; calories and training load
-        aren't re-derivable from just part of a recording, so they'll show as unavailable after
-        trimming.
+        gain, and heart rate are recomputed for the kept window; calories and training load aren't
+        re-derivable from just part of a recording, so they'll show as unavailable after trimming.
       </p>
 
       <div className="activity-trim__map">
@@ -146,7 +147,9 @@ export function ActivityTrimControls({
 
       <div className="activity-trim__summary">
         <span>Kept duration: {formatClockDuration(keptDurationS)}</span>
-        {keptDistanceM != null && <span>Kept distance: {(keptDistanceM / 1000).toFixed(2)} km</span>}
+        {keptDistanceM != null && (
+          <span>Kept distance: {(keptDistanceM / 1000).toFixed(2)} km</span>
+        )}
       </div>
 
       {laps.length > 0 && (
@@ -154,10 +157,7 @@ export function ActivityTrimControls({
           <h3>Intervals</h3>
           <ul>
             {lapRows.map(({ lap, kept }, i) => (
-              <li
-                key={lap.lap_index}
-                className={kept ? undefined : "activity-trim__lap--dropped"}
-              >
+              <li key={lap.lap_index} className={kept ? undefined : "activity-trim__lap--dropped"}>
                 Lap {i + 1} {kept ? "" : "(dropped)"}
               </li>
             ))}
@@ -177,10 +177,7 @@ export function ActivityTrimControls({
           className="button button--primary"
           disabled={!valid || isSaving}
           onClick={() =>
-            onCommit(
-              trimStartS > 0 ? rawTrimStartS : null,
-              trimEndS < totalS ? rawTrimEndS : null,
-            )
+            onCommit(trimStartS > 0 ? rawTrimStartS : null, trimEndS < totalS ? rawTrimEndS : null)
           }
         >
           {isSaving ? "Saving…" : "Save trim"}

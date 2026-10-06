@@ -83,7 +83,10 @@ def test_matches_same_distance_and_nearby_start_excludes_self(
     with engine.connect() as conn:
         seed_activity(conn, activity_id="target", sport="running", distance_m=5000.0)
         seed_activity(
-            conn, activity_id="nearby", sport="running", local_date="2025-05-01",
+            conn,
+            activity_id="nearby",
+            sport="running",
+            local_date="2025-05-01",
             distance_m=5200.0,
         )
     _add_route(engine, activity_id="target", start_lat=HOME_LAT, start_lng=HOME_LNG)
@@ -102,7 +105,11 @@ def test_excludes_a_start_point_far_away(
     with engine.connect() as conn:
         seed_activity(conn, activity_id="target", sport="running", distance_m=5000.0)
         seed_activity(
-            conn, activity_id="far", sport="running", local_date="2025-05-01", distance_m=5000.0,
+            conn,
+            activity_id="far",
+            sport="running",
+            local_date="2025-05-01",
+            distance_m=5000.0,
         )
     _add_route(engine, activity_id="target", start_lat=HOME_LAT, start_lng=HOME_LNG)
     # Roughly 1.1km away (0.01 degrees latitude) -- well outside the 300m radius.
@@ -120,7 +127,10 @@ def test_excludes_activities_outside_the_15_percent_distance_band(
     with engine.connect() as conn:
         seed_activity(conn, activity_id="target", sport="running", distance_m=5000.0)
         seed_activity(
-            conn, activity_id="too_far", sport="running", local_date="2025-05-01",
+            conn,
+            activity_id="too_far",
+            sport="running",
+            local_date="2025-05-01",
             distance_m=10000.0,
         )
     _add_route(engine, activity_id="target", start_lat=HOME_LAT, start_lng=HOME_LNG)
@@ -137,7 +147,10 @@ def test_excludes_a_different_sport_at_the_same_location_and_distance(
     with engine.connect() as conn:
         seed_activity(conn, activity_id="target", sport="running", distance_m=5000.0)
         seed_activity(
-            conn, activity_id="bike", sport="cycling", local_date="2025-05-01",
+            conn,
+            activity_id="bike",
+            sport="cycling",
+            local_date="2025-05-01",
             distance_m=5000.0,
         )
     _add_route(engine, activity_id="target", start_lat=HOME_LAT, start_lng=HOME_LNG)
@@ -155,8 +168,11 @@ def test_sorted_most_recent_first_and_capped_at_10(
         seed_activity(conn, activity_id="target", sport="running", distance_m=5000.0)
         for i in range(12):
             seed_activity(
-                conn, activity_id=f"r{i}", sport="running",
-                local_date=f"2025-01-{i + 1:02d}", distance_m=5000.0,
+                conn,
+                activity_id=f"r{i}",
+                sport="running",
+                local_date=f"2025-01-{i + 1:02d}",
+                distance_m=5000.0,
             )
     _add_route(engine, activity_id="target", start_lat=HOME_LAT, start_lng=HOME_LNG)
     for i in range(12):
@@ -176,15 +192,20 @@ def test_rows_carry_vdot_gap_hr_and_doubled_cadence(
     with engine.connect() as conn:
         seed_activity(conn, activity_id="target", sport="running", distance_m=5000.0)
         seed_activity(
-            conn, activity_id="match", sport="running", local_date="2025-05-01",
+            conn,
+            activity_id="match",
+            sport="running",
+            local_date="2025-05-01",
             distance_m=5000.0,
         )
     _add_route(engine, activity_id="target", start_lat=HOME_LAT, start_lng=HOME_LNG)
     _add_route(engine, activity_id="match", start_lat=HOME_LAT, start_lng=HOME_LNG)
     _add_metric(engine, activity_id="match", metric_key="perseverer.performance.vdot", value=48.5)
     _add_metric(
-        engine, activity_id="match",
-        metric_key="perseverer.performance.avg_gap_speed_mps", value=3.2,
+        engine,
+        activity_id="match",
+        metric_key="perseverer.performance.avg_gap_speed_mps",
+        value=3.2,
     )
     _add_metric(engine, activity_id="match", metric_key="fit.session.avg_heart_rate", value=151.0)
     # Raw single-foot rate -- the endpoint must double it to strides/min.

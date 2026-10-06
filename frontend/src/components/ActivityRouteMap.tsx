@@ -155,8 +155,7 @@ export function ActivityRouteMap({
   }, []);
 
   const segments = useMemo(
-    () =>
-      tones ? buildSegments(points, distanceM, elapsedS, tones.slow, tones.fast) : [],
+    () => (tones ? buildSegments(points, distanceM, elapsedS, tones.slow, tones.fast) : []),
     [points, distanceM, elapsedS, tones],
   );
 
@@ -179,7 +178,11 @@ export function ActivityRouteMap({
             outlines/POI icons/road-name clutter underneath it. */}
         <CartoBasemapLayer style="positron" />
         {segments.map((seg, i) => (
-          <Polyline key={i} positions={seg.positions} pathOptions={{ color: seg.color, weight: 4, opacity: 0.9 }} />
+          <Polyline
+            key={i}
+            positions={seg.positions}
+            pathOptions={{ color: seg.color, weight: 4, opacity: 0.9 }}
+          />
         ))}
         {highlightPositions && (
           <>
@@ -200,14 +203,24 @@ export function ActivityRouteMap({
         <CircleMarker
           center={[start.lat, start.lon]}
           radius={6}
-          pathOptions={{ color: "var(--color-surface)", fillColor: "var(--color-elevation)", fillOpacity: 1, weight: 2 }}
+          pathOptions={{
+            color: "var(--color-surface)",
+            fillColor: "var(--color-elevation)",
+            fillOpacity: 1,
+            weight: 2,
+          }}
         />
         <Marker position={[finish.lat, finish.lon]} icon={FINISH_ICON} />
         {marker && (
           <CircleMarker
             center={[marker.lat, marker.lon]}
             radius={7}
-            pathOptions={{ color: "var(--color-surface)", fillColor: "var(--color-pace)", fillOpacity: 1, weight: 2 }}
+            pathOptions={{
+              color: "var(--color-surface)",
+              fillColor: "var(--color-pace)",
+              fillOpacity: 1,
+              weight: 2,
+            }}
           />
         )}
       </MapContainer>

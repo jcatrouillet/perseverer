@@ -75,7 +75,18 @@ export interface TrendWindow {
 }
 
 const SHORT_MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 const SHORT_WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -118,8 +129,12 @@ function addDays(iso: string, days: number): string {
   return isoDate(d);
 }
 
-function addMonthsToFirstOfMonth(year: number, month1to12: number, delta: number): { year: number; month: number } {
-  const total = (year * 12 + (month1to12 - 1)) + delta;
+function addMonthsToFirstOfMonth(
+  year: number,
+  month1to12: number,
+  delta: number,
+): { year: number; month: number } {
+  const total = year * 12 + (month1to12 - 1) + delta;
   return { year: Math.floor(total / 12), month: (total % 12) + 1 };
 }
 
@@ -223,7 +238,10 @@ export function computeWindow(
       buckets = enumerateWeeklyBuckets(start, end);
     }
     return {
-      resolution, bucketBy, start, end,
+      resolution,
+      bucketBy,
+      start,
+      end,
       bucketKeys: buckets.map((b) => b.key),
       bucketLabels: buckets.map((b) => b.label),
       label: formatDateRangeLabel(start, end),
@@ -236,7 +254,10 @@ export function computeWindow(
     const { start, end } = weekRange(anchor);
     const buckets = enumerateDailyBuckets(start, end);
     return {
-      resolution, bucketBy: "day", start, end,
+      resolution,
+      bucketBy: "day",
+      start,
+      end,
       bucketKeys: buckets.map((b) => b.key),
       bucketLabels: buckets.map((b) => b.label),
       label: formatDateRangeLabel(start, end),
@@ -251,7 +272,10 @@ export function computeWindow(
     const { start, end } = monthRange(year, month);
     const buckets = enumerateWeeklyBuckets(start, end);
     return {
-      resolution, bucketBy: "week", start, end,
+      resolution,
+      bucketBy: "week",
+      start,
+      end,
       bucketKeys: buckets.map((b) => b.key),
       bucketLabels: buckets.map((b) => b.label),
       label: `${monthName(month)} ${year}`,
@@ -264,7 +288,10 @@ export function computeWindow(
     const { start, end } = yearRange(year);
     const buckets = enumerateMonthlyBuckets(start, end, shortMonthLabel);
     return {
-      resolution, bucketBy: "month", start, end,
+      resolution,
+      bucketBy: "month",
+      start,
+      end,
       bucketKeys: buckets.map((b) => b.key),
       bucketLabels: buckets.map((b) => b.label),
       label: String(year),
@@ -277,7 +304,10 @@ export function computeWindow(
   const end = today;
   const buckets = enumerateMonthlyBuckets(start, end, monthYearLabel);
   return {
-    resolution, bucketBy: "month", start, end,
+    resolution,
+    bucketBy: "month",
+    start,
+    end,
     bucketKeys: buckets.map((b) => b.key),
     bucketLabels: buckets.map((b) => b.label),
     label: "All time",

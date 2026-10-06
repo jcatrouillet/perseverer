@@ -138,15 +138,17 @@ describe("PaceTrendsChart", () => {
     await clickAt(durationWrapper, 200, 90);
     await clickAt(durationWrapper, 600, 90);
     expect(screen.getByText("Reset to full history")).toBeInTheDocument();
-    const firstSelectionCaption = document.querySelector(".pace-trends__selection-bar span")!
-      .textContent;
+    const firstSelectionCaption = document.querySelector(
+      ".pace-trends__selection-bar span",
+    )!.textContent;
 
     await clickAt(durationWrapper, 300, 90);
     await clickAt(durationWrapper, 500, 90);
 
     expect(screen.getByText("Reset to full history")).toBeInTheDocument();
-    const secondSelectionCaption = document.querySelector(".pace-trends__selection-bar span")!
-      .textContent;
+    const secondSelectionCaption = document.querySelector(
+      ".pace-trends__selection-bar span",
+    )!.textContent;
     expect(secondSelectionCaption).not.toBe(firstSelectionCaption);
   });
 

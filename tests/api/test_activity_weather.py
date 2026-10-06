@@ -50,9 +50,14 @@ def test_returns_the_fetched_summary_when_available(
     _add_route(engine, activity_id="a1", start_lat=37.36, start_lng=-121.97)
 
     summary = WeatherSummary(
-        temperature_min_c=18.0, temperature_max_c=26.0,
-        humidity_min_pct=35.0, humidity_max_pct=60.0, weather_code=2,
-        feels_like_c=17.0, wind_speed_mps=4.5, wind_direction_deg=225.0,
+        temperature_min_c=18.0,
+        temperature_max_c=26.0,
+        humidity_min_pct=35.0,
+        humidity_max_pct=60.0,
+        weather_code=2,
+        feels_like_c=17.0,
+        wind_speed_mps=4.5,
+        wind_direction_deg=225.0,
     )
     monkeypatch.setattr(
         "perseverer.api.routers.activities.get_or_fetch_activity_weather",
@@ -121,12 +126,19 @@ def test_includes_the_new_scalar_fields_when_present(
     _add_route(engine, activity_id="a1", start_lat=37.36, start_lng=-121.97)
 
     summary = WeatherSummary(
-        temperature_min_c=18.0, temperature_max_c=26.0,
-        humidity_min_pct=35.0, humidity_max_pct=60.0, weather_code=2,
-        dew_point_min_c=10.0, dew_point_max_c=14.0,
-        solar_radiation_max_wm2=820.0, solar_radiation_mean_wm2=400.0,
-        cloud_cover_min_pct=10.0, cloud_cover_max_pct=80.0,
-        apparent_temperature_min_c=17.0, apparent_temperature_max_c=27.0,
+        temperature_min_c=18.0,
+        temperature_max_c=26.0,
+        humidity_min_pct=35.0,
+        humidity_max_pct=60.0,
+        weather_code=2,
+        dew_point_min_c=10.0,
+        dew_point_max_c=14.0,
+        solar_radiation_max_wm2=820.0,
+        solar_radiation_mean_wm2=400.0,
+        cloud_cover_min_pct=10.0,
+        cloud_cover_max_pct=80.0,
+        apparent_temperature_min_c=17.0,
+        apparent_temperature_max_c=27.0,
         precipitation_mm=3.4,
         sunrise_utc=dt.datetime(2025, 6, 1, 6, 11),
         sunset_utc=dt.datetime(2025, 6, 1, 20, 4),
@@ -168,8 +180,11 @@ def test_sunset_during_run_is_true_when_sunset_falls_inside_the_activity_window(
     # Activity window is [2025-06-01T10:00:00, 2025-06-01T10:30:00] -- sunset at 10:15 falls
     # inside it.
     summary = WeatherSummary(
-        temperature_min_c=18.0, temperature_max_c=26.0,
-        humidity_min_pct=35.0, humidity_max_pct=60.0, weather_code=2,
+        temperature_min_c=18.0,
+        temperature_max_c=26.0,
+        humidity_min_pct=35.0,
+        humidity_max_pct=60.0,
+        weather_code=2,
         sunset_utc=dt.datetime(2025, 6, 1, 10, 15),
     )
     monkeypatch.setattr(
@@ -193,8 +208,11 @@ def test_sunset_during_run_is_none_when_sunset_utc_is_none(
     _add_route(engine, activity_id="a1", start_lat=37.36, start_lng=-121.97)
 
     summary = WeatherSummary(
-        temperature_min_c=18.0, temperature_max_c=26.0,
-        humidity_min_pct=35.0, humidity_max_pct=60.0, weather_code=2,
+        temperature_min_c=18.0,
+        temperature_max_c=26.0,
+        humidity_min_pct=35.0,
+        humidity_max_pct=60.0,
+        weather_code=2,
     )
     monkeypatch.setattr(
         "perseverer.api.routers.activities.get_or_fetch_activity_weather",
@@ -217,8 +235,11 @@ def test_includes_the_hourly_trajectory_derived_from_the_archived_raw_response(
     _add_route(engine, activity_id="a1", start_lat=37.36, start_lng=-121.97)
 
     summary = WeatherSummary(
-        temperature_min_c=18.0, temperature_max_c=26.0,
-        humidity_min_pct=35.0, humidity_max_pct=60.0, weather_code=2,
+        temperature_min_c=18.0,
+        temperature_max_c=26.0,
+        humidity_min_pct=35.0,
+        humidity_max_pct=60.0,
+        weather_code=2,
     )
     monkeypatch.setattr(
         "perseverer.api.routers.activities.get_or_fetch_activity_weather",

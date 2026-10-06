@@ -107,8 +107,7 @@ function FeaturedHikeCard({
         {activity.elevation_gain_m != null &&
           activity.elevation_gain_m > 0 &&
           ` · +${Math.round(activity.elevation_gain_m)} m`}
-        {activity.max_altitude_m != null &&
-          ` · ${Math.round(activity.max_altitude_m)} m peak`}
+        {activity.max_altitude_m != null && ` · ${Math.round(activity.max_altitude_m)} m peak`}
       </span>
     </Link>
   );
@@ -125,7 +124,9 @@ function hikeElevationStats(
   const withElevation = activities.filter((a) => (a.elevation_gain_m ?? 0) > 0);
   if (withElevation.length === 0) return null;
   const totalM = withElevation.reduce((sum, a) => sum + a.elevation_gain_m!, 0);
-  const maxHike = withElevation.reduce((max, a) => (a.elevation_gain_m! > max.elevation_gain_m! ? a : max));
+  const maxHike = withElevation.reduce((max, a) =>
+    a.elevation_gain_m! > max.elevation_gain_m! ? a : max,
+  );
   return { averageM: totalM / withElevation.length, maxHike };
 }
 
@@ -156,13 +157,7 @@ export function HikeStatsCard({ activities }: { activities: ActivitySummary[] })
     <section className="card">
       <h2>Hikes</h2>
       <div className="stat-grid">
-        <StatTile
-          label="Hikes"
-          value={activities.length}
-          icon="hike"
-          tone="elevation"
-          hero
-        />
+        <StatTile label="Hikes" value={activities.length} icon="hike" tone="elevation" hero />
         <StatTile
           label="Total distance"
           value={metersToDisplay(totalDistanceM).toFixed(1)}
@@ -188,10 +183,7 @@ export function HikeStatsCard({ activities }: { activities: ActivitySummary[] })
           />
         )}
         {elevationStats && (
-          <Link
-            href={`/activities/${elevationStats.maxHike.id}`}
-            className="stat-tile-link"
-          >
+          <Link href={`/activities/${elevationStats.maxHike.id}`} className="stat-tile-link">
             <StatTile
               label="Max elevation gain"
               value={Math.round(elevationStats.maxHike.elevation_gain_m!)}

@@ -880,9 +880,9 @@ def test_rebuild_replays_strava_export_gpx_and_manual_entry(
     (root / "activities").mkdir(parents=True)
     (root / "activities" / "999111.gpx").write_bytes(_STRAVA_GPX_BODY)
     rows = [
-        "999111,\"Apr 17, 2026, 10:17:09 PM\",Bryce Canyon hike,Hike,1800,4800.5,1800,50,300,10,"
+        '999111,"Apr 17, 2026, 10:17:09 PM",Bryce Canyon hike,Hike,1800,4800.5,1800,50,300,10,'
         "activities/999111.gpx",
-        "999222,\"Apr 18, 2026, 6:00:00 AM\",Gym session,Weight Training,2400,0,2400,50,300,10,",
+        '999222,"Apr 18, 2026, 6:00:00 AM",Gym session,Weight Training,2400,0,2400,50,300,10,',
     ]
     (root / "activities.csv").write_text(_STRAVA_CSV_HEADER + "\n" + "\n".join(rows) + "\n")
 
@@ -901,9 +901,7 @@ def test_rebuild_replays_strava_export_gpx_and_manual_entry(
             athlete_id=DEFAULT_ATHLETE_ID,
             path=root,
         )
-        before = sorted(
-            conn.execute(select(activity.c.sport, activity.c.name)).fetchall()
-        )
+        before = sorted(conn.execute(select(activity.c.sport, activity.c.name)).fetchall())
     assert summary.errors == []
     assert len(before) == 2
 
@@ -935,7 +933,7 @@ def test_rebuild_on_a_db_with_existing_insight_rows_does_not_fk_crash(
     (root / "activities" / "999111.gpx").write_bytes(_STRAVA_GPX_BODY)
     (root / "activities.csv").write_text(
         _STRAVA_CSV_HEADER + "\n"
-        "999111,\"Apr 17, 2026, 10:17:09 PM\",Bryce Canyon hike,Hike,1800,4800.5,1800,50,300,10,"
+        '999111,"Apr 17, 2026, 10:17:09 PM",Bryce Canyon hike,Hike,1800,4800.5,1800,50,300,10,'
         "activities/999111.gpx\n"
     )
 
@@ -1214,7 +1212,11 @@ def _build_garmin_export_archive(tmp_path: Path, subdir: str) -> tuple[Path, Pat
     _seed_athlete(engine)
     with engine.connect() as conn:
         import_garmin_export(
-            conn, archive_root, parquet_dir, root / "extract", athlete_id=DEFAULT_ATHLETE_ID,
+            conn,
+            archive_root,
+            parquet_dir,
+            root / "extract",
+            athlete_id=DEFAULT_ATHLETE_ID,
             path=root / "src",
         )
     return archive_root, parquet_dir
@@ -1307,9 +1309,7 @@ def _strip_unstable_ids(
     # full row, id included) can put logically-identical rows in a different relative order
     # once two independently-assigned ids differ, which would otherwise fail this comparison for
     # a reason that has nothing to do with the actual content.
-    return {
-        table_name: sorted(rows, key=repr) for table_name, rows in stripped.items()
-    }
+    return {table_name: sorted(rows, key=repr) for table_name, rows in stripped.items()}
 
 
 def test_shadow_rebuild_matches_plain_in_place_rebuild(tmp_path: Path) -> None:
@@ -1392,9 +1392,7 @@ def test_shadow_rebuild_swaps_parquet_files_not_just_sql_rows(tmp_path: Path) ->
     _seed_athlete(engine)
     with engine.connect() as conn:
         rebuild_database(conn, archive_root, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
-        stream_row = conn.execute(
-            select(activity_metric.c.activity_id).limit(1)
-        ).fetchone()
+        stream_row = conn.execute(select(activity_metric.c.activity_id).limit(1)).fetchone()
         assert stream_row is not None
         parquet_path = parquet_dir / f"{DEFAULT_ATHLETE_ID}/{stream_row.activity_id}.parquet"
         assert parquet_path.exists()

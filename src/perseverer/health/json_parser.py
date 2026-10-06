@@ -735,6 +735,4 @@ def parse_garmin_export_json(raw_bytes: bytes, *, report_kind: str) -> HealthBat
         observations.extend(record_obs)
         unrecognized.extend(record_unrecognized)
 
-    return HealthBatch(
-        observations=observations, unrecognized_field_keys=sorted(set(unrecognized))
-    )
+    return HealthBatch(observations=observations, unrecognized_field_keys=sorted(set(unrecognized)))

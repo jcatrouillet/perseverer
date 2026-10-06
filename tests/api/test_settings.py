@@ -212,9 +212,7 @@ def test_running_load_put_immediately_refreshes_the_fitness_rollup(
     """Saving a threshold pace must not look like a no-op until the next sync -- see
     api/routers/settings.py's own module docstring."""
     with engine.connect() as conn:
-        seed_activity(
-            conn, activity_id="run1", local_date="2025-06-01", moving_duration_s=3600.0
-        )
+        seed_activity(conn, activity_id="run1", local_date="2025-06-01", moving_duration_s=3600.0)
         get_or_register_metric(
             conn,
             metric_key=AVG_GAP_METRIC_KEY,
@@ -245,9 +243,7 @@ def test_running_load_put_immediately_refreshes_the_fitness_rollup(
 
     with engine.connect() as conn:
         row = conn.execute(
-            select(fitness_daily_rollup).where(
-                fitness_daily_rollup.c.local_date == "2025-06-01"
-            )
+            select(fitness_daily_rollup).where(fitness_daily_rollup.c.local_date == "2025-06-01")
         ).fetchone()
     assert row is not None
     assert abs(row.training_load - 100.0) < 1e-9  # 1h exactly at threshold -> rTSS 100
@@ -341,9 +337,9 @@ def test_api_key_post_rotates_and_invalidates_the_old_key(
 ) -> None:
     first_key = client.post("/api/v1/settings/api-key", headers=auth_headers).json()["api_key"]
     # The freshly-minted key actually authenticates -- not just a value the endpoint returned.
-    assert client.get(
-        "/api/v1/settings/api-key", headers={"X-API-Key": first_key}
-    ).status_code == 200
+    assert (
+        client.get("/api/v1/settings/api-key", headers={"X-API-Key": first_key}).status_code == 200
+    )
 
     second_key = client.post("/api/v1/settings/api-key", headers=auth_headers).json()["api_key"]
     assert second_key != first_key
@@ -351,9 +347,9 @@ def test_api_key_post_rotates_and_invalidates_the_old_key(
     # Rotating overwrote the stored hash -- the old key no longer authenticates anything.
     r = client.get("/api/v1/settings/api-key", headers={"X-API-Key": first_key})
     assert r.status_code == 401
-    assert client.get(
-        "/api/v1/settings/api-key", headers={"X-API-Key": second_key}
-    ).status_code == 200
+    assert (
+        client.get("/api/v1/settings/api-key", headers={"X-API-Key": second_key}).status_code == 200
+    )
 
 
 def test_api_key_endpoints_require_auth(client: TestClient) -> None:
@@ -549,18 +545,14 @@ def test_put_profile_rejects_out_of_range_home_lon(
 def test_put_profile_rejects_lat_without_lon(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    r = client.put(
-        "/api/v1/settings/profile", json={"home_lat": 48.8566}, headers=auth_headers
-    )
+    r = client.put("/api/v1/settings/profile", json={"home_lat": 48.8566}, headers=auth_headers)
     assert r.status_code == 422
 
 
 def test_put_profile_rejects_an_invalid_email(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    r = client.put(
-        "/api/v1/settings/profile", json={"email": "not-an-email"}, headers=auth_headers
-    )
+    r = client.put("/api/v1/settings/profile", json={"email": "not-an-email"}, headers=auth_headers)
     assert r.status_code == 422
 
 
@@ -677,9 +669,7 @@ def test_personalize_put_defaults_every_field_when_omitted(
 def test_personalize_put_rejects_a_value_outside_the_closed_set(
     client: TestClient, auth_headers: dict[str, str], field: str, value: str
 ) -> None:
-    r = client.put(
-        "/api/v1/settings/personalize", json={field: value}, headers=auth_headers
-    )
+    r = client.put("/api/v1/settings/personalize", json={field: value}, headers=auth_headers)
     assert r.status_code == 422
 
 

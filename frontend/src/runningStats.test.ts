@@ -103,7 +103,7 @@ describe("formatDurationHM", () => {
     expect(formatDurationHM(42 * 60)).toBe("42m");
   });
 
-  it("formats an hour or more as \"Xh Ym\"", () => {
+  it('formats an hour or more as "Xh Ym"', () => {
     expect(formatDurationHM(74 * 60)).toBe("1h 14m");
   });
 
@@ -282,11 +282,7 @@ describe("distanceByDay", () => {
 describe("distanceByYear", () => {
   it("sums each calendar year into its own bucket, not collapsed by month across years", () => {
     const buckets = distanceByYear(
-      [
-        activity("2022-01-15", 5000),
-        activity("2023-01-15", 3000),
-        activity("2023-06-01", 2000),
-      ],
+      [activity("2022-01-15", 5000), activity("2023-01-15", 3000), activity("2023-06-01", 2000)],
       "2022-01-01",
       "2023-12-31",
     );
@@ -383,12 +379,7 @@ describe("distinctActiveDates", () => {
 
 describe("longestStreakAndBreak", () => {
   it("finds a run of consecutive days as the longest streak", () => {
-    const result = longestStreakAndBreak([
-      "2025-06-01",
-      "2025-06-02",
-      "2025-06-03",
-      "2025-06-10",
-    ]);
+    const result = longestStreakAndBreak(["2025-06-01", "2025-06-02", "2025-06-03", "2025-06-10"]);
     expect(result.longestStreakDays).toBe(3);
     expect(result.longestStreakStart).toBe("2025-06-01");
     expect(result.longestStreakEnd).toBe("2025-06-03");
@@ -516,9 +507,15 @@ describe("amPmCounts", () => {
   it("splits activities by local hour, not UTC hour", () => {
     const activities = [
       // 08:00 UTC, -7h offset -> 01:00 local -> AM.
-      activity("2025-06-01", 5000, { start_time_utc: "2025-06-01T08:00:00Z", utc_offset_s: -25200 }),
+      activity("2025-06-01", 5000, {
+        start_time_utc: "2025-06-01T08:00:00Z",
+        utc_offset_s: -25200,
+      }),
       // 20:00 UTC, -7h offset -> 13:00 local -> PM.
-      activity("2025-06-02", 5000, { start_time_utc: "2025-06-02T20:00:00Z", utc_offset_s: -25200 }),
+      activity("2025-06-02", 5000, {
+        start_time_utc: "2025-06-02T20:00:00Z",
+        utc_offset_s: -25200,
+      }),
     ];
     expect(amPmCounts(activities)).toEqual({ am: 1, pm: 1 });
   });
@@ -531,7 +528,11 @@ describe("bestVdot", () => {
       activity("2025-05-15", 5000, { vdot: 41.0 }),
       activity("2025-05-20", 5000, { vdot: 35.1 }),
     ];
-    expect(bestVdot(activities)).toEqual({ value: 41.0, date: "2025-05-15", activityId: "2025-05-15" });
+    expect(bestVdot(activities)).toEqual({
+      value: 41.0,
+      date: "2025-05-15",
+      activityId: "2025-05-15",
+    });
   });
 
   it("ignores activities with no vdot", () => {
@@ -539,7 +540,11 @@ describe("bestVdot", () => {
       activity("2025-05-01", 5000, { vdot: null }),
       activity("2025-05-15", 5000, { vdot: 27.6 }),
     ];
-    expect(bestVdot(activities)).toEqual({ value: 27.6, date: "2025-05-15", activityId: "2025-05-15" });
+    expect(bestVdot(activities)).toEqual({
+      value: 27.6,
+      date: "2025-05-15",
+      activityId: "2025-05-15",
+    });
   });
 
   it("returns null when nothing in the period has a vdot", () => {

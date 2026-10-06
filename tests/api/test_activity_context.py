@@ -71,12 +71,21 @@ def test_percentile_excludes_self_from_the_comparison_pool(
     target's own trivially-in-band distance must not count as a comparison against itself."""
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="a1", sport="running", distance_m=5000.0,
-            duration_s=1500.0, moving_duration_s=1500.0,
+            conn,
+            activity_id="a1",
+            sport="running",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,
         )
         seed_activity(
-            conn, activity_id="a2", sport="running", local_date="2025-06-02",
-            distance_m=5000.0, duration_s=1500.0, moving_duration_s=1500.0,
+            conn,
+            activity_id="a2",
+            sport="running",
+            local_date="2025-06-02",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,
         )
 
     r = client.get("/api/v1/activities/a1/context", headers=auth_headers)
@@ -94,26 +103,50 @@ def test_percentile_rank_matches_independent_calculation(
     with engine.connect() as conn:
         # Target: 5000m in 1500s moving -> pace 0.3 s/m.
         seed_activity(
-            conn, activity_id="target", sport="running", distance_m=5000.0,
-            duration_s=1500.0, moving_duration_s=1500.0,
+            conn,
+            activity_id="target",
+            sport="running",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,
         )
         # Faster than target (lower pace): excluded from "slower or equal" count.
         seed_activity(
-            conn, activity_id="faster1", sport="running", local_date="2025-06-02",
-            distance_m=5000.0, duration_s=1200.0, moving_duration_s=1200.0,
+            conn,
+            activity_id="faster1",
+            sport="running",
+            local_date="2025-06-02",
+            distance_m=5000.0,
+            duration_s=1200.0,
+            moving_duration_s=1200.0,
         )
         seed_activity(
-            conn, activity_id="faster2", sport="running", local_date="2025-06-03",
-            distance_m=5000.0, duration_s=1300.0, moving_duration_s=1300.0,
+            conn,
+            activity_id="faster2",
+            sport="running",
+            local_date="2025-06-03",
+            distance_m=5000.0,
+            duration_s=1300.0,
+            moving_duration_s=1300.0,
         )
         # Slower than target: included in "slower or equal" count.
         seed_activity(
-            conn, activity_id="slower1", sport="running", local_date="2025-06-04",
-            distance_m=5000.0, duration_s=1600.0, moving_duration_s=1600.0,
+            conn,
+            activity_id="slower1",
+            sport="running",
+            local_date="2025-06-04",
+            distance_m=5000.0,
+            duration_s=1600.0,
+            moving_duration_s=1600.0,
         )
         seed_activity(
-            conn, activity_id="slower2", sport="running", local_date="2025-06-05",
-            distance_m=5000.0, duration_s=1800.0, moving_duration_s=1800.0,
+            conn,
+            activity_id="slower2",
+            sport="running",
+            local_date="2025-06-05",
+            distance_m=5000.0,
+            duration_s=1800.0,
+            moving_duration_s=1800.0,
         )
 
     r = client.get("/api/v1/activities/target/context", headers=auth_headers)
@@ -129,18 +162,32 @@ def test_distance_band_excludes_activities_outside_15_percent(
     of the target's own distance count."""
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="target", sport="running", distance_m=5000.0,
-            duration_s=1500.0, moving_duration_s=1500.0,
+            conn,
+            activity_id="target",
+            sport="running",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,
         )
         # Within band: 5000 * 1.1 = 5500.
         seed_activity(
-            conn, activity_id="in_band", sport="running", local_date="2025-06-02",
-            distance_m=5500.0, duration_s=1600.0, moving_duration_s=1600.0,
+            conn,
+            activity_id="in_band",
+            sport="running",
+            local_date="2025-06-02",
+            distance_m=5500.0,
+            duration_s=1600.0,
+            moving_duration_s=1600.0,
         )
         # Outside band: a 10K.
         seed_activity(
-            conn, activity_id="out_of_band", sport="running", local_date="2025-06-03",
-            distance_m=10000.0, duration_s=3000.0, moving_duration_s=3000.0,
+            conn,
+            activity_id="out_of_band",
+            sport="running",
+            local_date="2025-06-03",
+            distance_m=10000.0,
+            duration_s=3000.0,
+            moving_duration_s=3000.0,
         )
 
     r = client.get("/api/v1/activities/target/context", headers=auth_headers)
@@ -154,12 +201,21 @@ def test_distance_band_is_scoped_to_the_same_sport(
     """A cycling activity at the same distance must not count as a comparable running effort."""
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="target", sport="running", distance_m=5000.0,
-            duration_s=1500.0, moving_duration_s=1500.0,
+            conn,
+            activity_id="target",
+            sport="running",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,
         )
         seed_activity(
-            conn, activity_id="bike", sport="cycling", local_date="2025-06-02",
-            distance_m=5000.0, duration_s=900.0, moving_duration_s=900.0,
+            conn,
+            activity_id="bike",
+            sport="cycling",
+            local_date="2025-06-02",
+            distance_m=5000.0,
+            duration_s=900.0,
+            moving_duration_s=900.0,
         )
 
     r = client.get("/api/v1/activities/target/context", headers=auth_headers)
@@ -194,12 +250,21 @@ def test_fastest_rows_carry_avg_hr_bpm_via_the_same_alias_merge_as_the_activity_
 ) -> None:
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="target", sport="running", distance_m=5000.0,
-            duration_s=1500.0, moving_duration_s=1500.0,
+            conn,
+            activity_id="target",
+            sport="running",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,
         )
         seed_activity(
-            conn, activity_id="strava_only", sport="running", local_date="2025-06-02",
-            distance_m=5000.0, duration_s=1400.0, moving_duration_s=1400.0,
+            conn,
+            activity_id="strava_only",
+            sport="running",
+            local_date="2025-06-02",
+            distance_m=5000.0,
+            duration_s=1400.0,
+            moving_duration_s=1400.0,
         )
     _add_metric(engine, activity_id="target", metric_key="fit.session.avg_heart_rate", value=142.0)
     # GPX/TCX-sourced Strava activity: no fit.session.* key, only the strava.session.* alias.
@@ -222,16 +287,30 @@ def test_fastest_is_sorted_by_pace_ascending_and_includes_self(
     it earns a spot."""
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="target", sport="running", distance_m=5000.0,
-            duration_s=1500.0, moving_duration_s=1500.0,  # pace 0.30 s/m
+            conn,
+            activity_id="target",
+            sport="running",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,  # pace 0.30 s/m
         )
         seed_activity(
-            conn, activity_id="faster", sport="running", local_date="2025-06-02",
-            distance_m=5000.0, duration_s=1200.0, moving_duration_s=1200.0,  # pace 0.24 s/m
+            conn,
+            activity_id="faster",
+            sport="running",
+            local_date="2025-06-02",
+            distance_m=5000.0,
+            duration_s=1200.0,
+            moving_duration_s=1200.0,  # pace 0.24 s/m
         )
         seed_activity(
-            conn, activity_id="slower", sport="running", local_date="2025-06-03",
-            distance_m=5000.0, duration_s=1800.0, moving_duration_s=1800.0,  # pace 0.36 s/m
+            conn,
+            activity_id="slower",
+            sport="running",
+            local_date="2025-06-03",
+            distance_m=5000.0,
+            duration_s=1800.0,
+            moving_duration_s=1800.0,  # pace 0.36 s/m
         )
 
     r = client.get("/api/v1/activities/target/context", headers=auth_headers)
@@ -244,13 +323,22 @@ def test_fastest_is_capped_at_30(
 ) -> None:
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="target", sport="running", distance_m=5000.0,
-            duration_s=1500.0, moving_duration_s=1500.0,
+            conn,
+            activity_id="target",
+            sport="running",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,
         )
         for i in range(35):
             seed_activity(
-                conn, activity_id=f"a{i}", sport="running", local_date=f"2025-07-{i % 28 + 1:02d}",
-                distance_m=5000.0, duration_s=1000.0 + i, moving_duration_s=1000.0 + i,
+                conn,
+                activity_id=f"a{i}",
+                sport="running",
+                local_date=f"2025-07-{i % 28 + 1:02d}",
+                distance_m=5000.0,
+                duration_s=1000.0 + i,
+                moving_duration_s=1000.0 + i,
             )
 
     r = client.get("/api/v1/activities/target/context", headers=auth_headers)
@@ -263,16 +351,30 @@ def test_fastest_is_scoped_to_the_same_distance_band_and_sport(
 ) -> None:
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="target", sport="running", distance_m=5000.0,
-            duration_s=1500.0, moving_duration_s=1500.0,
+            conn,
+            activity_id="target",
+            sport="running",
+            distance_m=5000.0,
+            duration_s=1500.0,
+            moving_duration_s=1500.0,
         )
         seed_activity(
-            conn, activity_id="out_of_band", sport="running", local_date="2025-06-02",
-            distance_m=10000.0, duration_s=2000.0, moving_duration_s=2000.0,
+            conn,
+            activity_id="out_of_band",
+            sport="running",
+            local_date="2025-06-02",
+            distance_m=10000.0,
+            duration_s=2000.0,
+            moving_duration_s=2000.0,
         )
         seed_activity(
-            conn, activity_id="wrong_sport", sport="cycling", local_date="2025-06-03",
-            distance_m=5000.0, duration_s=600.0, moving_duration_s=600.0,
+            conn,
+            activity_id="wrong_sport",
+            sport="cycling",
+            local_date="2025-06-03",
+            distance_m=5000.0,
+            duration_s=600.0,
+            moving_duration_s=600.0,
         )
 
     r = client.get("/api/v1/activities/target/context", headers=auth_headers)
@@ -283,31 +385,55 @@ def test_fastest_is_scoped_to_the_same_distance_band_and_sport(
 def test_fastest_is_scoped_to_the_same_whole_kilometre_bucket_not_the_wider_15pct_band(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
-    """"only the runs exactly between 26.00km and 26.99km for a 26km activity, nothing else" --
+    """ "only the runs exactly between 26.00km and 26.99km for a 26km activity, nothing else" --
     narrower than the +/-15% band `percentile_rank` uses (whose ~22.3-30.2km window at this
     distance would otherwise let e.g. a 24km or 27.02km run sneak into the fastest-30 list)."""
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="target", sport="running", distance_m=26290.0,
-            duration_s=9500.0, moving_duration_s=9500.0,
+            conn,
+            activity_id="target",
+            sport="running",
+            distance_m=26290.0,
+            duration_s=9500.0,
+            moving_duration_s=9500.0,
         )
         seed_activity(
-            conn, activity_id="in_bucket_low_edge", sport="running", local_date="2025-06-02",
-            distance_m=26000.0, duration_s=9000.0, moving_duration_s=9000.0,
+            conn,
+            activity_id="in_bucket_low_edge",
+            sport="running",
+            local_date="2025-06-02",
+            distance_m=26000.0,
+            duration_s=9000.0,
+            moving_duration_s=9000.0,
         )
         seed_activity(
-            conn, activity_id="in_bucket_high_edge", sport="running", local_date="2025-06-03",
-            distance_m=26990.0, duration_s=9600.0, moving_duration_s=9600.0,
+            conn,
+            activity_id="in_bucket_high_edge",
+            sport="running",
+            local_date="2025-06-03",
+            distance_m=26990.0,
+            duration_s=9600.0,
+            moving_duration_s=9600.0,
         )
         # Just below the bucket, but still comfortably within the +/-15% band -- must be excluded.
         seed_activity(
-            conn, activity_id="just_under_bucket", sport="running", local_date="2025-06-04",
-            distance_m=25920.0, duration_s=8900.0, moving_duration_s=8900.0,
+            conn,
+            activity_id="just_under_bucket",
+            sport="running",
+            local_date="2025-06-04",
+            distance_m=25920.0,
+            duration_s=8900.0,
+            moving_duration_s=8900.0,
         )
         # Just above the bucket, again within the +/-15% band -- must be excluded.
         seed_activity(
-            conn, activity_id="just_over_bucket", sport="running", local_date="2025-06-05",
-            distance_m=27020.0, duration_s=9700.0, moving_duration_s=9700.0,
+            conn,
+            activity_id="just_over_bucket",
+            sport="running",
+            local_date="2025-06-05",
+            distance_m=27020.0,
+            duration_s=9700.0,
+            moving_duration_s=9700.0,
         )
         # Well within the +/-15% band (24km, ~9% short of 26.29km) but a different km bucket.
         seed_activity(

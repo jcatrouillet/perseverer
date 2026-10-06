@@ -13,7 +13,12 @@ vi.mock("../api/queries", () => ({
   useHealthDashboard: (...args: unknown[]) => mockUseHealthDashboard(...args),
 }));
 
-function fitnessRow(local_date: string, ctl: number, atl: number, tsb: number): FitnessDailyRollupOut {
+function fitnessRow(
+  local_date: string,
+  ctl: number,
+  atl: number,
+  tsb: number,
+): FitnessDailyRollupOut {
   return { local_date, training_load: 100, ctl, atl, tsb };
 }
 
@@ -104,7 +109,9 @@ describe("FitnessPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "VO2max" }));
     expect(screen.getByRole("heading", { name: "VO2max" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Fitness, Fatigue & Form" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Fitness, Fatigue & Form" }),
+    ).not.toBeInTheDocument();
   });
 
   it("switching to a different resolution updates the window label", () => {

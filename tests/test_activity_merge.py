@@ -152,7 +152,7 @@ def _add_activity(
 
 
 def _seed_pair(conn: Connection) -> None:
-    """"self" = fit_folder (the survivor in these tests), "other" = strava_export."""
+    """ "self" = fit_folder (the survivor in these tests), "other" = strava_export."""
     _add_activity(
         conn,
         activity_id="self1",
@@ -407,11 +407,15 @@ class TestMergeActivities:
             # directly to control the exact metric_key (the strava.session.* alias, from a
             # Strava GPX/TCX CSV-totals overlay, is what a real strava_export activity uses).
             get_or_register_metric(
-                conn, metric_key="fit.session.avg_heart_rate", source="fit_folder",
+                conn,
+                metric_key="fit.session.avg_heart_rate",
+                source="fit_folder",
                 category="activity",
             )
             get_or_register_metric(
-                conn, metric_key="strava.session.avg_heart_rate", source="strava_export",
+                conn,
+                metric_key="strava.session.avg_heart_rate",
+                source="strava_export",
                 category="activity",
             )
             conn.execute(

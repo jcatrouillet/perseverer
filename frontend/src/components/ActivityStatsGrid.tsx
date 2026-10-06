@@ -6,14 +6,14 @@
 // has no Running Dynamics section. Nothing here is estimated or backfilled.
 import type { ActivityDetail } from "../api/types";
 import { metricValue, metricValueAliased } from "../activityMetrics";
-import { boulderingRoutes, climbSummary, formatGrade, isBoulderingActivity } from "../boulderingRoutes";
-import { useDistanceFormat } from "../formatDistance";
 import {
-  effectiveDurationS,
-  formatDurationHM,
-  formatMinPerKm,
-  isPaceSport,
-} from "../runningStats";
+  boulderingRoutes,
+  climbSummary,
+  formatGrade,
+  isBoulderingActivity,
+} from "../boulderingRoutes";
+import { useDistanceFormat } from "../formatDistance";
+import { effectiveDurationS, formatDurationHM, formatMinPerKm, isPaceSport } from "../runningStats";
 import { StatTile } from "./StatTile";
 
 /** Distance & time, Heart rate, and the `afterHeartRate` slot (the route map) -- the part of the
@@ -55,7 +55,9 @@ export function ActivityStatsGridPrimary({
   // Bouldering has no distance/pace at all -- the tiles below already skip both via their own
   // `distance_m != null` guards, so the only bouldering-specific change needed here is the
   // heading text itself (there's genuinely no "distance" in this card once that's true).
-  const climb = isBouldering ? climbSummary(boulderingRoutes(activity.splits), activity.splits) : null;
+  const climb = isBouldering
+    ? climbSummary(boulderingRoutes(activity.splits), activity.splits)
+    : null;
 
   return (
     <div className="activity-stats">
@@ -78,26 +80,41 @@ export function ActivityStatsGridPrimary({
               />
             )}
             {durationS != null && (
-              <StatTile label="Moving time" value={formatDurationHM(durationS)} icon="clock" tone="cadence" hero />
-            )}
-            {/* distance_m > 0, not just non-null -- see ActivityCard's identical guard. */}
-            {activity.distance_m != null && activity.distance_m > 0 && durationS != null && durationS > 0 && (
               <StatTile
-                label={paceSport ? "Avg pace" : "Avg speed"}
-                value={
-                  paceSport
-                    ? formatMinPerKm(
-                        paceMinPerDisplayUnit(durationS / (activity.distance_m / 1000)),
-                      )
-                    : kmhToDisplay(activity.distance_m / 1000 / (durationS / 3600)).toFixed(1)
-                }
-                unit={paceSport ? `/${unitLabel}` : speedUnitLabel}
-                icon="gauge"
-                tone="pace"
+                label="Moving time"
+                value={formatDurationHM(durationS)}
+                icon="clock"
+                tone="cadence"
+                hero
               />
             )}
+            {/* distance_m > 0, not just non-null -- see ActivityCard's identical guard. */}
+            {activity.distance_m != null &&
+              activity.distance_m > 0 &&
+              durationS != null &&
+              durationS > 0 && (
+                <StatTile
+                  label={paceSport ? "Avg pace" : "Avg speed"}
+                  value={
+                    paceSport
+                      ? formatMinPerKm(
+                          paceMinPerDisplayUnit(durationS / (activity.distance_m / 1000)),
+                        )
+                      : kmhToDisplay(activity.distance_m / 1000 / (durationS / 3600)).toFixed(1)
+                  }
+                  unit={paceSport ? `/${unitLabel}` : speedUnitLabel}
+                  icon="gauge"
+                  tone="pace"
+                />
+              )}
             {activity.calories != null && (
-              <StatTile label="Calories" value={activity.calories.toFixed(0)} unit="kcal" icon="flame" tone="load" />
+              <StatTile
+                label="Calories"
+                value={activity.calories.toFixed(0)}
+                unit="kcal"
+                icon="flame"
+                tone="load"
+              />
             )}
           </div>
         </div>
@@ -144,7 +161,13 @@ export function ActivityStatsGridPrimary({
                   />
                 )}
                 {activity.max_hr_bpm != null && (
-                  <StatTile label="Max heart rate" value={Math.round(activity.max_hr_bpm)} unit="bpm" icon="heart" tone="hr" />
+                  <StatTile
+                    label="Max heart rate"
+                    value={Math.round(activity.max_hr_bpm)}
+                    unit="bpm"
+                    icon="heart"
+                    tone="hr"
+                  />
                 )}
               </div>
             </div>
@@ -161,13 +184,31 @@ export function ActivityStatsGridPrimary({
               <h3>Elevation</h3>
               <div className="stat-grid">
                 {activity.elevation_gain_m != null && (
-                  <StatTile label="Elevation gain" value={activity.elevation_gain_m.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
+                  <StatTile
+                    label="Elevation gain"
+                    value={activity.elevation_gain_m.toFixed(0)}
+                    unit="m"
+                    icon="mountain"
+                    tone="elevation"
+                  />
                 )}
                 {totalDescent != null && (
-                  <StatTile label="Elevation loss" value={totalDescent.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
+                  <StatTile
+                    label="Elevation loss"
+                    value={totalDescent.toFixed(0)}
+                    unit="m"
+                    icon="mountain"
+                    tone="elevation"
+                  />
                 )}
                 {activity.max_altitude_m != null && (
-                  <StatTile label="Max elevation" value={activity.max_altitude_m.toFixed(0)} unit="m" icon="mountain" tone="elevation" />
+                  <StatTile
+                    label="Max elevation"
+                    value={activity.max_altitude_m.toFixed(0)}
+                    unit="m"
+                    icon="mountain"
+                    tone="elevation"
+                  />
                 )}
               </div>
             </div>
@@ -239,13 +280,31 @@ export function ActivityStatsGridSecondary({
           <h3>Respiration</h3>
           <div className="stat-grid">
             {avgRespiration != null && (
-              <StatTile label="Avg respiration" value={avgRespiration.toFixed(0)} unit="brpm" icon="pulse" tone="cadence" />
+              <StatTile
+                label="Avg respiration"
+                value={avgRespiration.toFixed(0)}
+                unit="brpm"
+                icon="pulse"
+                tone="cadence"
+              />
             )}
             {maxRespiration != null && (
-              <StatTile label="Max respiration" value={maxRespiration.toFixed(0)} unit="brpm" icon="pulse" tone="cadence" />
+              <StatTile
+                label="Max respiration"
+                value={maxRespiration.toFixed(0)}
+                unit="brpm"
+                icon="pulse"
+                tone="cadence"
+              />
             )}
             {minRespiration != null && (
-              <StatTile label="Min respiration" value={minRespiration.toFixed(0)} unit="brpm" icon="pulse" tone="cadence" />
+              <StatTile
+                label="Min respiration"
+                value={minRespiration.toFixed(0)}
+                unit="brpm"
+                icon="pulse"
+                tone="cadence"
+              />
             )}
           </div>
         </>
@@ -256,16 +315,37 @@ export function ActivityStatsGridSecondary({
           <h3>Training effect</h3>
           <div className="stat-grid">
             {aerobicEffect != null && (
-              <StatTile label="Aerobic effect" value={aerobicEffect.toFixed(1)} icon="trend" tone="power" />
+              <StatTile
+                label="Aerobic effect"
+                value={aerobicEffect.toFixed(1)}
+                icon="trend"
+                tone="power"
+              />
             )}
             {anaerobicEffect != null && (
-              <StatTile label="Anaerobic effect" value={anaerobicEffect.toFixed(1)} icon="bolt" tone="power" />
+              <StatTile
+                label="Anaerobic effect"
+                value={anaerobicEffect.toFixed(1)}
+                icon="bolt"
+                tone="power"
+              />
             )}
             {activity.training_load != null && (
-              <StatTile label="Training load" value={Math.round(activity.training_load)} icon="bolt" tone="load" />
+              <StatTile
+                label="Training load"
+                value={Math.round(activity.training_load)}
+                icon="bolt"
+                tone="load"
+              />
             )}
             {activity.workout_rpe != null && (
-              <StatTile label="Perceived effort" value={activity.workout_rpe.toFixed(1)} unit="RPE" icon="flame" tone="load" />
+              <StatTile
+                label="Perceived effort"
+                value={activity.workout_rpe.toFixed(1)}
+                unit="RPE"
+                icon="flame"
+                tone="load"
+              />
             )}
             {activity.vdot != null && (
               <StatTile label="VDOT" value={activity.vdot.toFixed(1)} icon="trend" tone="pace" />
@@ -278,10 +358,32 @@ export function ActivityStatsGridSecondary({
         <>
           <h3>Power</h3>
           <div className="stat-grid">
-            {avgPower != null && <StatTile label="Avg power" value={Math.round(avgPower)} unit="W" icon="bolt" tone="power" />}
-            {maxPower != null && <StatTile label="Max power" value={Math.round(maxPower)} unit="W" icon="bolt" tone="power" />}
+            {avgPower != null && (
+              <StatTile
+                label="Avg power"
+                value={Math.round(avgPower)}
+                unit="W"
+                icon="bolt"
+                tone="power"
+              />
+            )}
+            {maxPower != null && (
+              <StatTile
+                label="Max power"
+                value={Math.round(maxPower)}
+                unit="W"
+                icon="bolt"
+                tone="power"
+              />
+            )}
             {normalizedPower != null && (
-              <StatTile label="Normalized power" value={Math.round(normalizedPower)} unit="W" icon="bolt" tone="power" />
+              <StatTile
+                label="Normalized power"
+                value={Math.round(normalizedPower)}
+                unit="W"
+                icon="bolt"
+                tone="power"
+              />
             )}
           </div>
         </>
@@ -310,10 +412,22 @@ export function ActivityStatsGridSecondary({
               />
             )}
             {avgStepLengthMm != null && (
-              <StatTile label="Step length" value={(avgStepLengthMm / 10).toFixed(0)} unit="cm" icon="route" tone="cadence" />
+              <StatTile
+                label="Step length"
+                value={(avgStepLengthMm / 10).toFixed(0)}
+                unit="cm"
+                icon="route"
+                tone="cadence"
+              />
             )}
             {avgStanceTime != null && (
-              <StatTile label="Ground contact time" value={Math.round(avgStanceTime)} unit="ms" icon="clock" tone="cadence" />
+              <StatTile
+                label="Ground contact time"
+                value={Math.round(avgStanceTime)}
+                unit="ms"
+                icon="clock"
+                tone="cadence"
+              />
             )}
             {avgVerticalOscillation != null && (
               <StatTile
@@ -325,7 +439,13 @@ export function ActivityStatsGridSecondary({
               />
             )}
             {avgVerticalRatio != null && (
-              <StatTile label="Vertical ratio" value={avgVerticalRatio.toFixed(1)} unit="%" icon="trend" tone="cadence" />
+              <StatTile
+                label="Vertical ratio"
+                value={avgVerticalRatio.toFixed(1)}
+                unit="%"
+                icon="trend"
+                tone="cadence"
+              />
             )}
           </div>
         </>
@@ -335,7 +455,13 @@ export function ActivityStatsGridSecondary({
         <>
           <h3>Temperature</h3>
           <div className="stat-grid">
-            <StatTile label="Avg temperature" value={avgTemp!.toFixed(0)} unit="°C" icon="thermometer" tone="load" />
+            <StatTile
+              label="Avg temperature"
+              value={avgTemp!.toFixed(0)}
+              unit="°C"
+              icon="thermometer"
+              tone="load"
+            />
             {minTemp != null && maxTemp != null && (
               <StatTile
                 label="Temperature range"

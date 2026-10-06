@@ -192,9 +192,7 @@ class Settings(BaseSettings):
     def smtp_configured(self) -> bool:
         """All four of host/username/password/from present -- email_reports.py's scheduled jobs
         and the test endpoint check this before attempting any send."""
-        return bool(
-            self.smtp_host and self.smtp_username and self.smtp_password and self.smtp_from
-        )
+        return bool(self.smtp_host and self.smtp_username and self.smtp_password and self.smtp_from)
 
     @property
     def cors_origins_list(self) -> list[str]:

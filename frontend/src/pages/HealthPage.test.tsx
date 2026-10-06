@@ -199,7 +199,15 @@ describe("HealthPage", () => {
     mockUseSleep.mockReturnValue({
       ...EMPTY,
       data: [
-        { local_date: TODAY, start_time_utc: "x", end_time_utc: "y", total_sleep_s: 27000, sleep_score: 80, source: "garmin_connect", stages: [] },
+        {
+          local_date: TODAY,
+          start_time_utc: "x",
+          end_time_utc: "y",
+          total_sleep_s: 27000,
+          sleep_score: 80,
+          source: "garmin_connect",
+          stages: [],
+        },
       ],
     });
     render(<HealthPage />);

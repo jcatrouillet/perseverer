@@ -90,9 +90,7 @@ def _add_observation(
         health_observation.insert().values(
             athlete_id=DEFAULT_ATHLETE_ID,
             metric_key=metric_key,
-            observed_at_utc=dt.datetime(year, month, day, hour, tzinfo=dt.UTC).replace(
-                tzinfo=None
-            ),
+            observed_at_utc=dt.datetime(year, month, day, hour, tzinfo=dt.UTC).replace(tzinfo=None),
             local_date=local_date,
             aggregation="daily",
             value_num=value,

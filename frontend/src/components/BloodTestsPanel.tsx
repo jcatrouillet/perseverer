@@ -122,7 +122,9 @@ export function ResultRow({
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(String(result.value_num));
   const [unit, setUnit] = useState(result.unit ?? "");
-  const [refLow, setRefLow] = useState(result.reference_low != null ? String(result.reference_low) : "");
+  const [refLow, setRefLow] = useState(
+    result.reference_low != null ? String(result.reference_low) : "",
+  );
   const [refHigh, setRefHigh] = useState(
     result.reference_high != null ? String(result.reference_high) : "",
   );
@@ -204,7 +206,13 @@ export function ResultRow({
   }
 
   return (
-    <tr className={isOutOfRange(result) ? "blood-tests__row blood-tests__row--out-of-range" : "blood-tests__row"}>
+    <tr
+      className={
+        isOutOfRange(result)
+          ? "blood-tests__row blood-tests__row--out-of-range"
+          : "blood-tests__row"
+      }
+    >
       <td>{leadLabel}</td>
       <td>
         {result.value_num}
@@ -299,7 +307,12 @@ function PanelMeta({ panel }: { panel: Panel }) {
           />
         </label>
         <div className="blood-tests__form-actions">
-          <button type="button" className="button button--primary" disabled={isSaving} onClick={save}>
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={isSaving}
+            onClick={save}
+          >
             {isSaving ? "Saving…" : "Save"}
           </button>
           <button type="button" className="button" onClick={() => setIsEditing(false)}>
@@ -645,8 +658,8 @@ export function BloodTestsPanel() {
     <section className="blood-tests">
       <h2>Add or manage blood tests</h2>
       <p className="chart-note">
-        Every marker you have recorded is listed in the menu on the left, each charted over time. Use
-        this section to add a new blood test, or to correct or delete results by test date.
+        Every marker you have recorded is listed in the menu on the left, each charted over time.
+        Use this section to add a new blood test, or to correct or delete results by test date.
         Reference ranges (when given) come from your own lab report -- shown only to flag values
         outside the range you provided, not as medical advice.
       </p>

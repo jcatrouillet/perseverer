@@ -183,9 +183,7 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
       source_text: workout.source_text,
       scheduled_time: workout.scheduled_time,
       duration_minutes:
-        workout.estimated_duration_s != null
-          ? Math.round(workout.estimated_duration_s / 60)
-          : null,
+        workout.estimated_duration_s != null ? Math.round(workout.estimated_duration_s / 60) : null,
       steps: workout.steps,
       comment: workout.comment,
     });
@@ -221,9 +219,7 @@ function WorkoutSummary({ workout }: { workout: ScheduledWorkout }) {
           {duration}
         </p>
       )}
-      {workout.comment && (
-        <p className="chart-note planned-workout__comment">{workout.comment}</p>
-      )}
+      {workout.comment && <p className="chart-note planned-workout__comment">{workout.comment}</p>}
       <WorkoutLoadBar workout={workout} />
       <WorkoutDetails workout={workout} />
       {workout.sport === "running" && (
@@ -311,9 +307,7 @@ function WorkoutEditForm({
   const [name, setName] = useState(initial?.name ?? "");
   const [sourceText, setSourceText] = useState(initial?.source_text ?? "");
   const [durationMinutes, setDurationMinutes] = useState(
-    initial?.estimated_duration_s
-      ? String(Math.round(initial.estimated_duration_s / 60))
-      : "",
+    initial?.estimated_duration_s ? String(Math.round(initial.estimated_duration_s / 60)) : "",
   );
   const [scheduledTime, setScheduledTime] = useState(initial?.scheduled_time ?? "");
   const [comment, setComment] = useState(initial?.comment ?? "");
@@ -718,11 +712,7 @@ export function ScheduleWorkoutForm({ localDate }: { localDate: string }) {
         </div>
       ))}
       <div className="planned-workout__actions">
-        <button
-          type="button"
-          className="button button--primary"
-          onClick={() => setAddingNew(true)}
-        >
+        <button type="button" className="button button--primary" onClick={() => setAddingNew(true)}>
           {list.length === 0 ? "Schedule a workout" : "Add another workout"}
         </button>
         {clipboardItem && (

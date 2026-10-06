@@ -88,7 +88,10 @@ function CurveTooltip({ active, payload, metric }: TooltipContentProps & { metri
   );
 }
 
-function pointAt(points: PerformanceCurvePointOut[], durationS: number): PerformanceCurvePointOut | undefined {
+function pointAt(
+  points: PerformanceCurvePointOut[],
+  durationS: number,
+): PerformanceCurvePointOut | undefined {
   return points.find((p) => p.duration_s === durationS);
 }
 
@@ -108,7 +111,9 @@ export function PerformanceCurveChart() {
   const effectiveSports = selectedSports ?? new Set(knownSports);
 
   const earliestDate = useMemo(() => {
-    const dates = (allActivities.data ?? []).map((a) => a.local_date).filter((d): d is string => !!d);
+    const dates = (allActivities.data ?? [])
+      .map((a) => a.local_date)
+      .filter((d): d is string => !!d);
     return dates.length > 0 ? dates.reduce((a, b) => (a < b ? a : b)) : undefined;
   }, [allActivities.data]);
 
@@ -134,9 +139,9 @@ export function PerformanceCurveChart() {
       <h2>Performance Curve</h2>
       <p className="chart-note">
         The best sustained value for each duration, across every activity in range -- not one
-        activity's own average, the single best window anywhere. Dashed lines (when shown) are
-        your own already-computed threshold pace/HR, for comparison -- never blended into the
-        curve itself.
+        activity's own average, the single best window anywhere. Dashed lines (when shown) are your
+        own already-computed threshold pace/HR, for comparison -- never blended into the curve
+        itself.
       </p>
 
       <div className="insights-tabs" role="tablist" style={{ marginBottom: "var(--space-3)" }}>
@@ -238,7 +243,9 @@ export function PerformanceCurveChart() {
           {(() => {
             const p60 = pointAt(curve.data.points, 3600);
             const threshold =
-              metric === "heart_rate" ? curve.data.threshold_hr_bpm : curve.data.threshold_pace_s_per_km;
+              metric === "heart_rate"
+                ? curve.data.threshold_hr_bpm
+                : curve.data.threshold_pace_s_per_km;
             if (!p60 || threshold == null) return null;
             if (metric === "heart_rate") {
               const diff = p60.value - threshold;
@@ -260,7 +267,10 @@ export function PerformanceCurveChart() {
             );
           })()}
 
-          <ChartFullscreen as="h3" title={`${metric === "heart_rate" ? "Heart rate" : metric === "gap" ? "GAP" : "Pace"} curve`}>
+          <ChartFullscreen
+            as="h3"
+            title={`${metric === "heart_rate" ? "Heart rate" : metric === "gap" ? "GAP" : "Pace"} curve`}
+          >
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart
                 data={curve.data.points}

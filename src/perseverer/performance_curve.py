@@ -92,7 +92,23 @@ Metric = Literal["pace", "gap", "heart_rate"]
 # bucket with no qualifying window across *every* activity in range is omitted from the curve
 # entirely (never a fabricated point).
 DURATION_BUCKETS_S: tuple[int, ...] = (
-    1, 5, 10, 15, 30, 60, 120, 180, 300, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200,
+    1,
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    180,
+    300,
+    600,
+    900,
+    1200,
+    1800,
+    2700,
+    3600,
+    5400,
+    7200,
 )
 
 # A real pause or signal dropout, not ordinary GPS/HR-strap jitter -- see module docstring for
@@ -275,9 +291,7 @@ def _qualifying_activities(
     return out
 
 
-def _trim_windows(
-    conn: Connection, *, athlete_id: str
-) -> dict[datetime, tuple[float, float]]:
+def _trim_windows(conn: Connection, *, athlete_id: str) -> dict[datetime, tuple[float, float]]:
     """`{activity_start_time_utc: (trim_start_s, trim_end_s)}` for every trim override this
     athlete has -- same identity key `get_activity_stream`'s own trim lookup uses. A trimmed
     activity's Parquet file still holds the full original recording (never destructive, see
@@ -340,7 +354,11 @@ def compute_performance_curve(
     each `CurvePoint` recording which activity set it). `sports` is ignored entirely for
     `metric in ("pace", "gap")` -- see module docstring."""
     activities = _qualifying_activities(
-        conn, athlete_id=athlete_id, metric=metric, start_date=start_date, end_date=end_date,
+        conn,
+        athlete_id=athlete_id,
+        metric=metric,
+        start_date=start_date,
+        end_date=end_date,
         sports=sports,
     )
     reference = _reference_values(conn, athlete_id=athlete_id, metric=metric, as_of=as_of)
@@ -351,9 +369,7 @@ def compute_performance_curve(
     paths = [str(parquet_dir / a[2]) for a in activities]
     local_date_by_path = {str(parquet_dir / a[2]): a[1] for a in activities}
     activity_id_by_path = {str(parquet_dir / a[2]): a[0] for a in activities}
-    trim_by_path = {
-        str(parquet_dir / a[2]): trims[a[3]] for a in activities if a[3] in trims
-    }
+    trim_by_path = {str(parquet_dir / a[2]): trims[a[3]] for a in activities if a[3] in trims}
 
     columns = ["heart_rate"] if metric == "heart_rate" else ["distance_m", "altitude_m"]
     col_list = ", ".join(columns)
@@ -383,9 +399,7 @@ def compute_performance_curve(
         search_mode: Literal["mean", "rate"]
         if metric == "heart_rate":
             hr = [r[2] for r in path_rows]
-            valid_pairs = [
-                (t, v) for t, v in zip(timestamps_s, hr, strict=True) if v is not None
-            ]
+            valid_pairs = [(t, v) for t, v in zip(timestamps_s, hr, strict=True) if v is not None]
             if len(valid_pairs) < 2:
                 continue
             valid_timestamps = [t for t, _ in valid_pairs]
@@ -412,9 +426,7 @@ def compute_performance_curve(
 
             if metric == "gap":
                 filtered_altitudes = [altitudes[i] for i in keep]
-                timestamps_dt = [
-                    datetime.fromtimestamp(t, tz=UTC) for t in filtered_timestamps_s
-                ]
+                timestamps_dt = [datetime.fromtimestamp(t, tz=UTC) for t in filtered_timestamps_s]
                 per_interval = compute_gap_adjusted_distances(
                     timestamps_dt, filtered_distances, filtered_altitudes
                 )

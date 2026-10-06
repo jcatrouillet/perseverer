@@ -116,9 +116,7 @@ def downsample(
             GROUP BY CAST((ts - (SELECT min(ts) FROM src)) / ? AS BIGINT)
             ORDER BY bucket_start
         """
-        rows = con.execute(
-            query, [str(parquet_path), *window_params, bucket_width_s]
-        ).fetchall()
+        rows = con.execute(query, [str(parquet_path), *window_params, bucket_width_s]).fetchall()
 
     timestamps = [datetime.fromtimestamp(row[0], tz=UTC) for row in rows]
     series: dict[str, list[float | None]] = {

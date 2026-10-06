@@ -84,8 +84,8 @@ export function ActivityComparisonTable({
         {comparisons.matched_count === comparisons.rows.length
           ? `${comparisons.matched_count} `
           : `${comparisons.rows.length} of ${comparisons.matched_count} `}
-        run{comparisons.matched_count === 1 ? "" : "s"} within {bandPct}% of this distance,
-        starting within {radiusLabel}.
+        run{comparisons.matched_count === 1 ? "" : "s"} within {bandPct}% of this distance, starting
+        within {radiusLabel}.
       </p>
       <div className="table-scroll">
         <table className="comparison-table">
@@ -119,7 +119,9 @@ export function ActivityComparisonTable({
                       <Link href={`/activities/${r.id}`}>{dateCell}</Link>
                     )}
                   </td>
-                  <td>{metersToDisplayDistance(r.distance_m, unit).toFixed(2)} {unitLabel}</td>
+                  <td>
+                    {metersToDisplayDistance(r.distance_m, unit).toFixed(2)} {unitLabel}
+                  </td>
                   <td>
                     {paceSport
                       ? `${formatMinPerKm(paceValue)}/${unitLabel}`
@@ -132,7 +134,9 @@ export function ActivityComparisonTable({
                   </td>
                   <td>{r.vdot != null ? r.vdot.toFixed(1) : "—"}</td>
                   <td>{r.avg_hr_bpm != null ? `${Math.round(r.avg_hr_bpm)} bpm` : "—"}</td>
-                  <td>{r.avg_cadence_spm != null ? `${Math.round(r.avg_cadence_spm)} spm` : "—"}</td>
+                  <td>
+                    {r.avg_cadence_spm != null ? `${Math.round(r.avg_cadence_spm)} spm` : "—"}
+                  </td>
                 </tr>
               );
             })}

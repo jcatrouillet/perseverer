@@ -287,9 +287,7 @@ def parse_health_fit(raw_bytes: bytes) -> HealthBatch:
                 num = _to_float(value)
                 if num is not None:
                     key_name = _metric_key("hrv_status_summary_mesgs", key)
-                    observations.append(
-                        HealthObservation(key_name, ts, local_date, "daily", num)
-                    )
+                    observations.append(HealthObservation(key_name, ts, local_date, "daily", num))
             else:
                 unrecognized.add(_metric_key("hrv_status_summary_mesgs", key))
 

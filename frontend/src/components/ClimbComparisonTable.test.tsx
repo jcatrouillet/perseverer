@@ -1,7 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { ActivityDetail, ClimbComparisonRowOut, ClimbComparisonsOut, SplitOut } from "../api/types";
+import type {
+  ActivityDetail,
+  ClimbComparisonRowOut,
+  ClimbComparisonsOut,
+  SplitOut,
+} from "../api/types";
 import { ClimbComparisonTable } from "./ClimbComparisonTable";
 
 function split(overrides: Partial<SplitOut> = {}): SplitOut {
@@ -137,9 +142,7 @@ describe("ClimbComparisonTable", () => {
   });
 
   it("captions with the matched count and threshold when rows were capped", () => {
-    render(
-      <ClimbComparisonTable activity={activity()} comparisons={comparisons([row()], 14)} />,
-    );
+    render(<ClimbComparisonTable activity={activity()} comparisons={comparisons([row()], 14)} />);
     expect(screen.getByText(/1 of 14/)).toBeInTheDocument();
     expect(screen.getByText(/15%/)).toBeInTheDocument();
   });

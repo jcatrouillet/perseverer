@@ -449,9 +449,9 @@ describe("ScheduleWorkoutForm", () => {
     render(<ScheduleWorkoutForm localDate="2026-09-02" />);
     fireEvent.click(screen.getByText("Paste copied workout"));
 
-    expect(
-      screen.getByPlaceholderText(/easy effort, focus on cadence/),
-    ).toHaveValue("Legs still sore -- cut it short if needed.");
+    expect(screen.getByPlaceholderText(/easy effort, focus on cadence/)).toHaveValue(
+      "Legs still sore -- cut it short if needed.",
+    );
   });
 
   it("hides Push to Garmin for a sport with no push builder (e.g. legacy 'fitness' data)", () => {
@@ -555,7 +555,7 @@ describe("ScheduleWorkoutForm", () => {
       expect((screen.getByPlaceholderText(/Search exercises/) as HTMLInputElement).value).toBe(
         "Burpee",
       );
-      expect((screen.getByDisplayValue("15") as HTMLInputElement)).toBeInTheDocument();
+      expect(screen.getByDisplayValue("15") as HTMLInputElement).toBeInTheDocument();
     });
 
     it("saving an edit calls the update mutation with the workout's id", () => {

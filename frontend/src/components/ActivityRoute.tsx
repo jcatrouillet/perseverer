@@ -271,7 +271,12 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
               <Icon name="download" />
               Export image
             </button>
-            <button type="button" className="button" onClick={exportGif} disabled={gifProgress != null}>
+            <button
+              type="button"
+              className="button"
+              onClick={exportGif}
+              disabled={gifProgress != null}
+            >
               <Icon name="download" />
               {gifProgress != null ? `Encoding… ${Math.round(gifProgress * 100)}%` : "Export GIF"}
             </button>

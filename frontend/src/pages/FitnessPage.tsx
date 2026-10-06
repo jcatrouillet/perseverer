@@ -131,10 +131,7 @@ export function FitnessPage() {
   const fitness = useFitness(EARLIEST_PLAUSIBLE_DATE, TODAY);
   const dashboard = useHealthDashboard(EARLIEST_PLAUSIBLE_DATE, TODAY);
 
-  const fitnessPoints = useMemo(
-    () => fitnessToDailyPoints(fitness.data ?? []),
-    [fitness.data],
-  );
+  const fitnessPoints = useMemo(() => fitnessToDailyPoints(fitness.data ?? []), [fitness.data]);
   const healthPoints = useMemo(
     () =>
       dashboard.data

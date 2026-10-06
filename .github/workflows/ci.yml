@@ -23,6 +23,7 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --frozen --all-groups
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - run: uv run mypy
       # Phase 9 hardening (ADR 0014): fails the build on a known-vulnerable pinned dependency.
       # Zero findings as of this writing (confirmed by running it before wiring it in) -- no
@@ -56,6 +57,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run format:check
+      - run: npm test
       - run: npm run build
       # Phase 9 hardening (ADR 0014) -- see the lint job's pip-audit step for the same reasoning
       # (zero findings as of this writing, no allowlist needed yet).

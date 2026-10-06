@@ -114,9 +114,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   // Monday. See dateUtils.ts::sumDayRollups.
   const weekByStart = new Map(
     weekRows.map((row) => {
-      const rowDays = row
-        .map((d) => dayByDate.get(d))
-        .filter((d): d is DayRollupOut => d != null);
+      const rowDays = row.map((d) => dayByDate.get(d)).filter((d): d is DayRollupOut => d != null);
       return [row[0]!, sumDayRollups(rowDays)];
     }),
   );

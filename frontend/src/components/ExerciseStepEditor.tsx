@@ -71,7 +71,8 @@ function matchRank(entry: ExerciseCatalogEntry, q: string): number {
 function matchingCatalogEntries(q: string): ExerciseCatalogEntry[] {
   if (q.length < 2 || catalog == null) return [];
   const matches = catalog.filter(
-    (entry) => entry.name.toLowerCase().includes(q) || entry.categoryLabel.toLowerCase().includes(q),
+    (entry) =>
+      entry.name.toLowerCase().includes(q) || entry.categoryLabel.toLowerCase().includes(q),
   );
   matches.sort((a, b) => matchRank(a, q) - matchRank(b, q));
   return matches;

@@ -95,8 +95,8 @@ export function Vo2maxChart() {
         <p className="chart-note">
           A trailing-maximum VDOT (Daniels &amp; Gilbert, 1979) computed from your own race-effort
           runs, in the same ml/kg/min units clinical VO2max is measured in -- not Garmin's own
-          precomputed value. See "What's driving this value" below for exactly which run and
-          window set today's number.
+          precomputed value. See "What's driving this value" below for exactly which run and window
+          set today's number.
         </p>
         <TrendChart points={bucketed} series={VO2MAX_SERIES} />
       </ChartFullscreen>

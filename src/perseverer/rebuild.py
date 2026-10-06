@@ -180,7 +180,7 @@ _SHADOW_SWAP_INSERT_ORDER = (
 # shadow-side numeric id.
 _FK_REMAP_JOINS: dict[tuple[str, str], tuple[str, str]] = {
     ("activity", "device_id"): (
-        'LEFT JOIN shadow_db.device AS shadow_device ON shadow_device.id = src.device_id '
+        "LEFT JOIN shadow_db.device AS shadow_device ON shadow_device.id = src.device_id "
         "LEFT JOIN device AS live_device ON live_device.athlete_id = shadow_device.athlete_id "
         "AND live_device.manufacturer = shadow_device.manufacturer "
         "AND live_device.product = shadow_device.product "
@@ -188,7 +188,7 @@ _FK_REMAP_JOINS: dict[tuple[str, str], tuple[str, str]] = {
         "live_device.id",
     ),
     ("health_observation", "device_id"): (
-        'LEFT JOIN shadow_db.device AS shadow_ho_device ON shadow_ho_device.id = src.device_id '
+        "LEFT JOIN shadow_db.device AS shadow_ho_device ON shadow_ho_device.id = src.device_id "
         "LEFT JOIN device AS live_ho_device "
         "ON live_ho_device.athlete_id = shadow_ho_device.athlete_id "
         "AND live_ho_device.manufacturer = shadow_ho_device.manufacturer "
@@ -588,7 +588,9 @@ def _insert_from_shadow_sql(table: object) -> str:
     instead of a straight copy, for the same reason autoincrement ids don't copy safely."""
     all_cols: list[str] = list(table.c.keys())  # type: ignore[attr-defined]
     insert_cols = [
-        c for c in all_cols if not (c == "id" and isinstance(table.c[c].type, Integer))  # type: ignore[attr-defined]
+        c
+        for c in all_cols
+        if not (c == "id" and isinstance(table.c[c].type, Integer))  # type: ignore[attr-defined]
     ]
     joins: list[str] = []
     select_exprs: list[str] = []
@@ -728,9 +730,9 @@ def rebuild_database_via_shadow(
             # The shadow db needs its own `athlete` row before any FK-constrained insert can
             # succeed -- metric_definition, by contrast, self-populates as ingestion calls
             # get_or_register_metric, exactly like a real fresh install does.
-            athlete_row = conn.execute(
-                select(athlete).where(athlete.c.id == athlete_id)
-            ).mappings().one()
+            athlete_row = (
+                conn.execute(select(athlete).where(athlete.c.id == athlete_id)).mappings().one()
+            )
             # Releases this read's own implicit transaction/snapshot on `conn` immediately,
             # rather than holding it open for however long the replay below takes -- otherwise
             # `conn`'s next query after this function returns would still see the pre-swap state

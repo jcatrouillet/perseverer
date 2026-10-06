@@ -178,7 +178,11 @@ def _build_event(row: Row, steps: list[Row], timezone_name: str) -> Event:  # ty
     if row.scheduled_time:
         hour, minute = (int(p) for p in row.scheduled_time.split(":"))
         start = datetime(
-            local_date.year, local_date.month, local_date.day, hour, minute,
+            local_date.year,
+            local_date.month,
+            local_date.day,
+            hour,
+            minute,
             tzinfo=ZoneInfo(timezone_name),
         )
         duration_s = row.estimated_duration_s or _DEFAULT_EVENT_DURATION_S
@@ -211,7 +215,11 @@ def _build_race_event(row: Row, timezone_name: str) -> Event:  # type: ignore[ty
     if row.scheduled_time:
         hour, minute = (int(p) for p in row.scheduled_time.split(":"))
         start = datetime(
-            local_date.year, local_date.month, local_date.day, hour, minute,
+            local_date.year,
+            local_date.month,
+            local_date.day,
+            hour,
+            minute,
             tzinfo=ZoneInfo(timezone_name),
         )
         duration_s = row.target_duration_s or _DEFAULT_RACE_EVENT_DURATION_S

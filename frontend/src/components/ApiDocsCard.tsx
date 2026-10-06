@@ -8,8 +8,8 @@ export function ApiDocsCard() {
     <section className="card">
       <h2>API documentation</h2>
       <p className="chart-note">
-        Every endpoint, parameter, and response shape, for scripts, the MCP server, or anything
-        else calling this app&apos;s REST API directly.
+        Every endpoint, parameter, and response shape, for scripts, the MCP server, or anything else
+        calling this app&apos;s REST API directly.
       </p>
       <a className="button" href="/api-docs.html" target="_blank" rel="noopener noreferrer">
         Open API documentation

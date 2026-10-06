@@ -66,6 +66,7 @@ def _local_date(start_time_utc: datetime, utc_offset_s: int) -> str:
     next UTC day. See ADR 0009 decision 8."""
     return (start_time_utc + timedelta(seconds=utc_offset_s)).date().isoformat()
 
+
 # fit_folder's charter is FIT files, plus these two specific Garmin Connect-shaped JSON
 # filename patterns confirmed against real data (see docs/adr/0004-phase-2-health-ingestion.md)
 # — not a general JSON importer.
@@ -190,9 +191,7 @@ def _find_merge_match(
     window_start = candidate.start_time_utc - _MERGE_WINDOW
     window_end = candidate.start_time_utc + _MERGE_WINDOW
     rows = conn.execute(
-        select(
-            activity.c.id, activity.c.start_time_utc, activity.c.duration_s, activity.c.sport
-        )
+        select(activity.c.id, activity.c.start_time_utc, activity.c.duration_s, activity.c.sport)
         .where(
             activity.c.athlete_id == athlete_id,
             activity.c.start_time_utc.between(window_start, window_end),

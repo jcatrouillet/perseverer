@@ -3,7 +3,15 @@
 // deliberately avoided charting (see health/json_parser.py::parse_daily_body_battery_json's own
 // docstring for why the real per-minute-ish series was worth fetching live instead). Same
 // small-line-chart shape as SleepDurationChart.tsx, just a Line instead of a Bar.
-import { Line, LineChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Line,
+  LineChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { useTimeFormat } from "../formatTime";
 import { toneColor } from "../metricStyle";

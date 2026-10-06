@@ -25,9 +25,7 @@ describe("ClimbingStatsCard", () => {
   });
 
   it("renders nothing when there were no bouldering sessions in the period", () => {
-    const { container } = render(
-      <ClimbingStatsCard summary={summary({ session_count: 0 })} />,
-    );
+    const { container } = render(<ClimbingStatsCard summary={summary({ session_count: 0 })} />);
     expect(container.firstChild).toBeNull();
   });
 

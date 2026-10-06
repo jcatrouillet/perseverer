@@ -69,8 +69,12 @@ class TestPatchClimbRouteStatus:
         with engine.connect() as conn:
             seed_activity(conn, activity_id="a1", sport="rock_climbing", sub_sport="bouldering")
         _add_split(
-            engine, activity_id="a1", split_index=1, split_type="climb_rest",
-            grade=None, result=None,
+            engine,
+            activity_id="a1",
+            split_index=1,
+            split_type="climb_rest",
+            grade=None,
+            result=None,
         )
 
         r = client.patch(
@@ -119,7 +123,9 @@ class TestPatchClimbRouteStatus:
         _add_split(engine, activity_id="a1", split_index=0)
 
         r = client.patch(
-            "/api/v1/activities/a1/climb-routes/0", json={}, headers=auth_headers,
+            "/api/v1/activities/a1/climb-routes/0",
+            json={},
+            headers=auth_headers,
         )
         assert r.status_code == 422
 
@@ -207,9 +213,7 @@ class TestDeleteClimbRoute:
         )
         split_index = add.json()["split_index"]
 
-        r = client.delete(
-            f"/api/v1/activities/a1/climb-routes/{split_index}", headers=auth_headers
-        )
+        r = client.delete(f"/api/v1/activities/a1/climb-routes/{split_index}", headers=auth_headers)
         assert r.status_code == 204
 
         detail = client.get("/api/v1/activities/a1", headers=auth_headers)
@@ -230,9 +234,7 @@ class TestClimbComparisons:
     def test_404_for_unknown_activity(
         self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
-        r = client.get(
-            "/api/v1/activities/doesnotexist/climb-comparisons", headers=auth_headers
-        )
+        r = client.get("/api/v1/activities/doesnotexist/climb-comparisons", headers=auth_headers)
         assert r.status_code == 404
 
     def test_matches_sessions_within_the_duration_band(
@@ -240,18 +242,32 @@ class TestClimbComparisons:
     ) -> None:
         with engine.connect() as conn:
             seed_activity(
-                conn, activity_id="target", sport="rock_climbing", sub_sport="bouldering",
-                duration_s=3600.0, distance_m=None,
+                conn,
+                activity_id="target",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                duration_s=3600.0,
+                distance_m=None,
             )
             # Within +/-15% of 3600s.
             seed_activity(
-                conn, activity_id="in_band", local_date="2025-06-02", sport="rock_climbing",
-                sub_sport="bouldering", duration_s=3900.0, distance_m=None,
+                conn,
+                activity_id="in_band",
+                local_date="2025-06-02",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                duration_s=3900.0,
+                distance_m=None,
             )
             # Outside the band.
             seed_activity(
-                conn, activity_id="out_of_band", local_date="2025-06-03", sport="rock_climbing",
-                sub_sport="bouldering", duration_s=7200.0, distance_m=None,
+                conn,
+                activity_id="out_of_band",
+                local_date="2025-06-03",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                duration_s=7200.0,
+                distance_m=None,
             )
         _add_split(engine, activity_id="in_band", split_index=0, result="completed")
 
@@ -267,11 +283,18 @@ class TestClimbComparisons:
     ) -> None:
         with engine.connect() as conn:
             seed_activity(
-                conn, activity_id="target", sport="rock_climbing", sub_sport="bouldering",
-                duration_s=3600.0, distance_m=None,
+                conn,
+                activity_id="target",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                duration_s=3600.0,
+                distance_m=None,
             )
             seed_activity(
-                conn, activity_id="a_run", local_date="2025-06-02", sport="running",
+                conn,
+                activity_id="a_run",
+                local_date="2025-06-02",
+                sport="running",
                 duration_s=3600.0,
             )
 
@@ -285,12 +308,20 @@ class TestClimbingSummary:
     ) -> None:
         with engine.connect() as conn:
             seed_activity(
-                conn, activity_id="a1", local_date="2025-06-01", sport="rock_climbing",
-                sub_sport="bouldering", distance_m=None,
+                conn,
+                activity_id="a1",
+                local_date="2025-06-01",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                distance_m=None,
             )
             seed_activity(
-                conn, activity_id="a2", local_date="2025-06-05", sport="rock_climbing",
-                sub_sport="bouldering", distance_m=None,
+                conn,
+                activity_id="a2",
+                local_date="2025-06-05",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                distance_m=None,
             )
         _add_split(engine, activity_id="a1", split_index=0, grade=2, result="completed")
         _add_split(engine, activity_id="a1", split_index=2, grade=2, result="attempt")
@@ -315,8 +346,12 @@ class TestClimbingSummary:
     ) -> None:
         with engine.connect() as conn:
             seed_activity(
-                conn, activity_id="a1", local_date="2025-05-01", sport="rock_climbing",
-                sub_sport="bouldering", distance_m=None,
+                conn,
+                activity_id="a1",
+                local_date="2025-05-01",
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                distance_m=None,
             )
         _add_split(engine, activity_id="a1", split_index=0)
 
@@ -335,7 +370,10 @@ class TestClimbingSummary:
     ) -> None:
         with engine.connect() as conn:
             seed_activity(
-                conn, activity_id="a1", local_date="2025-06-01", sport="rock_climbing",
+                conn,
+                activity_id="a1",
+                local_date="2025-06-01",
+                sport="rock_climbing",
                 sub_sport="sport_climbing",
             )
 

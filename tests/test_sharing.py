@@ -1199,12 +1199,12 @@ def test_render_activity_share_html_stats_use_icon_chips_and_tone_colors(
 
     # Distance & time and heart-rate-less basic sections always carry icon chips now.
     assert 'class="icon-chip"' in html
-    assert 'tone-pace' in html
-    assert 'tone-elevation' in html
-    assert 'tone-cadence' in html
-    assert 'tone-load' in html
+    assert "tone-pace" in html
+    assert "tone-elevation" in html
+    assert "tone-cadence" in html
+    assert "tone-load" in html
     # The five sections converted last (training effect / power / temperature / respiration).
-    assert 'tone-power' in html
+    assert "tone-power" in html
     assert "Aerobic effect" in html
     assert "Avg power" in html
     assert "Avg temperature" in html
@@ -1261,9 +1261,7 @@ def test_render_activity_share_html_shows_cached_weather(tmp_path: Path) -> None
             ("weather.open_meteo.weather_code", 1.0),
             ("weather.open_meteo.wind_speed_mps", 3.0),
         ):
-            _add_metric(
-                conn, activity_id="act1", metric_key=key, value=value, source="open-meteo"
-            )
+            _add_metric(conn, activity_id="act1", metric_key=key, value=value, source="open-meteo")
         conn.commit()
         html = render_activity_share_html(conn, _settings(tmp_path), "act1")
 
@@ -1449,9 +1447,7 @@ def test_render_activity_share_html_route_map_includes_playback_when_gps_stream_
         settings,
         activity_id="act1",
         base=base,
-        values_over_time=[
-            {"lat": 37.0 + i * 0.001, "lon": -122.5 + i * 0.001} for i in range(50)
-        ],
+        values_over_time=[{"lat": 37.0 + i * 0.001, "lon": -122.5 + i * 0.001} for i in range(50)],
     )
 
     with engine.connect() as conn:

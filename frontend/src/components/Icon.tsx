@@ -90,10 +90,7 @@ export function IconSprite() {
         <symbol viewBox="0 0 24 24" id="i-route">
           <circle cx="5.5" cy="18" r="2.3" />
           <circle cx="18.5" cy="6" r="2.3" />
-          <path
-            d="M7.6 17.1c3.4-1 4.2-3 4.4-5 .2-2.2 1.4-4 4.4-4.8"
-            strokeDasharray="2.4 2.6"
-          />
+          <path d="M7.6 17.1c3.4-1 4.2-3 4.4-5 .2-2.2 1.4-4 4.4-4.8" strokeDasharray="2.4 2.6" />
         </symbol>
         <symbol viewBox="0 0 24 24" id="i-clock">
           <circle cx="12" cy="12" r="8.4" />
@@ -208,7 +205,10 @@ export function IconSprite() {
           <path d="M8.4 17.4 7 21M12.6 17.4 11.2 21M16.8 17.4l-1.4 3.6" />
         </symbol>
         <symbol viewBox="0 0 24 24" id="i-fog">
-          <path d="M6.8 11.2a4.4 4.4 0 0 1-.4-8.75 5.6 5.6 0 0 1 10.7-2 4.2 4.2 0 0 1-.4 10.75Z" transform="translate(0 -1.5) scale(0.9)" />
+          <path
+            d="M6.8 11.2a4.4 4.4 0 0 1-.4-8.75 5.6 5.6 0 0 1 10.7-2 4.2 4.2 0 0 1-.4 10.75Z"
+            transform="translate(0 -1.5) scale(0.9)"
+          />
           <path d="M3.4 14.6h17.2M3.4 18h17.2M3.4 21.4h17.2" />
         </symbol>
         <symbol viewBox="0 0 24 24" id="i-storm">
@@ -253,7 +253,9 @@ export function Icon({
   const Sport = SPORT_ICONS[name];
   if (Sport) {
     const classes = className ? `icon icon--filled ${className}` : "icon icon--filled";
-    return <Sport className={classes} weight="fill" size={size} aria-hidden="true" focusable="false" />;
+    return (
+      <Sport className={classes} weight="fill" size={size} aria-hidden="true" focusable="false" />
+    );
   }
   return (
     <svg

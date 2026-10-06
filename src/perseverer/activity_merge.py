@@ -114,9 +114,7 @@ def find_duplicate_candidates(
     ).fetchone()
     if self_row is None:
         return []
-    self_candidate = ActivityCandidate(
-        self_row.start_time_utc, self_row.duration_s, self_row.sport
-    )
+    self_candidate = ActivityCandidate(self_row.start_time_utc, self_row.duration_s, self_row.sport)
 
     window_start = self_row.start_time_utc - _MERGE_WINDOW
     window_end = self_row.start_time_utc + _MERGE_WINDOW
@@ -254,9 +252,7 @@ def _apply_field_choices(
         if field_choices.get(field) == "other"
     }
     if scalar_updates:
-        other_row = conn.execute(
-            select(activity).where(activity.c.id == other_id)
-        ).fetchone()
+        other_row = conn.execute(select(activity).where(activity.c.id == other_id)).fetchone()
         assert other_row is not None
         conn.execute(
             activity.update()

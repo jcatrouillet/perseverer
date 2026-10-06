@@ -86,7 +86,18 @@ class TestBestWindowOverStream:
         # actually straddle it).
         timestamps = [0, 1, 2, 3, 4, 5, 40, 41, 42, 43, 44, 45]
         values = [
-            100.0, 100.0, 100.0, 100.0, 190.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            190.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
+            100.0,
         ]
         best = best_window_over_stream(timestamps, values, 1, mode="mean", max_gap_s=15.0)
         assert best == 190.0
@@ -185,23 +196,35 @@ class TestComputePerformanceCurve:
         start = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
         with engine.connect() as conn:
             _seed_activity_with_stream(
-                conn, parquet_dir,
-                activity_id="a1", local_date="2026-06-01", sport="running", start=start,
+                conn,
+                parquet_dir,
+                activity_id="a1",
+                local_date="2026-06-01",
+                sport="running",
+                start=start,
                 values={"heart_rate": [140.0] * 30},
             )
             _seed_activity_with_stream(
-                conn, parquet_dir,
-                activity_id="a2", local_date="2026-06-02", sport="running",
+                conn,
+                parquet_dir,
+                activity_id="a2",
+                local_date="2026-06-02",
+                sport="running",
                 start=start + dt.timedelta(days=1),
                 values={"heart_rate": [160.0] * 30},  # genuinely higher -- must win
             )
 
         with engine.connect() as conn:
             curve = compute_performance_curve(
-                conn, duckdb.connect(":memory:"), parquet_dir,
-                athlete_id=DEFAULT_ATHLETE_ID, metric="heart_rate",
-                start_date=dt.date(2026, 6, 1), end_date=dt.date(2026, 6, 3),
-                sports=["running"], as_of=dt.date(2026, 6, 3),
+                conn,
+                duckdb.connect(":memory:"),
+                parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric="heart_rate",
+                start_date=dt.date(2026, 6, 1),
+                end_date=dt.date(2026, 6, 3),
+                sports=["running"],
+                as_of=dt.date(2026, 6, 3),
             )
 
         point = next(p for p in curve.points if p.duration_s == 15)
@@ -216,8 +239,12 @@ class TestComputePerformanceCurve:
         start = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
         with engine.connect() as conn:
             _seed_activity_with_stream(
-                conn, parquet_dir,
-                activity_id="run1", local_date="2026-06-01", sport="running", start=start,
+                conn,
+                parquet_dir,
+                activity_id="run1",
+                local_date="2026-06-01",
+                sport="running",
+                start=start,
                 values={
                     "distance_m": [i * 4.0 for i in range(30)],
                     "altitude_m": [100.0] * 30,
@@ -226,8 +253,11 @@ class TestComputePerformanceCurve:
             # A cycling activity, much faster -- must NOT be picked up by pace/gap even though
             # "sports" isn't restricted to running here.
             _seed_activity_with_stream(
-                conn, parquet_dir,
-                activity_id="ride1", local_date="2026-06-02", sport="cycling",
+                conn,
+                parquet_dir,
+                activity_id="ride1",
+                local_date="2026-06-02",
+                sport="cycling",
                 start=start + dt.timedelta(days=1),
                 values={
                     "distance_m": [i * 12.0 for i in range(30)],
@@ -237,10 +267,15 @@ class TestComputePerformanceCurve:
 
         with engine.connect() as conn:
             curve = compute_performance_curve(
-                conn, duckdb.connect(":memory:"), parquet_dir,
-                athlete_id=DEFAULT_ATHLETE_ID, metric="pace",
-                start_date=dt.date(2026, 6, 1), end_date=dt.date(2026, 6, 3),
-                sports=None, as_of=dt.date(2026, 6, 3),
+                conn,
+                duckdb.connect(":memory:"),
+                parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric="pace",
+                start_date=dt.date(2026, 6, 1),
+                end_date=dt.date(2026, 6, 3),
+                sports=None,
+                as_of=dt.date(2026, 6, 3),
             )
 
         point = next(p for p in curve.points if p.duration_s == 15)
@@ -252,16 +287,24 @@ class TestComputePerformanceCurve:
         start = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
         with engine.connect() as conn:
             _seed_activity_with_stream(
-                conn, parquet_dir,
-                activity_id="ride1", local_date="2026-06-01", sport="cycling", start=start,
+                conn,
+                parquet_dir,
+                activity_id="ride1",
+                local_date="2026-06-01",
+                sport="cycling",
+                start=start,
                 values={"heart_rate": [170.0] * 30},
             )
 
         with engine.connect() as conn:
             curve = compute_performance_curve(
-                conn, duckdb.connect(":memory:"), parquet_dir,
-                athlete_id=DEFAULT_ATHLETE_ID, metric="heart_rate",
-                start_date=dt.date(2026, 6, 1), end_date=dt.date(2026, 6, 3),
+                conn,
+                duckdb.connect(":memory:"),
+                parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric="heart_rate",
+                start_date=dt.date(2026, 6, 1),
+                end_date=dt.date(2026, 6, 3),
                 sports=["running"],  # cycling not selected
                 as_of=dt.date(2026, 6, 3),
             )
@@ -275,10 +318,15 @@ class TestComputePerformanceCurve:
         parquet_dir = tmp_path / "parquet"
         with engine.connect() as conn:
             curve = compute_performance_curve(
-                conn, duckdb.connect(":memory:"), parquet_dir,
-                athlete_id=DEFAULT_ATHLETE_ID, metric="pace",
-                start_date=dt.date(2026, 6, 1), end_date=dt.date(2026, 6, 3),
-                sports=None, as_of=dt.date(2026, 6, 3),
+                conn,
+                duckdb.connect(":memory:"),
+                parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric="pace",
+                start_date=dt.date(2026, 6, 1),
+                end_date=dt.date(2026, 6, 3),
+                sports=None,
+                as_of=dt.date(2026, 6, 3),
             )
         assert curve.points == []
         assert curve.threshold_pace_s_per_km is None
@@ -305,16 +353,26 @@ class TestComputePerformanceCurve:
 
         with engine.connect() as conn:
             pace_curve = compute_performance_curve(
-                conn, duckdb.connect(":memory:"), parquet_dir,
-                athlete_id=DEFAULT_ATHLETE_ID, metric="pace",
-                start_date=dt.date(2026, 6, 1), end_date=dt.date(2026, 6, 3),
-                sports=None, as_of=dt.date(2026, 6, 3),
+                conn,
+                duckdb.connect(":memory:"),
+                parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric="pace",
+                start_date=dt.date(2026, 6, 1),
+                end_date=dt.date(2026, 6, 3),
+                sports=None,
+                as_of=dt.date(2026, 6, 3),
             )
             hr_curve = compute_performance_curve(
-                conn, duckdb.connect(":memory:"), parquet_dir,
-                athlete_id=DEFAULT_ATHLETE_ID, metric="heart_rate",
-                start_date=dt.date(2026, 6, 1), end_date=dt.date(2026, 6, 3),
-                sports=["running"], as_of=dt.date(2026, 6, 3),
+                conn,
+                duckdb.connect(":memory:"),
+                parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric="heart_rate",
+                start_date=dt.date(2026, 6, 1),
+                end_date=dt.date(2026, 6, 3),
+                sports=["running"],
+                as_of=dt.date(2026, 6, 3),
             )
 
         assert pace_curve.threshold_pace_s_per_km == 300.0
@@ -334,8 +392,12 @@ class TestComputePerformanceCurve:
             # started); the trim excludes it. Without honoring the trim, this would set a
             # nonsensical short-duration HR record.
             _seed_activity_with_stream(
-                conn, parquet_dir,
-                activity_id="hike1", local_date="2026-06-01", sport="hiking", start=start,
+                conn,
+                parquet_dir,
+                activity_id="hike1",
+                local_date="2026-06-01",
+                sport="hiking",
+                start=start,
                 values={"heart_rate": [200.0] * 10 + [120.0] * 20},
             )
             conn.execute(
@@ -352,10 +414,15 @@ class TestComputePerformanceCurve:
 
         with engine.connect() as conn:
             curve = compute_performance_curve(
-                conn, duckdb.connect(":memory:"), parquet_dir,
-                athlete_id=DEFAULT_ATHLETE_ID, metric="heart_rate",
-                start_date=dt.date(2026, 6, 1), end_date=dt.date(2026, 6, 1),
-                sports=["hiking"], as_of=dt.date(2026, 6, 1),
+                conn,
+                duckdb.connect(":memory:"),
+                parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric="heart_rate",
+                start_date=dt.date(2026, 6, 1),
+                end_date=dt.date(2026, 6, 1),
+                sports=["hiking"],
+                as_of=dt.date(2026, 6, 1),
             )
 
         point = next(p for p in curve.points if p.duration_s == 5)

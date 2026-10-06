@@ -155,9 +155,21 @@ describe("itemsToApiSteps", () => {
 
   it("omits the repeat marker for a count of 1 or an empty/invalid value", () => {
     const entry = { ...emptyExerciseEntry(), exerciseCategory: "SQUAT", exerciseName: "" };
-    expect(itemsToApiSteps([{ type: "group", group: { ...emptyGroup(), repeatCount: "1", entries: [entry] } }])).toHaveLength(1);
-    expect(itemsToApiSteps([{ type: "group", group: { ...emptyGroup(), repeatCount: "", entries: [entry] } }])).toHaveLength(1);
-    expect(itemsToApiSteps([{ type: "group", group: { ...emptyGroup(), repeatCount: "abc", entries: [entry] } }])).toHaveLength(1);
+    expect(
+      itemsToApiSteps([
+        { type: "group", group: { ...emptyGroup(), repeatCount: "1", entries: [entry] } },
+      ]),
+    ).toHaveLength(1);
+    expect(
+      itemsToApiSteps([
+        { type: "group", group: { ...emptyGroup(), repeatCount: "", entries: [entry] } },
+      ]),
+    ).toHaveLength(1);
+    expect(
+      itemsToApiSteps([
+        { type: "group", group: { ...emptyGroup(), repeatCount: "abc", entries: [entry] } },
+      ]),
+    ).toHaveLength(1);
   });
 
   it("builds a set of several exercises with rest, repeated together", () => {
@@ -332,7 +344,9 @@ describe("apiStepsToItems", () => {
     const items = apiStepsToItems(steps);
     expect(items).toHaveLength(1);
     expect(items[0].type).toBe("group");
-    const group = (items[0] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }).group;
+    const group = (
+      items[0] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }
+    ).group;
     expect(group.repeatCount).toBe("4");
     expect(group.entries).toHaveLength(1);
   });
@@ -363,8 +377,12 @@ describe("apiStepsToItems", () => {
 
     const items = apiStepsToItems(asOut);
     expect(items.map((it) => it.type)).toEqual(["entry", "group", "group"]);
-    const groupA = (items[1] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }).group;
-    const groupB = (items[2] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }).group;
+    const groupA = (
+      items[1] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }
+    ).group;
+    const groupB = (
+      items[2] as { type: "group"; group: { repeatCount: string; entries: ExerciseEntry[] } }
+    ).group;
     expect(groupA.repeatCount).toBe("3");
     expect(groupA.entries[0].exerciseCategory).toBe("SQUAT");
     expect(groupB.repeatCount).toBe("2");
@@ -379,7 +397,11 @@ describe("estimateItemsDurationS", () => {
   });
 
   it("uses the real seconds for a time-based or rest step", () => {
-    const exercise = { ...emptyExerciseEntry(), durationType: "time" as const, durationTimeS: "45" };
+    const exercise = {
+      ...emptyExerciseEntry(),
+      durationType: "time" as const,
+      durationTimeS: "45",
+    };
     const rest = emptyRestEntry();
     rest.durationTimeS = "60";
     expect(estimateItemsDurationS([entryItem(exercise), entryItem(rest)])).toBe(105);

@@ -195,9 +195,7 @@ class TestGetActivityMergePreview:
     ) -> None:
         _seed_pair(engine, test_settings)
 
-        r = client.get(
-            "/api/v1/activities/self1/merge-preview/doesnotexist", headers=auth_headers
-        )
+        r = client.get("/api/v1/activities/self1/merge-preview/doesnotexist", headers=auth_headers)
         assert r.status_code == 404
 
 

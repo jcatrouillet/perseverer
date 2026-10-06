@@ -149,7 +149,8 @@ def _windowed_grades_batch(
     the full history) once vectorized here."""
     n = len(timestamps_utc)
     ts = np.fromiter(
-        ((t - timestamps_utc[0]).total_seconds() for t in timestamps_utc), dtype=np.float64,
+        ((t - timestamps_utc[0]).total_seconds() for t in timestamps_utc),
+        dtype=np.float64,
         count=n,
     )
     dist = np.fromiter((np.nan if v is None else v for v in distances_m), dtype=np.float64, count=n)

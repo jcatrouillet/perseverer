@@ -17,11 +17,7 @@ import type { TooltipContentProps } from "recharts";
 
 import type { EddingtonBar } from "../eddington";
 
-function BarTooltip({
-  active,
-  payload,
-  unitLabel,
-}: TooltipContentProps & { unitLabel: string }) {
+function BarTooltip({ active, payload, unitLabel }: TooltipContentProps & { unitLabel: string }) {
   if (!active || !payload?.length) return null;
   const bar = payload[0]!.payload as EddingtonBar;
   return (
@@ -33,7 +29,9 @@ function BarTooltip({
         padding: "8px 12px",
       }}
     >
-      <p style={{ margin: 0, fontWeight: 600 }}>{bar.km} {unitLabel}</p>
+      <p style={{ margin: 0, fontWeight: 600 }}>
+        {bar.km} {unitLabel}
+      </p>
       <p style={{ margin: 0 }}>
         {bar.count} run{bar.count === 1 ? "" : "s"} that far or further
       </p>

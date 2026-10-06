@@ -29,8 +29,8 @@ export function ApiKeyCard() {
       <h2>API key</h2>
       <p className="chart-note">
         A personal key for scripts or the MCP server to authenticate as you (send it as{" "}
-        <code>X-API-Key</code>). Scoped to your own data only — it can never read or change
-        another athlete&apos;s. Generating a new key immediately invalidates the old one.
+        <code>X-API-Key</code>). Scoped to your own data only — it can never read or change another
+        athlete&apos;s. Generating a new key immediately invalidates the old one.
       </p>
       <button
         className="button"

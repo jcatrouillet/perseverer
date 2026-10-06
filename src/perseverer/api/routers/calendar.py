@@ -55,9 +55,7 @@ def get_calendar(
         health_metric_daily_rollup.c.local_date <= end_date.isoformat(),
     )
     if metric_keys:
-        health_query = health_query.where(
-            health_metric_daily_rollup.c.metric_key.in_(metric_keys)
-        )
+        health_query = health_query.where(health_metric_daily_rollup.c.metric_key.in_(metric_keys))
     health_rows = conn.execute(health_query).fetchall()
 
     by_date: dict[str, list[HealthMetricRollupOut]] = defaultdict(list)

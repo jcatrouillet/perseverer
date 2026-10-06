@@ -70,9 +70,7 @@ def test_login_unknown_username_401(
 ) -> None:
     client = _client_with_jwt_secret(tmp_path, engine, duckdb_con, JWT_SECRET)
     try:
-        r = client.post(
-            "/api/v1/auth/login", json={"username": "nobody", "password": "whatever"}
-        )
+        r = client.post("/api/v1/auth/login", json={"username": "nobody", "password": "whatever"})
         assert r.status_code == 401
     finally:
         app.dependency_overrides.clear()
@@ -88,9 +86,7 @@ def test_login_locks_out_after_max_failed_attempts(
     client = _client_with_jwt_secret(tmp_path, engine, duckdb_con, JWT_SECRET)
     try:
         for _ in range(MAX_FAILED_ATTEMPTS):
-            r = client.post(
-                "/api/v1/auth/login", json={"username": "jerome", "password": "wrong"}
-            )
+            r = client.post("/api/v1/auth/login", json={"username": "jerome", "password": "wrong"})
             assert r.status_code == 401
 
         r = client.post("/api/v1/auth/login", json={"username": "jerome", "password": "hunter2"})
@@ -106,9 +102,7 @@ def test_login_not_locked_out_below_the_threshold(
     client = _client_with_jwt_secret(tmp_path, engine, duckdb_con, JWT_SECRET)
     try:
         for _ in range(MAX_FAILED_ATTEMPTS - 1):
-            r = client.post(
-                "/api/v1/auth/login", json={"username": "jerome", "password": "wrong"}
-            )
+            r = client.post("/api/v1/auth/login", json={"username": "jerome", "password": "wrong"})
             assert r.status_code == 401
 
         r = client.post("/api/v1/auth/login", json={"username": "jerome", "password": "hunter2"})

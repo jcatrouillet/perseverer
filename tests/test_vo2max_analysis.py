@@ -121,9 +121,10 @@ def test_single_run_is_the_driving_activity_with_no_other_contributors(tmp_path:
     assert result.driving_activity.activity_id == "a0"
     assert result.driving_activity.name == "Tempo run"
     assert result.other_contributors == []
-    assert result.expires_on == (
-        dt.date(2025, 6, 1) + dt.timedelta(days=ROLLING_VDOT_WINDOW_DAYS)
-    ).isoformat()
+    assert (
+        result.expires_on
+        == (dt.date(2025, 6, 1) + dt.timedelta(days=ROLLING_VDOT_WINDOW_DAYS)).isoformat()
+    )
     assert any("single qualifying run" in m for m in result.missing)
 
 

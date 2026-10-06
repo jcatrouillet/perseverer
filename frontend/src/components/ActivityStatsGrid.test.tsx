@@ -95,7 +95,12 @@ describe("ActivityStatsGrid", () => {
   it("omits avg pace/speed for a real 0m-distance activity rather than showing 0.0 km/h", () => {
     render(
       <ActivityStatsGrid
-        activity={activity({ sport: "strength_training", distance_m: 0, duration_s: 1800, moving_duration_s: 1800 })}
+        activity={activity({
+          sport: "strength_training",
+          distance_m: 0,
+          duration_s: 1800,
+          moving_duration_s: 1800,
+        })}
       />,
     );
     expect(screen.queryByText("Avg speed")).not.toBeInTheDocument();
@@ -254,7 +259,12 @@ describe("ActivityStatsGrid", () => {
           sub_sport: "bouldering",
           distance_m: null,
           splits: [
-            climbSplit({ split_index: 0, climb_grade: 2, climb_result: "completed", duration_s: 60 }),
+            climbSplit({
+              split_index: 0,
+              climb_grade: 2,
+              climb_result: "completed",
+              duration_s: 60,
+            }),
             climbSplit({ split_index: 2, climb_grade: 4, climb_result: "attempt", duration_s: 90 }),
           ],
         })}

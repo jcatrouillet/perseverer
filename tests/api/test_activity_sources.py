@@ -72,9 +72,7 @@ def _add_link(
     return link_id
 
 
-def test_sources_404_for_unknown_activity(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
+def test_sources_404_for_unknown_activity(client: TestClient, auth_headers: dict[str, str]) -> None:
     r = client.get("/api/v1/activities/doesnotexist/sources", headers=auth_headers)
     assert r.status_code == 404
 
@@ -205,9 +203,7 @@ def test_split_creates_a_new_activity_with_csv_overlay(
             ingested_at=dt.datetime(2026, 4, 18),
         )
 
-    r = client.post(
-        f"/api/v1/activities/a1/sources/{strava_link_id}/split", headers=auth_headers
-    )
+    r = client.post(f"/api/v1/activities/a1/sources/{strava_link_id}/split", headers=auth_headers)
     assert r.status_code == 200
     new_id = r.json()["new_activity_id"]
     assert new_id != "a1"
@@ -227,8 +223,6 @@ def test_split_creates_a_new_activity_with_csv_overlay(
         assert links[0].activity_id == new_id  # repointed, not duplicated
 
         original = conn.execute(
-            select(activity_source_link.c.source).where(
-                activity_source_link.c.activity_id == "a1"
-            )
+            select(activity_source_link.c.source).where(activity_source_link.c.activity_id == "a1")
         ).fetchall()
         assert [row.source for row in original] == ["fit_folder"]  # untouched

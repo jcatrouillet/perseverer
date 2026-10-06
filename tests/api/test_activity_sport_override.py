@@ -98,9 +98,7 @@ def test_override_422s_for_an_empty_sport(
     with engine.connect() as conn:
         seed_activity(conn, activity_id="target", sport="running")
 
-    r = client.patch(
-        "/api/v1/activities/target/sport", json={"sport": "  "}, headers=auth_headers
-    )
+    r = client.patch("/api/v1/activities/target/sport", json={"sport": "  "}, headers=auth_headers)
     assert r.status_code == 422
 
 
@@ -157,9 +155,7 @@ class TestRaceOverride:
         client.patch(
             "/api/v1/activities/target/sport", json={"sport": "hiking"}, headers=auth_headers
         )
-        client.patch(
-            "/api/v1/activities/target/race", json={"is_race": True}, headers=auth_headers
-        )
+        client.patch("/api/v1/activities/target/race", json={"is_race": True}, headers=auth_headers)
 
         with engine.connect() as conn:
             row = conn.execute(
@@ -214,9 +210,7 @@ class TestNameOverride:
         with engine.connect() as conn:
             seed_activity(conn, activity_id="target", sport="running")
 
-        client.patch(
-            "/api/v1/activities/target/race", json={"is_race": True}, headers=auth_headers
-        )
+        client.patch("/api/v1/activities/target/race", json={"is_race": True}, headers=auth_headers)
         client.patch(
             "/api/v1/activities/target/name", json={"name": "My Title"}, headers=auth_headers
         )
@@ -318,9 +312,7 @@ class TestFuelingOverride:
 
         with engine.connect() as conn:
             row = conn.execute(
-                select(activity.c.name, activity.c.carbohydrates_g).where(
-                    activity.c.id == "target"
-                )
+                select(activity.c.name, activity.c.carbohydrates_g).where(activity.c.id == "target")
             ).fetchone()
         assert row is not None
         assert (row.name, row.carbohydrates_g) == ("My Title", 40.0)

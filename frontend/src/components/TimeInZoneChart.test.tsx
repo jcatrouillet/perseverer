@@ -51,11 +51,7 @@ describe("TimeInZoneChart", () => {
   });
 
   it("uses the configured boundaries against the raw stream instead of device zones, when given both", () => {
-    const timestamps = [
-      "2026-01-01T00:00:00Z",
-      "2026-01-01T00:00:10Z",
-      "2026-01-01T00:00:20Z",
-    ];
+    const timestamps = ["2026-01-01T00:00:00Z", "2026-01-01T00:00:10Z", "2026-01-01T00:00:20Z"];
     render(
       <TimeInZoneChart
         metrics={realShape}
@@ -72,7 +68,12 @@ describe("TimeInZoneChart", () => {
 
   it("falls back to device-reported zones when the stream/boundaries aren't available", () => {
     render(
-      <TimeInZoneChart metrics={realShape} heartRateStream={null} timestamps={null} configuredZoneBoundaries={null} />,
+      <TimeInZoneChart
+        metrics={realShape}
+        heartRateStream={null}
+        timestamps={null}
+        configuredZoneBoundaries={null}
+      />,
     );
     expect(screen.getByText("Z0")).toBeInTheDocument();
   });
@@ -86,7 +87,9 @@ describe("TimeInZoneChart", () => {
     // separate max-sample-gap exclusion (a different fixture below covers that one).
     const start = new Date("2026-01-01T00:00:00Z").getTime();
     const n = 121; // 0..600s at 5s spacing
-    const timestamps = Array.from({ length: n }, (_, i) => new Date(start + i * 5000).toISOString());
+    const timestamps = Array.from({ length: n }, (_, i) =>
+      new Date(start + i * 5000).toISOString(),
+    );
     const heartRateStream = Array.from({ length: n }, () => 130);
     const speedMpsStream = Array.from({ length: n }, (_, i) => (i < 60 ? 3.0 : 0.0));
     render(

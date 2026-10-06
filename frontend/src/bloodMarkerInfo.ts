@@ -29,8 +29,7 @@ const INFO: Record<string, string> = {
     "Glycated hemoglobin: the share of hemoglobin that has sugar attached, reflecting average blood sugar over roughly the previous three months.",
   "estimated average glucose":
     "The average blood glucose implied by the HbA1c result, calculated from it with a standard formula.",
-  tsh:
-    "Thyroid-stimulating hormone, made by the pituitary gland to tell the thyroid how much hormone to produce. It is the usual first screen of thyroid function.",
+  tsh: "Thyroid-stimulating hormone, made by the pituitary gland to tell the thyroid how much hormone to produce. It is the usual first screen of thyroid function.",
 
   // Electrolytes & kidney
   sodium:
@@ -43,22 +42,18 @@ const INFO: Record<string, string> = {
     "Mostly bicarbonate, the blood's main buffer against acidity. It reflects the body's acid-base balance.",
   "anion gap":
     "A calculated difference between the measured positive and negative ions in the blood (sodium minus chloride and bicarbonate), used to look for unmeasured acids.",
-  bun:
-    "Blood urea nitrogen: a waste product from protein breakdown that the kidneys clear. Also affected by hydration and protein intake.",
+  bun: "Blood urea nitrogen: a waste product from protein breakdown that the kidneys clear. Also affected by hydration and protein intake.",
   creatinine:
     "A waste product from normal muscle activity, filtered out by the kidneys. Blood levels depend on kidney function and on muscle mass.",
-  egfr:
-    "Estimated glomerular filtration rate: an estimate of how much blood the kidneys filter per minute, calculated from creatinine, age and sex.",
+  egfr: "Estimated glomerular filtration rate: an estimate of how much blood the kidneys filter per minute, calculated from creatinine, age and sex.",
   calcium:
     "A mineral needed for bones, muscles, nerves and blood clotting. Most is in bone; the blood level is kept within a narrow band.",
   magnesium:
     "A mineral involved in hundreds of enzyme reactions, including muscle, nerve and heart function.",
 
   // Liver & pancreas
-  alt:
-    "Alanine aminotransferase: an enzyme found mainly in the liver that leaks into the blood when liver cells are irritated or damaged.",
-  ast:
-    "Aspartate aminotransferase: an enzyme found in the liver but also in muscle and the heart, so hard exercise can raise it as well.",
+  alt: "Alanine aminotransferase: an enzyme found mainly in the liver that leaks into the blood when liver cells are irritated or damaged.",
+  ast: "Aspartate aminotransferase: an enzyme found in the liver but also in muscle and the heart, so hard exercise can raise it as well.",
   "alkaline phosphatase":
     "An enzyme found in the liver, bile ducts and bone. Results are read alongside other liver tests.",
   "total bilirubin":
@@ -75,24 +70,16 @@ const INFO: Record<string, string> = {
     "A digestive enzyme made mostly by the pancreas to break down fats. Blood levels rise when the pancreas is inflamed.",
 
   // Blood count
-  wbc:
-    "White blood cell count: the cells of the immune system that fight infection. The count rises with infection, inflammation and physical stress.",
-  rbc:
-    "Red blood cell count: the number of oxygen-carrying cells in a given volume of blood.",
+  wbc: "White blood cell count: the cells of the immune system that fight infection. The count rises with infection, inflammation and physical stress.",
+  rbc: "Red blood cell count: the number of oxygen-carrying cells in a given volume of blood.",
   hemoglobin:
     "The iron-containing protein in red blood cells that carries oxygen from the lungs to the tissues.",
-  hematocrit:
-    "The percentage of blood volume taken up by red blood cells.",
-  mcv:
-    "Mean corpuscular volume: the average size of a red blood cell.",
-  mch:
-    "Mean corpuscular hemoglobin: the average amount of hemoglobin in one red blood cell.",
-  mchc:
-    "Mean corpuscular hemoglobin concentration: how densely hemoglobin is packed inside red blood cells.",
-  rdw:
-    "Red cell distribution width: how much red blood cells vary in size from one another.",
-  platelets:
-    "Small cell fragments that stick together to form clots and stop bleeding.",
+  hematocrit: "The percentage of blood volume taken up by red blood cells.",
+  mcv: "Mean corpuscular volume: the average size of a red blood cell.",
+  mch: "Mean corpuscular hemoglobin: the average amount of hemoglobin in one red blood cell.",
+  mchc: "Mean corpuscular hemoglobin concentration: how densely hemoglobin is packed inside red blood cells.",
+  rdw: "Red cell distribution width: how much red blood cells vary in size from one another.",
+  platelets: "Small cell fragments that stick together to form clots and stop bleeding.",
   "neutrophils %":
     "Neutrophils as a share of all white blood cells. Neutrophils are the first-responder cells that fight bacterial infection.",
   "lymphocytes %":
@@ -109,8 +96,7 @@ const INFO: Record<string, string> = {
     "The absolute number of neutrophils per volume of blood, the first-responder cells against bacterial infection.",
   "lymphocytes (abs)":
     "The absolute number of lymphocytes per volume of blood (T cells, B cells and natural killer cells).",
-  "monocytes (abs)":
-    "The absolute number of monocytes per volume of blood.",
+  "monocytes (abs)": "The absolute number of monocytes per volume of blood.",
   "eosinophils (abs)":
     "The absolute number of eosinophils per volume of blood, the cells involved in allergy and parasite responses.",
   "basophils (abs)":
@@ -127,8 +113,7 @@ const INFO: Record<string, string> = {
     "The pressure of oxygen dissolved in venous blood. It is much lower than in arterial blood because the tissues have taken oxygen up.",
   "venous hco3":
     "Bicarbonate in venous blood, the main buffer against acid, as calculated by the blood-gas analyzer.",
-  "venous tco2":
-    "Total carbon dioxide in venous blood: bicarbonate plus dissolved CO2.",
+  "venous tco2": "Total carbon dioxide in venous blood: bicarbonate plus dissolved CO2.",
   "base excess":
     "How much acid or base would be needed to bring the blood back to a normal pH. It shows the metabolic (non-breathing) part of acid-base balance.",
   "venous o2 saturation":
@@ -143,10 +128,8 @@ const INFO: Record<string, string> = {
     "A vitamin needed for nerve function and making red blood cells, found in animal foods.",
   ferritin:
     "A protein that stores iron; the blood level is the usual indicator of the body's iron stores.",
-  iron:
-    "The mineral that hemoglobin uses to carry oxygen. The blood level varies through the day and with recent meals.",
-  crp:
-    "C-reactive protein: made by the liver in response to inflammation, so it rises with infection and other inflammatory conditions.",
+  iron: "The mineral that hemoglobin uses to carry oxygen. The blood level varies through the day and with recent meals.",
+  crp: "C-reactive protein: made by the liver in response to inflammation, so it rises with infection and other inflammatory conditions.",
   "free t4":
     "The active, unbound form of thyroxine, the main hormone made by the thyroid gland to set the body's metabolic rate.",
   "white blood cell count":

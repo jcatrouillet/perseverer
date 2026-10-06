@@ -43,7 +43,9 @@ function GoalCard({
         <div className="goal-progress__summary-tile">
           <span
             className={`goal-progress__summary-value${
-              ahead ? " goal-progress__summary-value--ahead" : " goal-progress__summary-value--behind"
+              ahead
+                ? " goal-progress__summary-value--ahead"
+                : " goal-progress__summary-value--behind"
             }`}
           >
             {ahead ? "+" : "-"}
@@ -90,8 +92,8 @@ export function BoulderingGoalsSection({
 
       {goals.data && goals.data.length === 0 && editing === null && (
         <p className="chart-note">
-          No bouldering goal for this period yet. A goal counts completed routes only — for
-          example 10 × V4 in a year, or 1 × V5 in a month.
+          No bouldering goal for this period yet. A goal counts completed routes only — for example
+          10 × V4 in a year, or 1 × V5 in a month.
         </p>
       )}
 

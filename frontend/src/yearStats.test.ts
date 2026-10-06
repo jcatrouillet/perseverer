@@ -228,9 +228,9 @@ describe("activityTypeCounts", () => {
 
 describe("displaySport", () => {
   it("substitutes sub_sport for the generic 'training' container", () => {
-    expect(displaySport(activity("2025-01-01", 1000, { sport: "training", sub_sport: "yoga" }))).toBe(
-      "yoga",
-    );
+    expect(
+      displaySport(activity("2025-01-01", 1000, { sport: "training", sub_sport: "yoga" })),
+    ).toBe("yoga");
   });
 
   it("leaves a non-container sport alone even when sub_sport is set", () => {

@@ -19,8 +19,9 @@ export const DEFAULT_PERSONALIZE_SETTINGS: PersonalizeSettingsOut = {
 // Exported (not just the Provider/hook below) so a test can wrap a component in
 // `<PersonalizeContext.Provider value={{...}}>` directly, without mocking the network layer
 // just to exercise a non-default preference.
-export const PersonalizeContext =
-  createContext<PersonalizeSettingsOut>(DEFAULT_PERSONALIZE_SETTINGS);
+export const PersonalizeContext = createContext<PersonalizeSettingsOut>(
+  DEFAULT_PERSONALIZE_SETTINGS,
+);
 
 export function PersonalizeProvider({ children }: { children: React.ReactNode }) {
   const query = usePersonalizeSettings();

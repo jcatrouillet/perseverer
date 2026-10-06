@@ -357,8 +357,7 @@ HAND_CURATED_STEPS: dict[tuple[str, str], _Curated] = {
             "the floor.",
             "Extend your hips and back together to raise your torso back up in a straight "
             "line, without arching past neutral at the top.",
-            "Move slowly and under control in both directions -- this is not a movement to "
-            "rush.",
+            "Move slowly and under control in both directions -- this is not a movement to rush.",
         ],
         "reference_url": "https://en.wikipedia.org/wiki/Hyperextension_(exercise)",
         "reference_label": "Wikipedia",
@@ -528,8 +527,7 @@ BASE_STEPS_OVERRIDE: dict[str, list[str]] = {
         "Brace your core and glutes so your hips don't sag or pike up.",
         "Bend your elbows to lower your chest toward the floor, keeping them at roughly a "
         "45-degree angle from your torso rather than flared straight out.",
-        "Lower until your chest is just above the floor, then press back up to full arm "
-        "extension.",
+        "Lower until your chest is just above the floor, then press back up to full arm extension.",
         "Keep your neck neutral throughout, looking slightly ahead rather than straight down.",
     ],
     "SQUAT": [
@@ -559,8 +557,7 @@ BASE_STEPS_OVERRIDE: dict[str, list[str]] = {
         "you rise.",
         "Lift only until your shoulder blades clear the floor -- this is a short range of "
         "motion, not a full sit-up.",
-        "Lower back down under control, inhaling, without fully relaxing your abs at the "
-        "bottom.",
+        "Lower back down under control, inhaling, without fully relaxing your abs at the bottom.",
     ],
     "LUNGE": [
         "Stand tall with feet hip-width apart, hands on your hips or holding weights at your "
@@ -583,22 +580,18 @@ BASE_STEPS_OVERRIDE: dict[str, list[str]] = {
         "Raise your hips until your body forms a straight line from shoulders to knees, "
         "without overarching your lower back.",
         "Hold briefly at the top, keeping your glutes contracted.",
-        "Lower your hips back down under control, without letting them fully rest between "
-        "reps.",
+        "Lower your hips back down under control, without letting them fully rest between reps.",
     ],
     "PULL_UP": [
-        "Grip a pull-up bar with an overhand grip, hands slightly wider than shoulder-width "
-        "apart.",
-        "Hang with your arms fully extended and your core braced, avoiding excessive "
-        "swinging.",
+        "Grip a pull-up bar with an overhand grip, hands slightly wider than shoulder-width apart.",
+        "Hang with your arms fully extended and your core braced, avoiding excessive swinging.",
         "Pull your body up by driving your elbows down and back, leading with your chest "
         "toward the bar.",
         "Continue until your chin clears the bar.",
         "Lower back down under control to a full arm extension before starting the next rep.",
     ],
     "SIT_UP": [
-        "Lie on your back with your knees bent and feet flat on the floor, anchored if "
-        "needed.",
+        "Lie on your back with your knees bent and feet flat on the floor, anchored if needed.",
         "Cross your arms over your chest or place your hands lightly behind your head.",
         "Engage your core and curl your torso up off the floor, leading with your chest "
         "rather than your neck.",
@@ -614,143 +607,343 @@ BASE_STEPS_OVERRIDE: dict[str, list[str]] = {
 # one real difference changes the base movement -- never a generic "this is a variant" filler.
 # Original wording throughout, general exercise-science knowledge.
 MODIFIER_NOTES: list[tuple[tuple[str, ...], str]] = [
-    (("single", "leg"), "Performing this on one leg at a time removes the help the other leg "
-     "normally provides, so expect it to demand more balance."),
-    (("single", "arm"), "Working one arm at a time removes the help the other arm normally "
-     "provides -- keep your torso square rather than twisting toward the working side."),
-    (("one", "arm"), "Working one arm at a time removes the help the other arm normally "
-     "provides -- keep your torso square rather than twisting toward the working side."),
-    (("one", "leg"), "Performing this on one leg at a time removes the help the other leg "
-     "normally provides, so expect it to demand more balance."),
-    (("elevated", "feet"), "Elevating your feet shifts more of your body weight onto your "
-     "upper body, increasing the difficulty."),
-    (("neutral", "grip"), "A neutral grip (palms facing each other) is often easier on the "
-     "wrists and shoulders than a full overhand or underhand grip."),
-    (("mixed", "grip"), "A mixed grip (one palm forward, one back) lets you hold more weight "
-     "than a double-overhand grip -- alternate which hand faces which way between sets."),
-    (("reverse", "grip"), "A reverse (underhand/supinated) grip changes which muscles assist "
-     "the main movers compared to a standard grip."),
-    (("underhand", "grip"), "An underhand (supinated) grip brings more biceps into a pulling "
-     "movement than an overhand grip."),
-    (("overhand", "grip"), "An overhand (pronated) grip is the standard grip for this "
-     "movement, emphasizing the back and shoulders over the biceps."),
-    (("wide", "grip"), "A wider hand placement than standard shifts emphasis to different "
-     "muscles and shortens the range of motion slightly."),
-    (("close", "grip"), "A closer hand placement than standard lengthens the range of motion "
-     "and shifts more emphasis onto the arms."),
-    (("ez", "bar"), "An EZ-bar's angled grips are easier on the wrists than a straight bar -- "
-     "keep your hands on the angled sections."),
-    (("swiss", "ball"), "A Swiss ball adds an unstable base -- brace your core to avoid "
-     "rolling, and use a lighter load than the stable version."),
-    (("medicine", "ball"), "Holding a medicine ball adds load and something to grip -- keep a "
-     "secure hold on it throughout."),
-    (("foam", "roller"), "A foam roller adds instability similar to a Swiss ball -- move "
-     "slowly and keep your core braced."),
-    (("bosu", "balance"), "A BOSU trainer's unstable dome demands extra core and ankle "
-     "stabilization -- move slower and use less load than the stable version."),
-    (("get", "up"), "This sequences several positions into one continuous movement -- move "
-     "through each step deliberately rather than rushing to the next."),
-    (("towel",), "Gripping a towel instead of a bar challenges your grip strength more than "
-     "usual -- expect your forearms to fatigue faster."),
-    (("hollow",), "A hollow body position presses your lower back into the floor and holds "
-     "your limbs slightly off it -- keep that contact with the floor throughout."),
-    (("suspended",), "Suspension straps add instability and let you adjust difficulty by "
-     "changing your body angle -- the more horizontal your body, the harder it gets."),
-    (("trx",), "Suspension straps add instability and let you adjust difficulty by changing "
-     "your body angle -- the more horizontal your body, the harder it gets."),
-    (("ring",), "Gymnastic rings add instability a fixed bar/handle doesn't have -- control "
-     "the movement rather than letting the rings swing."),
-    (("rings",), "Gymnastic rings add instability a fixed bar/handle doesn't have -- control "
-     "the movement rather than letting the rings swing."),
-    (("barbell",), "A barbell gives continuous, fixed-path resistance -- keep an even grip "
-     "across the whole range."),
-    (("dumbbell",), "Dumbbells let each side move independently -- keep both sides moving at "
-     "the same pace so one side doesn't do more of the work."),
-    (("dumbbells",), "Dumbbells let each side move independently -- keep both sides moving at "
-     "the same pace so one side doesn't do more of the work."),
-    (("kettlebell",), "A kettlebell's handle sits above the weight -- keep your wrist neutral "
-     "rather than letting the bell roll around in your grip."),
-    (("cable",), "A cable keeps tension on the muscle through the full range, including the "
-     "stretched position, unlike a free weight."),
-    (("machine",), "A machine guides the movement path for you -- set the seat/pad height so "
-     "the pivot point lines up with your own joint."),
-    (("smith",), "A Smith machine fixes the bar to a vertical (or angled) track, so your feet "
-     "can sit slightly forward of the bar since the path is already fixed."),
-    (("band",), "A resistance band gets harder to stretch as you move through the range -- "
-     "expect the hardest part to be near full extension, not the start."),
-    (("banded",), "A resistance band gets harder to stretch as you move through the range -- "
-     "expect the hardest part to be near full extension, not the start."),
-    (("decline",), "A decline angle (head lower than hips/feet) shifts more load onto your "
-     "upper body -- expect it to feel harder than the flat version."),
-    (("incline",), "An incline angle shifts more load onto your lower chest and front "
-     "shoulders -- keep your core braced so you don't slide down."),
-    (("kneeling",), "Performing this from a kneeling position removes your legs from the base "
-     "of support, isolating the working muscles more and reducing momentum."),
-    (("seated",), "Sitting removes your legs from the movement, isolating the target muscles "
-     "and reducing the ability to use momentum from your lower body."),
-    (("standing",), "Standing brings your core and legs into play for stability, unlike a "
-     "seated or lying version of the same movement."),
-    (("lying",), "Lying down removes your legs from the base of support and can let you "
-     "isolate the target muscle more directly."),
-    (("inverted",), "An inverted position reverses which way gravity loads the movement -- "
-     "keep your core braced throughout."),
-    (("crossover",), "Crossing past the midline of your body adds a rotational component -- "
-     "move under control rather than swinging across."),
-    (("diagonal",), "Moving on a diagonal rather than straight up-and-down or side-to-side "
-     "brings a rotational element into the exercise -- keep it smooth rather than jerky."),
-    (("rotational",), "This adds a rotational (twisting) component through your torso -- "
-     "initiate the rotation from your core, not just your arms."),
-    (("rotation",), "This adds a rotational (twisting) component through your torso -- "
-     "initiate the rotation from your core, not just your arms."),
-    (("alternating",), "Alternate sides each rep rather than completing a full set on one "
-     "side before switching."),
-    (("staggered",), "A staggered stance (one foot ahead of the other) shifts more load onto "
-     "the forward leg/arm -- keep most of your weight there."),
-    (("split",), "A split stance (one foot forward, one back) narrows your base -- keep your "
-     "torso upright and your weight balanced between both legs."),
-    (("sumo",), "A sumo stance (feet wider than shoulder-width, toes turned out) shifts more "
-     "emphasis onto your inner thighs and glutes than a standard stance."),
-    (("curtsy",), "A curtsy step (crossing one leg diagonally behind the other) adds a "
-     "lateral, rotational component compared to a straight lunge."),
-    (("weighted",), "Adding external weight increases the resistance beyond your body weight "
-     "alone -- start lighter than you think you need until your form is solid."),
-    (("plyometric",), "This is an explosive (plyometric) version -- move as fast as you can "
-     "on the way up while still landing/finishing softly and under control."),
-    (("explosive",), "This is an explosive version -- move as fast as you can through the "
-     "power phase while still finishing under control."),
-    (("jump",), "This is an explosive, jumping version -- move as fast as you can on the way "
-     "up while still landing softly and under control."),
-    (("jumps",), "This is an explosive, jumping version -- move as fast as you can on the way "
-     "up while still landing softly and under control."),
-    (("isometric",), "This is a held (isometric) version -- rather than performing reps, hold "
-     "the working position steady for the target duration."),
-    (("static",), "This is a held (static) version -- rather than performing reps, hold the "
-     "working position steady for the target duration."),
-    (("handstand",), "An inverted handstand position shifts the entire load onto your "
-     "shoulders and arms -- build up against a wall for support before attempting it "
-     "freestanding."),
-    (("hanging",), "Hanging from a bar removes your legs from the base of support entirely -- "
-     "keep swinging to a minimum by controlling the movement."),
-    (("chin",), "A chin-up-style underhand grip brings more biceps into the movement than a "
-     "standard overhand pull-up grip."),
-    (("modified",), "This is an easier, modified version of the standard movement -- use it "
-     "to build the strength and control needed for the full version."),
-    (("sliding",), "Sliding discs (or a towel on a smooth floor) remove friction, so the "
-     "working limb has to control the movement actively rather than just lifting and setting "
-     "down -- move slowly."),
-    (("pilates",), "This follows Pilates' own emphasis on slow, controlled movement driven "
-     "from your deep core -- prioritize control over speed or range."),
-    (("crossed",), "Crossing your limbs changes your base of support and can add a "
-     "rotational element -- keep the movement controlled."),
-    (("pike",), "A pike position hinges sharply at the hips with straight legs -- keep your "
-     "core braced so the movement comes from your hips, not your lower back rounding."),
-    (("v",), "A V-shaped body position works both your upper and lower abs together -- keep "
-     "your lower back from arching off the floor."),
-    (("mountain", "climber"), "Rather than holding the position static, drive your knees in "
-     "toward your chest one at a time at a controlled pace, keeping your hips low throughout."),
-    (("pistol",), "A pistol squat is performed on one leg, with the other leg extended "
-     "straight out in front of you for balance -- it demands far more balance, ankle "
-     "mobility, and single-leg strength than a two-legged squat."),
+    (
+        ("single", "leg"),
+        "Performing this on one leg at a time removes the help the other leg "
+        "normally provides, so expect it to demand more balance.",
+    ),
+    (
+        ("single", "arm"),
+        "Working one arm at a time removes the help the other arm normally "
+        "provides -- keep your torso square rather than twisting toward the working side.",
+    ),
+    (
+        ("one", "arm"),
+        "Working one arm at a time removes the help the other arm normally "
+        "provides -- keep your torso square rather than twisting toward the working side.",
+    ),
+    (
+        ("one", "leg"),
+        "Performing this on one leg at a time removes the help the other leg "
+        "normally provides, so expect it to demand more balance.",
+    ),
+    (
+        ("elevated", "feet"),
+        "Elevating your feet shifts more of your body weight onto your "
+        "upper body, increasing the difficulty.",
+    ),
+    (
+        ("neutral", "grip"),
+        "A neutral grip (palms facing each other) is often easier on the "
+        "wrists and shoulders than a full overhand or underhand grip.",
+    ),
+    (
+        ("mixed", "grip"),
+        "A mixed grip (one palm forward, one back) lets you hold more weight "
+        "than a double-overhand grip -- alternate which hand faces which way between sets.",
+    ),
+    (
+        ("reverse", "grip"),
+        "A reverse (underhand/supinated) grip changes which muscles assist "
+        "the main movers compared to a standard grip.",
+    ),
+    (
+        ("underhand", "grip"),
+        "An underhand (supinated) grip brings more biceps into a pulling "
+        "movement than an overhand grip.",
+    ),
+    (
+        ("overhand", "grip"),
+        "An overhand (pronated) grip is the standard grip for this "
+        "movement, emphasizing the back and shoulders over the biceps.",
+    ),
+    (
+        ("wide", "grip"),
+        "A wider hand placement than standard shifts emphasis to different "
+        "muscles and shortens the range of motion slightly.",
+    ),
+    (
+        ("close", "grip"),
+        "A closer hand placement than standard lengthens the range of motion "
+        "and shifts more emphasis onto the arms.",
+    ),
+    (
+        ("ez", "bar"),
+        "An EZ-bar's angled grips are easier on the wrists than a straight bar -- "
+        "keep your hands on the angled sections.",
+    ),
+    (
+        ("swiss", "ball"),
+        "A Swiss ball adds an unstable base -- brace your core to avoid "
+        "rolling, and use a lighter load than the stable version.",
+    ),
+    (
+        ("medicine", "ball"),
+        "Holding a medicine ball adds load and something to grip -- keep a "
+        "secure hold on it throughout.",
+    ),
+    (
+        ("foam", "roller"),
+        "A foam roller adds instability similar to a Swiss ball -- move "
+        "slowly and keep your core braced.",
+    ),
+    (
+        ("bosu", "balance"),
+        "A BOSU trainer's unstable dome demands extra core and ankle "
+        "stabilization -- move slower and use less load than the stable version.",
+    ),
+    (
+        ("get", "up"),
+        "This sequences several positions into one continuous movement -- move "
+        "through each step deliberately rather than rushing to the next.",
+    ),
+    (
+        ("towel",),
+        "Gripping a towel instead of a bar challenges your grip strength more than "
+        "usual -- expect your forearms to fatigue faster.",
+    ),
+    (
+        ("hollow",),
+        "A hollow body position presses your lower back into the floor and holds "
+        "your limbs slightly off it -- keep that contact with the floor throughout.",
+    ),
+    (
+        ("suspended",),
+        "Suspension straps add instability and let you adjust difficulty by "
+        "changing your body angle -- the more horizontal your body, the harder it gets.",
+    ),
+    (
+        ("trx",),
+        "Suspension straps add instability and let you adjust difficulty by changing "
+        "your body angle -- the more horizontal your body, the harder it gets.",
+    ),
+    (
+        ("ring",),
+        "Gymnastic rings add instability a fixed bar/handle doesn't have -- control "
+        "the movement rather than letting the rings swing.",
+    ),
+    (
+        ("rings",),
+        "Gymnastic rings add instability a fixed bar/handle doesn't have -- control "
+        "the movement rather than letting the rings swing.",
+    ),
+    (
+        ("barbell",),
+        "A barbell gives continuous, fixed-path resistance -- keep an even grip "
+        "across the whole range.",
+    ),
+    (
+        ("dumbbell",),
+        "Dumbbells let each side move independently -- keep both sides moving at "
+        "the same pace so one side doesn't do more of the work.",
+    ),
+    (
+        ("dumbbells",),
+        "Dumbbells let each side move independently -- keep both sides moving at "
+        "the same pace so one side doesn't do more of the work.",
+    ),
+    (
+        ("kettlebell",),
+        "A kettlebell's handle sits above the weight -- keep your wrist neutral "
+        "rather than letting the bell roll around in your grip.",
+    ),
+    (
+        ("cable",),
+        "A cable keeps tension on the muscle through the full range, including the "
+        "stretched position, unlike a free weight.",
+    ),
+    (
+        ("machine",),
+        "A machine guides the movement path for you -- set the seat/pad height so "
+        "the pivot point lines up with your own joint.",
+    ),
+    (
+        ("smith",),
+        "A Smith machine fixes the bar to a vertical (or angled) track, so your feet "
+        "can sit slightly forward of the bar since the path is already fixed.",
+    ),
+    (
+        ("band",),
+        "A resistance band gets harder to stretch as you move through the range -- "
+        "expect the hardest part to be near full extension, not the start.",
+    ),
+    (
+        ("banded",),
+        "A resistance band gets harder to stretch as you move through the range -- "
+        "expect the hardest part to be near full extension, not the start.",
+    ),
+    (
+        ("decline",),
+        "A decline angle (head lower than hips/feet) shifts more load onto your "
+        "upper body -- expect it to feel harder than the flat version.",
+    ),
+    (
+        ("incline",),
+        "An incline angle shifts more load onto your lower chest and front "
+        "shoulders -- keep your core braced so you don't slide down.",
+    ),
+    (
+        ("kneeling",),
+        "Performing this from a kneeling position removes your legs from the base "
+        "of support, isolating the working muscles more and reducing momentum.",
+    ),
+    (
+        ("seated",),
+        "Sitting removes your legs from the movement, isolating the target muscles "
+        "and reducing the ability to use momentum from your lower body.",
+    ),
+    (
+        ("standing",),
+        "Standing brings your core and legs into play for stability, unlike a "
+        "seated or lying version of the same movement.",
+    ),
+    (
+        ("lying",),
+        "Lying down removes your legs from the base of support and can let you "
+        "isolate the target muscle more directly.",
+    ),
+    (
+        ("inverted",),
+        "An inverted position reverses which way gravity loads the movement -- "
+        "keep your core braced throughout.",
+    ),
+    (
+        ("crossover",),
+        "Crossing past the midline of your body adds a rotational component -- "
+        "move under control rather than swinging across.",
+    ),
+    (
+        ("diagonal",),
+        "Moving on a diagonal rather than straight up-and-down or side-to-side "
+        "brings a rotational element into the exercise -- keep it smooth rather than jerky.",
+    ),
+    (
+        ("rotational",),
+        "This adds a rotational (twisting) component through your torso -- "
+        "initiate the rotation from your core, not just your arms.",
+    ),
+    (
+        ("rotation",),
+        "This adds a rotational (twisting) component through your torso -- "
+        "initiate the rotation from your core, not just your arms.",
+    ),
+    (
+        ("alternating",),
+        "Alternate sides each rep rather than completing a full set on one side before switching.",
+    ),
+    (
+        ("staggered",),
+        "A staggered stance (one foot ahead of the other) shifts more load onto "
+        "the forward leg/arm -- keep most of your weight there.",
+    ),
+    (
+        ("split",),
+        "A split stance (one foot forward, one back) narrows your base -- keep your "
+        "torso upright and your weight balanced between both legs.",
+    ),
+    (
+        ("sumo",),
+        "A sumo stance (feet wider than shoulder-width, toes turned out) shifts more "
+        "emphasis onto your inner thighs and glutes than a standard stance.",
+    ),
+    (
+        ("curtsy",),
+        "A curtsy step (crossing one leg diagonally behind the other) adds a "
+        "lateral, rotational component compared to a straight lunge.",
+    ),
+    (
+        ("weighted",),
+        "Adding external weight increases the resistance beyond your body weight "
+        "alone -- start lighter than you think you need until your form is solid.",
+    ),
+    (
+        ("plyometric",),
+        "This is an explosive (plyometric) version -- move as fast as you can "
+        "on the way up while still landing/finishing softly and under control.",
+    ),
+    (
+        ("explosive",),
+        "This is an explosive version -- move as fast as you can through the "
+        "power phase while still finishing under control.",
+    ),
+    (
+        ("jump",),
+        "This is an explosive, jumping version -- move as fast as you can on the way "
+        "up while still landing softly and under control.",
+    ),
+    (
+        ("jumps",),
+        "This is an explosive, jumping version -- move as fast as you can on the way "
+        "up while still landing softly and under control.",
+    ),
+    (
+        ("isometric",),
+        "This is a held (isometric) version -- rather than performing reps, hold "
+        "the working position steady for the target duration.",
+    ),
+    (
+        ("static",),
+        "This is a held (static) version -- rather than performing reps, hold the "
+        "working position steady for the target duration.",
+    ),
+    (
+        ("handstand",),
+        "An inverted handstand position shifts the entire load onto your "
+        "shoulders and arms -- build up against a wall for support before attempting it "
+        "freestanding.",
+    ),
+    (
+        ("hanging",),
+        "Hanging from a bar removes your legs from the base of support entirely -- "
+        "keep swinging to a minimum by controlling the movement.",
+    ),
+    (
+        ("chin",),
+        "A chin-up-style underhand grip brings more biceps into the movement than a "
+        "standard overhand pull-up grip.",
+    ),
+    (
+        ("modified",),
+        "This is an easier, modified version of the standard movement -- use it "
+        "to build the strength and control needed for the full version.",
+    ),
+    (
+        ("sliding",),
+        "Sliding discs (or a towel on a smooth floor) remove friction, so the "
+        "working limb has to control the movement actively rather than just lifting and setting "
+        "down -- move slowly.",
+    ),
+    (
+        ("pilates",),
+        "This follows Pilates' own emphasis on slow, controlled movement driven "
+        "from your deep core -- prioritize control over speed or range.",
+    ),
+    (
+        ("crossed",),
+        "Crossing your limbs changes your base of support and can add a "
+        "rotational element -- keep the movement controlled.",
+    ),
+    (
+        ("pike",),
+        "A pike position hinges sharply at the hips with straight legs -- keep your "
+        "core braced so the movement comes from your hips, not your lower back rounding.",
+    ),
+    (
+        ("v",),
+        "A V-shaped body position works both your upper and lower abs together -- keep "
+        "your lower back from arching off the floor.",
+    ),
+    (
+        ("mountain", "climber"),
+        "Rather than holding the position static, drive your knees in "
+        "toward your chest one at a time at a controlled pace, keeping your hips low throughout.",
+    ),
+    (
+        ("pistol",),
+        "A pistol squat is performed on one leg, with the other leg extended "
+        "straight out in front of you for balance -- it demands far more balance, ankle "
+        "mobility, and single-leg strength than a two-legged squat.",
+    ),
 ]
 
 # A few modifier words mean genuinely different things in different exercise families ("reverse"
@@ -760,12 +953,21 @@ MODIFIER_NOTES: list[tuple[tuple[str, ...], str]] = [
 # where the meaning is unambiguous.
 CATEGORY_SCOPED_NOTES: dict[str, list[tuple[tuple[str, ...], str]]] = {
     "LUNGE": [
-        (("reverse",), "A reverse lunge steps backward instead of forward -- it's often "
-         "gentler on the front knee, since there's less forward momentum to control."),
-        (("walking",), "A walking lunge continues forward into the next step rather than "
-         "returning to the start position each rep."),
-        (("side",), "A side (lateral) lunge steps out to the side rather than forward or "
-         "back, bending the stepping knee while keeping the other leg straight."),
+        (
+            ("reverse",),
+            "A reverse lunge steps backward instead of forward -- it's often "
+            "gentler on the front knee, since there's less forward momentum to control.",
+        ),
+        (
+            ("walking",),
+            "A walking lunge continues forward into the next step rather than "
+            "returning to the start position each rep.",
+        ),
+        (
+            ("side",),
+            "A side (lateral) lunge steps out to the side rather than forward or "
+            "back, bending the stepping knee while keeping the other leg straight.",
+        ),
     ],
 }
 
@@ -872,8 +1074,7 @@ _DIP_STEPS = [
     "Bend your elbows to lower your body until your upper arms are roughly parallel to the "
     "floor, or as far as feels comfortable on your shoulders.",
     "Keep your elbows tracking back rather than flaring straight out to the sides.",
-    "Press back up through your palms to full arm extension, without shrugging your "
-    "shoulders up.",
+    "Press back up through your palms to full arm extension, without shrugging your shoulders up.",
 ]
 
 _SubBaseEntry = dict[tuple[str, str], tuple[str, list[str]]]
@@ -886,39 +1087,98 @@ def _sub_base(
 
 
 SUB_BASE_OVERRIDES: dict[tuple[str, str], tuple[str, list[str]]] = {
-    **_sub_base("CRUNCH", "Reverse Crunch", _REVERSE_CRUNCH_STEPS, [
-        "CROSS_LEG_REVERSE_CRUNCH", "FOAM_ROLLER_REVERSE_CRUNCH_ON_BENCH",
-        "FOAM_ROLLER_REVERSE_CRUNCH_WITH_DUMBBELL", "FOAM_ROLLER_REVERSE_CRUNCH_WITH_MEDICINE_BALL",
-        "INCLINE_REVERSE_CRUNCH", "REVERSE_CURL_AND_LIFT", "SEATED_ALTERNATING_REVERSE_CRUNCH",
-        "SINGLE_LEG_REVERSE_CRUNCH", "WEIGHTED_CROSS_LEG_REVERSE_CRUNCH",
-        "WEIGHTED_FOAM_ROLLER_REVERSE_CRUNCH_ON_BENCH", "WEIGHTED_INCLINE_REVERSE_CRUNCH",
-        "WEIGHTED_REVERSE_CRUNCH", "WEIGHTED_REVERSE_CRUNCH_ON_A_BENCH",
-        "WEIGHTED_REVERSE_CURL_AND_LIFT", "WEIGHTED_SEATED_ALTERNATING_REVERSE_CRUNCH",
-        "WEIGHTED_SINGLE_LEG_REVERSE_CRUNCH",
-    ]),
-    **_sub_base("SIT_UP", "Reverse Curl-up", _REVERSE_CRUNCH_STEPS, [
-        "REVERSE_CURL_UP", "WEIGHTED_REVERSE_CURL_UP",
-    ]),
-    **_sub_base("HIP_RAISE", "Reverse Hip Raise", _REVERSE_HIP_RAISE_STEPS, [
-        "REVERSE_HIP_RAISE", "WEIGHTED_REVERSE_HIP_RAISE",
-        "BENT_KNEE_SWISS_BALL_REVERSE_HIP_RAISE", "WEIGHTED_BENT_KNEE_SWISS_BALL_REVERSE_HIP_RAISE",
-    ]),
-    **_sub_base("HIP_RAISE", "Incline Rear-leg Extension", _REVERSE_HIP_RAISE_STEPS, [
-        "INCLINE_REAR_LEG_EXTENSION", "WEIGHTED_INCLINE_REAR_LEG_EXTENSION",
-    ]),
-    **_sub_base("PULL_UP", "Lat Pulldown", _LAT_PULLDOWN_STEPS, [
-        "_30_DEGREE_LAT_PULLDOWN", "CLOSE_GRIP_LAT_PULLDOWN", "KNEELING_LAT_PULLDOWN",
-        "KNEELING_UNDERHAND_GRIP_LAT_PULLDOWN", "REVERSE_GRIP_PULLDOWN", "STRAIGHT_ARM_PULLDOWN",
-    ]),
-    **_sub_base("LEG_CURL", "Good Morning", _GOOD_MORNING_STEPS, [
-        "SINGLE_LEG_BARBELL_GOOD_MORNING", "SPLIT_BARBELL_GOOD_MORNING",
-        "STAGGERED_STANCE_GOOD_MORNING", "ZERCHER_GOOD_MORNING",
-    ]),
-    **_sub_base("TRICEPS_EXTENSION", "Dip", _DIP_STEPS, [
-        "BODY_WEIGHT_DIP", "SUSPENDED_DIP", "TABLETOP_DIP", "WEIGHTED_DIP", "WEIGHTED_INCLINE_DIP",
-        "WEIGHTED_SUSPENDED_DIP", "WEIGHTED_TABLETOP_DIP", "SINGLE_LEG_BENCH_DIP_AND_KICK",
-        "WEIGHTED_SINGLE_LEG_BENCH_DIP_AND_KICK",
-    ]),
+    **_sub_base(
+        "CRUNCH",
+        "Reverse Crunch",
+        _REVERSE_CRUNCH_STEPS,
+        [
+            "CROSS_LEG_REVERSE_CRUNCH",
+            "FOAM_ROLLER_REVERSE_CRUNCH_ON_BENCH",
+            "FOAM_ROLLER_REVERSE_CRUNCH_WITH_DUMBBELL",
+            "FOAM_ROLLER_REVERSE_CRUNCH_WITH_MEDICINE_BALL",
+            "INCLINE_REVERSE_CRUNCH",
+            "REVERSE_CURL_AND_LIFT",
+            "SEATED_ALTERNATING_REVERSE_CRUNCH",
+            "SINGLE_LEG_REVERSE_CRUNCH",
+            "WEIGHTED_CROSS_LEG_REVERSE_CRUNCH",
+            "WEIGHTED_FOAM_ROLLER_REVERSE_CRUNCH_ON_BENCH",
+            "WEIGHTED_INCLINE_REVERSE_CRUNCH",
+            "WEIGHTED_REVERSE_CRUNCH",
+            "WEIGHTED_REVERSE_CRUNCH_ON_A_BENCH",
+            "WEIGHTED_REVERSE_CURL_AND_LIFT",
+            "WEIGHTED_SEATED_ALTERNATING_REVERSE_CRUNCH",
+            "WEIGHTED_SINGLE_LEG_REVERSE_CRUNCH",
+        ],
+    ),
+    **_sub_base(
+        "SIT_UP",
+        "Reverse Curl-up",
+        _REVERSE_CRUNCH_STEPS,
+        [
+            "REVERSE_CURL_UP",
+            "WEIGHTED_REVERSE_CURL_UP",
+        ],
+    ),
+    **_sub_base(
+        "HIP_RAISE",
+        "Reverse Hip Raise",
+        _REVERSE_HIP_RAISE_STEPS,
+        [
+            "REVERSE_HIP_RAISE",
+            "WEIGHTED_REVERSE_HIP_RAISE",
+            "BENT_KNEE_SWISS_BALL_REVERSE_HIP_RAISE",
+            "WEIGHTED_BENT_KNEE_SWISS_BALL_REVERSE_HIP_RAISE",
+        ],
+    ),
+    **_sub_base(
+        "HIP_RAISE",
+        "Incline Rear-leg Extension",
+        _REVERSE_HIP_RAISE_STEPS,
+        [
+            "INCLINE_REAR_LEG_EXTENSION",
+            "WEIGHTED_INCLINE_REAR_LEG_EXTENSION",
+        ],
+    ),
+    **_sub_base(
+        "PULL_UP",
+        "Lat Pulldown",
+        _LAT_PULLDOWN_STEPS,
+        [
+            "_30_DEGREE_LAT_PULLDOWN",
+            "CLOSE_GRIP_LAT_PULLDOWN",
+            "KNEELING_LAT_PULLDOWN",
+            "KNEELING_UNDERHAND_GRIP_LAT_PULLDOWN",
+            "REVERSE_GRIP_PULLDOWN",
+            "STRAIGHT_ARM_PULLDOWN",
+        ],
+    ),
+    **_sub_base(
+        "LEG_CURL",
+        "Good Morning",
+        _GOOD_MORNING_STEPS,
+        [
+            "SINGLE_LEG_BARBELL_GOOD_MORNING",
+            "SPLIT_BARBELL_GOOD_MORNING",
+            "STAGGERED_STANCE_GOOD_MORNING",
+            "ZERCHER_GOOD_MORNING",
+        ],
+    ),
+    **_sub_base(
+        "TRICEPS_EXTENSION",
+        "Dip",
+        _DIP_STEPS,
+        [
+            "BODY_WEIGHT_DIP",
+            "SUSPENDED_DIP",
+            "TABLETOP_DIP",
+            "WEIGHTED_DIP",
+            "WEIGHTED_INCLINE_DIP",
+            "WEIGHTED_SUSPENDED_DIP",
+            "WEIGHTED_TABLETOP_DIP",
+            "SINGLE_LEG_BENCH_DIP_AND_KICK",
+            "WEIGHTED_SINGLE_LEG_BENCH_DIP_AND_KICK",
+        ],
+    ),
 }
 
 

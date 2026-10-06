@@ -91,7 +91,12 @@ describe("ActivityCard", () => {
   it("shows speed (km/h) rather than pace for a wheeled sport", () => {
     render(
       <ActivityCard
-        activity={activity({ sport: "cycling", distance_m: 20000, duration_s: 3600, moving_duration_s: 3600 })}
+        activity={activity({
+          sport: "cycling",
+          distance_m: 20000,
+          duration_s: 3600,
+          moving_duration_s: 3600,
+        })}
       />,
     );
     expect(screen.getByText("20.0 km/h")).toBeInTheDocument();

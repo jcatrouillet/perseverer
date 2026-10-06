@@ -41,6 +41,7 @@ def test_exempt_tables_are_the_expected_small_set() -> None:
     exactly the case a brute-force attempt usually is. `oauth_client` (ADR 0007 decision 10) is a
     dynamically-registered *application* (e.g. claude.ai), which exists before any athlete has
     logged in -- a shared catalog like `metric_definition`, not an athlete's data."""
-    assert frozenset(
-        {"athlete", "metric_definition", "auth_login_attempt", "oauth_client"}
-    ) == EXEMPT_FROM_ATHLETE_SCOPING
+    assert (
+        frozenset({"athlete", "metric_definition", "auth_login_attempt", "oauth_client"})
+        == EXEMPT_FROM_ATHLETE_SCOPING
+    )

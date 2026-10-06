@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { JobStatusOut } from "../api/types";
 import { RebuildCard } from "./RebuildCard";
 
-const mockRebuildMutate = vi.fn(
-  (_vars: unknown, options?: { onSuccess?: () => void }) => options?.onSuccess?.(),
+const mockRebuildMutate = vi.fn((_vars: unknown, options?: { onSuccess?: () => void }) =>
+  options?.onSuccess?.(),
 );
 const mockUseLatestJob = vi.fn();
 

@@ -53,8 +53,7 @@ export function Vo2maxFactorAnalysis() {
   if (analysis.isError) return <p role="alert">Could not load the VO2max factor analysis.</p>;
   if (!analysis.data) return null;
 
-  const { driving_activity, other_contributors, missing, window_start, window_end } =
-    analysis.data;
+  const { driving_activity, other_contributors, missing, window_start, window_end } = analysis.data;
 
   return (
     <section className="card">

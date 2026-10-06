@@ -298,7 +298,9 @@ describe("WeekView weather forecast", () => {
     // Sits right after the header (weekday/date), before the planned-workout/activity sections.
     const day = document.querySelectorAll(".week-columns__day")[1]!; // Tuesday = 2026-09-01
     const header = day.querySelector(".week-columns__header")!;
-    expect(header.compareDocumentPosition(forecastRow!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      header.compareDocumentPosition(forecastRow!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("shows no forecast row for a day outside the returned forecast range", () => {
@@ -377,9 +379,7 @@ describe("WeekView compliance", () => {
     vi.useRealTimers();
   });
 
-  function planned(
-    overrides: Partial<PlannedWorkoutListItemOut> = {},
-  ): PlannedWorkoutListItemOut {
+  function planned(overrides: Partial<PlannedWorkoutListItemOut> = {}): PlannedWorkoutListItemOut {
     return {
       local_date: "2026-09-01",
       id: 1,
@@ -572,7 +572,9 @@ describe("WeekView week stats", () => {
         <WeekView date="2026-09-01" />
       </PersonalizeContext.Provider>,
     );
-    expect(screen.getByRole("heading", { name: "Week of 2026-08-30 – 2026-09-05" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Week of 2026-08-30 – 2026-09-05" }),
+    ).toBeInTheDocument();
     const statGrid = document.querySelector(".stat-grid")!;
     expect(statGrid).toHaveTextContent("3.0"); // 3000m -> 3.0 km, only countable once the range
     // actually includes 2026-08-30 (a Sunday, outside the default Monday-start range).

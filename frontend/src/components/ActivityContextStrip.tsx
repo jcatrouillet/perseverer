@@ -69,9 +69,13 @@ function ContextTooltip({
     <div className="activity-context__tooltip">
       <div className="activity-context__tooltip-date">{p.date}</div>
       <div>
-        {paceSport ? `${formatMinPerKm(p.value)} /${unitLabel}` : `${p.value.toFixed(1)} ${speedUnitLabel(unit)}`}
+        {paceSport
+          ? `${formatMinPerKm(p.value)} /${unitLabel}`
+          : `${p.value.toFixed(1)} ${speedUnitLabel(unit)}`}
       </div>
-      <div className="activity-context__tooltip-distance">{p.distanceKm.toFixed(2)} {unitLabel}</div>
+      <div className="activity-context__tooltip-distance">
+        {p.distanceKm.toFixed(2)} {unitLabel}
+      </div>
     </div>
   );
 }

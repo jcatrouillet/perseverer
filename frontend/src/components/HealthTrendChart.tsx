@@ -109,7 +109,12 @@ export function HealthTrendChart({
               data's own range (with Recharts' usual padded/rounded tick bounds), the same way
               the pace-vs-distance scatter charts already zoom to their own data instead of
               starting at 0. */}
-          <YAxis stroke="var(--color-text-muted)" fontSize={11} width={32} domain={["auto", "auto"]} />
+          <YAxis
+            stroke="var(--color-text-muted)"
+            fontSize={11}
+            width={32}
+            domain={["auto", "auto"]}
+          />
           <Tooltip
             contentStyle={{
               background: "var(--color-surface-raised)",

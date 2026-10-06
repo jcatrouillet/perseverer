@@ -403,9 +403,7 @@ class TestRunningLoadEstimate:
         self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         self._configure_threshold_pace(client, auth_headers)
-        _create(
-            client, auth_headers, "2026-09-01", sport="running", source_text="10m 3:30/km Pace"
-        )
+        _create(client, auth_headers, "2026-09-01", sport="running", source_text="10m 3:30/km Pace")
         by_date = client.get("/api/v1/planned-workouts/by-date/2026-09-01", headers=auth_headers)
         assert by_date.json()[0]["estimated_load"] is not None
 
@@ -480,9 +478,7 @@ class TestYogaAndBoulderingPlaceholders:
         self, client: TestClient, auth_headers: dict[str, str]
     ) -> None:
         created = _create(client, auth_headers, "2026-09-01", sport="yoga", duration_minutes=45)
-        push = client.post(
-            f"/api/v1/planned-workouts/{created['id']}/push", headers=auth_headers
-        )
+        push = client.post(f"/api/v1/planned-workouts/{created['id']}/push", headers=auth_headers)
         assert push.status_code == 200
 
         # No Garmin token store in this test's tmp_path, so the push still fails -- but the
@@ -585,9 +581,7 @@ class TestExerciseSports:
                 },
             ],
         )
-        push = client.post(
-            f"/api/v1/planned-workouts/{created['id']}/push", headers=auth_headers
-        )
+        push = client.post(f"/api/v1/planned-workouts/{created['id']}/push", headers=auth_headers)
         assert push.status_code == 200
 
         # No Garmin token store in this test's tmp_path, so the push still fails -- but it must
@@ -621,11 +615,19 @@ def test_list_returns_workouts_within_range(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     _create(
-        client, auth_headers, "2026-09-01", sport="running", name="In range",
+        client,
+        auth_headers,
+        "2026-09-01",
+        sport="running",
+        name="In range",
         source_text="Warmup 10m",
     )
     _create(
-        client, auth_headers, "2026-10-15", sport="running", name="Out of range",
+        client,
+        auth_headers,
+        "2026-10-15",
+        sport="running",
+        name="Out of range",
         source_text="Warmup 10m",
     )
     r = client.get(
@@ -646,12 +648,22 @@ def test_by_date_list_orders_by_scheduled_time_then_id(
         client, auth_headers, "2026-09-01", sport="strength_training", name="No time set"
     )
     evening = _create(
-        client, auth_headers, "2026-09-01", sport="yoga", name="Evening yoga",
-        scheduled_time="18:30", duration_minutes=30,
+        client,
+        auth_headers,
+        "2026-09-01",
+        sport="yoga",
+        name="Evening yoga",
+        scheduled_time="18:30",
+        duration_minutes=30,
     )
     morning = _create(
-        client, auth_headers, "2026-09-01", sport="running", name="Morning run",
-        scheduled_time="06:00", source_text="Warmup 10m",
+        client,
+        auth_headers,
+        "2026-09-01",
+        sport="running",
+        name="Morning run",
+        scheduled_time="06:00",
+        source_text="Warmup 10m",
     )
 
     r = client.get("/api/v1/planned-workouts/by-date/2026-09-01", headers=auth_headers)
@@ -836,7 +848,11 @@ class TestRecurring:
         """A day can hold more than one workout now, so recurring creation never skips a date
         that already has one -- it stacks alongside it instead."""
         _create(
-            client, auth_headers, "2026-09-08", sport="running", name="Existing",
+            client,
+            auth_headers,
+            "2026-09-08",
+            sport="running",
+            name="Existing",
             source_text="Warmup 5m",
         )
         r = client.post(

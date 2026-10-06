@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { BulkImportCard } from "./BulkImportCard";
 
-const mockUploadMutate = vi.fn(
-  (_vars: unknown, options?: { onSuccess?: () => void }) => options?.onSuccess?.(),
+const mockUploadMutate = vi.fn((_vars: unknown, options?: { onSuccess?: () => void }) =>
+  options?.onSuccess?.(),
 );
 const mockUseLatestJob = vi.fn();
 

@@ -46,7 +46,8 @@ const FIXTURES: ExerciseLibraryEntry[] = [
     primary_muscles: ["Quads", "Glutes"],
     secondary_muscles: [],
     tier: 2,
-    image_url: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Squat/0.jpg",
+    image_url:
+      "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Squat/0.jpg",
     image_source: "free-exercise-db",
     description: "Stand with feet shoulder-width apart and squat down.",
     difficulty: "Intermediate",
@@ -157,7 +158,8 @@ describe("ExerciseLibraryPage", () => {
         description: "Primarily targets the lats, traps.",
         difficulty: null,
         steps: ["Hinge at the hips.", "Pull the weight to your ribs."],
-        reference_url: "https://www.acefitness.org/resources/everyone/exercise-library/12/bent-over-row/",
+        reference_url:
+          "https://www.acefitness.org/resources/everyone/exercise-library/12/bent-over-row/",
         reference_label: "ACE Fitness",
       }),
     ]);

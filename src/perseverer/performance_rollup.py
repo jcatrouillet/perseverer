@@ -198,12 +198,8 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
     birthdate = date.fromisoformat(birthdate_str) if birthdate_str else None
 
     vdot_rows = conn.execute(
-        select(
-            activity_metric.c.activity_id, activity.c.local_date, activity_metric.c.value_num
-        )
-        .select_from(
-            activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id)
-        )
+        select(activity_metric.c.activity_id, activity.c.local_date, activity_metric.c.value_num)
+        .select_from(activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id))
         .where(
             activity_metric.c.athlete_id == athlete_id,
             activity_metric.c.metric_key == VDOT_METRIC_KEY,
@@ -227,9 +223,7 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
             activity_metric.c.metric_key,
             activity_metric.c.value_num,
         )
-        .select_from(
-            activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id)
-        )
+        .select_from(activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id))
         .where(
             activity_metric.c.athlete_id == athlete_id,
             activity_metric.c.metric_key.in_(AVG_HR_METRIC_KEYS),
@@ -248,9 +242,7 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
             activity_metric.c.metric_key,
             activity_metric.c.value_num,
         )
-        .select_from(
-            activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id)
-        )
+        .select_from(activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id))
         .where(
             activity_metric.c.athlete_id == athlete_id,
             activity_metric.c.metric_key.in_(MAX_HR_METRIC_KEYS),
@@ -263,9 +255,7 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
     max_hr_local_date_by_activity = {r.activity_id: r.local_date for r in max_hr_raw}
 
     conn.execute(
-        delete(performance_daily_rollup).where(
-            performance_daily_rollup.c.athlete_id == athlete_id
-        )
+        delete(performance_daily_rollup).where(performance_daily_rollup.c.athlete_id == athlete_id)
     )
 
     if not vdot_rows and not max_hr_by_activity:
@@ -333,15 +323,12 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
             max_hr_source = None
 
         while (
-            threshold_i < len(threshold_candidates)
-            and threshold_candidates[threshold_i][0] <= iso
+            threshold_i < len(threshold_candidates) and threshold_candidates[threshold_i][0] <= iso
         ):
             threshold_window.append(threshold_candidates[threshold_i])
             threshold_i += 1
         threshold_cutoff = (day - timedelta(days=THRESHOLD_HR_WINDOW_DAYS - 1)).isoformat()
-        threshold_window = [
-            (d, p, h) for d, p, h in threshold_window if d >= threshold_cutoff
-        ]
+        threshold_window = [(d, p, h) for d, p, h in threshold_window if d >= threshold_cutoff]
 
         threshold_pace_s_per_km = compute_threshold_pace_s_per_km(rolling_vdot)
         aerobic_threshold_pace_s_per_km = compute_threshold_pace_s_per_km(
@@ -363,9 +350,7 @@ def refresh_performance_rollup(conn: Connection, *, athlete_id: str) -> None:
 
         predicted = {
             label: (
-                predict_race_time_s(distance_m, rolling_vdot)
-                if rolling_vdot is not None
-                else None
+                predict_race_time_s(distance_m, rolling_vdot) if rolling_vdot is not None else None
             )
             for label, distance_m in RACE_DISTANCES_M.items()
         }

@@ -99,11 +99,21 @@ describe("MetricExplorer groups", () => {
   it("skips the shared detail header for a metric that opts out", () => {
     const header = <div>window controls</div>;
     const { rerender } = render(
-      <MetricExplorer metrics={GROUPED} selected="weight" onSelect={vi.fn()} detailHeader={header} />,
+      <MetricExplorer
+        metrics={GROUPED}
+        selected="weight"
+        onSelect={vi.fn()}
+        detailHeader={header}
+      />,
     );
     expect(screen.getByText("window controls")).toBeInTheDocument();
     rerender(
-      <MetricExplorer metrics={GROUPED} selected="b:alt" onSelect={vi.fn()} detailHeader={header} />,
+      <MetricExplorer
+        metrics={GROUPED}
+        selected="b:alt"
+        onSelect={vi.fn()}
+        detailHeader={header}
+      />,
     );
     expect(screen.queryByText("window controls")).not.toBeInTheDocument();
     expect(screen.getByText("alt chart")).toBeInTheDocument();
@@ -131,6 +141,9 @@ describe("MetricExplorer subgroups", () => {
   it("opens the group and subgroup holding the selected metric", () => {
     render(<MetricExplorer metrics={NESTED} selected="b:alt" onSelect={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Liver/ })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: /Lipids/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Lipids/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 });

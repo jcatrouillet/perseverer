@@ -158,9 +158,13 @@ class TestGetOrFetchActivityLocation:
 
         with engine.connect() as conn:
             location = get_or_fetch_activity_location(
-                conn, archive_root,
-                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
-                lat=37.4124, lon=-121.9990, client=mock_client,
+                conn,
+                archive_root,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                lat=37.4124,
+                lon=-121.9990,
+                client=mock_client,
             )
             conn.commit()
 
@@ -196,9 +200,13 @@ class TestGetOrFetchActivityLocation:
             mock_client = httpx.Client(transport=httpx.MockTransport(handler))
             with engine.connect() as conn:
                 location = get_or_fetch_activity_location(
-                    conn, archive_root,
-                    athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
-                    lat=37.4124, lon=-121.9990, client=mock_client,
+                    conn,
+                    archive_root,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    lat=37.4124,
+                    lon=-121.9990,
+                    client=mock_client,
                 )
                 conn.commit()
 
@@ -219,9 +227,13 @@ class TestGetOrFetchActivityLocation:
 
         with engine.connect() as conn:
             location = get_or_fetch_activity_location(
-                conn, archive_root,
-                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
-                lat=37.4124, lon=-121.9990, client=mock_client,
+                conn,
+                archive_root,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                lat=37.4124,
+                lon=-121.9990,
+                client=mock_client,
             )
             conn.commit()
 
@@ -248,9 +260,13 @@ class TestGetOrFetchActivityLocation:
 
         with engine.connect() as conn:
             location = get_or_fetch_activity_location(
-                conn, archive_root,
-                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
-                lat=37.4124, lon=-121.9990, client=mock_client,
+                conn,
+                archive_root,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                lat=37.4124,
+                lon=-121.9990,
+                client=mock_client,
             )
             conn.commit()
 
@@ -279,9 +295,13 @@ class TestGetOrFetchActivityLocation:
 
         with engine.connect() as conn:
             get_or_fetch_activity_location(
-                conn, archive_root,
-                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
-                lat=37.8393, lon=-119.5164, client=mock_client,
+                conn,
+                archive_root,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                lat=37.8393,
+                lon=-119.5164,
+                client=mock_client,
             )
             conn.commit()
 

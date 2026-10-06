@@ -167,9 +167,17 @@ describe("ActivityCharts", () => {
     });
     // distanceM/durationS chosen so the average pace (5:33 /km) differs from any raw sample.
     const { container } = render(
-      <ActivityCharts stream={withSpeed} laps={[]} sport="running" distanceM={3000} durationS={1000} />,
+      <ActivityCharts
+        stream={withSpeed}
+        laps={[]}
+        sport="running"
+        distanceM={3000}
+        durationS={1000}
+      />,
     );
-    const labels = Array.from(container.querySelectorAll(".recharts-label")).map((l) => l.textContent);
+    const labels = Array.from(container.querySelectorAll(".recharts-label")).map(
+      (l) => l.textContent,
+    );
     expect(labels).toContain("Avg");
   });
 
@@ -179,7 +187,9 @@ describe("ActivityCharts", () => {
       series: { speed_mps: [3.0, 3.2, 3.1] },
     });
     const { container } = render(<ActivityCharts stream={withSpeed} laps={[]} sport="running" />);
-    const labels = Array.from(container.querySelectorAll(".recharts-label")).map((l) => l.textContent);
+    const labels = Array.from(container.querySelectorAll(".recharts-label")).map(
+      (l) => l.textContent,
+    );
     expect(labels).not.toContain("Avg");
   });
 
@@ -221,10 +231,14 @@ describe("ActivityCharts", () => {
       <ActivityCharts stream={withSpeed} laps={laps} sport="running" workout={workout} />,
     );
     const pacePanel = Array.from(container.querySelectorAll(".activity-charts__panel")).find(
-      (p) => p.querySelector("h4")?.textContent?.includes("Pace") && !p.querySelector("h4")?.textContent?.includes("Grade"),
+      (p) =>
+        p.querySelector("h4")?.textContent?.includes("Pace") &&
+        !p.querySelector("h4")?.textContent?.includes("Grade"),
     )!;
     expect(pacePanel.querySelectorAll(".recharts-area").length).toBeGreaterThan(0);
-    const labels = Array.from(container.querySelectorAll(".recharts-label")).map((l) => l.textContent);
+    const labels = Array.from(container.querySelectorAll(".recharts-label")).map(
+      (l) => l.textContent,
+    );
     expect(labels).not.toContain("6:25-6:50");
   });
 
@@ -235,7 +249,9 @@ describe("ActivityCharts", () => {
       <ActivityCharts stream={withSpeed} laps={laps} sport="running" workout={null} />,
     );
     const pacePanel = Array.from(container.querySelectorAll(".activity-charts__panel")).find(
-      (p) => p.querySelector("h4")?.textContent?.includes("Pace") && !p.querySelector("h4")?.textContent?.includes("Grade"),
+      (p) =>
+        p.querySelector("h4")?.textContent?.includes("Pace") &&
+        !p.querySelector("h4")?.textContent?.includes("Grade"),
     )!;
     expect(pacePanel.querySelectorAll(".recharts-area").length).toBe(0);
   });

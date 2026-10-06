@@ -68,13 +68,13 @@ export function FitnessChart({ series }: { series: FitnessDailyRollupOut[] }) {
           <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
           <XAxis dataKey="local_date" stroke="var(--color-text-muted)" fontSize={12} />
           <YAxis yAxisId="load" stroke="var(--color-text-muted)" fontSize={12} />
-          <YAxis
+          <YAxis yAxisId="tsb" orientation="right" stroke="var(--color-text-muted)" fontSize={12} />
+          <ReferenceLine
             yAxisId="tsb"
-            orientation="right"
-            stroke="var(--color-text-muted)"
-            fontSize={12}
+            y={0}
+            stroke="var(--color-text-faint)"
+            strokeDasharray="4 4"
           />
-          <ReferenceLine yAxisId="tsb" y={0} stroke="var(--color-text-faint)" strokeDasharray="4 4" />
           <Tooltip
             contentStyle={{
               background: "var(--color-surface-raised)",

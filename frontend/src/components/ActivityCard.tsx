@@ -81,7 +81,10 @@ export function ActivityCard({
             <span className="activity-card__sport">
               {sport.replace(/_/g, " ")}
               {activity.is_race && (
-                <span className="activity-card__race-badge" title="Marked as a race in Garmin Connect">
+                <span
+                  className="activity-card__race-badge"
+                  title="Marked as a race in Garmin Connect"
+                >
                   <Icon name="trophy" /> Race
                 </span>
               )}
@@ -105,13 +108,16 @@ export function ActivityCard({
           {/* Distance > 0, not just non-null: a strength-training session logged with an exact
               0m distance is real data, but a "0.0 km/h" pace chip on it would read as a broken
               measurement rather than "this activity has no meaningful distance". */}
-          {activity.distance_m != null && activity.distance_m > 0 && durationS != null && durationS > 0 && (
-            <MetricChip
-              label={paceOrSpeedLabel(sport, durationS, activity.distance_m, unit, formatPace)}
-              icon="gauge"
-              tone="pace"
-            />
-          )}
+          {activity.distance_m != null &&
+            activity.distance_m > 0 &&
+            durationS != null &&
+            durationS > 0 && (
+              <MetricChip
+                label={paceOrSpeedLabel(sport, durationS, activity.distance_m, unit, formatPace)}
+                icon="gauge"
+                tone="pace"
+              />
+            )}
           {activity.avg_hr_bpm != null && (
             <MetricChip label={`${Math.round(activity.avg_hr_bpm)} bpm`} icon="heart" tone="hr" />
           )}
@@ -130,7 +136,11 @@ export function ActivityCard({
             />
           )}
           {activity.climb_time_s != null && (
-            <MetricChip label={formatDurationHM(activity.climb_time_s)} icon="clock" tone="cadence" />
+            <MetricChip
+              label={formatDurationHM(activity.climb_time_s)}
+              icon="clock"
+              tone="cadence"
+            />
           )}
           {activity.training_load != null && (
             <MetricChip
@@ -140,11 +150,7 @@ export function ActivityCard({
             />
           )}
           {activity.workout_rpe != null && (
-            <MetricChip
-              label={`RPE ${activity.workout_rpe.toFixed(1)}`}
-              icon="flame"
-              tone="load"
-            />
+            <MetricChip label={`RPE ${activity.workout_rpe.toFixed(1)}`} icon="flame" tone="load" />
           )}
         </div>
 

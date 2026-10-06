@@ -351,7 +351,7 @@ _SPORT_ICON_PATHS: dict[str, str] = {
         ",0,1,240,176Zm-16,0a24,24,0,1,0-24,24A24,24,0,0,0,224,176Zm-24-64a8,8,0,0,0-8-8H155.31"
         "L125.66,74.34a8,8,0,0,0-11.32,0l-32,32a8,8,0,0,0,0,11.32L120,155.31V200a8,8,0,0,0,16,0V152"
         "a8,8,0,0,0-2.34-5.66L99.31,112,120,91.31l26.34,26.35A8,8,0,0,0,152,120h40A8,8,0,0,0,200,"
-        '112ZM96,176a40,40,0,1,1-40-40A40,40,0,0,1,96,176Zm-16,0a24,24,0,1,0-24,24A24,24,0,0,0,80,'
+        "112ZM96,176a40,40,0,1,1-40-40A40,40,0,0,1,96,176Zm-16,0a24,24,0,1,0-24,24A24,24,0,0,0,80,"
         '176Z"/>'
     ),
     "dumbbell": (
@@ -628,7 +628,7 @@ def _svg_series_chart(
         f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" '
         f'role="img"{aria} class="chart">{fill}'
         f'<polyline points="{poly}" fill="none" stroke="{color}" stroke-width="2"/>'
-        f'{axis_labels}'
+        f"{axis_labels}"
         f'<line class="ichart-cursor" x1="0" x2="0" y1="{pad}" y2="{height - pad}"/>'
         f"</svg>"
     )
@@ -790,9 +790,7 @@ def _route_map_html(
     base = f"https://cdn.jsdelivr.net/npm/maplibre-gl@{_MAPLIBRE_VERSION}/dist"
 
     has_playback = (
-        playback_coords is not None
-        and playback_elapsed_s is not None
-        and len(playback_coords) >= 2
+        playback_coords is not None and playback_elapsed_s is not None and len(playback_coords) >= 2
     )
     playback_ui = ""
     playback_js = ""
@@ -1195,8 +1193,22 @@ _WEATHER_OPTIONAL_KEYS = (
 )
 
 _COMPASS_POINTS = (
-    "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+    "N",
+    "NNE",
+    "NE",
+    "ENE",
+    "E",
+    "ESE",
+    "SE",
+    "SSE",
+    "S",
+    "SSW",
+    "SW",
+    "WSW",
+    "W",
+    "WNW",
+    "NW",
+    "NNW",
 )
 
 
@@ -1230,9 +1242,7 @@ def _weather_html(values: dict[str, float]) -> str:
     wind_dir = values.get("weather.open_meteo.wind_direction_deg")
 
     info = weather_code_info(code)
-    temp = (
-        f"{t_min:.0f}°C" if round(t_min) == round(t_max) else f"{t_min:.0f}-{t_max:.0f}°C"
-    )
+    temp = f"{t_min:.0f}°C" if round(t_min) == round(t_max) else f"{t_min:.0f}-{t_max:.0f}°C"
     humidity = (
         f"{h_min:.0f}% RH" if round(h_min) == round(h_max) else f"{h_min:.0f}-{h_max:.0f}% RH"
     )
@@ -1264,8 +1274,13 @@ _TIME_IN_ZONE_PREFIX = "fit.time_in_zone.time_in_hr_zone_"
 _ZONE_BOUNDARY_PREFIX = "fit.time_in_zone.hr_zone_high_boundary_"
 # Same cool-to-hot tone cycle as TimeInZoneChart.tsx's own ZONE_TONES, as CSS var references.
 _ZONE_TONE_VARS = (
-    "var(--color-cadence)", "var(--color-elevation)", "var(--color-pace)",
-    "var(--color-load)", "var(--color-power)", "var(--color-heart-rate)", "var(--color-heart-rate)",
+    "var(--color-cadence)",
+    "var(--color-elevation)",
+    "var(--color-pace)",
+    "var(--color-load)",
+    "var(--color-power)",
+    "var(--color-heart-rate)",
+    "var(--color-heart-rate)",
 )
 
 
@@ -1671,7 +1686,7 @@ def render_activity_share_html(conn: Connection, settings: Settings, activity_id
                     )
                     if svg:
                         chart_hover_needed = True
-                        chart_svgs.append(f'<h3>{escape(title)}</h3>\n{svg}')
+                        chart_svgs.append(f"<h3>{escape(title)}</h3>\n{svg}")
                 if chart_svgs:
                     charts_section = _section("Charts", "\n".join(chart_svgs))
         finally:
@@ -1838,19 +1853,13 @@ def render_activity_share_html(conn: Connection, settings: Settings, activity_id
         if cadence_raw is not None:
             stats.append(st("Avg cadence", f"{cadence_raw * 2:.0f} spm", "steps", "cadence"))
         if max_cadence_raw is not None:
-            stats.append(
-                st("Max cadence", f"{max_cadence_raw * 2:.0f} spm", "steps", "cadence")
-            )
+            stats.append(st("Max cadence", f"{max_cadence_raw * 2:.0f} spm", "steps", "cadence"))
         if avg_step_len is not None:
             stats.append(st("Step length", f"{avg_step_len / 10:.0f} cm", "route", "cadence"))
         if avg_stance is not None:
-            stats.append(
-                st("Ground contact time", f"{avg_stance:.0f} ms", "clock", "cadence")
-            )
+            stats.append(st("Ground contact time", f"{avg_stance:.0f} ms", "clock", "cadence"))
         if avg_vert_osc is not None:
-            stats.append(
-                st("Vertical oscillation", f"{avg_vert_osc:.1f} mm", "trend", "cadence")
-            )
+            stats.append(st("Vertical oscillation", f"{avg_vert_osc:.1f} mm", "trend", "cadence"))
         if avg_vert_ratio is not None:
             stats.append(st("Vertical ratio", f"{avg_vert_ratio:.1f} %", "trend", "cadence"))
         body_parts.append(_section("Running dynamics", _stats_grid_iconed(*stats)))
@@ -1921,11 +1930,32 @@ def _period_date_range(period_type: str, period_start: str | None) -> tuple[str 
 
 
 _MONTH_ABBR = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
 ]
 _MONTH_NAMES = [
-    "January", "February", "March", "April", "May", "June", "July", "August", "September",
-    "October", "November", "December",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 ]
 _WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -2032,7 +2062,7 @@ def _busiest_week_start(activities: list[_PeriodActivity]) -> str | None:
     for a in activities:
         if a.local_date is None:
             continue
-        monday = (date.fromisoformat(a.local_date) - timedelta(days=_weekday_index(a.local_date)))
+        monday = date.fromisoformat(a.local_date) - timedelta(days=_weekday_index(a.local_date))
         counts[monday.isoformat()] = counts.get(monday.isoformat(), 0) + 1
     if not counts:
         return None
@@ -2266,7 +2296,7 @@ def _svg_trailing_chart(
         f'<svg viewBox="0 0 {width} {height}" width="100%" height="{height}" '
         f'role="img" aria-label="Trailing distance" class="chart">'
         f'<polyline points="{poly}" fill="none" stroke="{color}" stroke-width="2"/>'
-        f'{"".join(ticks)}</svg>'
+        f"{''.join(ticks)}</svg>"
     )
 
 
@@ -2432,9 +2462,7 @@ def _weekly_heatmap_grid_html(activities: list[_PeriodActivity], start: str, end
             km = dist_m / 1000
             pace = (dur_s / 60 / km) if km > 0 else None
             title = _format_heatmap_date(iso)
-            cells.append(
-                _heatmap_cell_html(km, pace, elev_m, title, _WEEKLY_HEATMAP_SCALE, extra)
-            )
+            cells.append(_heatmap_cell_html(km, pace, elev_m, title, _WEEKLY_HEATMAP_SCALE, extra))
         rows.append(
             f'<div class="running-heatmap__row"><span class="running-heatmap__row-label">'
             f"{weekday_label}</span>" + "".join(cells) + "</div>"
@@ -2603,7 +2631,7 @@ def _format_pace_min_per_km(min_per_km: float) -> str:
 
 
 def _format_duration_rounded_to_minute(seconds: float) -> str:
-    """"1:41:00" / "56:00" -- the personal-records table's own local `formatDuration`, rounded to
+    """ "1:41:00" / "56:00" -- the personal-records table's own local `formatDuration`, rounded to
     the minute (distinct from this file's own `_format_duration`, which keeps real seconds)."""
     h = int(seconds // 3600)
     m = round((seconds % 3600) / 60)
@@ -2734,7 +2762,7 @@ def _featured_hike_card_html(f: _FeaturedHike) -> str:
 
 
 def _format_duration_hm(seconds: float) -> str:
-    """"1h 14m" / "42m" -- runningStats.ts::formatDurationHM, distinct from this file's own
+    """ "1h 14m" / "42m" -- runningStats.ts::formatDurationHM, distinct from this file's own
     `_format_duration` (H:MM:SS)."""
     h = int(seconds // 3600)
     m = round((seconds % 3600) / 60)
@@ -2993,7 +3021,7 @@ def render_period_share_html(
             trailing_title = f"Trailing {trailing_window_days}-day kilometers"
             running_body += (
                 '<div class="running-stats__charts">'
-                f'<div><h3>{escape(bucket_title)}</h3>{bucket_chart}</div>'
+                f"<div><h3>{escape(bucket_title)}</h3>{bucket_chart}</div>"
                 f"<div><h3>{escape(trailing_title)}</h3>{trailing_chart}</div>"
                 "</div>\n"
                 f'<div class="running-heatmap"><h3>{escape(heatmap_title)}</h3>{heatmap_html}'
@@ -3033,11 +3061,9 @@ def render_period_share_html(
                         )
                         for r in conn.execute(all_running_query)
                     ]
-                    new_prs = _new_all_time_prs(
-                        period_records, _personal_records(all_time_running)
-                    )
+                    new_prs = _new_all_time_prs(period_records, _personal_records(all_time_running))
                 caveat = (
-                    " <span class=\"running-records__caveat\">(fastest whole recorded run near "
+                    ' <span class="running-records__caveat">(fastest whole recorded run near '
                     "each distance, not a true best-effort segment)</span>"
                 )
                 running_body += (
@@ -3138,9 +3164,7 @@ def render_period_share_html(
                 st("Max grade completed", f"V{max(completed_grades)}", "mountain", "elevation")
             )
         grade_chart = _svg_grade_chart([(g, a, c) for g, (a, c) in sorted(breakdown.items())])
-        climbing_body = (
-            f"<h2>Climbing</h2>\n{_stats_grid_iconed(*climbing_stats)}\n{grade_chart}\n"
-        )
+        climbing_body = f"<h2>Climbing</h2>\n{_stats_grid_iconed(*climbing_stats)}\n{grade_chart}\n"
 
     # hiit/strength_training has no dedicated card in the authenticated app at all (confirmed:
     # MonthView/YearView show these sports only via the generic PeriodStatsCard totals and the

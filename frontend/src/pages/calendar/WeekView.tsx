@@ -274,9 +274,7 @@ export function WeekView({ date }: { date: string }) {
   // /health/dashboard already resolves, e.g. garmin.daily_summary.totalSteps) -- reuses the same
   // `health` fetch WeekWellnessCharts already draws its own metrics from, no second call.
   const stepsMetric = health.data?.metrics.find((m) => m.logical_metric === "steps");
-  const stepsByDate = new Map(
-    (stepsMetric?.daily ?? []).map((d) => [d.local_date, d.value_sum]),
-  );
+  const stepsByDate = new Map((stepsMetric?.daily ?? []).map((d) => [d.local_date, d.value_sum]));
   // One bulk fetch for the whole week (the summary-list endpoint MonthView's own grid cell
   // already uses), not the per-day usePlannedWorkoutsForDate hook WeekDayPlannedWorkouts calls
   // above -- compliance needs every day's own scheduled workouts at once to aggregate by sport,
@@ -395,7 +393,12 @@ export function WeekView({ date }: { date: string }) {
               tone="elevation"
               hero
             />
-            <StatTile label="Activities" value={weekTotal.activity_count} icon="calendar" tone="pace" />
+            <StatTile
+              label="Activities"
+              value={weekTotal.activity_count}
+              icon="calendar"
+              tone="pace"
+            />
             {weekTotal.activity_elevation_gain_m != null && (
               <StatTile
                 label="Total elevation"

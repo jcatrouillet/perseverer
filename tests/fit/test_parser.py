@@ -127,9 +127,7 @@ class TestClimbFields:
         """Confirmed against real data: "climb_rest" splits never carry fields 70/71 at all --
         but even if one somehow did, it must not be read as route data, since a rest interval
         isn't a route."""
-        grade, result, _avg_hr, _max_hr = _climb_fields(
-            {"split_type": "climb_rest", 70: 3, 71: 3}
-        )
+        grade, result, _avg_hr, _max_hr = _climb_fields({"split_type": "climb_rest", 70: 3, 71: 3})
         assert grade is None
         assert result is None
 

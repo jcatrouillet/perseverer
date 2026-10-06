@@ -130,9 +130,7 @@ describe("BloodTestsPanel", () => {
 
     expect(mockCreateBatchMutate).toHaveBeenCalledWith(
       expect.objectContaining({
-        results: [
-          expect.objectContaining({ marker: "Glucose", value_num: 95 }),
-        ],
+        results: [expect.objectContaining({ marker: "Glucose", value_num: 95 })],
       }),
       expect.anything(),
     );
@@ -314,10 +312,20 @@ describe("BloodTestsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ resultId: 1, marker: "LDL", lab_name: "LabCorp", notes: "Non-fasting" }),
+      expect.objectContaining({
+        resultId: 1,
+        marker: "LDL",
+        lab_name: "LabCorp",
+        notes: "Non-fasting",
+      }),
     );
     expect(mockUpdateMutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ resultId: 2, marker: "HDL", lab_name: "LabCorp", notes: "Non-fasting" }),
+      expect.objectContaining({
+        resultId: 2,
+        marker: "HDL",
+        lab_name: "LabCorp",
+        notes: "Non-fasting",
+      }),
     );
   });
 

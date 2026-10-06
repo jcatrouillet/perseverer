@@ -82,7 +82,10 @@ describe("EddingtonChart", () => {
       data: [run("2023-01-01", 5), run("2025-01-01", 5), run("2024-01-01", 5)],
     });
     render(<EddingtonChart />);
-    const years = screen.getAllByRole("row").slice(1).map((r) => r.textContent!.slice(0, 4));
+    const years = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => r.textContent!.slice(0, 4));
     expect(years).toEqual(["2025", "2024", "2023"]);
   });
 

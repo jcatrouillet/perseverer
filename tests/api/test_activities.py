@@ -144,9 +144,7 @@ def test_list_and_detail_surface_hr_load_and_descaled_rpe(
         seed_activity(conn, activity_id="a1")
     _add_metric(engine, activity_id="a1", metric_key="fit.session.avg_heart_rate", value=142.0)
     _add_metric(engine, activity_id="a1", metric_key="fit.session.max_heart_rate", value=171.0)
-    _add_metric(
-        engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=81.8
-    )
+    _add_metric(engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=81.8)
     # Raw FIT value is Borg CR10 x10 (see routers/activities.py's _workout_rpe_from_raw comment,
     # sourced from introspecting the installed garmin_fit_sdk's profile.py field 193) -- 46 raw
     # must come back as 4.6, not 46.
@@ -180,9 +178,7 @@ def test_list_and_detail_prefer_running_tss_over_training_load_peak(
     aggregate training load for every running activity. Both endpoints must now agree."""
     with engine.connect() as conn:
         seed_activity(conn, activity_id="a1")
-    _add_metric(
-        engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=222.0
-    )
+    _add_metric(engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=222.0)
     _add_metric(
         engine, activity_id="a1", metric_key="perseverer.performance.running_tss", value=80.0
     )
@@ -199,9 +195,7 @@ def test_list_and_detail_fall_back_to_training_load_peak_without_running_tss(
 ) -> None:
     with engine.connect() as conn:
         seed_activity(conn, activity_id="a1")
-    _add_metric(
-        engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=222.0
-    )
+    _add_metric(engine, activity_id="a1", metric_key="fit.session.training_load_peak", value=222.0)
 
     r = client.get("/api/v1/activities", headers=auth_headers)
     assert r.json()["items"][0]["training_load"] == 222.0
@@ -439,9 +433,7 @@ def test_stream_endpoint_downsamples_and_404s_without_stream(
     assert len(body["timestamps"]) <= 300
     assert "heart_rate" in body["series"]
 
-    r = client.get(
-        "/api/v1/activities/a1/stream?channels=not_a_channel", headers=auth_headers
-    )
+    r = client.get("/api/v1/activities/a1/stream?channels=not_a_channel", headers=auth_headers)
     assert r.status_code == 400
 
 

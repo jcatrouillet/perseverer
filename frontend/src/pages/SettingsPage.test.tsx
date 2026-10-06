@@ -22,9 +22,7 @@ function trimCandidate(overrides: Partial<TrimCandidateOut> = {}): TrimCandidate
   };
 }
 
-function duplicateCandidate(
-  overrides: Partial<DuplicateCandidateOut> = {},
-): DuplicateCandidateOut {
+function duplicateCandidate(overrides: Partial<DuplicateCandidateOut> = {}): DuplicateCandidateOut {
   return {
     id: "other1",
     name: "Half Dome",

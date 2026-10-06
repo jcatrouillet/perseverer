@@ -145,9 +145,7 @@ export function ActivityMergePanel({
                                 type="radio"
                                 name={`merge-${f.field}`}
                                 checked={(choices[f.field] ?? "self") === "self"}
-                                onChange={() =>
-                                  setChoices((c) => ({ ...c, [f.field]: "self" }))
-                                }
+                                onChange={() => setChoices((c) => ({ ...c, [f.field]: "self" }))}
                               />
                               {formatFieldValue(f.field, f.self_value)}
                             </label>
@@ -158,9 +156,7 @@ export function ActivityMergePanel({
                                 type="radio"
                                 name={`merge-${f.field}`}
                                 checked={choices[f.field] === "other"}
-                                onChange={() =>
-                                  setChoices((c) => ({ ...c, [f.field]: "other" }))
-                                }
+                                onChange={() => setChoices((c) => ({ ...c, [f.field]: "other" }))}
                               />
                               {formatFieldValue(f.field, f.other_value)}
                             </label>

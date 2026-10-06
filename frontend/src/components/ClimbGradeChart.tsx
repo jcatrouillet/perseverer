@@ -29,7 +29,12 @@ export function ClimbGradeChart({ gradeBreakdown }: { gradeBreakdown: ClimbGrade
             dataKey="grade"
             stroke="var(--color-text-muted)"
             fontSize={11}
-            label={{ value: "Route Difficulty", position: "insideBottom", offset: -5, fontSize: 11 }}
+            label={{
+              value: "Route Difficulty",
+              position: "insideBottom",
+              offset: -5,
+              fontSize: 11,
+            }}
           />
           <YAxis
             stroke="var(--color-text-muted)"
@@ -44,8 +49,18 @@ export function ClimbGradeChart({ gradeBreakdown }: { gradeBreakdown: ClimbGrade
               border: "1px solid var(--color-border)",
             }}
           />
-          <Bar dataKey="Attempted" stackId="grade" fill="var(--color-danger)" isAnimationActive={false} />
-          <Bar dataKey="Completed" stackId="grade" fill="var(--color-success)" isAnimationActive={false} />
+          <Bar
+            dataKey="Attempted"
+            stackId="grade"
+            fill="var(--color-danger)"
+            isAnimationActive={false}
+          />
+          <Bar
+            dataKey="Completed"
+            stackId="grade"
+            fill="var(--color-success)"
+            isAnimationActive={false}
+          />
         </BarChart>
       </ResponsiveContainer>
       <ChartLegend

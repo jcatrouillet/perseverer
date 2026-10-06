@@ -141,9 +141,7 @@ class TestBackfillGarminActivityNames:
     def test_never_touches_a_real_custom_title(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
         with engine.connect() as conn:
-            _seed_garmin_activity(
-                conn, tmp_path / "raw", activity_id="a1", name="My Favorite Loop"
-            )
+            _seed_garmin_activity(conn, tmp_path / "raw", activity_id="a1", name="My Favorite Loop")
 
         with engine.connect() as conn:
             changes = backfill_garmin_activity_names(

@@ -865,8 +865,12 @@ export function RunningStats({
                       <td>
                         {formatMinPerKm(paceMinPerDisplayUnit(r.paceMinPerKm * 60))} /{unitLabel}
                       </td>
-                      <td>{kmhToDisplay(r.speedKmh).toFixed(2)} {speedUnitLabel}</td>
-                      <td>{metersToDisplay(r.actualDistanceM).toFixed(2)} {unitLabel}</td>
+                      <td>
+                        {kmhToDisplay(r.speedKmh).toFixed(2)} {speedUnitLabel}
+                      </td>
+                      <td>
+                        {metersToDisplay(r.actualDistanceM).toFixed(2)} {unitLabel}
+                      </td>
                       <td>{formatDuration(r.durationS)}</td>
                       <td>{r.eligibleCount}</td>
                     </tr>

@@ -174,9 +174,7 @@ def test_create_backup_succeeds_when_the_destination_root_does_not_exist_at_all(
 
 def test_create_backup_skipped_without_destination_or_config(tmp_path: Path) -> None:
     engine = _seeded_engine(tmp_path)
-    result = create_backup(
-        engine, tmp_path / "raw", tmp_path / "parquet", tmp_path / "backups"
-    )
+    result = create_backup(engine, tmp_path / "raw", tmp_path / "parquet", tmp_path / "backups")
     assert result is None
     assert not (tmp_path / "backups").exists()
 

@@ -60,12 +60,14 @@ describe("TrendChart", () => {
 
   it("shows a caption summarizing the latest bucket with real data, using each series' own formatter", () => {
     const series: TrendSeries[] = [
-      { key: "weight_kg", label: "Weight", color: "#000", formatValue: (v) => `${v.toFixed(1)} kg` },
+      {
+        key: "weight_kg",
+        label: "Weight",
+        color: "#000",
+        formatValue: (v) => `${v.toFixed(1)} kg`,
+      },
     ];
-    const points = [
-      point("Mon 1", { weight_kg: 79.5 }),
-      point("Tue 2", { weight_kg: null }),
-    ];
+    const points = [point("Mon 1", { weight_kg: 79.5 }), point("Tue 2", { weight_kg: null })];
     render(<TrendChart points={points} series={series} />);
     expect(screen.getByText(/Mon 1/)).toBeInTheDocument();
     expect(screen.getByText(/79\.5 kg/)).toBeInTheDocument();
@@ -81,7 +83,10 @@ describe("TrendChart", () => {
       { key: "pace", label: "Pace", color: "#111" },
       { key: "hr", label: "HR", color: "#222", axis: "right" },
     ];
-    const dualPoints = [point("Mon 1", { pace: 5, hr: 150 }), point("Tue 2", { pace: 5.1, hr: 148 })];
+    const dualPoints = [
+      point("Mon 1", { pace: 5, hr: 150 }),
+      point("Tue 2", { pace: 5.1, hr: 148 }),
+    ];
     const { container: dual } = render(<TrendChart points={dualPoints} series={dualAxis} />);
     expect(dual.querySelectorAll(".recharts-yAxis")).toHaveLength(2);
   });

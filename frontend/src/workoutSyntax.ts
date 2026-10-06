@@ -103,7 +103,8 @@ function parseDuration(
   m = DIST_MI_RE.exec(token);
   if (m) return { type: "distance", timeS: null, distanceM: parseFloat(m[1]) * MILE_IN_METERS };
   m = TIME_MS_RE.exec(token);
-  if (m) return { type: "time", timeS: parseInt(m[1], 10) * 60 + parseInt(m[2], 10), distanceM: null };
+  if (m)
+    return { type: "time", timeS: parseInt(m[1], 10) * 60 + parseInt(m[2], 10), distanceM: null };
   m = TIME_M_RE.exec(token);
   if (m) return { type: "time", timeS: parseInt(m[1], 10) * 60, distanceM: null };
   m = TIME_S_RE.exec(token);
@@ -254,14 +255,22 @@ function estimateTotalDurationS(steps: ParsedStep[]): number {
   const byIndex = new Map(steps.map((s) => [s.stepIndex, s]));
   const consumed = new Set<number>();
   for (const s of steps) {
-    if (s.durationType === "repeat_until_steps_cmplt" && s.repeatFromStep !== null && s.repeatCount !== null) {
+    if (
+      s.durationType === "repeat_until_steps_cmplt" &&
+      s.repeatFromStep !== null &&
+      s.repeatCount !== null
+    ) {
       for (let idx = s.repeatFromStep; idx < s.stepIndex; idx++) consumed.add(idx);
     }
   }
   let total = 0;
   for (const s of steps) {
     if (consumed.has(s.stepIndex)) continue;
-    if (s.durationType === "repeat_until_steps_cmplt" && s.repeatFromStep !== null && s.repeatCount !== null) {
+    if (
+      s.durationType === "repeat_until_steps_cmplt" &&
+      s.repeatFromStep !== null &&
+      s.repeatCount !== null
+    ) {
       let childTotal = 0;
       for (let idx = s.repeatFromStep; idx < s.stepIndex; idx++) {
         const child = byIndex.get(idx);
@@ -405,7 +414,11 @@ function formatPaceToken(speedMps: number): string {
 }
 
 function formatRecordedStepLine(step: RecordedStepLike): string | null {
-  const durationTok = formatDurationToken(step.durationType, step.durationTimeS, step.durationDistanceM);
+  const durationTok = formatDurationToken(
+    step.durationType,
+    step.durationTimeS,
+    step.durationDistanceM,
+  );
   if (durationTok === null) return null;
   const parts: string[] = [];
   if (step.intensity && INTENSITY_WORDS.has(step.intensity)) {
@@ -441,13 +454,19 @@ export function stepsToSourceText(steps: RecordedStepLike[]): string {
   const lines: string[] = [];
   for (const s of sorted) {
     if (consumed.has(s.stepIndex)) continue;
-    if (s.durationType === "repeat_until_steps_cmplt" && s.repeatFromStep !== null && s.repeatCount !== null) {
+    if (
+      s.durationType === "repeat_until_steps_cmplt" &&
+      s.repeatFromStep !== null &&
+      s.repeatCount !== null
+    ) {
       const children: RecordedStepLike[] = [];
       for (let idx = s.repeatFromStep; idx < s.stepIndex; idx++) {
         const c = byIndex.get(idx);
         if (c) children.push(c);
       }
-      const childLines = children.map(formatRecordedStepLine).filter((l): l is string => l !== null);
+      const childLines = children
+        .map(formatRecordedStepLine)
+        .filter((l): l is string => l !== null);
       if (childLines.length === 0) continue;
       if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");
       lines.push(`${s.repeatCount}x`);

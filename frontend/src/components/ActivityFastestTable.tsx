@@ -12,7 +12,12 @@
 import { Link } from "wouter";
 
 import type { ActivityContextRecentOut } from "../api/types";
-import { kmhToDisplaySpeed, paceMinPerDisplayUnit, speedUnitLabel, useDistanceFormat } from "../formatDistance";
+import {
+  kmhToDisplaySpeed,
+  paceMinPerDisplayUnit,
+  speedUnitLabel,
+  useDistanceFormat,
+} from "../formatDistance";
 import { formatMinPerKm, isPaceSport } from "../runningStats";
 
 export function ActivityFastestTable({
@@ -38,9 +43,7 @@ export function ActivityFastestTable({
 
   return (
     <section className="card activity-fastest">
-      <h2>
-        Fastest {distanceKmLabel} km runs
-      </h2>
+      <h2>Fastest {distanceKmLabel} km runs</h2>
       <ul className="activity-fastest__list">
         {rows.map((r) => {
           const distanceKm = r.distance_m / 1000;

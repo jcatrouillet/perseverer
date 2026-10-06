@@ -32,7 +32,10 @@ describe("HealthMetricTiles", () => {
 
   it("omits a tile for a key with no data instead of showing a dash", () => {
     render(
-      <HealthMetricTiles metrics={[metric("steps", 8000)]} keys={["steps", "resting_heart_rate"]} />,
+      <HealthMetricTiles
+        metrics={[metric("steps", 8000)]}
+        keys={["steps", "resting_heart_rate"]}
+      />,
     );
     expect(screen.getByText("steps")).toBeInTheDocument();
     expect(screen.queryByText("resting heart rate")).not.toBeInTheDocument();

@@ -171,9 +171,7 @@ def test_window_filters_to_the_given_elapsed_range(
     assert result.timestamps[-1] == datetime(2025, 6, 1, tzinfo=UTC) + timedelta(seconds=20)
 
 
-def test_window_filters_when_bucketing_too(
-    con: duckdb.DuckDBPyConnection, tmp_path: Path
-) -> None:
+def test_window_filters_when_bucketing_too(con: duckdb.DuckDBPyConnection, tmp_path: Path) -> None:
     path = tmp_path / "stream.parquet"
     n_samples = 5000
     _write_fixture(path, n_samples)

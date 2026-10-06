@@ -52,12 +52,22 @@ def test_a_later_faster_run_never_credits_an_earlier_activity(
     a faster 10K was run afterwards."""
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="earlier", local_date="2025-06-01",
-            sport="running", distance_m=10000.0, duration_s=3200.0, moving_duration_s=3200.0,
+            conn,
+            activity_id="earlier",
+            local_date="2025-06-01",
+            sport="running",
+            distance_m=10000.0,
+            duration_s=3200.0,
+            moving_duration_s=3200.0,
         )
         seed_activity(
-            conn, activity_id="later_and_faster", local_date="2025-06-15",
-            sport="running", distance_m=10000.0, duration_s=3000.0, moving_duration_s=3000.0,
+            conn,
+            activity_id="later_and_faster",
+            local_date="2025-06-15",
+            sport="running",
+            distance_m=10000.0,
+            duration_s=3000.0,
+            moving_duration_s=3000.0,
         )
 
     r = client.get("/api/v1/activities/earlier/insights", headers=auth_headers)
@@ -74,19 +84,31 @@ def test_a_later_faster_run_gets_its_own_pb_credit(
 ) -> None:
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="earlier", local_date="2025-06-01",
-            sport="running", distance_m=10000.0, duration_s=3200.0, moving_duration_s=3200.0,
+            conn,
+            activity_id="earlier",
+            local_date="2025-06-01",
+            sport="running",
+            distance_m=10000.0,
+            duration_s=3200.0,
+            moving_duration_s=3200.0,
         )
         seed_activity(
-            conn, activity_id="later_and_faster", local_date="2025-06-15",
-            sport="running", distance_m=10000.0, duration_s=3000.0, moving_duration_s=3000.0,
+            conn,
+            activity_id="later_and_faster",
+            local_date="2025-06-15",
+            sport="running",
+            distance_m=10000.0,
+            duration_s=3000.0,
+            moving_duration_s=3000.0,
         )
 
     r = client.get("/api/v1/activities/later_and_faster/insights", headers=auth_headers)
     body = r.json()
     ten_k_pb = [
-        i for i in body
-        if i["kind"] == "pb" and i["activity_id"] == "later_and_faster"
+        i
+        for i in body
+        if i["kind"] == "pb"
+        and i["activity_id"] == "later_and_faster"
         and i["detail"]["distance_label"] == "10 km"
     ]
     assert len(ten_k_pb) == 1
@@ -130,12 +152,20 @@ def test_bouldering_insights_never_look_ahead_to_a_later_session(
 ) -> None:
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="earlier_boulder", local_date="2025-06-01",
-            sport="rock_climbing", sub_sport="bouldering", distance_m=None,
+            conn,
+            activity_id="earlier_boulder",
+            local_date="2025-06-01",
+            sport="rock_climbing",
+            sub_sport="bouldering",
+            distance_m=None,
         )
         seed_activity(
-            conn, activity_id="later_boulder", local_date="2025-06-15",
-            sport="rock_climbing", sub_sport="bouldering", distance_m=None,
+            conn,
+            activity_id="later_boulder",
+            local_date="2025-06-15",
+            sport="rock_climbing",
+            sub_sport="bouldering",
+            distance_m=None,
         )
     _add_climb_route(
         engine,
@@ -167,12 +197,20 @@ def test_bouldering_insights_exclude_a_later_session_on_the_same_day(
 ) -> None:
     with engine.connect() as conn:
         seed_activity(
-            conn, activity_id="morning_boulder", local_date="2025-06-01",
-            sport="rock_climbing", sub_sport="bouldering", distance_m=None,
+            conn,
+            activity_id="morning_boulder",
+            local_date="2025-06-01",
+            sport="rock_climbing",
+            sub_sport="bouldering",
+            distance_m=None,
         )
         seed_activity(
-            conn, activity_id="evening_boulder", local_date="2025-06-01",
-            sport="rock_climbing", sub_sport="bouldering", distance_m=None,
+            conn,
+            activity_id="evening_boulder",
+            local_date="2025-06-01",
+            sport="rock_climbing",
+            sub_sport="bouldering",
+            distance_m=None,
         )
         conn.execute(
             update(activity)

@@ -75,12 +75,14 @@ def test_matches_a_standard_distance_to_its_own_predicted_column(conn: Connectio
         predicted_5k_s=1100.0,
         predicted_marathon_s=13500.0,
     )
-    assert predicted_duration_s_for_distance(
-        conn, athlete_id=DEFAULT_ATHLETE_ID, distance_m=5000.0
-    ) == 1100.0
-    assert predicted_duration_s_for_distance(
-        conn, athlete_id=DEFAULT_ATHLETE_ID, distance_m=42195.0
-    ) == 13500.0
+    assert (
+        predicted_duration_s_for_distance(conn, athlete_id=DEFAULT_ATHLETE_ID, distance_m=5000.0)
+        == 1100.0
+    )
+    assert (
+        predicted_duration_s_for_distance(conn, athlete_id=DEFAULT_ATHLETE_ID, distance_m=42195.0)
+        == 13500.0
+    )
 
 
 def test_uses_the_most_recent_rollup_row(conn: Connection) -> None:
@@ -99,8 +101,6 @@ def test_skips_a_more_recent_row_missing_that_distance(conn: Connection) -> None
     _seed_rollup(conn, "2026-08-01", predicted_half_marathon_s=5800.0)
     _seed_rollup(conn, "2026-09-01", predicted_5k_s=1100.0)
     assert (
-        predicted_duration_s_for_distance(
-            conn, athlete_id=DEFAULT_ATHLETE_ID, distance_m=21097.5
-        )
+        predicted_duration_s_for_distance(conn, athlete_id=DEFAULT_ATHLETE_ID, distance_m=21097.5)
         == 5800.0
     )

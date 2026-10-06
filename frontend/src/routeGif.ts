@@ -18,7 +18,13 @@ import gifWorkerUrl from "gif.js/dist/gif.worker.js?url";
 import type { RoutePoint } from "./components/ActivityRouteMap";
 import { resolveTone } from "./components/ActivityRouteMap";
 import { drawBasemapTiles } from "./mapTiles";
-import { drawOutlinedText, drawRouteTrace, POSTER_PADDING, type ProjectedPoint, type RoutePosterStats } from "./routeExport";
+import {
+  drawOutlinedText,
+  drawRouteTrace,
+  POSTER_PADDING,
+  type ProjectedPoint,
+  type RoutePosterStats,
+} from "./routeExport";
 
 const GIF_SIZE = 640;
 const STATS_LINE_HEIGHT = 26;

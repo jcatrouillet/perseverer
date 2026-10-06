@@ -51,9 +51,9 @@ def backfill_workouts(conn: Connection, archive_root: Path, *, athlete_id: str) 
     activity_id_by_raw_object_id = {
         row.raw_object_id: row.activity_id
         for row in conn.execute(
-            select(
-                activity_source_link.c.raw_object_id, activity_source_link.c.activity_id
-            ).where(activity_source_link.c.athlete_id == athlete_id)
+            select(activity_source_link.c.raw_object_id, activity_source_link.c.activity_id).where(
+                activity_source_link.c.athlete_id == athlete_id
+            )
         )
     }
 

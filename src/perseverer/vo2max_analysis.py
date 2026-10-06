@@ -84,9 +84,7 @@ def compute_vo2max_factor_analysis(
             activity.c.moving_duration_s,
             activity_metric.c.value_num,
         )
-        .select_from(
-            activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id)
-        )
+        .select_from(activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id))
         .where(
             activity_metric.c.athlete_id == athlete_id,
             activity_metric.c.metric_key == VDOT_METRIC_KEY,
@@ -120,9 +118,7 @@ def compute_vo2max_factor_analysis(
 
     most_recent_local_date = conn.execute(
         select(activity.c.local_date)
-        .select_from(
-            activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id)
-        )
+        .select_from(activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id))
         .where(
             activity_metric.c.athlete_id == athlete_id,
             activity_metric.c.metric_key == VDOT_METRIC_KEY,

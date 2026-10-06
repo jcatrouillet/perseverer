@@ -235,9 +235,7 @@ def refresh_period_rollup(
                 [r.activity_moving_duration_s for r in day_rows]
             ),
             activity_distance_m=_sum_or_none([r.activity_distance_m for r in day_rows]),
-            activity_elevation_gain_m=_sum_or_none(
-                [r.activity_elevation_gain_m for r in day_rows]
-            ),
+            activity_elevation_gain_m=_sum_or_none([r.activity_elevation_gain_m for r in day_rows]),
             activity_calories=_sum_or_none([r.activity_calories for r in day_rows]),
             activity_days_count=sum(1 for r in day_rows if r.activity_count > 0),
             sleep_total_s=_sum_or_none([r.sleep_total_s for r in day_rows]),

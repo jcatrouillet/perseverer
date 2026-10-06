@@ -9,7 +9,11 @@ import { describe, expect, it } from "vitest";
 import type { ActivitySummary } from "../api/types";
 import { RunningStats } from "./RunningStats";
 
-function activity(id: string, local_date: string, overrides: Partial<ActivitySummary> = {}): ActivitySummary {
+function activity(
+  id: string,
+  local_date: string,
+  overrides: Partial<ActivitySummary> = {},
+): ActivitySummary {
   return {
     id,
     start_time_utc: `${local_date}T12:00:00Z`,

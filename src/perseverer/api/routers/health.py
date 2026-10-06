@@ -485,9 +485,7 @@ def get_health_dashboard(
             )
         else:
             combined = sorted(bmr_metric.daily + fallback_days, key=lambda d: d.local_date)
-            metrics[metrics.index(bmr_metric)] = bmr_metric.model_copy(
-                update={"daily": combined}
-            )
+            metrics[metrics.index(bmr_metric)] = bmr_metric.model_copy(update={"daily": combined})
 
     return HealthDashboardOut(metrics=metrics)
 
@@ -532,7 +530,8 @@ def get_health_stream(
             continue
         table = pq.read_table(parquet_path)
         for ts, value in zip(
-            table.column("timestamp_utc").to_pylist(), table.column("value").to_pylist(),
+            table.column("timestamp_utc").to_pylist(),
+            table.column("value").to_pylist(),
             strict=True,
         ):
             if day_start <= ts < day_end:

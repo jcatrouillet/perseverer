@@ -40,9 +40,7 @@ def test_retire_hides_pair_and_removes_sport_defaults(
     )
     assert default_response.status_code == 200
 
-    retired = client.put(
-        f"/api/v1/gear/shoes/{shoe_id}/retire", headers=auth_headers, json={}
-    )
+    retired = client.put(f"/api/v1/gear/shoes/{shoe_id}/retire", headers=auth_headers, json={})
     assert retired.status_code == 200
     assert retired.json()["retired"] is True
     assert retired.json()["default_sports"] == []
@@ -51,9 +49,7 @@ def test_retire_hides_pair_and_removes_sport_defaults(
     assert active.status_code == 200
     assert active.json() == []
 
-    all_shoes = client.get(
-        "/api/v1/gear/shoes?include_retired=true", headers=auth_headers
-    )
+    all_shoes = client.get("/api/v1/gear/shoes?include_retired=true", headers=auth_headers)
     assert all_shoes.status_code == 200
     assert [pair["id"] for pair in all_shoes.json()] == [shoe_id]
 
@@ -64,9 +60,7 @@ def test_retire_hides_pair_and_removes_sport_defaults(
     assert mapping_count == 0
 
 
-def test_shoe_can_have_no_mileage_limit(
-    client: TestClient, auth_headers: dict[str, str]
-) -> None:
+def test_shoe_can_have_no_mileage_limit(client: TestClient, auth_headers: dict[str, str]) -> None:
     created = _create_shoe(client, auth_headers, max_distance_km=None)
     assert created["max_distance_km"] is None
     assert created["remaining_km"] is None
@@ -104,9 +98,7 @@ def test_replacing_an_activity_pair_recalculates_both_shoe_mileages(
     assert mileage_by_id[second_shoe["id"]] == 29.7
 
 
-def _seed_default(
-    engine: Engine, *, sport: str, shoe_id: str, assigned_at: dt.datetime
-) -> None:
+def _seed_default(engine: Engine, *, sport: str, shoe_id: str, assigned_at: dt.datetime) -> None:
     """Inserts an `athlete_default_shoe` row with an explicit `assigned_at`, rather than going
     through `PUT /gear/defaults/{sport}` (which always stamps the real wall-clock "now" -- later
     than `seed_activity`'s fixed 2025-06-01 test date, the wrong direction for a test that needs

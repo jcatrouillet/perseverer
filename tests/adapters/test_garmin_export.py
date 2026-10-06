@@ -170,9 +170,7 @@ def test_export_health_json_is_parsed_into_observations(tmp_path: Path) -> None:
             )
         ).fetchall()
         raw_kind = conn.execute(
-            select(raw_object.c.kind).where(
-                raw_object.c.kind == "garmin_export_health_json"
-            )
+            select(raw_object.c.kind).where(raw_object.c.kind == "garmin_export_health_json")
         ).scalar_one_or_none()
 
     assert summary.errors == []

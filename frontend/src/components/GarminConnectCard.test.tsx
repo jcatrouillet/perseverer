@@ -11,7 +11,12 @@ const mockUseLatestJob = vi.fn();
 
 vi.mock("../api/queries", () => ({
   useGarminStatus: () => mockUseGarminStatus(),
-  useGarminLogin: () => ({ mutate: mockLoginMutate, isPending: false, isError: false, isSuccess: false }),
+  useGarminLogin: () => ({
+    mutate: mockLoginMutate,
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+  }),
   useTriggerGarminSync: () => ({ mutate: mockSyncMutate, isPending: false }),
   useLatestJob: (...args: unknown[]) => mockUseLatestJob(...args),
 }));

@@ -134,10 +134,15 @@ def _seed_with_old_cache(engine: Engine, tmp_path: Path, activity_id: str = "a1"
     old_transport = httpx.MockTransport(lambda r: httpx.Response(200, json=_old_response()))
     with engine.connect() as conn:
         get_or_fetch_activity_weather(
-            conn, tmp_path / "raw",
-            athlete_id=DEFAULT_ATHLETE_ID, activity_id=activity_id,
-            start_time_utc=dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC), duration_s=1800.0,
-            lat=37.36, lon=-121.97, client=_RealClient(transport=old_transport),
+            conn,
+            tmp_path / "raw",
+            athlete_id=DEFAULT_ATHLETE_ID,
+            activity_id=activity_id,
+            start_time_utc=dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC),
+            duration_s=1800.0,
+            lat=37.36,
+            lon=-121.97,
+            client=_RealClient(transport=old_transport),
         )
         conn.commit()
 
@@ -199,10 +204,15 @@ class TestBackfillWeatherFields:
         )
         with engine.connect() as conn:
             get_or_fetch_activity_weather(
-                conn, tmp_path / "raw",
-                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
-                start_time_utc=dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC), duration_s=1800.0,
-                lat=37.36, lon=-121.97, client=_RealClient(transport=dew_point_transport),
+                conn,
+                tmp_path / "raw",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                start_time_utc=dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC),
+                duration_s=1800.0,
+                lat=37.36,
+                lon=-121.97,
+                client=_RealClient(transport=dew_point_transport),
             )
             conn.commit()
 
@@ -271,10 +281,15 @@ class TestBackfillWeatherFields:
         new_transport = httpx.MockTransport(lambda r: httpx.Response(200, json=_new_response()))
         with engine.connect() as conn:
             get_or_fetch_activity_weather(
-                conn, tmp_path / "raw",
-                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1",
-                start_time_utc=dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC), duration_s=1800.0,
-                lat=37.36, lon=-121.97, client=_RealClient(transport=new_transport),
+                conn,
+                tmp_path / "raw",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                start_time_utc=dt.datetime(2026, 8, 2, 8, 0, tzinfo=dt.UTC),
+                duration_s=1800.0,
+                lat=37.36,
+                lon=-121.97,
+                client=_RealClient(transport=new_transport),
             )
             conn.commit()
 
@@ -354,10 +369,15 @@ class TestBackfillWeatherFields:
         new_transport = httpx.MockTransport(lambda r: httpx.Response(200, json=_new_response()))
         with engine.connect() as conn:
             get_or_fetch_activity_weather(
-                conn, tmp_path / "raw",
-                athlete_id=DEFAULT_ATHLETE_ID, activity_id="a2",
-                start_time_utc=dt.datetime(2026, 8, 3, 8, 0, tzinfo=dt.UTC), duration_s=1800.0,
-                lat=37.36, lon=-121.97, client=_RealClient(transport=new_transport),
+                conn,
+                tmp_path / "raw",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a2",
+                start_time_utc=dt.datetime(2026, 8, 3, 8, 0, tzinfo=dt.UTC),
+                duration_s=1800.0,
+                lat=37.36,
+                lon=-121.97,
+                client=_RealClient(transport=new_transport),
             )
             conn.commit()
 

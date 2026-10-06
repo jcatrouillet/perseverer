@@ -83,14 +83,14 @@ export function RaceReadinessChart() {
     <section className="card">
       <h2>Race Readiness</h2>
       <p className="chart-note">
-        For {race_name} on {race_local_date}: how your recent weekly running distance and long
-        runs compare to what this app targets for that distance (
+        For {race_name} on {race_local_date}: how your recent weekly running distance and long runs
+        compare to what this app targets for that distance (
         {weekly_distance_target_m != null && `${formatKm(weekly_distance_target_m)}/week`}
         {weekly_distance_target_m != null && long_run_target_m != null && ", "}
         {long_run_target_m != null && `${formatKm(long_run_target_m)} long run`}) -- recent weeks
-        count for more than older ones. This is a volume-adequacy check, not a fitness estimate;
-        see the Race Predictions tab for your VDOT-based finish-time prediction, shown below
-        alongside it.
+        count for more than older ones. This is a volume-adequacy check, not a fitness estimate; see
+        the Race Predictions tab for your VDOT-based finish-time prediction, shown below alongside
+        it.
       </p>
       <div className="stat-grid">
         <StatTile
@@ -105,7 +105,11 @@ export function RaceReadinessChart() {
           label="Weekly distance"
           value={current.weekly_distance_compliance_pct.toFixed(0)}
           unit="%"
-          meta={weekly_distance_target_m != null ? `Target: ${formatKm(weekly_distance_target_m)}/week` : null}
+          meta={
+            weekly_distance_target_m != null
+              ? `Target: ${formatKm(weekly_distance_target_m)}/week`
+              : null
+          }
           icon="route"
           tone="elevation"
         />

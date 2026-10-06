@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ActivityShareButton, PeriodShareButton } from "./ShareButton";
 
-const mockActivityShareMutate = vi.fn(
-  (_vars: unknown, options?: { onSuccess?: () => void }) => options?.onSuccess?.(),
+const mockActivityShareMutate = vi.fn((_vars: unknown, options?: { onSuccess?: () => void }) =>
+  options?.onSuccess?.(),
 );
-const mockPeriodShareMutate = vi.fn(
-  (_vars: unknown, options?: { onSuccess?: () => void }) => options?.onSuccess?.(),
+const mockPeriodShareMutate = vi.fn((_vars: unknown, options?: { onSuccess?: () => void }) =>
+  options?.onSuccess?.(),
 );
 let activityShareState: { isPending: boolean; isError: boolean; data?: { url: string } } = {
   isPending: false,

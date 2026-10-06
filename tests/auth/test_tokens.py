@@ -28,8 +28,6 @@ def test_expired_token_rejected() -> None:
 
 def test_token_missing_sub_claim_rejected() -> None:
     now = dt.datetime.now(dt.UTC)
-    token = jwt.encode(
-        {"iat": now, "exp": now + dt.timedelta(days=1)}, "secret", algorithm="HS256"
-    )
+    token = jwt.encode({"iat": now, "exp": now + dt.timedelta(days=1)}, "secret", algorithm="HS256")
     with pytest.raises(InvalidSessionToken):
         verify_session_token(token, "secret")

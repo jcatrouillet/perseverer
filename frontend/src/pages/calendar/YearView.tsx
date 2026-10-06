@@ -184,7 +184,9 @@ export function YearView({ year }: { year: number }) {
                     {rollup.activity_count} activit{rollup.activity_count === 1 ? "y" : "ies"}
                   </div>
                   {rollup.activity_distance_m != null && (
-                    <div>{metersToDisplay(rollup.activity_distance_m).toFixed(1)} {unitLabel}</div>
+                    <div>
+                      {metersToDisplay(rollup.activity_distance_m).toFixed(1)} {unitLabel}
+                    </div>
                   )}
                   {rollup.activity_moving_duration_s != null && (
                     <div>{(rollup.activity_moving_duration_s / 3600).toFixed(1)}h</div>

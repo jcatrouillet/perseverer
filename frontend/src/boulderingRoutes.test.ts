@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { SplitOut } from "./api/types";
-import { boulderingRoutes, climbSummary, formatGrade, formatResult, summarizeBoulderingRoutes } from "./boulderingRoutes";
+import {
+  boulderingRoutes,
+  climbSummary,
+  formatGrade,
+  formatResult,
+  summarizeBoulderingRoutes,
+} from "./boulderingRoutes";
 
 function split(overrides: Partial<SplitOut> = {}): SplitOut {
   return {
@@ -82,8 +88,21 @@ describe("climbSummary with demoted Garmin rows", () => {
   it("counts a superseded Garmin row's duration toward climb time without making it a route", () => {
     const splits = [
       { split_index: 0, split_type: "climb_active_superseded", duration_s: 100 },
-      { split_index: 1, split_type: "climb_active", duration_s: 20, climb_grade: 2, climb_result: "completed" },
-      { split_index: 2, split_type: "climb_active", duration_s: null, climb_grade: null, climb_name: "Pink - A8", climb_result: "attempt" },
+      {
+        split_index: 1,
+        split_type: "climb_active",
+        duration_s: 20,
+        climb_grade: 2,
+        climb_result: "completed",
+      },
+      {
+        split_index: 2,
+        split_type: "climb_active",
+        duration_s: null,
+        climb_grade: null,
+        climb_name: "Pink - A8",
+        climb_result: "attempt",
+      },
     ] as unknown as SplitOut[];
     const routes = boulderingRoutes(splits);
     expect(routes).toHaveLength(2);

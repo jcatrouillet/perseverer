@@ -37,17 +37,13 @@ export function BulkImportCard() {
       <h2>Bulk import</h2>
       <p className="chart-note">
         Import a full "export your data" archive from Garmin or Strava. Always safe to re-run —
-        already-imported activities are recognized and skipped, not duplicated. Very large
-        exports may be rejected by a reverse proxy in front of this app before reaching it.
+        already-imported activities are recognized and skipped, not duplicated. Very large exports
+        may be rejected by a reverse proxy in front of this app before reaching it.
       </p>
       <form className="settings-bulk-import__form" onSubmit={handleSubmit}>
         <label className="field">
           Source
-          <select
-            className="input"
-            value={kind}
-            onChange={(e) => setKind(e.target.value as Kind)}
-          >
+          <select className="input" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
             <option value="garmin">Garmin export</option>
             <option value="strava">Strava export</option>
           </select>

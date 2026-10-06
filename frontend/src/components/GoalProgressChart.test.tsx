@@ -48,9 +48,7 @@ describe("GoalTooltip", () => {
 
   it("shows the target/current/ahead breakdown for a historical (non-today) point", () => {
     render(
-      <GoalTooltip
-        {...tooltipProps(true, actualPoint({ targetKm: 90, km: 100, diffKm: 10 }))}
-      />,
+      <GoalTooltip {...tooltipProps(true, actualPoint({ targetKm: 90, km: 100, diffKm: 10 }))} />,
     );
     expect(screen.getByText(/Target: 90\.0 km/)).toBeInTheDocument();
     expect(screen.getByText(/Current: 100\.0 km/)).toBeInTheDocument();
@@ -77,7 +75,9 @@ describe("GoalTooltip", () => {
       />,
     );
     expect(
-      screen.getByText(/The 4\.6 km you ran today puts you 142\.4 km ahead of your goal for today\./),
+      screen.getByText(
+        /The 4\.6 km you ran today puts you 142\.4 km ahead of your goal for today\./,
+      ),
     ).toBeInTheDocument();
   });
 

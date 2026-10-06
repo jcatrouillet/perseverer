@@ -27,7 +27,12 @@ describe("computeWindow", () => {
     expect(w.label).toBe("August 2026");
     // Weeks (Monday-starting) touching August 2026: Jul 27, Aug 3, 10, 17, 24, 31.
     expect(w.bucketKeys).toEqual([
-      "2026-07-27", "2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24", "2026-08-31",
+      "2026-07-27",
+      "2026-08-03",
+      "2026-08-10",
+      "2026-08-17",
+      "2026-08-24",
+      "2026-08-31",
     ]);
   });
 
@@ -38,7 +43,18 @@ describe("computeWindow", () => {
     expect(w.end).toBe("2026-12-31");
     expect(w.label).toBe("2026");
     expect(w.bucketLabels).toEqual([
-      "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
     ]);
   });
 
@@ -151,7 +167,11 @@ describe("defaultCustomRange", () => {
 describe("earliestDate", () => {
   it("returns the minimum local_date across the given points", () => {
     expect(
-      earliestDate([{ local_date: "2026-03-01" }, { local_date: "2020-06-15" }, { local_date: "2024-01-01" }]),
+      earliestDate([
+        { local_date: "2026-03-01" },
+        { local_date: "2020-06-15" },
+        { local_date: "2024-01-01" },
+      ]),
     ).toBe("2020-06-15");
   });
 

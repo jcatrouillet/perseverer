@@ -202,15 +202,41 @@ class TestBuildIcsFeed:
         engine = _engine(tmp_path)
         steps = [
             PlannedStepLike(
-                0, "reps", None, None, None, None, None, None, None, None, None, None, None,
-                duration_reps=12, exercise_category="SQUAT", exercise_name="", weight_kg=40.0,
+                0,
+                "reps",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                duration_reps=12,
+                exercise_category="SQUAT",
+                exercise_name="",
+                weight_kg=40.0,
             ),
             # The repeat marker's own step_index comes AFTER the block it covers
             # (repeat_from_step=0..step_index-1), same convention planned_workout_step/
             # activity_workout_step both use throughout this codebase.
             PlannedStepLike(
-                1, "repeat_until_steps_cmplt", None, None, None, None, None, None, None, None,
-                None, 0, 3,
+                1,
+                "repeat_until_steps_cmplt",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                0,
+                3,
             ),
         ]
         with engine.connect() as conn:
@@ -258,8 +284,23 @@ class TestBuildIcsFeed:
         engine = _engine(tmp_path)
         steps = [
             PlannedStepLike(
-                0, "reps", None, None, None, None, None, None, None, None, None, None, None,
-                duration_reps=10, exercise_category="PUSH_UP", exercise_name="", weight_kg=None,
+                0,
+                "reps",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                duration_reps=10,
+                exercise_category="PUSH_UP",
+                exercise_name="",
+                weight_kg=None,
                 comment="Bring the resistance bands",
             ),
         ]
@@ -285,12 +326,39 @@ class TestBuildIcsFeed:
         engine = _engine(tmp_path)
         steps = [
             PlannedStepLike(
-                0, "reps", None, None, None, None, None, None, None, None, None, None, None,
-                duration_reps=12, exercise_category="SQUAT", exercise_name="", weight_kg=None,
+                0,
+                "reps",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                duration_reps=12,
+                exercise_category="SQUAT",
+                exercise_name="",
+                weight_kg=None,
             ),
             PlannedStepLike(
-                1, "repeat_until_steps_cmplt", None, None, None, None, None, None, None, None,
-                None, 0, 3, comment="superset, no rest between rounds",
+                1,
+                "repeat_until_steps_cmplt",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                0,
+                3,
+                comment="superset, no rest between rounds",
             ),
         ]
         with engine.connect() as conn:
@@ -375,7 +443,11 @@ class TestBuildIcsFeedRaces:
         assert "Paris Marathon" in str(event["summary"])
         start = cast(dt.datetime, _prop_dt(event, "dtstart"))
         assert (start.year, start.month, start.day, start.hour, start.minute) == (
-            2026, 4, 12, 9, 0,
+            2026,
+            4,
+            12,
+            9,
+            0,
         )
         end = cast(dt.datetime, _prop_dt(event, "dtend"))
         assert (end - start) == dt.timedelta(hours=4)

@@ -462,14 +462,20 @@ class TestRefreshAvgGap:
         with engine.connect() as conn:
             _add_activity(conn, activity_id="run_with_stream", sport="running")
             _add_gap_stream(
-                parquet_dir, conn, activity_id="run_with_stream",
-                distances_m=distances, altitudes_m=altitudes,
+                parquet_dir,
+                conn,
+                activity_id="run_with_stream",
+                distances_m=distances,
+                altitudes_m=altitudes,
             )
             _add_activity(conn, activity_id="run_no_stream", sport="running")
             _add_activity(conn, activity_id="ride_with_stream", sport="cycling")
             _add_gap_stream(
-                parquet_dir, conn, activity_id="ride_with_stream",
-                distances_m=distances, altitudes_m=altitudes,
+                parquet_dir,
+                conn,
+                activity_id="ride_with_stream",
+                distances_m=distances,
+                altitudes_m=altitudes,
             )
             conn.commit()
 
@@ -522,8 +528,11 @@ class TestRefreshAvgGap:
         with engine.connect() as conn:
             _add_activity(conn, activity_id="run1", sport="running")
             _add_gap_stream(
-                parquet_dir, conn, activity_id="run1",
-                distances_m=distances, altitudes_m=altitudes,
+                parquet_dir,
+                conn,
+                activity_id="run1",
+                distances_m=distances,
+                altitudes_m=altitudes,
             )
             conn.commit()
             refresh_avg_gap(conn, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
@@ -546,8 +555,11 @@ class TestRefreshAvgGap:
         with engine.connect() as conn:
             _add_activity(conn, activity_id="run1")
             _add_gap_stream(
-                parquet_dir, conn, activity_id="run1",
-                distances_m=distances, altitudes_m=altitudes,
+                parquet_dir,
+                conn,
+                activity_id="run1",
+                distances_m=distances,
+                altitudes_m=altitudes,
             )
             conn.commit()
 
@@ -568,8 +580,11 @@ class TestRefreshAvgGap:
         with engine.connect() as conn:
             _add_activity(conn, activity_id="run1")
             _add_gap_stream(
-                parquet_dir, conn, activity_id="run1",
-                distances_m=distances, altitudes_m=altitudes,
+                parquet_dir,
+                conn,
+                activity_id="run1",
+                distances_m=distances,
+                altitudes_m=altitudes,
             )
             conn.commit()
 
@@ -577,8 +592,9 @@ class TestRefreshAvgGap:
             conn.commit()
 
             row = conn.execute(
-                select(activity_metric.c.metric_key, activity_metric.c.unit)
-                .where(activity_metric.c.activity_id == "run1")
+                select(activity_metric.c.metric_key, activity_metric.c.unit).where(
+                    activity_metric.c.activity_id == "run1"
+                )
             ).fetchone()
             assert row is not None
             assert row.metric_key == AVG_GAP_METRIC_KEY

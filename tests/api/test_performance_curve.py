@@ -96,15 +96,21 @@ def test_returns_a_real_curve_for_heart_rate(
     start = dt.datetime(2026, 6, 1, 10, 0, tzinfo=dt.UTC)
     with engine.connect() as conn:
         _seed_activity_with_stream(
-            conn, tmp_path / "parquet",
-            activity_id="a1", local_date="2026-06-01", sport="running", start=start,
+            conn,
+            tmp_path / "parquet",
+            activity_id="a1",
+            local_date="2026-06-01",
+            sport="running",
+            start=start,
             values={"heart_rate": [150.0] * 30},
         )
 
     r = client.get(
         "/api/v1/performance/curve",
         params={
-            "metric": "heart_rate", "start_date": "2026-06-01", "end_date": "2026-06-30",
+            "metric": "heart_rate",
+            "start_date": "2026-06-01",
+            "end_date": "2026-06-30",
             "sports": "running,cycling",
         },
         headers=auth_headers,
@@ -123,15 +129,21 @@ def test_sports_param_is_comma_split_and_scopes_heart_rate(
     start = dt.datetime(2026, 6, 1, 10, 0, tzinfo=dt.UTC)
     with engine.connect() as conn:
         _seed_activity_with_stream(
-            conn, tmp_path / "parquet",
-            activity_id="ride1", local_date="2026-06-01", sport="cycling", start=start,
+            conn,
+            tmp_path / "parquet",
+            activity_id="ride1",
+            local_date="2026-06-01",
+            sport="cycling",
+            start=start,
             values={"heart_rate": [160.0] * 30},
         )
 
     r = client.get(
         "/api/v1/performance/curve",
         params={
-            "metric": "heart_rate", "start_date": "2026-06-01", "end_date": "2026-06-30",
+            "metric": "heart_rate",
+            "start_date": "2026-06-01",
+            "end_date": "2026-06-30",
             "sports": "running",  # cycling not included
         },
         headers=auth_headers,
@@ -146,15 +158,21 @@ def test_pace_ignores_sports_param_and_stays_running_only(
     start = dt.datetime(2026, 6, 1, 10, 0, tzinfo=dt.UTC)
     with engine.connect() as conn:
         _seed_activity_with_stream(
-            conn, tmp_path / "parquet",
-            activity_id="ride1", local_date="2026-06-01", sport="cycling", start=start,
+            conn,
+            tmp_path / "parquet",
+            activity_id="ride1",
+            local_date="2026-06-01",
+            sport="cycling",
+            start=start,
             values={"distance_m": [i * 10.0 for i in range(30)], "altitude_m": [100.0] * 30},
         )
 
     r = client.get(
         "/api/v1/performance/curve",
         params={
-            "metric": "pace", "start_date": "2026-06-01", "end_date": "2026-06-30",
+            "metric": "pace",
+            "start_date": "2026-06-01",
+            "end_date": "2026-06-30",
             "sports": "cycling",  # ignored for pace -- must not pick up the ride
         },
         headers=auth_headers,
@@ -169,8 +187,12 @@ def test_reference_values_are_included_for_the_requested_metric(
     start = dt.datetime(2026, 6, 1, 10, 0, tzinfo=dt.UTC)
     with engine.connect() as conn:
         _seed_activity_with_stream(
-            conn, tmp_path / "parquet",
-            activity_id="a1", local_date="2026-06-01", sport="running", start=start,
+            conn,
+            tmp_path / "parquet",
+            activity_id="a1",
+            local_date="2026-06-01",
+            sport="running",
+            start=start,
             values={"distance_m": [i * 4.0 for i in range(30)], "altitude_m": [100.0] * 30},
         )
         today = dt.datetime.now(dt.UTC).date().isoformat()

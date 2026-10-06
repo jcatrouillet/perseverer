@@ -123,9 +123,9 @@ def parse_summarized_activities_json(content: bytes) -> list[GarminActivitySumma
                     name=raw_entry.get("name"),
                     activity_type=raw_entry.get("activityType"),
                     event_type_id=raw_entry.get("eventTypeId"),
-                    begin_timestamp_utc=datetime.fromtimestamp(
-                        begin_ts / 1000, tz=UTC
-                    ).replace(tzinfo=None),
+                    begin_timestamp_utc=datetime.fromtimestamp(begin_ts / 1000, tz=UTC).replace(
+                        tzinfo=None
+                    ),
                 )
             )
     return entries
@@ -196,9 +196,7 @@ def correct_activities_from_summary(
     now = datetime.now(UTC).replace(tzinfo=None)
     for best_idx, entry in winning_entry_by_idx.items():
         row = rows[best_idx]
-        mapped = (
-            GARMIN_ACTIVITY_TYPE_MAP.get(entry.activity_type) if entry.activity_type else None
-        )
+        mapped = GARMIN_ACTIVITY_TYPE_MAP.get(entry.activity_type) if entry.activity_type else None
         updates: dict[str, object] = {}
         if mapped is not None and (row.sport, row.sub_sport) != mapped:
             updates["sport"], updates["sub_sport"] = mapped

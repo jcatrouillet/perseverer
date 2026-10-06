@@ -17,7 +17,11 @@ function row(
 describe("ActivityFastestTable", () => {
   it("renders nothing with fewer than two comparable rows", () => {
     const { container } = render(
-      <ActivityFastestTable fastest={[row("a1", "2025-06-01", 5000, 1500)]} sport="running" currentActivityId="a1" />,
+      <ActivityFastestTable
+        fastest={[row("a1", "2025-06-01", 5000, 1500)]}
+        sport="running"
+        currentActivityId="a1"
+      />,
     );
     expect(container).toBeEmptyDOMElement();
   });

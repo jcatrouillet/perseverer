@@ -45,23 +45,25 @@ export interface BoulderingRoute {
  * HR (unlike grade/result) are also real on the *rest* split between routes, but this table
  * shows one row per route, so only the climb's own HR is surfaced here. */
 export function boulderingRoutes(splits: SplitOut[]): BoulderingRoute[] {
-  return splits
-    // A graded Garmin route, or any Kaya-sourced one (which may be ungraded, "v?").
-    .filter((s) => s.split_type === "climb_active" && (s.climb_grade != null || s.climb_name))
-    .map((s, i) => ({
-      splitIndex: s.split_index,
-      routeNumber: i + 1,
-      grade: s.climb_grade,
-      name: s.climb_name ?? null,
-      source: s.source ?? null,
-      climbKayaId: s.climb_kaya_id ?? null,
-      note: s.note ?? null,
-      result: s.climb_result ?? "unknown",
-      durationS: s.duration_s,
-      avgHr: s.climb_avg_hr,
-      maxHr: s.climb_max_hr,
-      isManual: s.is_manual === true,
-    }));
+  return (
+    splits
+      // A graded Garmin route, or any Kaya-sourced one (which may be ungraded, "v?").
+      .filter((s) => s.split_type === "climb_active" && (s.climb_grade != null || s.climb_name))
+      .map((s, i) => ({
+        splitIndex: s.split_index,
+        routeNumber: i + 1,
+        grade: s.climb_grade,
+        name: s.climb_name ?? null,
+        source: s.source ?? null,
+        climbKayaId: s.climb_kaya_id ?? null,
+        note: s.note ?? null,
+        result: s.climb_result ?? "unknown",
+        durationS: s.duration_s,
+        avgHr: s.climb_avg_hr,
+        maxHr: s.climb_max_hr,
+        isManual: s.is_manual === true,
+      }))
+  );
 }
 
 export function formatGrade(grade: number | null): string {
@@ -112,7 +114,9 @@ export function climbSummary(routes: BoulderingRoute[], splits?: SplitOut[]): Cl
   // the real time on the wall). Without them, fall back to the routes' own durations.
   const durations = splits
     ? splits
-        .filter((s) => s.split_type === "climb_active" || s.split_type === "climb_active_superseded")
+        .filter(
+          (s) => s.split_type === "climb_active" || s.split_type === "climb_active_superseded",
+        )
         .map((s) => s.duration_s)
         .filter((d): d is number => d != null)
     : routes.map((r) => r.durationS).filter((d): d is number => d != null);

@@ -72,7 +72,8 @@ function RaceSummary({ race, onEdit }: { race: PlannedRaceOut; onEdit: () => voi
         ? `Predicted ${formatClockDuration(race.predicted_duration_s)} — on track`
         : `Predicted ${formatClockDuration(race.predicted_duration_s)} — ` +
           `${formatClockDuration(-diff)} over target`;
-    comparisonClass = diff >= 0 ? "planned-race__comparison--good" : "planned-race__comparison--warn";
+    comparisonClass =
+      diff >= 0 ? "planned-race__comparison--good" : "planned-race__comparison--warn";
   } else if (race.predicted_duration_s != null) {
     comparison = `Predicted ${formatClockDuration(race.predicted_duration_s)}`;
   }
@@ -86,7 +87,10 @@ function RaceSummary({ race, onEdit }: { race: PlannedRaceOut; onEdit: () => voi
       </div>
       <p className="chart-note">
         {race.scheduled_time && `${formatHHMM(race.scheduled_time)} · `}
-        {formatDistance(race.distance_m, Number.isInteger(metersToDisplay(race.distance_m)) ? 0 : 1)}
+        {formatDistance(
+          race.distance_m,
+          Number.isInteger(metersToDisplay(race.distance_m)) ? 0 : 1,
+        )}
         {race.target_duration_s != null &&
           ` · Target sub ${formatClockDuration(race.target_duration_s)}`}
         {" · "}
@@ -164,7 +168,9 @@ function RaceEditForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const distanceM =
-      distancePreset === "custom" ? displayToMeters(Number(customDistance)) : Number(distancePreset);
+      distancePreset === "custom"
+        ? displayToMeters(Number(customDistance))
+        : Number(distancePreset);
     if (!name.trim() || !(distanceM > 0)) return;
     const fields = {
       local_date: localDate,
@@ -335,11 +341,7 @@ export function PlannedRaceForm({ localDate }: { localDate: string }) {
         </div>
       ))}
       <div className="planned-workout__actions">
-        <button
-          type="button"
-          className="button button--primary"
-          onClick={() => setAddingNew(true)}
-        >
+        <button type="button" className="button button--primary" onClick={() => setAddingNew(true)}>
           {list.length === 0 ? "Add a race" : "Add another race"}
         </button>
       </div>

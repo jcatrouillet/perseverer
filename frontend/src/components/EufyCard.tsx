@@ -35,16 +35,14 @@ export function EufyCard() {
     <section className="card">
       <h2>Eufy scale</h2>
       <p className="chart-note">
-        Body composition (weight, body fat, muscle mass, and more) from a Eufy smart scale. A
-        daily sync already runs automatically once connected.
+        Body composition (weight, body fat, muscle mass, and more) from a Eufy smart scale. A daily
+        sync already runs automatically once connected.
       </p>
 
       {status.data && (
         <ul className="settings-garmin__status">
           <li>
-            {status.data.configured
-              ? `Connected — ${status.data.email}.`
-              : "Not connected yet."}
+            {status.data.configured ? `Connected — ${status.data.email}.` : "Not connected yet."}
           </li>
         </ul>
       )}

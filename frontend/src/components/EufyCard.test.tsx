@@ -9,7 +9,12 @@ const mockLoginMutate = vi.fn();
 
 vi.mock("../api/queries", () => ({
   useEufyStatus: () => mockUseEufyStatus(),
-  useEufyLogin: () => ({ mutate: mockLoginMutate, isPending: false, isError: false, isSuccess: false }),
+  useEufyLogin: () => ({
+    mutate: mockLoginMutate,
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+  }),
 }));
 
 const NOT_CONNECTED: EufyStatusOut = { configured: false, email: null };

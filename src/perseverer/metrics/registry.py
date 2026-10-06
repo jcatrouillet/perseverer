@@ -26,9 +26,7 @@ def get_or_register_metric(
     deliberate editorial action, not something ingest should silently do on every re-run.
     """
     existing = conn.execute(
-        select(metric_definition.c.metric_key).where(
-            metric_definition.c.metric_key == metric_key
-        )
+        select(metric_definition.c.metric_key).where(metric_definition.c.metric_key == metric_key)
     ).scalar_one_or_none()
     if existing is not None:
         return

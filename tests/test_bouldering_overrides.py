@@ -90,14 +90,15 @@ class TestSetRouteStatusOverride:
             conn.commit()
 
             set_route_status_override(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=0,
                 result="completed",
             )
             conn.commit()
 
-            row = conn.execute(
-                select(split.c.climb_result).where(split.c.split_index == 0)
-            ).one()
+            row = conn.execute(select(split.c.climb_result).where(split.c.split_index == 0)).one()
         assert row.climb_result == "completed"
 
     def test_rejects_an_unrecognized_result_value(self, tmp_path: Path) -> None:
@@ -109,7 +110,10 @@ class TestSetRouteStatusOverride:
 
             with pytest.raises(ValueError, match="result must be one of"):
                 set_route_status_override(
-                    conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0,
+                    conn,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    split_index=0,
                     result="sent",
                 )
 
@@ -119,14 +123,21 @@ class TestSetRouteStatusOverride:
         with engine.connect() as conn:
             _add_activity(conn, activity_id="a1")
             _add_split(
-                conn, activity_id="a1", split_index=1, split_type="climb_rest",
-                grade=None, result=None,
+                conn,
+                activity_id="a1",
+                split_index=1,
+                split_type="climb_rest",
+                grade=None,
+                result=None,
             )
             conn.commit()
 
             with pytest.raises(ValueError, match="no climb_active route"):
                 set_route_status_override(
-                    conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=1,
+                    conn,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    split_index=1,
                     result="completed",
                 )
 
@@ -138,7 +149,10 @@ class TestSetRouteStatusOverride:
 
             with pytest.raises(ValueError, match="no climb_active route"):
                 set_route_status_override(
-                    conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=99,
+                    conn,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    split_index=99,
                     result="completed",
                 )
 
@@ -152,19 +166,23 @@ class TestSetRouteStatusOverride:
             conn.commit()
 
             set_route_status_override(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=0,
                 result="completed",
             )
             conn.commit()
             set_route_status_override(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=0,
                 result="attempt",
             )
             conn.commit()
 
-            row = conn.execute(
-                select(split.c.climb_result).where(split.c.split_index == 0)
-            ).one()
+            row = conn.execute(select(split.c.climb_result).where(split.c.split_index == 0)).one()
         assert row.climb_result == "attempt"
 
     def test_survives_a_simulated_rebuild(self, tmp_path: Path) -> None:
@@ -179,7 +197,10 @@ class TestSetRouteStatusOverride:
             conn.commit()
 
             set_route_status_override(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=0,
                 result="completed",
             )
             conn.commit()
@@ -193,9 +214,7 @@ class TestSetRouteStatusOverride:
             changed = apply_bouldering_route_overrides(conn, athlete_id=DEFAULT_ATHLETE_ID)
             conn.commit()
 
-            row = conn.execute(
-                select(split.c.climb_result).where(split.c.split_index == 0)
-            ).one()
+            row = conn.execute(select(split.c.climb_result).where(split.c.split_index == 0)).one()
         assert changed == 1
         assert row.climb_result == "completed"
 
@@ -208,14 +227,22 @@ class TestAddManualRoute:
             conn.commit()
 
             split_index = add_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=3, result="attempt",
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                grade=3,
+                result="attempt",
             )
             conn.commit()
 
             row = conn.execute(
-                select(split.c.split_type, split.c.climb_grade, split.c.climb_result,
-                       split.c.duration_s, split.c.is_manual)
-                .where(split.c.split_index == split_index)
+                select(
+                    split.c.split_type,
+                    split.c.climb_grade,
+                    split.c.climb_result,
+                    split.c.duration_s,
+                    split.c.is_manual,
+                ).where(split.c.split_index == split_index)
             ).one()
         assert row.split_type == "climb_active"
         assert row.climb_grade == 3
@@ -232,7 +259,10 @@ class TestAddManualRoute:
             conn.commit()
 
             split_index = add_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=1,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                grade=1,
                 result="completed",
             )
         assert split_index == 2
@@ -244,11 +274,18 @@ class TestAddManualRoute:
             conn.commit()
 
             first = add_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=1, result="attempt",
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                grade=1,
+                result="attempt",
             )
             conn.commit()
             second = add_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=2,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                grade=2,
                 result="completed",
             )
         assert second == first + 1
@@ -261,7 +298,10 @@ class TestAddManualRoute:
             _add_activity(conn, activity_id="a1")
             conn.commit()
             add_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=4,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                grade=4,
                 result="completed",
             )
             conn.commit()
@@ -288,12 +328,19 @@ class TestDeleteManualRoute:
             _add_activity(conn, activity_id="a1")
             conn.commit()
             split_index = add_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=2, result="attempt",
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                grade=2,
+                result="attempt",
             )
             conn.commit()
 
             delete_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=split_index,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=split_index,
             )
             conn.commit()
 
@@ -314,7 +361,10 @@ class TestDeleteManualRoute:
 
             with pytest.raises(ValueError, match="no manually-added route"):
                 delete_manual_route(
-                    conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0,
+                    conn,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    split_index=0,
                 )
 
             # Never touched -- still there after the rejected delete.
@@ -329,7 +379,10 @@ class TestDeleteManualRoute:
 
             with pytest.raises(ValueError, match="no manually-added route"):
                 delete_manual_route(
-                    conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0,
+                    conn,
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    split_index=0,
                 )
 
 
@@ -344,7 +397,11 @@ class TestSetRouteGradeOverride:
             conn.commit()
 
             set_route_grade_override(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0, grade=5,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=0,
+                grade=5,
             )
             conn.commit()
 
@@ -358,7 +415,11 @@ class TestSetRouteGradeOverride:
             _add_split(conn, activity_id="a1", split_index=0, grade=2)
             conn.commit()
             set_route_grade_override(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0, grade=5,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=0,
+                grade=5,
             )
             conn.commit()
 
@@ -393,13 +454,15 @@ class TestSetRouteGradeOverride:
             )
             conn.commit()
             set_route_grade_override(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", split_index=0, grade=5,
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                split_index=0,
+                grade=5,
             )
             conn.commit()
 
-            row = conn.execute(
-                select(split.c.climb_grade, split.c.climb_result)
-            ).one()
+            row = conn.execute(select(split.c.climb_grade, split.c.climb_result)).one()
         assert (row.climb_grade, row.climb_result) == (5, "completed")
 
         # Both corrections -- recorded independently on the same override row -- survive a
@@ -410,9 +473,7 @@ class TestSetRouteGradeOverride:
             conn.commit()
             apply_bouldering_route_overrides(conn, athlete_id=DEFAULT_ATHLETE_ID)
             conn.commit()
-            row = conn.execute(
-                select(split.c.climb_grade, split.c.climb_result)
-            ).one()
+            row = conn.execute(select(split.c.climb_grade, split.c.climb_result)).one()
         assert (row.climb_grade, row.climb_result) == (5, "completed")
 
     def test_updates_bouldering_manual_route_for_a_manually_added_route(
@@ -423,7 +484,11 @@ class TestSetRouteGradeOverride:
             _add_activity(conn, activity_id="a1")
             conn.commit()
             split_index = add_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=2, result="attempt",
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                grade=2,
+                result="attempt",
             )
             conn.commit()
 
@@ -447,7 +512,11 @@ class TestSetRouteGradeOverride:
             _add_activity(conn, activity_id="a1")
             conn.commit()
             split_index = add_manual_route(
-                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="a1", grade=2, result="attempt",
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="a1",
+                grade=2,
+                result="attempt",
             )
             conn.commit()
             set_route_grade_override(

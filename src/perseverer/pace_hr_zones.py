@@ -221,10 +221,10 @@ ZONE_DESCRIPTIONS: tuple[str, ...] = (
     "The pace most easy and long runs should sit in -- builds aerobic capacity and mitochondrial "
     "density with minimal fatigue, sustainable for hours, still fully conversational. This "
     "should be the bulk of a week's total running time.",
-    "Sustained \"steady state\" effort right around your aerobic threshold -- comfortably hard, "
+    'Sustained "steady state" effort right around your aerobic threshold -- comfortably hard, '
     "breathing noticeably deeper but still controlled in short sentences. Good for extended "
     "tempo runs (30-60+ min) and marathon-pace-adjacent work.",
-    "Sustained effort right around your lactate threshold -- the classic \"comfortably hard\" "
+    'Sustained effort right around your lactate threshold -- the classic "comfortably hard" '
     "tempo/threshold-interval pace, typically sustainable for 20-60 minutes continuously or in "
     "long intervals (2 x 15-20 min). Trains lactate clearance and raises the pace you can hold "
     "before fatigue accumulates quickly.",

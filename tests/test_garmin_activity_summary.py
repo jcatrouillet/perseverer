@@ -292,9 +292,7 @@ class TestCorrectActivitiesFromSummary:
         engine = _engine(tmp_path)
         start = dt.datetime(2026, 5, 10, 8, 0, 0)
         with engine.connect() as conn:
-            _add_activity(
-                conn, activity_id="a1", start_time_utc=start, sport="running", name="Run"
-            )
+            _add_activity(conn, activity_id="a1", start_time_utc=start, sport="running", name="Run")
 
         entry = _entry(
             activity_type="running",
@@ -354,9 +352,7 @@ class TestCorrectActivitiesFromSummary:
                 conn, activity_id="a1", start_time_utc=start, sport="running", name="My Own Title"
             )
 
-        entry = _entry(
-            activity_type="running", name="Garmin's Name", begin=start, event_type_id=9
-        )
+        entry = _entry(activity_type="running", name="Garmin's Name", begin=start, event_type_id=9)
         with engine.connect() as conn:
             _correct(conn, [entry])
             conn.commit()
@@ -388,9 +384,7 @@ def _archive_summary_json(
         content=content,
         locator=locator,
     )
-    conn.execute(
-        raw_object.update().where(raw_object.c.id == raw_id).values(fetched_at=fetched_at)
-    )
+    conn.execute(raw_object.update().where(raw_object.c.id == raw_id).values(fetched_at=fetched_at))
     conn.commit()
 
 
@@ -455,9 +449,7 @@ class TestBackfillActivityCorrectionsOrdering:
 
         assert names == ["Monterey County Other"] * 4
 
-    def test_the_newer_snapshots_name_wins_even_when_archived_first(
-        self, tmp_path: Path
-    ) -> None:
+    def test_the_newer_snapshots_name_wins_even_when_archived_first(self, tmp_path: Path) -> None:
         """Same as above, but the *older* snapshot (by fetched_at) happens to be archived
         second -- proves the ordering is driven by fetched_at, not by insertion/call order."""
         archive_root = tmp_path / "archive"

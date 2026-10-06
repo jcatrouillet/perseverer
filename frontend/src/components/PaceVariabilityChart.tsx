@@ -42,21 +42,20 @@ export function PaceVariabilityChart({ result }: { result: PaceVariabilityResult
         cumulativeM += seg.distanceM;
         const endKm = cumulativeM / 1000;
         return (
-          <line
-            key={i}
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            className="pace-variability__bar"
-          >
+          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} className="pace-variability__bar">
             <title>
               {`${startKm.toFixed(2)}–${endKm.toFixed(2)} km: ${formatMinPerKm(seg.paceMinPerKm)} /km`}
             </title>
           </line>
         );
       })}
-      <text x={CENTER} y={CENTER} className="pace-variability__value" textAnchor="middle" dominantBaseline="central">
+      <text
+        x={CENTER}
+        y={CENTER}
+        className="pace-variability__value"
+        textAnchor="middle"
+        dominantBaseline="central"
+      >
         {Math.round(variabilityPct)}%
       </text>
     </svg>

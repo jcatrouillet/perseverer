@@ -45,9 +45,7 @@ def test_list_insights_returns_seeded_rows(
     assert body[0]["detail"] == {"activity_id": "a1"}
 
 
-def test_filter_by_kind(
-    client: TestClient, auth_headers: dict[str, str], engine: Engine
-) -> None:
+def test_filter_by_kind(client: TestClient, auth_headers: dict[str, str], engine: Engine) -> None:
     _seed_insight(engine, kind="effort", subject_key="distance:run")
     _seed_insight(engine, kind="streak", subject_key="streak:current")
     r = client.get("/api/v1/insights?kind=streak", headers=auth_headers)
@@ -56,9 +54,7 @@ def test_filter_by_kind(
     assert body[0]["kind"] == "streak"
 
 
-def test_filter_by_window(
-    client: TestClient, auth_headers: dict[str, str], engine: Engine
-) -> None:
+def test_filter_by_window(client: TestClient, auth_headers: dict[str, str], engine: Engine) -> None:
     _seed_insight(engine, window="30d", subject_key="distance:run")
     _seed_insight(engine, window="90d", subject_key="distance:run")
     r = client.get("/api/v1/insights?window=90d", headers=auth_headers)

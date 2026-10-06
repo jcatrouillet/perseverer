@@ -7,11 +7,27 @@ import { ActivitySourcesPanel } from "./ActivitySourcesPanel";
 function sources(overrides: Partial<ActivitySourcesOut> = {}): ActivitySourcesOut {
   return {
     sources: [
-      { link_id: 1, source: "fit_folder", external_id: "abc", ingested_at: "2025-06-01T00:00:00Z", can_split: true },
-      { link_id: 2, source: "strava_export", external_id: "999", ingested_at: "2026-04-18T00:00:00Z", can_split: true },
+      {
+        link_id: 1,
+        source: "fit_folder",
+        external_id: "abc",
+        ingested_at: "2025-06-01T00:00:00Z",
+        can_split: true,
+      },
+      {
+        link_id: 2,
+        source: "strava_export",
+        external_id: "999",
+        ingested_at: "2026-04-18T00:00:00Z",
+        can_split: true,
+      },
     ],
     merge_decisions: [
-      { candidate_ref: "2026-04-17T22:17:09", reasons: ["start_time delta 0s <= 180s", "sport family match"], decided_at: "2026-04-18T00:00:00Z" },
+      {
+        candidate_ref: "2026-04-17T22:17:09",
+        reasons: ["start_time delta 0s <= 180s", "sport family match"],
+        decided_at: "2026-04-18T00:00:00Z",
+      },
     ],
     ...overrides,
   };
@@ -50,7 +66,13 @@ describe("ActivitySourcesPanel", () => {
       <ActivitySourcesPanel
         sources={sources({
           sources: [
-            { link_id: 1, source: "fit_folder", external_id: "abc", ingested_at: "2025-06-01T00:00:00Z", can_split: false },
+            {
+              link_id: 1,
+              source: "fit_folder",
+              external_id: "abc",
+              ingested_at: "2025-06-01T00:00:00Z",
+              can_split: false,
+            },
           ],
         })}
         onSplit={vi.fn()}
