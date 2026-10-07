@@ -257,3 +257,10 @@ from the same file; see [docs/DEPLOY.md](docs/DEPLOY.md).
 Python 3.12, FastAPI, SQLAlchemy Core, Alembic, SQLite (WAL), Parquet/PyArrow, DuckDB, APScheduler,
 the official MCP SDK · React 19, TypeScript, Vite, TanStack Query, Recharts, Leaflet + MapLibre ·
 nginx, Podman/Docker, systemd Quadlet, GitHub Actions, GHCR.
+
+## License
+
+[Apache License 2.0](LICENSE). You may use, modify and redistribute Perseverer, including
+commercially, provided you keep the copyright and license notices, ship the [NOTICE](NOTICE) file
+with any redistribution or derivative work (crediting the original project), and state the files
+you changed.
