@@ -1,5 +1,9 @@
 # Architecture
 
+The goal of Perseverer is to replace Garmin Connect, Strava and intervals.icu with a single,
+self-hosted app: the device and health data of the first, the activity history and records of the
+second, and the training analytics and workout planning of the third, in one archive you own.
+
 Perseverer is a self-hosted platform that collects everything a sports watch and its companion
 services know about you, keeps the original bytes forever, and turns them into a fast web app, a
 REST API and an MCP server an AI agent can work with.

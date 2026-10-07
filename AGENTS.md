@@ -3,7 +3,8 @@
 Guidance for anyone changing Perseverer: human contributors and coding agents alike (Claude Code
 reads this through `CLAUDE.md`; Codex, Cursor, Gemini CLI and Copilot read it directly).
 
-Perseverer is a self-hosted fitness and health platform: Garmin, Strava, Apple Health, a Eufy
+The goal of Perseverer is to replace Garmin Connect, Strava and intervals.icu with a single
+self-hosted app. It is a fitness and health platform: Garmin, Strava, Apple Health, a Eufy
 scale and the Kaya climbing logbook in; one owned archive (raw files + SQLite + Parquet); a REST
 API, an MCP server and a React web app out. Start with
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

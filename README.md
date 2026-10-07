@@ -1,5 +1,19 @@
 # Perseverer
 
+**The goal of Perseverer is to replace Garmin Connect, Strava and intervals.icu with a single app
+that you own.** Instead of spreading your training across three services, each holding part of
+your history behind its own account, Perseverer brings it together in one place:
+
+- **Instead of Garmin Connect:** your activities, sleep, HRV, body battery and daily health
+  metrics, and structured workouts and courses sent to your watch.
+- **Instead of Strava:** a complete activity history with maps, records, insights, recaps and
+  share links, including everything from your Strava export.
+- **Instead of intervals.icu:** Fitness & Form (CTL/ATL/TSB), training zones, performance
+  curves, race predictions, goals, and a calendar where you plan workouts in a text syntax.
+
+Your watch still uploads to Garmin Connect, and Perseverer syncs from it in the background: you
+keep the device ecosystem but no longer need the three apps to see, analyse or plan your training.
+
 **Own your training data.** Perseverer is a self-hosted fitness and health platform: it pulls
 everything your Garmin watch, your smart scale and your climbing logbook record, keeps the
 original files forever, and turns them into a fast calendar-centred web app, a REST API and an
@@ -260,7 +274,9 @@ nginx, Podman/Docker, systemd Quadlet, GitHub Actions, GHCR.
 
 ## License
 
-[Apache License 2.0](LICENSE). You may use, modify and redistribute Perseverer, including
+[Apache License 2.0](LICENSE). Perseverer is an independent project, not affiliated with or
+endorsed by Garmin, Strava or intervals.icu; their names are used only to describe what it
+replaces. You may use, modify and redistribute Perseverer, including
 commercially, provided you keep the copyright and license notices, ship the [NOTICE](NOTICE) file
 with any redistribution or derivative work (crediting the original project), and state the files
 you changed.
