@@ -154,6 +154,7 @@ export function PersonalizeCard() {
             <option value="month">Month view</option>
             <option value="day">Day view</option>
             <option value="activities">Activities view</option>
+            <option value="last_activity">Last activity imported</option>
           </select>
         </label>
 

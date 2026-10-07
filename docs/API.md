@@ -225,6 +225,16 @@ dashboard load. Excludes any activity that already has a trim recorded.
 
 **Response `200`:** `array<TrimCandidateOut>`, most recent first.
 
+### `GET /activities/last-imported`
+
+The activity whose source file was imported most recently — used by the "Last activity imported"
+starting page. Ranked by when the raw file was archived (`raw_object.fetched_at`, which survives a
+rebuild), not by when the activity happened, so a history import of an old run makes that run the
+answer. A merged activity counts its most recently imported source; deleted activities are ignored.
+
+**Response `200`:** `LastImportedActivityOut` — `id`, `name`, `sport`, `local_date`,
+`start_time_utc`, `imported_at`. **`404`** when the athlete has no activities.
+
 ### `GET /activities/possible-duplicates`
 
 Settings page's list-wide scan for cross-source duplicate activities never merged at ingest time
@@ -1697,7 +1707,8 @@ only by the frontend's own rendering. `unit_preference` is the `athlete.unit_pre
 
 **Response `200`:** `PersonalizeSettingsOut` — `week_start_day` (`"monday"|"sunday"`, default
 `"monday"`), `time_format` (`"24h"|"12h"`, default `"24h"`), `default_view`
-(`"week"|"month"|"day"|"activities"`, default `"week"`), `unit_preference`
+(`"week"|"month"|"day"|"activities"|"last_activity"`, default `"week"`;
+`"last_activity"` opens the activity from `GET /activities/last-imported`), `unit_preference`
 (`"metric"|"imperial"`, default `"metric"`).
 
 ### `PUT /settings/personalize`

@@ -758,7 +758,7 @@ backend computations.
 |---|---|---|
 | `athlete.week_start_day` | `monday`, `sunday` | `monday` |
 | `athlete.time_format` | `24h`, `12h` | `24h` |
-| `athlete.default_view` | `week`, `month`, `day`, `activities` | `week` |
+| `athlete.default_view` | `week`, `month`, `day`, `activities`, `last_activity` (most recently imported activity) | `week` |
 | `athlete.unit_preference` | `metric`, `imperial` | `metric` |
 
 All backend weekly data (rollups, week notes, race readiness, email reports, share pages) stays

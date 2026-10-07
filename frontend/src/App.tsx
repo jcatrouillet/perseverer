@@ -1,9 +1,10 @@
 import { lazy, Suspense } from "react";
-import { Link, Route, Switch, useLocation } from "wouter";
+import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 
 import { AuthGate } from "./components/AuthGate";
 import { GearAlertBanner } from "./components/GearAlertBanner";
 import { Icon, type IconName } from "./components/Icon";
+import { useLastImportedActivity } from "./api/queries";
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import { LogoutButton } from "./components/LogoutButton";
 import { localIsoDate } from "./dateUtils";
@@ -78,7 +79,19 @@ function DefaultLandingPage() {
   if (defaultView === "activities") {
     return <ActivityListPage />;
   }
+  if (defaultView === "last_activity") {
+    return <LastImportedActivityLanding />;
+  }
   return <WeekView date={localIsoDate(today)} />;
+}
+
+// "Last activity imported": redirects to that activity's page (a real URL, so Back and sharing
+// behave normally). With no activities yet, or if the lookup fails, falls back to the week view.
+function LastImportedActivityLanding() {
+  const last = useLastImportedActivity();
+  if (last.isPending) return <LoadingSpinner />;
+  if (last.data) return <Redirect to={`/activities/${last.data.id}`} replace />;
+  return <WeekView date={localIsoDate(new Date())} />;
 }
 
 function NavLink({

@@ -178,14 +178,14 @@ class AthleteProfileOut(BaseModel):
 class PersonalizeSettingsIn(BaseModel):
     week_start_day: Literal["monday", "sunday"] = "monday"
     time_format: Literal["24h", "12h"] = "24h"
-    default_view: Literal["week", "month", "day", "activities"] = "week"
+    default_view: Literal["week", "month", "day", "activities", "last_activity"] = "week"
     unit_preference: Literal["metric", "imperial"] = "metric"
 
 
 class PersonalizeSettingsOut(BaseModel):
     week_start_day: Literal["monday", "sunday"]
     time_format: Literal["24h", "12h"]
-    default_view: Literal["week", "month", "day", "activities"]
+    default_view: Literal["week", "month", "day", "activities", "last_activity"]
     unit_preference: Literal["metric", "imperial"]
 
 

@@ -415,7 +415,17 @@ export interface AthleteProfileIn {
 
 export type WeekStartDay = "monday" | "sunday";
 export type TimeFormat = "24h" | "12h";
-export type DefaultView = "week" | "month" | "day" | "activities";
+export type DefaultView = "week" | "month" | "day" | "activities" | "last_activity";
+
+/** GET /activities/last-imported -- the activity whose source file was imported most recently. */
+export interface LastImportedActivityOut {
+  id: string;
+  name: string | null;
+  sport: string;
+  local_date: string | null;
+  start_time_utc: string;
+  imported_at: string;
+}
 export type UnitPreference = "metric" | "imperial";
 
 // GET/PUT /settings/personalize -- pure display preferences (never read by any backend

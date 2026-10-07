@@ -63,6 +63,7 @@ from perseverer.api.schemas.activities import (
     DuplicatePairOut,
     FieldComparisonOut,
     LapOut,
+    LastImportedActivityOut,
     RouteOut,
     SplitOut,
     TransportMixFlagOut,
@@ -691,6 +692,49 @@ def list_trim_candidates(
         )
     candidates.sort(key=lambda c: c.start_time_utc, reverse=True)
     return candidates
+
+
+# Registered before /activities/{activity_id} for the same route-ordering reason as
+# /activities/needs-trim above.
+@router.get("/activities/last-imported")
+def get_last_imported_activity(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> LastImportedActivityOut:
+    """The activity whose source data was imported most recently -- the "Last activity imported"
+    starting page. Import time is when the raw file was first archived (`raw_object.fetched_at`,
+    restored from the sidecars by a rebuild), falling back to the source link's own `ingested_at`;
+    an activity merged from several sources counts its latest import. 404 with no activities."""
+    imported_at = func.max(
+        func.coalesce(raw_object.c.fetched_at, activity_source_link.c.ingested_at)
+    )
+    row = conn.execute(
+        select(
+            activity.c.id,
+            activity.c.name,
+            activity.c.sport,
+            activity.c.local_date,
+            activity.c.start_time_utc,
+            imported_at.label("imported_at"),
+        )
+        .select_from(activity)
+        .join(activity_source_link, activity_source_link.c.activity_id == activity.c.id)
+        .outerjoin(raw_object, raw_object.c.id == activity_source_link.c.raw_object_id)
+        .where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
+        .group_by(activity.c.id)
+        .order_by(imported_at.desc(), activity.c.start_time_utc.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no activities")
+    return LastImportedActivityOut(
+        id=row.id,
+        name=row.name,
+        sport=row.sport,
+        local_date=row.local_date,
+        start_time_utc=to_utc(row.start_time_utc),
+        imported_at=to_utc(row.imported_at),
+    )
 
 
 # Registered before /activities/{activity_id} for the same route-ordering reason as

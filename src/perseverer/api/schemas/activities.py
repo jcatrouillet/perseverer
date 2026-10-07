@@ -111,6 +111,18 @@ class DuplicatePairOut(BaseModel):
     activity_b: DuplicateCandidateOut
 
 
+class LastImportedActivityOut(BaseModel):
+    # GET /activities/last-imported -- the activity whose source file was archived most recently
+    # (raw_object.fetched_at, which survives a rebuild), for the "Last activity imported"
+    # starting page.
+    id: str
+    name: str | None
+    sport: str
+    local_date: str | None
+    start_time_utc: datetime
+    imported_at: datetime
+
+
 class TrimCandidateOut(BaseModel):
     # One activity transport_mix.detect_transport_mix flagged, from the Settings page's
     # list-wide scan -- everything the detail-page's own TransportMixFlagOut carries, plus

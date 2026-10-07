@@ -162,8 +162,8 @@ step-by-step instructions.
 - **External tools:** connect Garmin, Kaya and the Eufy scale from the Settings page, sync on
   demand, upload Garmin or Strava exports (Apple Health from the CLI), or rebuild the whole
   database from the archive.
-- **Personalize:** week start, 12/24-hour time, kilometres or miles, starting page, light or dark
-  theme.
+- **Personalize:** week start, 12/24-hour time, kilometres or miles, starting page (week, month, day,
+  activity list, or the last activity imported), light or dark theme.
 - **Profile and physical profile:** home location and time zone (for forecasts), birthdate,
   height and sex (for estimates before real data exists), heart-rate zones, and your threshold
   pace, which switches running load to a pace-based TSS.

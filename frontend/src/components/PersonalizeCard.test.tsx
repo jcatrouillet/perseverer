@@ -67,6 +67,22 @@ describe("PersonalizeCard", () => {
     });
   });
 
+  it("offers the last imported activity as a starting page", () => {
+    settingsState = {
+      data: settings({ default_view: "last_activity" }),
+      isLoading: false,
+      isSuccess: true,
+    };
+    render(<PersonalizeCard />);
+    const select = screen.getByLabelText("Starting page");
+    expect(select).toHaveValue("last_activity");
+    expect(screen.getByRole("option", { name: "Last activity imported" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockSetMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ default_view: "last_activity" }),
+    );
+  });
+
   it("defaults to Monday/24h/Week/km before any settings have loaded", () => {
     settingsState = { data: undefined, isLoading: true, isSuccess: false };
     render(<PersonalizeCard />);

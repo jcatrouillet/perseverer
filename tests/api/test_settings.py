@@ -637,6 +637,26 @@ def test_personalize_put_stores_and_returns_the_values(
     )
 
 
+def test_personalize_accepts_last_activity_as_starting_page(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    body = {
+        "week_start_day": "monday",
+        "time_format": "24h",
+        "default_view": "last_activity",
+        "unit_preference": "metric",
+    }
+    r = client.put("/api/v1/settings/personalize", json=body, headers=auth_headers)
+    assert r.status_code == 200
+    assert client.get("/api/v1/settings/personalize", headers=auth_headers).json() == body
+    bad = client.put(
+        "/api/v1/settings/personalize",
+        json={**body, "default_view": "somewhere"},
+        headers=auth_headers,
+    )
+    assert bad.status_code == 422
+
+
 def test_personalize_put_defaults_every_field_when_omitted(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:

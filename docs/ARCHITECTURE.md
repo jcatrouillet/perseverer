@@ -347,7 +347,8 @@ Recharts for charts, Leaflet with a MapLibre-rendered CARTO vector basemap for m
   share or OAuth navigations.
 - **Code splitting:** every page except the week and month calendar views is lazy-loaded, as are
   the exercise catalog and the map libraries, keeping the first load small.
-- **Personalization:** week start, 12/24-hour time, km or miles, starting page, light/dark theme.
+- **Personalization:** week start, 12/24-hour time, km or miles, starting page (calendar view, activity list, or the last
+  activity imported), light/dark theme.
 - **Design system:** each metric has one hue and icon everywhere (`metricStyle.ts`), light and dark
   themes from shared tokens.
 - **Lean payloads:** calendar and sleep requests ask the API to omit per-day health rollups and

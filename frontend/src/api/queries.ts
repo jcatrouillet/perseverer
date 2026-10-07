@@ -61,6 +61,7 @@ import type {
   HealthDashboardOut,
   HealthObservationOut,
   HealthStreamResponse,
+  LastImportedActivityOut,
   HrZoneConfigIn,
   HrZoneConfigOut,
   InsightOut,
@@ -320,6 +321,16 @@ export function useAllActivities(filters: Omit<ActivityFilters, "limit" | "offse
       }
       return items;
     },
+  });
+}
+
+/** The most recently imported activity, for the "Last activity imported" starting page. A 404
+ * (no activities yet) is a normal answer, so it is not retried. */
+export function useLastImportedActivity() {
+  return useQuery({
+    queryKey: ["activity-last-imported"],
+    queryFn: () => apiGet<LastImportedActivityOut>("/api/v1/activities/last-imported"),
+    retry: false,
   });
 }
 

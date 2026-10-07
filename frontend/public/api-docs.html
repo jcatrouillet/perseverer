@@ -711,6 +711,14 @@ const SCHEMAS = [
       ["distance_m","number|null",""],
       ["duration_s","number|null",""],
     ] },
+  { name: "LastImportedActivityOut", note: "GET /activities/last-imported.", fields: [
+      ["id","string","Activity ULID."],
+      ["name","string|null","Activity name."],
+      ["sport","string","Sport."],
+      ["local_date","string|null","Local date of the activity."],
+      ["start_time_utc","datetime","Start time, UTC."],
+      ["imported_at","datetime","When its newest source file was imported, UTC."],
+    ] },
   { name: "DuplicatePairOut", note: "One relationship from GET /activities/possible-duplicates.", fields: [
       ["activity_a","DuplicateCandidateOut",""],
       ["activity_b","DuplicateCandidateOut",""],
@@ -1217,7 +1225,7 @@ const SCHEMAS = [
   { name: "PersonalizeSettingsOut", note: "Returned by GET and PUT /settings/personalize. Pure display preferences -- unlike AthleteProfileOut's fields, none of these four are ever read by any backend computation, only by the frontend's own rendering. unit_preference reuses the athlete.unit_preference column sync athlete create has always set, previously never read anywhere in the app.", fields: [
       ["week_start_day","string","\"monday\" or \"sunday\". Default \"monday\"."],
       ["time_format","string","\"24h\" or \"12h\". Default \"24h\"."],
-      ["default_view","string","\"week\", \"month\", \"day\", or \"activities\" -- which page the app lands on by default. Default \"week\"."],
+      ["default_view","string","\"week\", \"month\", \"day\", \"activities\", or \"last_activity\" (the most recently imported activity) -- which page the app lands on by default. Default \"week\"."],
       ["unit_preference","string","\"metric\" or \"imperial\" -- km vs. miles for every distance/pace/speed display. Default \"metric\"."],
     ] },
   { name: "WeatherForecastOut", note: "Returned by GET /weather/forecast. See “available: false” in Conventions -- false when the athlete hasn't set a home location (home_lat/home_lon on PUT /settings/profile) or the coarse-forecast Open-Meteo fetch failed. Deliberately not archived or cached, unlike every other Open-Meteo response in this API -- see docs/DATA_DICTIONARY.md's own Weather forecast section.", fields: [
@@ -1527,6 +1535,11 @@ const GROUPS = [
     { method: "GET", path: "/api/v1/activities/needs-trim", summary: "Settings page's list-wide scan for likely car-travel-tainted recordings.",
       description: "Every hiking/walking activity likely to include a stretch of car travel (the same heuristic ActivityDetail.transport_mix_flag applies per-activity), excluding any that already has a trim recorded. A deliberate exception to this app's usual never-scan-list-wide rule — cheap enough (~0.9s over ~360 eligible activities) for a page visited occasionally rather than on every dashboard load.",
       responses: [ { code: 200, ref: "array&lt;TrimCandidateOut&gt;", note: "most recent first" } ],
+      example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/last-imported", summary: "The most recently imported activity.",
+      description: "The activity whose source file was imported most recently, used by the \"Last activity imported\" starting page. Ranked by when the raw file was archived (survives a rebuild), not by when the activity happened. A merged activity counts its most recently imported source; deleted activities are ignored.",
+      responses: [ { code: 200, ref: "LastImportedActivityOut" }, { code: 404, note: 'detail: "no activities"' } ],
       example: {}
     },
     { method: "GET", path: "/api/v1/activities/possible-duplicates", summary: "Settings page's list-wide scan for cross-source duplicates.",
@@ -2502,7 +2515,7 @@ const GROUPS = [
       body: { schema: "PersonalizeSettingsIn", fields: [
         ["week_start_day","string","opt","\"monday\"","\"monday\" or \"sunday\"."],
         ["time_format","string","opt","\"24h\"","\"24h\" or \"12h\"."],
-        ["default_view","string","opt","\"week\"","\"week\", \"month\", \"day\", or \"activities\"."],
+        ["default_view","string","opt","\"week\"","\"week\", \"month\", \"day\", \"activities\", or \"last_activity\"."],
         ["unit_preference","string","opt","\"metric\"","\"metric\" or \"imperial\"."],
       ]},
       responses: [ { code: 200, ref: "PersonalizeSettingsOut" }, { code: 422, note: "A value outside the closed set for any field." } ],
