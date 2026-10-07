@@ -1,5 +1,5 @@
 """garmin_export tests: nested-directory FIT discovery, nested-zip FIT discovery (real GDPR
-export shape -- see docs/adr/0005-phase-2-garmin-export-real-data.md), filename-based
+export shape -- docs/ARCHITECTURE.md), filename-based
 external_id, GDPR export health JSON recognition, last_full_export_at, and idempotent
 re-import — all using the committed synthetic fixtures, never real personal data.
 """
@@ -107,13 +107,13 @@ def test_recursive_fit_discovery_and_filename_external_id(tmp_path: Path) -> Non
     assert summary.errors == []
     assert link == "55501234"  # from the filename, not derived from FIT content
     assert json_raw == "garmin_export_json"  # DI-Connect-User: not recognized, archived raw
-    # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation.
+    # Proves the rollup-refresh wiring end to end, not just in isolation.
     assert len(rollup_rows) == 1
     assert rollup_rows[0].activity_count == 1
 
 
 def test_nested_zip_fit_is_discovered_and_ingested(tmp_path: Path) -> None:
-    """Real GDPR exports bury FIT files one zip-level deeper (see ADR 0005) -- confirm the
+    """Real GDPR exports bury FIT files one zip-level deeper -- confirm the
     recursive extraction pre-pass finds them and routes them through the unified dispatch,
     deriving external_id from the real "<email>_<id>.fit" naming."""
     uploaded_dir = tmp_path / "src" / "DI_CONNECT" / "DI-Connect-Uploaded-Files"

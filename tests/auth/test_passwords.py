@@ -1,4 +1,4 @@
-"""Tests for auth/passwords.py -- PBKDF2 password hashing (Phase 5, ADR 0008)."""
+"""Tests for auth/passwords.py -- PBKDF2 password hashing."""
 
 from perseverer.auth.passwords import hash_password, verify_password
 

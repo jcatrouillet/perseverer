@@ -1,7 +1,7 @@
 // The GPX route on a planned running workout: a small map with the route's name, distance and
 // climb, plus Attach/Replace/Remove. Purely presentational (like BoulderingRoutesTable) -- the
 // caller owns the mutations. The route is for the athlete's own reference on the calendar; it is
-// not sent to the watch (see docs/adr/0017-planned-workout-gpx-route.md).
+// not sent to the watch (docs/ARCHITECTURE.md).
 import { useRef } from "react";
 
 import type { PlannedRouteOut } from "../api/types";

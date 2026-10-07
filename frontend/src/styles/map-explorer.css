@@ -1,4 +1,4 @@
-/* MapExplorerPage (Phase 7 Milestone A). Leaflet needs an explicit pixel/viewport height on its
+/* MapExplorerPage. Leaflet needs an explicit pixel/viewport height on its
    container -- it can't infer one from surrounding flow the way normal block content does. */
 
 .map-explorer__count {

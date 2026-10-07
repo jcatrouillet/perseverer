@@ -1,4 +1,4 @@
-// One insight (Phase 8 insight engine -- see docs/adr/0012-phase-8-strava-merge-insights.md),
+// One insight (rules engine, docs/ARCHITECTURE.md),
 // presented on the same icon-chip/tone system every other card in this app already uses. Links
 // to its subject activity when one exists; otherwise renders as a plain (non-clickable) card.
 import { Link } from "wouter";

@@ -664,7 +664,7 @@ def post_recurring_planned_workout(
     conn: Connection = Depends(get_conn),
 ) -> RecurringWorkoutOut:
     """Materializes one independent `planned_workout` row per occurrence date -- not a
-    recurring-rule object (see docs/adr/0015-scheduled-workouts.md's own "Copy/paste ... and
+    recurring-rule object (docs/ARCHITECTURE.md's own "Copy/paste ... and
     repeating a schedule" section). Always creates a new row, even on a date that already has a
     workout scheduled -- a day can hold more than one now, so there's nothing to skip."""
     try:

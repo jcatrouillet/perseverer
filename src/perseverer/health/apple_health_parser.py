@@ -65,7 +65,7 @@ def _parse_observed_at_utc(start_date: str | None) -> tuple[datetime, str] | Non
         return None
     observed_at_utc = parsed.astimezone(UTC).replace(tzinfo=None)
     # Naive UTC-date truncation, matching eufy_parser.py's own convention -- health data
-    # deliberately doesn't apply the offset-adjusted conversion activity.local_date uses (ADR
+    # deliberately doesn't apply the offset-adjusted conversion activity.local_date uses (see
     # 0009).
     local_date = observed_at_utc.date().isoformat()
     return observed_at_utc, local_date

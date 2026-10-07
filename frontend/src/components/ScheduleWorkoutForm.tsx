@@ -1,5 +1,5 @@
 // The "Planned workout" section of MonthView's expanded-day card and DayViewPage
-// (docs/adr/0015-scheduled-workouts.md): shows every workout scheduled for a date (a day can
+// (docs/ARCHITECTURE.md): shows every workout scheduled for a date (a day can
 // hold more than one, each independently id-addressed) + its push status, or a "Schedule a
 // workout" affordance if none exist yet. Three sport tiers, matching
 // planned_workouts.py::save_planned_workout: running gets the full text-syntax editor + live

@@ -1,6 +1,6 @@
 // Grade Adjusted Pace -- the equivalent flat-ground pace that represents the same physiological
 // effort as running at a given grade. No raw field exists anywhere in this archive (confirmed:
-// zero GAP/Performance-Condition/Stamina fields in FIT or JSON sources -- ADR 0010's real-data
+// zero GAP/Performance-Condition/Stamina fields in FIT or JSON sources -- the design doc's real-data
 // inventory), so this is computed client-side from elevation+distance stream data. Shared by the
 // per-km splits panel (ActivityRouteMap/SplitsTable), the GAP chart panel, and the Intervals
 // table's per-lap GAP column (ActivityDetailPage.tsx), so all three read the same effort model.

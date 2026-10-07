@@ -1,6 +1,6 @@
 """GET /calendar -- reads day_rollup/health_metric_daily_rollup only, no DuckDB, no
 request-time scan (AGENTS.md's rollup mandate). See
-docs/adr/0006-phase-3-read-api-and-rollups.md.
+docs/ARCHITECTURE.md.
 
 Every endpoint here takes `include_health_metrics` (default true, so API/MCP callers keep the
 full per-day/per-period health rollups). The web app passes false: it never reads them, and they

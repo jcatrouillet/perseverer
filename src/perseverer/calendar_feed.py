@@ -7,7 +7,8 @@ onto it -- this is one standing, athlete-scoped secret (same replace-on-rotate s
 `api/routers/settings.py` (the authenticated create/rotate/revoke routes).
 
 Deliberately never includes completed activities -- only `planned_workout`, the athlete's own
-authored training plan (see `planned_workouts.py` / ADR 0015). Google Calendar polls a subscribed
+authored training plan (see `planned_workouts.py` / docs/ARCHITECTURE.md). Google Calendar polls a
+subscribed
 feed URL roughly every 8-24h, not in real time, so this is called fresh on every request with no
 caching -- `planned_workout` is a small table with no rollup precedent of its own already (unlike
 the ~1,400+ day activity history tables this project does precompute).
@@ -15,7 +16,8 @@ the ~1,400+ day activity history tables this project does precompute).
 Event rendering, per sport tier (`planned_workouts.py::PLACEHOLDER_SPORTS`/`EXERCISE_SPORTS`):
 running/yoga/bouldering already have a human-readable `source_text` (workout syntax or freeform
 notes respectively -- used verbatim as the event DESCRIPTION); hiit/strength_training never has
-`source_text` at all ("steps arrive already-structured, never parsed from text" -- ADR 0015), so
+`source_text` at all ("steps arrive already-structured, never parsed from text" --
+docs/ARCHITECTURE.md), so
 `_render_exercise_description` is a purpose-built renderer for that one case rather than reusing
 `workout_syntax.py::steps_to_source_text` (shaped for *recorded*, pace-only steps -- a different
 domain from `planned_workout_step`'s reps/exercise/weight fields).

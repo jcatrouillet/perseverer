@@ -2,7 +2,7 @@
 # Regenerates config.js from PERSEVERER_API_BASE_URL/PERSEVERER_CARTO_API_KEY at container
 # START, not image build -- this is what makes the frontend's API base URL and CARTO basemap key
 # runtime-configurable rather than baked into the Vite build (docs/DEPLOY.md,
-# docs/adr/0008-phase-5-frontend.md). Runs via nginx's own stock docker-entrypoint.d mechanism
+# docs/ARCHITECTURE.md). Runs via nginx's own stock docker-entrypoint.d mechanism
 # (nginx:1.27-alpine), so we don't override the base image's ENTRYPOINT/CMD at all. Leaving both
 # vars unset keeps the image's committed frontend/public/config.js default untouched.
 set -eu

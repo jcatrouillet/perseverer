@@ -1,5 +1,5 @@
 """GET /settings/kaya/status, POST /settings/kaya/login, POST /settings/kaya/sync -- the Settings
-page's web counterparts of `sync auth kaya-login` / `sync import kaya` (ADR 0016). Kaya itself is
+page's web counterparts of `sync auth kaya-login` / `sync import kaya`. Kaya itself is
 never contacted: login and the import are patched at the router module."""
 
 from __future__ import annotations

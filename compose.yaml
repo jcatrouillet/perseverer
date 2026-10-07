@@ -1,15 +1,9 @@
 name: perseverer
 
-# Base service definitions, for local dev only (Windows/Podman Desktop) — see
-# compose.override.yml (auto-merged) for the published-port overlay. Production (bercy) uses
-# systemd Quadlet units instead (quadlet/), not Compose at all — see docs/DEPLOY.md. This file
-# used to also have a compose.nas.yml overlay for the original Synology deploy target; that's
-# gone now that production moved to bercy's Quadlet-based deploy, along with the
-# GHCR_IMAGE_PREFIX/IMAGE_TAG variables it alone used to reference (an earlier version of this
-# file referenced them directly here too — `${GHCR_IMAGE_PREFIX:-perseverer-api}:${IMAGE_TAG:-
-# local}` — which silently collapsed onto one shared image name once GHCR_IMAGE_PREFIX was set
-# for that overlay; decoupling local build tags from any registry prefix avoided that bug class,
-# and remains true now with no NAS overlay to decouple from at all).
+# Base service definitions, for local development (Docker or Podman Compose) — see
+# compose.override.yml (auto-merged) for the published-port overlay. Production uses systemd
+# Quadlet units instead (quadlet/), not Compose — see docs/DEPLOY.md. Local images are tagged
+# `perseverer-<service>:local`, independent of any registry prefix.
 
 services:
   api:
@@ -23,12 +17,12 @@ services:
       PERSEVERER_LOG_LEVEL: ${PERSEVERER_LOG_LEVEL:-INFO}
       PERSEVERER_API_PORT: ${PERSEVERER_API_PORT:-8000}
       # Unset -> every data route fails closed (503), never open. See
-      # docs/adr/0006-phase-3-read-api-and-rollups.md decision 6.
+      # docs/ARCHITECTURE.md.
       PERSEVERER_API_KEY: ${PERSEVERER_API_KEY:-}
       # Unset -> no CORS middleware at all (no cross-origin browser access by default).
       PERSEVERER_CORS_ALLOWED_ORIGINS: ${PERSEVERER_CORS_ALLOWED_ORIGINS:-}
       # Signs athlete login session JWTs (POST /auth/login). Unset -> that route 503s. See
-      # docs/adr/0008-phase-5-frontend.md.
+      # docs/ARCHITECTURE.md.
       PERSEVERER_JWT_SECRET: ${PERSEVERER_JWT_SECRET:-}
       PERSEVERER_JWT_EXPIRY_DAYS: ${PERSEVERER_JWT_EXPIRY_DAYS:-30}
       # Hardcoded, not templated from .env: this is the container-internal mount point
@@ -49,9 +43,9 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    # Phase 9 hardening (ADR 0014) -- mirrors quadlet/perseverer-api.container's
+    # Hardening -- mirrors quadlet/perseverer-api.container's
     # ReadOnly=true/ReadOnlyTmpfs=true/NoNewPrivileges=true, verified here first since Compose
-    # is dev's own deploy path (Windows/Podman Desktop) and bercy's production Quadlet units are
+    # is the dev host's own deploy path and the production Quadlet units are
     # the one place this can't be trial-and-errored against live data. Standard Compose Spec
     # syntax, not a Podman-specific flag, so this works identically under `docker compose` too
     # per this file's own header comment -- Compose has no equivalent of Podman CLI's
@@ -102,7 +96,7 @@ services:
       # Regenerates frontend/public/config.js at container start (docker/frontend-entrypoint.d)
       # -- never baked into the Vite build. Unset -> the image's committed dev-default
       # (http://localhost:8008) is served as-is, which only matters for a raw `docker run`
-      # without this compose file. See docs/DEPLOY.md and docs/adr/0008-phase-5-frontend.md.
+      # without this compose file. See docs/DEPLOY.md and docs/ARCHITECTURE.md.
       PERSEVERER_API_BASE_URL: ${PERSEVERER_API_BASE_URL:-}
 
 volumes:

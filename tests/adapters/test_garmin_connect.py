@@ -391,7 +391,7 @@ def test_sync_garmin_connect_full_orchestration_with_fake_client(tmp_path: Path)
         "garmin_connect_lactate_threshold_json",
         "garmin_connect_daily_stress_json",
     }
-    # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation --
+    # Proves the rollup-refresh wiring end to end, not just in isolation --
     # the daily-wellness loop now touches every date in the rolling window too (11 dates at
     # rolling_window_days=10), so more than one day_rollup row exists; the one for the activity's
     # own date (wherever the fixture's embedded date lands) is what actually matters here.
@@ -741,7 +741,7 @@ def test_hrv_429_aborts_the_run_without_retrying(tmp_path: Path) -> None:
 
 def test_wellness_alone_triggers_the_rollup_refresh_chain(tmp_path: Path) -> None:
     """Zero new activities, one day of wellness data -- touched_dates from wellness alone must
-    still drive refresh_daily_and_period_rollups (ADR 0006 decision 3), the same as an
+    still drive refresh_daily_and_period_rollups, the same as an
     activity-touched date would."""
     today = dt.datetime.now(dt.UTC).date().isoformat()
 

@@ -20,7 +20,7 @@ import { effectiveDurationS, formatMinPerKm, gapPaceMinPerKm, isPaceSport } from
 
 // Mirrors gap.py::AVG_GAP_METRIC_KEY and routers/activities.py::CADENCE_METRIC_KEY exactly --
 // duplicated string literals, not a shared constant module, matching how ActivityStatsGrid.tsx
-// already reads every other fit.session.* key directly (ADR 0012's cross-module precedent).
+// already reads every other fit.session.* key directly (the design doc's cross-module precedent).
 const AVG_GAP_METRIC_KEY = "perseverer.performance.avg_gap_speed_mps";
 const CADENCE_METRIC_KEY = "fit.session.avg_running_cadence";
 

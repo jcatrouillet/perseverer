@@ -1,6 +1,6 @@
 // A small, non-interactive route thumbnail for the activity list and day view -- the user's own
 // framing ("a map of the activities... must be shown... central to this app"). Reuses the same
-// Leaflet + public OSM tile stack MapExplorerPage already verified (ADR 0011 decision 1/2), just
+// Leaflet + public OSM tile stack MapExplorerPage already verified (docs/ARCHITECTURE.md/2), just
 // with all interaction disabled and zoomed to fit the one route via `decodePolyline()`.
 //
 // CARTO's Positron basemap (a much lower-detail tile set -- no building outlines/POI icons/
@@ -37,7 +37,7 @@ export function ActivityMap({
   encodedPolyline: string;
   /** The route's stroke colour -- callers pass `toneColor(sportStyle(activity.sport).tone)` so
    * a run's thumbnail route reads in the same hue as its sport icon everywhere else in the app,
-   * rather than this component inventing its own decorative colour (ADR 0010's "a hue always
+   * rather than this component inventing its own decorative colour (the design doc's "a hue always
    * identifies a metric" rule). */
   color: string;
 }) {

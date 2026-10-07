@@ -1,5 +1,5 @@
 """Kaya ingest: parse/store idempotency, grade mapping, and the local-date merge with Garmin
-bouldering activities (ADR 0016)."""
+bouldering activities."""
 
 from __future__ import annotations
 

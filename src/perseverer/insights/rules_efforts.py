@@ -4,7 +4,7 @@ avg/max heart rate (both directions), avg/max cadence, elevation gained/lost, hi
 reached, calories burned, start-time-of-day
 (earliest/latest), and outside temperature (hottest/coldest). One generic `find_extreme`
 function driven by a declarative `_DIMENSIONS` table, not one hand-written function per
-combination -- see ADR 0012.
+combination -- see docs/ARCHITECTURE.md.
 
 Distance/duration/pace/HR/cadence/elevation dimensions are scoped within the same sport family
 (comparing a hike's elevation gain to a run's is not a meaningful "record") -- one insight per

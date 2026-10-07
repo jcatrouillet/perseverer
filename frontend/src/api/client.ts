@@ -1,7 +1,7 @@
 // Thin fetch wrapper: attaches whichever credential is in localStorage (a JWT from
 // POST /auth/login, or a pasted per-athlete API key -- see components/AuthGate.tsx) and
 // branches on 401 vs 503 rather than treating every failure alike. See
-// docs/adr/0008-phase-5-frontend.md.
+// docs/ARCHITECTURE.md.
 import type { LoginRequest, LoginResponse } from "./types";
 
 const JWT_STORAGE_KEY = "perseverer_jwt";

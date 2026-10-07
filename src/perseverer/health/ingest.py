@@ -25,7 +25,7 @@ class HealthIngestResult:
     sleep_sessions_new: int = 0
     # Distinct local_dates that gained a new observation/sleep session -- what callers
     # accumulate across an ingest run and feed to rollups.refresh_daily_rollup once each. See
-    # docs/adr/0006-phase-3-read-api-and-rollups.md decision 3.
+    # docs/ARCHITECTURE.md.
     affected_local_dates: set[str] = field(default_factory=set)
 
 

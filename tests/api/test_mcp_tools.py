@@ -2,7 +2,7 @@
 direct call, not through the MCP wire protocol -- that's the SDK's own responsibility to get
 right, not something this project needs to re-test. Reuses tests/api/conftest.py's
 client/engine/duckdb_con/seed_activity fixtures unchanged -- see
-docs/adr/0007-phase-4-mcp-server.md decision 6 for why that works.
+docs/ARCHITECTURE.md for why that works.
 """
 
 from __future__ import annotations

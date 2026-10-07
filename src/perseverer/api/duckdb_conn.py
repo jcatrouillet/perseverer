@@ -1,5 +1,5 @@
 """DuckDB connection setup for the read API's stream-downsampling endpoint -- the only place
-this project uses DuckDB (see docs/adr/0006-phase-3-read-api-and-rollups.md decisions 3-4).
+this project uses DuckDB (docs/ARCHITECTURE.md).
 
 Behavior below was verified directly against the installed `duckdb` package (ATTACH syntax,
 `.cursor()` semantics, the timestamp-CAST and extension-network gotchas) rather than recalled
@@ -22,13 +22,13 @@ def make_duckdb_connection(
 
     `extension_dir`, when set, points at a directory the "sqlite" extension was pre-installed
     into at Docker build time (`api.Dockerfile`) -- production must never fetch it over the
-    network at request/startup time, since the NAS container has no reason to have outbound
+    network at request/startup time, since the production container has no reason to have outbound
     internet and images are never built there. Local dev (extension_dir=None) installs it
-    on first use instead, which is fine off the NAS.
+    on first use instead, which is fine on the dev host.
 
     `temp_directory` is set explicitly under `db_path`'s own parent (i.e. `/data` in production)
-    rather than left at DuckDB's own default (the current working directory) -- Phase 9's
-    container hardening (ADR 0014) makes the API container's root filesystem read-only, and
+    rather than left at DuckDB's own default (the current working directory) -- the
+    container hardening makes the API container's root filesystem read-only, and
     `/data` is the one bind mount that stays writable, so a query large enough to spill to disk
     needs an explicit writable path or it would otherwise try (and fail) to write under the
     now-read-only `/app`.

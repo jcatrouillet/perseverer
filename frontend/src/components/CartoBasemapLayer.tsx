@@ -3,11 +3,11 @@
 // @maplibre/maplibre-gl-leaflet -- lets ActivityRouteMap.tsx's detail view and MapExplorerPage
 // keep their own Polyline/Marker/CircleMarker/Popup components completely unchanged, swapping out
 // only the basemap layer itself. Replaces CARTO's pre-rendered raster PNG tiles
-// (docs/adr/0011-phase-7-map-recaps-pwa.md decision 1's original choice for MapExplorerPage;
+// (docs/ARCHITECTURE.md's original choice for MapExplorerPage;
 // ActivityRouteMap independently landed on the same raster CARTO tileset later) now that a real
 // CARTO API key is configured -- crisper at high zoom, one shared vector tileset instead of
 // per-zoom-level pre-rendered PNGs, and no more anonymous-tier rate-limiting risk. A deliberate
-// revision of that ADR decision, not a new phase.
+// revision of that decision.
 //
 // Deliberately NOT used by ActivityMap.tsx's route thumbnail, even though it renders the exact
 // same Positron style: a WebGL context is a scarce, page-wide resource (Chrome caps live

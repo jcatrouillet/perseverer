@@ -1,6 +1,6 @@
 """The Eufy Life adapter: syncs body-composition readings (weight, body fat, muscle mass, and
 ~20 other fields -- see health/eufy_parser.py) from a Eufy smart scale, via the same Eufy Life
-mobile-app API the sibling `eufy-health-sync` project already uses in production to upload this
+mobile-app API an existing Eufy sync tool already uses in production to upload this
 data *into* Garmin/intervals.icu. That project is this adapter's own source of truth for the
 API's real shape (endpoints, auth flow, field names) -- ported directly, not reimplemented from
 scratch, though this adapter reads *every* field the API returns rather than the 9 that project
@@ -8,7 +8,7 @@ extracts (see the parser's own docstring).
 
 Unlike `garmin_connect.py`, this is deliberately NOT built around a persisted token store with
 "never auto-login" as a hard rule -- there's no evidence Eufy's API shares Garmin's SSO 429-lockout
-fragility, and the sibling project has run a fresh email/password login on every scheduled run for
+fragility, and that tool has run a fresh email/password login on every scheduled run for
 months without incident. `sync_eufy()` simply skips (logs, doesn't raise) when credentials aren't
 configured, so a deployment with no Eufy account attached is unaffected.
 

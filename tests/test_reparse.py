@@ -1,5 +1,5 @@
 """Tests for reparse.py -- specifically that both FIT raw_object kinds this app has ever
-archived under ("fit", the current unified kind, and "fit_activity", the Phase 1 kind still real
+archived under ("fit", the current unified kind, and "fit_activity", the older kind still real
 for anything ingested before that unification) parse identically. Caught by a real
 activity_trim.py::clear_activity_trim call against a genuinely old activity in this athlete's own
 archive failing with "raw bytes no longer parse as an activity" despite the bytes themselves

@@ -1056,7 +1056,7 @@ def test_send_report_email_starttls_path(conn: Connection, monkeypatch: pytest.M
     _seed_week_rollup(conn)
     monkeypatch.setattr("perseverer.email_delivery.smtplib.SMTP", _FakeSMTP)
     settings = Settings(
-        smtp_host="ssl0.ovh.net",
+        smtp_host="smtp.example.com",
         smtp_port=587,
         smtp_username="me@example.com",
         smtp_password="secret",
@@ -1065,7 +1065,7 @@ def test_send_report_email_starttls_path(conn: Connection, monkeypatch: pytest.M
     )
     send_report_email(settings, conn, athlete_id=DEFAULT_ATHLETE_ID, kind="weekly", today=SUNDAY)
     smtp = _FakeSMTP.instances[0]
-    assert (smtp.host, smtp.port) == ("ssl0.ovh.net", 587)
+    assert (smtp.host, smtp.port) == ("smtp.example.com", 587)
     assert smtp.started_tls is True
     assert smtp.logged_in == ("me@example.com", "secret")
     assert smtp.sent is not None
@@ -1076,7 +1076,7 @@ def test_send_report_email_ssl_path(conn: Connection, monkeypatch: pytest.Monkey
     _seed_week_rollup(conn)
     monkeypatch.setattr("perseverer.email_delivery.smtplib.SMTP_SSL", _FakeSMTP)
     settings = Settings(
-        smtp_host="ssl0.ovh.net",
+        smtp_host="smtp.example.com",
         smtp_port=465,
         smtp_username="me@example.com",
         smtp_password="secret",

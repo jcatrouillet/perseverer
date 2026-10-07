@@ -1,4 +1,4 @@
-// Click-through behavior added in Milestone D: "when clicking on a table or graph should go to
+// Click-through behavior: "when clicking on a table or graph should go to
 // the corresponding activity" -- PR table rows link to /activities/:id (a PR names one exact
 // activity), heatmap cells link to /day/:date (a cell represents a whole day, not one
 // activity). The rest of RunningStats' large surface (charts, tiles) is already covered

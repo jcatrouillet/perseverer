@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     data_dir: Path = Path("/data")
 
-    # --- Phase 2: garmin_connect rate limiting, rolling window, staleness, scheduler ---
+    # --- garmin_connect rate limiting, rolling window, staleness, scheduler ---
     garmin_rolling_window_days: int = 10
     garmin_request_interval_s: float = 3.0
     garmin_max_requests_per_hour: int = 300
@@ -48,27 +48,26 @@ class Settings(BaseSettings):
     # offset would. Defaults to UTC (APScheduler's own default), matching this setting's original
     # unconfigurable behavior for anyone not overriding it -- worker/main.py's own docstring
     # calling this "04:15 local" was previously inaccurate on any host not itself running in the
-    # athlete's own timezone (bercy's system clock is UTC, not Pacific).
+    # athlete's own timezone (server clocks usually run on UTC).
     schedule_timezone: str = "UTC"
 
-    # --- Phase 3: read API auth/CORS/DuckDB ---
+    # --- read API auth/CORS/DuckDB ---
     # Shared secret for the X-API-Key header (api/dependencies.py::require_api_key). Unset ->
-    # every protected route fails closed (503), never fails open. See ADR 0006 decision 6.
+    # every protected route fails closed (503), never fails open. see docs/ARCHITECTURE.md.
     api_key: str | None = None
     # Comma-separated origins for CORSMiddleware; unset -> no CORS middleware at all (no
-    # cross-origin browser access by default). See ADR 0006 decision 8.
+    # cross-origin browser access by default). see docs/ARCHITECTURE.md.
     cors_allowed_origins: str | None = None
     # Reserved, not yet wired to uvicorn's --forwarded-allow-ips (needs an api.Dockerfile CMD
-    # change unrelated to Phase 3's core scope). See ADR 0006 decision 8 / decision 3 in the
-    # deferred-scope section.
+    # change of its own).
     trusted_proxy_ip: str | None = None
     # Where the DuckDB sqlite extension is baked in at Docker build time (api.Dockerfile) --
-    # None locally, where DuckDB's own default cache/INSTALL is fine. See ADR 0006 decision 4.
+    # None locally, where DuckDB's own default cache/INSTALL is fine. see docs/ARCHITECTURE.md.
     duckdb_extension_dir: Path | None = None
 
-    # --- Phase 5: per-athlete login (auth/tokens.py, api/routers/auth.py) ---
+    # --- per-athlete login (auth/tokens.py, api/routers/auth.py) ---
     # Signs session JWTs. Unset -> /auth/login fails closed (503), mirroring api_key's
-    # unset-503 precedent. See ADR 0008.
+    # unset-503 precedent. see docs/ARCHITECTURE.md.
     jwt_secret: str | None = None
     jwt_expiry_days: int = 30
 
@@ -94,17 +93,17 @@ class Settings(BaseSettings):
     # All optional and unset by default -- sync_eufy() skips with a log line, not an error, when
     # unconfigured. Deliberately plain env-var credentials, not a token-store-only model like
     # garmin_connect's: no evidence Eufy's API shares Garmin's SSO lockout fragility, and this is
-    # exactly how the sibling eufy-health-sync project already runs safely, daily, unattended.
+    # exactly how an existing Eufy sync tool already runs safely, daily, unattended.
     eufy_email: str | None = None
     eufy_password: str | None = None
     eufy_device_id: str | None = None
     eufy_customer_id: str | None = None
 
-    # --- Backup + restore automation (Phase 9, backup.py) ---
+    # --- Backup + restore automation (backup.py) ---
     # All optional and unset by default -- create_backup() logs and skips (not an error) when
     # unconfigured, same graceful-degradation contract as the Eufy block above. rsync over SSH to
-    # a second host, not a cloud target: this is a home-lab single-NUC deployment (bercy), and
-    # the user already has a second LAN host to rsync to. The one-time SSH key exchange
+    # a second host, not a cloud target: a self-hosted deployment typically has another machine
+    # on its network to rsync to. The one-time SSH key exchange
     # (`ssh-copy-id`) is a manual runbook step in docs/DEPLOY.md -- this app has no way to
     # provision credentials on a host it doesn't control.
     backup_host: str | None = None
@@ -173,7 +172,8 @@ class Settings(BaseSettings):
         return self.data_dir / "garmin_tokens" / athlete_id
 
     def kaya_tokenstore_dir_for(self, athlete_id: str) -> Path:
-        """Per-athlete Kaya token directory (tokens only, never the password); see ADR 0016."""
+        """Per-athlete Kaya token directory (tokens only, never the password); see
+        docs/ARCHITECTURE.md."""
         return self.data_dir / "kaya_tokens" / athlete_id
 
     @property
@@ -185,7 +185,7 @@ class Settings(BaseSettings):
         # A dedicated known_hosts file under /data (always writable), not backup.py's own
         # read-only-mounted SSH key directory -- see backup.py::_rsync's own docstring for why
         # accept-new's first-contact write needs a genuinely writable path once the worker
-        # container's root filesystem is read-only (Phase 9 container hardening, ADR 0014).
+        # container's root filesystem is read-only (container hardening, docs/ARCHITECTURE.md).
         return self.data_dir / "backup_known_hosts"
 
     @property

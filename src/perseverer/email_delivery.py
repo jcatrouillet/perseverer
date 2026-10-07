@@ -8,7 +8,7 @@ address (`athlete.email`).
 stdlib `smtplib` + `email.message.EmailMessage` only, no dependency. `smtp_security` picks the
 wire mode: "starttls" (port 587, mail submission -- connect plaintext then upgrade in place),
 "ssl" (port 465, implicit TLS from the first byte), or "none" (a local unauthenticated relay --
-no TLS, no login). OVH's `ssl0.ovh.net` serves both 587/STARTTLS and 465/implicit-SSL.
+no TLS, no login).
 """
 
 from __future__ import annotations

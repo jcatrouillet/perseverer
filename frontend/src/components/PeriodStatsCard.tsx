@@ -80,7 +80,7 @@ export function PeriodStatsCard({
   busiestValue: string | null;
   /** Label for the year-over-year comparison period, e.g. "2025" or "Aug 2025" -- the caller
    * names what it's comparing against since only it knows whether that's a prior year, a prior
-   * month, or something else (ADR 0011 decision 3, "year-over-year deltas"). */
+   * month, or something else (docs/ARCHITECTURE.md, "year-over-year deltas"). */
   compareLabel?: string;
   /** Total distance for the comparison period, from a second, separately-fetched activity
    * list, shown as a small "Xkm in <compareLabel>" caption under the Distance tile (the user

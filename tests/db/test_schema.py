@@ -35,10 +35,10 @@ def test_every_data_table_is_athlete_scoped() -> None:
 
 def test_exempt_tables_are_the_expected_small_set() -> None:
     """Guards the exemption list from silently growing — a new exemption should be a
-    deliberate, reviewed decision (see docs/adr/0002), not an accident. `auth_login_attempt`
-    (Phase 9 hardening, ADR 0014) joined this set deliberately: a login attempt against a
+    deliberate, reviewed decision (docs/ARCHITECTURE.md), not an accident. `auth_login_attempt`
+    joined this set deliberately: a login attempt against a
     nonexistent username has no athlete row to attach it to, and must still be counted -- that's
-    exactly the case a brute-force attempt usually is. `oauth_client` (ADR 0007 decision 10) is a
+    exactly the case a brute-force attempt usually is. `oauth_client` is a
     dynamically-registered *application* (e.g. claude.ai), which exists before any athlete has
     logged in -- a shared catalog like `metric_definition`, not an athlete's data."""
     assert (

@@ -1,7 +1,7 @@
 """The scheduled-workout text syntax -- inspired by intervals.icu's own workout-builder syntax
 (https://forum.intervals.icu/t/workout-builder-syntax-quick-guide/123701), not a full
 implementation of it: Perseverer supports the subset that actually applies to running (this
-feature's "running first" scope, see docs/adr/0015-scheduled-workouts.md) -- duration (time or
+feature's "running first" scope, docs/ARCHITECTURE.md) -- duration (time or
 distance), a pace or heart-rate target (absolute range, a single value, or a `Z<n>` zone
 resolved against the athlete's own `athlete_hr_zone_config` at push time -- see
 `hr_zones.py::resolve_hr_zone_bpm`, not resolved here), trailing running cadence, and a simple
@@ -433,7 +433,7 @@ def parse_workout_syntax(text: str) -> ParsedWorkout:
 #
 # Powers the calendar's "Copy" action on a completed activity (ActivityDetailPage.tsx): turns a
 # real recorded structured workout back into editable syntax text as a one-time starting point,
-# never a link back to the source (see docs/adr/0015-scheduled-workouts.md). The actual UI path
+# never a link back to the source (docs/ARCHITECTURE.md). The actual UI path
 # runs the TS twin of this function (frontend/src/workoutSyntax.ts::stepsToSourceText) client-
 # side, since ActivityDetailPage.tsx already has the activity's steps loaded; this Python copy
 # exists so the conversion is tested the same dual-implementation way as the forward parse (see

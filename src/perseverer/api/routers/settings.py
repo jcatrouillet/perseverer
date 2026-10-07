@@ -167,7 +167,7 @@ def set_hr_zone_config(
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
 ) -> HrZoneConfigOut:
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     existing = conn.execute(
         select(athlete_hr_zone_config.c.athlete_id).where(
             athlete_hr_zone_config.c.athlete_id == athlete_id
@@ -214,7 +214,7 @@ def set_running_load_config(
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
 ) -> RunningLoadConfigOut:
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     existing = conn.execute(
         select(athlete_running_load_config.c.athlete_id).where(
             athlete_running_load_config.c.athlete_id == athlete_id
@@ -278,7 +278,7 @@ def post_calendar_feed(
     # operation that ever makes sense here is "give me a current link" (see calendar_feed.py's
     # own module docstring for why this is one standing secret, not a growing history of shares).
     raw_token = generate_feed_token()
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     conn.execute(
         athlete.update()
         .where(athlete.c.id == athlete_id)
@@ -329,7 +329,7 @@ def post_api_key(
     # immediately invalidates the old key (its hash is overwritten, not appended to a list), so
     # any other client still using it starts getting 401s right away.
     raw_key = generate_api_key()
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     conn.execute(
         athlete.update()
         .where(athlete.c.id == athlete_id)
@@ -389,7 +389,7 @@ def set_email_report_config(
     conn: Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
 ) -> EmailReportConfigOut:
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     existing = conn.execute(
         select(athlete_email_report_config.c.athlete_id).where(
             athlete_email_report_config.c.athlete_id == athlete_id
@@ -643,7 +643,7 @@ def post_eufy_login(
     except requests.RequestException as e:
         raise HTTPException(status_code=502, detail="Could not reach Eufy -- try again.") from e
 
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     existing = conn.execute(
         select(athlete_eufy_config.c.athlete_id).where(
             athlete_eufy_config.c.athlete_id == athlete_id
@@ -860,7 +860,8 @@ def post_rebuild(
     raw archive. Poll GET /settings/jobs/latest?source=rebuild for progress.
 
     Launched as a standalone `sync rebuild --tracked` subprocess rather than an in-process
-    BackgroundTasks call -- a real rebuild on bercy once hung for hours sharing a connection with
+    BackgroundTasks call -- a real rebuild in production once hung for hours sharing a connection
+    with
     this same live multi-worker process's own request handling. A subprocess gets its own
     interpreter, its own SQLAlchemy engine/connections, and no shared threads or event loop with
     the workers serving ordinary traffic, so it can hold whatever long transaction it needs

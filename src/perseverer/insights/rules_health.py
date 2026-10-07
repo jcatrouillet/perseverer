@@ -1,11 +1,11 @@
 """Health/wellness anomalies: rolling-baseline deviation for resting heart rate and sleep
-score, read from data Phase 2/6 already ingest and roll up (`health_metric_daily_rollup`,
+score, read from data already ingested and rolled up (`health_metric_daily_rollup`,
 `sleep_session.sleep_score`) -- no new health ingestion. Pure functions over a plain
 `(local_date, value)` series sorted ascending by date, no DB access.
 
 Thresholds (10% above baseline for resting HR, 15% below baseline for sleep score) are
 adjustable defaults, not validated against this athlete's real outcomes -- same caveat as
-rules_load.py's thresholds, called out in ADR 0012.
+rules_load.py's thresholds, called out in docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations

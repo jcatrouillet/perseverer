@@ -1,6 +1,6 @@
 // Settings page: Kaya (the bouldering logbook app) status, a one-shot login form, and a "sync now"
 // trigger -- the web counterpart of `sync auth kaya-login` / `sync import kaya`
-// (docs/adr/0016-kaya-bouldering-adapter.md). Only the resulting session is saved, never the
+// (docs/ARCHITECTURE.md). Only the resulting session is saved, never the
 // password. A daily sync already runs automatically once connected.
 import { useEffect, useState } from "react";
 

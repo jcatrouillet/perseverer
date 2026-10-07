@@ -1,4 +1,4 @@
-"""Login brute-force lockout (Phase 9 hardening, ADR 0014). `/auth/login` previously had no
+"""Login brute-force lockout. `/auth/login` previously had no
 attempt-count limit at all -- constant-time password comparison (see passwords.py) protects
 against *timing* attacks, but nothing stopped an unlimited number of guesses.
 

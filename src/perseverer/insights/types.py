@@ -1,4 +1,4 @@
-"""Shared pure-Python shapes for the insight engine (Phase 8, ADR 0012). `InsightActivity` is
+"""Shared pure-Python shapes for the insight engine. `InsightActivity` is
 the bounded, already-flattened view of one activity every rule module needs -- assembled by
 `engine.py` (which has DB access) from `activity` plus the handful of `activity_metric` EAV
 rows each rule actually reads (elevation loss, cadence, weather), so rule modules themselves

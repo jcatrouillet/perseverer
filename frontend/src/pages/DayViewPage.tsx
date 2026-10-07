@@ -1,5 +1,5 @@
-// Milestone D of docs/adr/0010-phase-6.1-frontend-design.md's plan: the day view combines that
-// day's activities (ActivityCard, from Milestone B), a compact Fitness & Form tile, and health
+// The day view combines that
+// day's activities (ActivityCard), a compact Fitness & Form tile, and health
 // tiles -- all composed client-side from three already-existing endpoints (GET /fitness,
 // GET /health/dashboard, GET /health/observations), no new backend endpoint.
 //
@@ -65,8 +65,8 @@ export function DayViewPage({ date }: { date: string }) {
   const { metersToDisplay, unitLabel } = useDistanceFormat();
   const calendar = useCalendar(date, date);
   const activities = useActivities({ startDate: date, endDate: date, limit: 50 });
-  // Unbounded all-time running history, for the "PBs set today" callout below -- see ADR 0011
-  // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
+  // Unbounded all-time running history, for the "PBs set today" callout below -- see docs/ARCHITECTURE.md
+  // and RunningStats.tsx's allTimeRecords prop docstring.
   const allTimeRunning = useAllActivities({ sport: "running" });
   const fitness = useFitness(date, date);
   const health = useHealthDashboard(date, date);

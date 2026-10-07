@@ -1,7 +1,7 @@
 // Wraps the whole app. Renders children once a credential is stored; otherwise a two-tab
 // form -- password login (issues a JWT) or a pasted per-athlete API key (see
 // sync athlete set-password / create-key). Re-shows itself if a background request clears the
-// stored credential (AUTH_CLEARED_EVENT), e.g. an expired JWT. See ADR 0008.
+// stored credential (AUTH_CLEARED_EVENT), e.g. an expired JWT. see docs/ARCHITECTURE.md.
 import { useEffect, useState } from "react";
 
 import {
@@ -87,7 +87,7 @@ function ApiKeyForm({ onSuccess }: { onSuccess: () => void }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!apiKey.trim()) return;
-    // No validation round-trip here by design (see ADR 0008) -- the next real API call
+    // No validation round-trip here by design -- the next real API call
     // proves whether the key is valid; an invalid one surfaces as the usual 401 re-prompt.
     storeApiKey(apiKey.trim());
     onSuccess();

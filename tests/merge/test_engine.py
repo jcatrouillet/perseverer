@@ -105,7 +105,7 @@ def test_matches_when_one_side_is_naive_and_the_other_aware() -> None:
     """Regression test: SQLite/SQLAlchemy don't round-trip tzinfo (see db/schema.py), so a
     freshly-parsed (aware) activity is routinely compared against one read back from the
     database (naive). This used to raise `TypeError: can't subtract offset-naive and
-    offset-aware datetimes` on real data — see docs/adr/0002-phase-1-schema-and-ingestion.md.
+    offset-aware datetimes` on real data — docs/ARCHITECTURE.md.
     """
     aware = ActivityCandidate(BASE_TIME, 1800.0, "running")
     naive = ActivityCandidate(BASE_TIME.replace(tzinfo=None), 1800.0, "running")

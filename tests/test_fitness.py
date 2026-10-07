@@ -1,6 +1,6 @@
 """Tests for fitness.refresh_fitness_rollup: the CTL/ATL/TSB EWMA recurrence against a
 hand-computed sequence, cold start, zero-fill on rest days through today, and both
-training-load dedup rules. See docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+training-load dedup rules. docs/ARCHITECTURE.md.
 """
 
 import datetime as dt

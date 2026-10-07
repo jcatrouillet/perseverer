@@ -1,5 +1,5 @@
-// The per-activity snapshot card for the activity list and the day view (Milestone B/D of
-// docs/adr/0010-phase-6.1-frontend-design.md's plan). Built entirely on the Milestone A design
+// The per-activity snapshot card for the activity list and the day view.
+// Built entirely on the design
 // system -- sport icon/colour from metricStyle.ts's sportStyle(), numeric readouts as
 // MetricChip pills in the metric's own tone -- rather than inventing a second visual language
 // for "one activity" versus "one stat tile".

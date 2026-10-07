@@ -1,5 +1,6 @@
-"""End-to-end test of the MCP OAuth 2.1 flow (auth/oauth.py, api/routers/oauth.py, ADR 0007
-decision 10) exactly as a remote client like claude.ai drives it: discovery, dynamic client
+"""End-to-end test of the MCP OAuth 2.1 flow (auth/oauth.py, api/routers/oauth.py,
+docs/ARCHITECTURE.md)
+exactly as a remote client like claude.ai drives it: discovery, dynamic client
 registration, PKCE authorization, the login page, token exchange, an authenticated MCP call,
 single-use codes, refresh rotation and revocation -- plus the header-key path Claude Code uses.
 """

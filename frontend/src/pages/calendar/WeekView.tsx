@@ -256,7 +256,7 @@ export function WeekView({ date }: { date: string }) {
   });
   // Unbounded (distinct from `runningHistory`'s 52-week window) so the "PBs set this week"
   // callout can tell a genuine all-time PR apart from merely a strong trailing-year effort --
-  // see ADR 0011 decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
+  // see docs/ARCHITECTURE.md and RunningStats.tsx's allTimeRecords prop docstring.
   const allTimeRunning = useAllActivities({ sport: "running" });
   // Also spans the prior week, for the ramp (week-over-week CTL change) comparison below.
   const fitness = useFitness(priorWeekStart, end);

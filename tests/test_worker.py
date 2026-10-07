@@ -137,7 +137,7 @@ def test_weekly_email_report_only_sends_for_opted_in_athletes(tmp_path: Path) ->
     sent: list[str] = []
     settings = Settings(
         data_dir=tmp_path,
-        smtp_host="ssl0.ovh.net",
+        smtp_host="smtp.example.com",
         smtp_username="u",
         smtp_password="p",
         smtp_from="f@example.com",
@@ -178,7 +178,7 @@ def test_weekly_email_report_skips_an_athlete_with_no_email_without_crashing(
 
     settings = Settings(
         data_dir=tmp_path,
-        smtp_host="ssl0.ovh.net",
+        smtp_host="smtp.example.com",
         smtp_username="u",
         smtp_password="p",
         smtp_from="f@example.com",
@@ -229,7 +229,7 @@ def test_weekly_email_report_syncs_garmin_first_for_each_opted_in_athlete(
 
     settings = Settings(
         data_dir=tmp_path,
-        smtp_host="ssl0.ovh.net",
+        smtp_host="smtp.example.com",
         smtp_username="u",
         smtp_password="p",
         smtp_from="f@example.com",
@@ -256,7 +256,7 @@ def test_weekly_email_still_sends_when_the_pre_send_garmin_sync_fails(tmp_path: 
     sent: list[str] = []
     settings = Settings(
         data_dir=tmp_path,
-        smtp_host="ssl0.ovh.net",
+        smtp_host="smtp.example.com",
         smtp_username="u",
         smtp_password="p",
         smtp_from="f@example.com",
@@ -315,7 +315,7 @@ def test_weekly_email_sync_rate_limit_for_one_athlete_does_not_block_anothers_se
 
     settings = Settings(
         data_dir=tmp_path,
-        smtp_host="ssl0.ovh.net",
+        smtp_host="smtp.example.com",
         smtp_username="u",
         smtp_password="p",
         smtp_from="f@example.com",
@@ -351,7 +351,7 @@ def test_monthly_email_report_does_not_sync_garmin_first(tmp_path: Path) -> None
 
     settings = Settings(
         data_dir=tmp_path,
-        smtp_host="ssl0.ovh.net",
+        smtp_host="smtp.example.com",
         smtp_username="u",
         smtp_password="p",
         smtp_from="f@example.com",

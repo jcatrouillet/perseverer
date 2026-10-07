@@ -131,7 +131,7 @@ def create_duration_goal(
         conn, athlete_id, payload.period_type, payload.period_start, payload.sport, None
     ):
         raise HTTPException(status_code=409, detail=_DUPLICATE)
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     result = conn.execute(
         goal_table.insert().values(
             athlete_id=athlete_id,

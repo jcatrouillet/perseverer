@@ -1,5 +1,5 @@
 // Focused on the one thing this session's own feature touches: the month grid's per-day
-// "planned workout" indicator (docs/adr/0015-scheduled-workouts.md). Every other query hook
+// "planned workout" indicator (docs/ARCHITECTURE.md). Every other query hook
 // MonthView (and the GoalButton/PeriodShareButton it renders unconditionally) needs is stubbed
 // to an empty/loading-free state so those panels render nothing, keeping this test's mock
 // surface bounded to what the indicator itself actually needs.

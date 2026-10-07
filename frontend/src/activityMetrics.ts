@@ -1,6 +1,6 @@
 // Pure helpers over `ActivityDetail.metrics` (the full per-activity EAV list GET
 // /activities/{id} already returns -- see api/schemas/activities.py::ActivityMetricOut). No
-// backend change needed for the Milestone C stats grid or time-in-zone chart: every field they
+// backend change needed for the stats grid or time-in-zone chart: every field they
 // need is already in that array, just not yet surfaced anywhere in the UI.
 import type { ActivityMetricOut } from "./api/types";
 import { STATIONARY_MPS_FLOOR } from "./runningStats";
@@ -11,7 +11,7 @@ export function metricValue(metrics: ActivityMetricOut[], key: string): number |
 
 /** Same alias-merge as api/routers/activities.py's `_aliased_metric_subquery` -- `keys` is
  * ordered by priority, not just membership. GPX/TCX-sourced Strava activities have no
- * fit.session.* keys at all (see ADR 0013); this lets a caller ask for a logical field without
+ * fit.session.* keys at all; this lets a caller ask for a logical field without
  * knowing which source namespace populated it for a given activity. */
 export function metricValueAliased(metrics: ActivityMetricOut[], keys: string[]): number | null {
   for (const key of keys) {

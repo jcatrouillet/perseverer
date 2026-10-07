@@ -1,5 +1,5 @@
 """Response model for GET /fitness -- the independently-computed CTL/ATL/TSB series. See
-docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations

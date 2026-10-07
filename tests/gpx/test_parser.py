@@ -1,5 +1,5 @@
 """gpx/parser.py tests -- synthetic GPX content shaped like the real Strava export archive
-samples confirmed in Phase 8 (ADR 0012): bare trkpt lat/lon/ele/time, and separately a
+samples confirmed against a real export: bare trkpt lat/lon/ele/time, and separately a
 gpxtpx:TrackPointExtension carrying heart_rate (the shape seen for GPX files a Garmin device
 itself originally produced)."""
 

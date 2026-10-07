@@ -1,4 +1,4 @@
-"""Tests for GET /insights -- a plain read against the insight table (Phase 8, ADR 0012)."""
+"""Tests for GET /insights -- a plain read against the insight table."""
 
 from __future__ import annotations
 

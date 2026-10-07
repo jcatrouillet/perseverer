@@ -145,7 +145,7 @@ def set_goal(
     except InvalidPeriod as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     out = _upsert_goal(conn, athlete_id, payload, payload.period_start, now)
     conn.commit()
     return out

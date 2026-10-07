@@ -1,7 +1,7 @@
-"""Tests for rebuild.py's garmin_export_health_json replay (Phase 6, ADR 0009) -- this raw
+"""Tests for rebuild.py's garmin_export_health_json replay -- this raw
 object kind was previously silently skipped by `sync rebuild` (fell through to the catch-all
 `else: continue`), which would have dropped every garmin.export.* health observation on any
-rebuild. See docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+rebuild. docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -185,7 +185,7 @@ def test_rebuild_replays_garmin_connect_daily_summary_json(tmp_path: Path) -> No
 def test_rebuild_replays_garmin_connect_daily_sleep_json(tmp_path: Path) -> None:
     """This raw object kind was missing from rebuild.py entirely until now -- exactly the same
     class of bug the garmin_export_health_json test above already caught for a different kind
-    (see docs/adr/0009-...): a `sync rebuild` would have silently dropped every sleep_session
+    (docs/ARCHITECTURE.md-...): a `sync rebuild` would have silently dropped every sleep_session
     row garmin_connect.py's live sleep fetch ever produced."""
     archive_root = tmp_path / "archive"
     parquet_dir = tmp_path / "parquet"
@@ -875,7 +875,7 @@ def test_rebuild_replays_strava_export_gpx_and_manual_entry(
     continue`, and a manual-entry row has *no* distinguishing raw_object at all -- its
     archived bytes are byte-identical to its own strava_export_csv_row, so
     archive_raw_bytes's content-addressed idempotency never creates a second row for it (see
-    rebuild.py, ADR 0013)."""
+    rebuild.py, docs/ARCHITECTURE.md)."""
     root = tmp_path / "strava"
     (root / "activities").mkdir(parents=True)
     (root / "activities" / "999111.gpx").write_bytes(_STRAVA_GPX_BODY)
@@ -922,11 +922,11 @@ def test_rebuild_on_a_db_with_existing_insight_rows_does_not_fk_crash(
 ) -> None:
     """A real, previously-unknown bug found via a real `sync rebuild` run against the live
     database: `insight.activity_id` is FK-constrained to `activity.id`, but `insight` was
-    missing from `_REBUILDABLE_TABLES` (added after that list was last written, in Phase 8) --
+    missing from `_REBUILDABLE_TABLES` (added after that list was last written) --
     so rebuilding *in place* against a database that already has insight rows (i.e. every real
     rebuild after the first `refresh_insights` call ever ran) FK-crashed on `DELETE FROM
     activity`. Rebuilding into a fresh, empty database never hit this, which is why it wasn't
-    caught earlier. See ADR 0013."""
+    caught earlier. see docs/ARCHITECTURE.md."""
     _mock_weather_unavailable(monkeypatch)
     root = tmp_path / "strava"
     (root / "activities").mkdir(parents=True)
@@ -1083,7 +1083,7 @@ def test_rebuild_database_commits_incrementally_not_in_one_long_transaction(
 ) -> None:
     """Regression test for a real production incident: the tail phase (overrides + rollups +
     fitness + insights + VDOT/pace-bands/GAP + weather titles) used to share one long
-    uncommitted transaction with the per-row replay loop before it, and a rebuild on bercy once
+    uncommitted transaction with the per-row replay loop before it, and a rebuild in production once
     hung inside that transaction, losing hours of otherwise-already-computed work when the
     process had to be killed. Each step now commits on its own (see rebuild.py's own comment on
     this) -- asserts that a real rebuild issues comfortably more commits than the ~4 it would if

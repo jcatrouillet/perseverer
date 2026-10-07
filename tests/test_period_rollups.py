@@ -1,7 +1,7 @@
 """Tests for rollups.refresh_period_rollup: sum-of-sums/weighted-average correctness, and that
 week/month rollups automatically reflect a retroactive correction to an already-rolled-up day
 -- no watermark or "closed period" concept needed, it falls out of the existing
-accumulate-then-refresh contract. See docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+accumulate-then-refresh contract. docs/ARCHITECTURE.md.
 """
 
 import datetime as dt

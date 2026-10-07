@@ -2,7 +2,7 @@
 path AGENTS.md's mission statement calls for ("a REST/JSON API an AI agent can write notes
 through"), now a first-class tool surface instead of raw HTTP a human has to proxy. Mounted
 into the same FastAPI app as the REST API (api/main.py), not a separate container/process --
-see docs/adr/0007-phase-4-mcp-server.md.
+docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ mcp = FastMCP(
     # custom header -- claude.ai's custom connector -- can authenticate. The SDK serves
     # /.well-known/*, /authorize, /token, /register and /revoke; auth/oauth.py supplies storage
     # and api/routers/oauth.py the login page. The header-key path is preserved by the ASGI
-    # wrapper below. See ADR 0007 decision 10.
+    # wrapper below. see docs/ARCHITECTURE.md.
     auth_server_provider=oauth_provider,
     auth=AuthSettings(
         issuer_url=AnyHttpUrl(_public_base_url),
@@ -50,7 +50,7 @@ mcp = FastMCP(
     ),
     # DNS-rebinding protection is redundant here -- the API key (_require_api_key_asgi below)
     # is the real gate, and enabling this would need a deployment-specific hostname baked into
-    # config for no real security gain against that specific threat. See ADR 0007 decision 4.
+    # config for no real security gain against that specific threat. see docs/ARCHITECTURE.md.
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
 
@@ -58,7 +58,7 @@ mcp = FastMCP(
 async def _call_api(method: str, path: str, **kwargs: Any) -> httpx.Response:
     """Every tool's single entry point back into the REST layer -- in-process, no real network
     hop, reusing 100% of the REST API's auth/validation/rollup/response-shaping instead of a
-    second implementation against `Connection`/`duckdb` directly. See ADR 0007 decision 6.
+    second implementation against `Connection`/`duckdb` directly. see docs/ARCHITECTURE.md.
     """
     from perseverer.api.main import app  # lazy: api/main.py mounts this module's ASGI app
 
@@ -564,8 +564,8 @@ def _drop_none(payload: dict[str, Any]) -> dict[str, Any]:
 # --- Write tools -----------------------------------------------------------------------------
 # Planned workouts / races (training plans), goals, blood tests, gear, and per-activity
 # corrections. Deliberately NOT exposed: every settings/* endpoint (credentials, rebuild, bulk
-# import), and trim/merge/split/climb-route edits (visual-review workflows). See ADR 0007
-# decision 9.
+# import), and trim/merge/split/climb-route edits (visual-review workflows). see
+# docs/ARCHITECTURE.md.
 
 _WORKOUT_SYNTAX_HELP = """
 sport is "running", "yoga", "bouldering", "hiit", or "strength_training".
@@ -1225,7 +1225,7 @@ def _require_api_key_asgi(inner_app: ASGIApp) -> ASGIApp:
     accepted -- a valid one is rewritten into an `Authorization: Bearer` header so the SDK's own
     auth middleware, which only understands bearer tokens, lets it through and Claude Code's
     header-based registration keeps working unchanged. `Mount`-ed sub-apps never reach FastAPI's
-    own dependency injection, hence a raw ASGI wrapper. See ADR 0007 decisions 5 and 10.
+    own dependency injection, hence a raw ASGI wrapper. see docs/ARCHITECTURE.md.
     """
 
     async def wrapped(scope: Scope, receive: Receive, send: Send) -> None:
@@ -1280,7 +1280,7 @@ def build_mcp_asgi_app() -> ASGIApp:
 async def mcp_lifespan(_app: object) -> AsyncIterator[None]:
     """Enters the MCP session manager's own run() context. Must be composed into the parent
     FastAPI app's lifespan -- `Mount` doesn't propagate ASGI lifespan events into a mounted
-    sub-app automatically (confirmed directly; see ADR 0007 decision 3). Must run after
+    sub-app automatically (confirmed directly; see docs/ARCHITECTURE.md). Must run after
     `build_mcp_asgi_app()` has been called at least once (api/main.py sequences these
     correctly: build+mount at import time, this lifespan entered at app startup).
     """

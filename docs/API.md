@@ -36,7 +36,7 @@ curl -H "X-API-Key: YOUR_API_KEY" \
 # Session token
 curl -X POST https://your-perseverer-host/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "jerome", "password": "YOUR_PASSWORD"}'
+  -d '{"username": "athlete", "password": "YOUR_PASSWORD"}'
 # => {"access_token": "eyJhbGciOi...", "expires_at": "2026-09-18T12:00:00Z"}
 
 curl -H "Authorization: Bearer eyJhbGciOi..." \
@@ -1199,11 +1199,11 @@ Deletes a goal by id. `200`; `404` → `detail: "goal not found"`.
 
 ## Planned Workouts
 
-Scheduled (future) workouts authored on the calendar and pushed to the Garmin watch. Running
-only, v1 — a non-running `sport` saves and lists fine but `POST .../push` fails cleanly
-(`push_status: "push_failed"`) since there's no step-level structure to build a Garmin workout
-from yet. See `docs/adr/0015-scheduled-workouts.md` and the workout-syntax text format described
-there (duration, a pace/HR/zone target, cadence, a simple `Nx` repeat block).
+Scheduled (future) workouts authored on the calendar and pushed to the Garmin watch. Sports:
+`running` (steps parsed from the workout text syntax: duration, distance or `lap`, a pace/HR/zone
+target, cadence, `Nx` repeat blocks, `# comments`), `hiit` and `strength_training` (structured
+exercise steps), and `yoga`/`bouldering` (one timed step). See
+[ARCHITECTURE.md](ARCHITECTURE.md#writing-back-to-garmin).
 
 A step's duration may also be the keyword `lap`, which ends the step on the watch's lap button
 instead of a time or distance — for terrain whose real boundary is a landmark rather than an
@@ -1692,8 +1692,8 @@ name) — all optional except `timezone` carries a default rather than being nul
 Four pure display preferences — week start day, time format, starting page on load, and distance
 units. A deliberate second endpoint from `/settings/profile` (same `athlete` table, different
 concern): unlike Profile's fields, none of these four are ever read by any backend computation,
-only by the frontend's own rendering. `unit_preference` reuses the same `athlete.unit_preference`
-column `sync athlete create` has always set, previously never read anywhere in the app.
+only by the frontend's own rendering. `unit_preference` is the `athlete.unit_preference` column
+`sync athlete create` sets.
 
 **Response `200`:** `PersonalizeSettingsOut` — `week_start_day` (`"monday"|"sunday"`, default
 `"monday"`), `time_format` (`"24h"|"12h"`, default `"24h"`), `default_view`
@@ -2024,7 +2024,7 @@ daily job or `push_planned_workout` sends it to the athlete's Garmin), planned r
 tests, gear, and per-activity sport/race/name/fueling corrections. Deliberately not exposed: every
 `settings/*` endpoint (credentials and operational actions), `auth/login`, the public
 `share`/`calendar` feed pages, and trim/merge/split/climb-route edits. See
-`docs/adr/0007-phase-4-mcp-server.md` decisions 8-9.
+[ARCHITECTURE.md](ARCHITECTURE.md#mcp-server).
 
 Authentication for `/mcp` is either the `X-API-Key` header above or **OAuth 2.1** for remote
 clients that cannot send one (e.g. claude.ai's custom connector): discovery at
@@ -2033,8 +2033,7 @@ dynamic client registration at `POST /register`, `GET /authorize` (PKCE `S256` r
 /token` (`authorization_code` and `refresh_token` grants; access tokens last 1 hour, refresh
 tokens 30 days and rotate), and `POST /revoke` (send an empty `client_secret` for a public
 client). The authorize step sends the browser to `/oauth/login`, where the athlete signs in with
-their Perseverer username/password; only the deployment's primary athlete may authorize. See ADR
-0007 decision 10.
+their Perseverer username/password; only the deployment's primary athlete may authorize.
 
 ---
 
@@ -2270,12 +2269,12 @@ the direction the wind is blowing *from*) are likewise single values at that sam
 not ranges, and each is independently nullable since Open-Meteo's historical archive doesn't
 always carry every field for every hour.
 
-Everything below was added so this one endpoint supports a full conditions judgement (heat stress
-in bpm/pace terms) without a second call to Open-Meteo. All are window aggregates over the
+The fields below let this one endpoint support a full conditions judgement (heat stress in
+bpm/pace terms) without a second call to Open-Meteo. All are window aggregates over the
 activity's own duration (same convention as `temperature_min_c`/`max_c` above) unless noted, and
 all are independently `null` — never fabricated — whenever Open-Meteo's response lacks that
-particular data, including on every activity whose weather was cached before these fields
-existed (until a backfill re-fetches it, see docs/DATA_DICTIONARY.md's own Weather section):
+particular data (an activity whose weather was fetched with an older request shape gets them after
+`sync backfill-weather-fields`, see docs/DATA_DICTIONARY.md's Weather section):
 
 | Field | Type | Description |
 |---|---|---|

@@ -1,7 +1,6 @@
 """Request/response models for POST/GET /notes -- the agent-writable write path AGENTS.md's
 mission statement calls for. Scoped to activities, days, and weeks for now; a new entity_type is
-a data-only addition, not a schema change. See docs/adr/0006-phase-3-read-api-and-rollups.md
-decision 7.
+a data-only addition, not a schema change. docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-// Horizontal bar of time spent in each HR zone (Milestone C). A plain CSS bar list rather than
+// Horizontal bar of time spent in each HR zone. A plain CSS bar list rather than
 // a Recharts BarChart: each row needs a boundary-range label to one side and a duration to the
 // other, which a bar chart's own axis labelling doesn't give a clean way to do at this small a
 // size -- ChartLegend/StatTile already established that a hand-built HTML row is fine for this

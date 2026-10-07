@@ -3,8 +3,8 @@
 `app` (from api/main.py) is a module-level singleton shared across every test in the process,
 and `get_engine`/`get_duckdb`'s real implementations cache their resources on `request.app.state`
 -- which would persist across tests since it's the same `app` object. That's exactly why they're
-lazy/DI-based rather than `lifespan`-created (see docs/adr/0006-phase-3-read-api-and-rollups.md
-decision 4): `app.dependency_overrides` replaces them entirely, bypassing the app.state cache,
+lazy/DI-based rather than `lifespan`-created (docs/ARCHITECTURE.md)
+: `app.dependency_overrides` replaces them entirely, bypassing the app.state cache,
 so each test gets its own tmp SQLite DB and DuckDB connection with no cross-test leakage.
 """
 

@@ -18,9 +18,9 @@ class HealthObservationOut(BaseModel):
     source: str
 
 
-# --- Health dashboard (Phase 6): merges the same logical field's several raw metric_key
+# --- Health dashboard: merges the same logical field's several raw metric_key
 # namespaces -- see api/routers/health.py::LOGICAL_METRICS and
-# docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+# docs/ARCHITECTURE.md.
 
 
 class HealthDashboardDayOut(BaseModel):
@@ -41,7 +41,7 @@ class HealthDashboardMetricOut(BaseModel):
     # The most recent local_date with data across ALL aliases, not bounded by the requested
     # date range -- lets the frontend show "last observed: {date}" even when the visible range
     # itself has no data, since garmin_connect's daily sync never touches wellness data (see
-    # ADR 0009) and this can otherwise look like live data that silently isn't.
+    # docs/ARCHITECTURE.md) and this can otherwise look like live data that silently isn't.
     last_observed: str | None
     daily: list[HealthDashboardDayOut]
 
@@ -50,7 +50,7 @@ class HealthDashboardOut(BaseModel):
     metrics: list[HealthDashboardMetricOut]
 
 
-# --- GET /health/stream (Phase 9): the intraday `health_stream`/Parquet series a
+# --- GET /health/stream: the intraday `health_stream`/Parquet series a
 # health/json_parser.py stream-point producer writes -- distinct from health_observation's
 # once-or-a-few-per-day EAV rows. Single-channel per request (unlike ActivityDetail's
 # StreamResponse, which returns every channel an activity has at once) since a health stream is

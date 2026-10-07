@@ -1,5 +1,5 @@
 """Shared response-model plumbing: pagination envelope and the naive-storage -> explicit-UTC
-boundary. Internal storage stays naive-implicit-UTC (ADR 0002) -- that's a storage-layer
+boundary. Internal storage stays naive-implicit-UTC -- that's a storage-layer
 decision that must not leak into the API's external JSON contract, which should be
 unambiguous ISO-8601. Every response model attaches tzinfo via `to_utc` when built from a row.
 """

@@ -58,7 +58,8 @@ def backfill_workouts(conn: Connection, archive_root: Path, *, athlete_id: str) 
     }
 
     # "fit" covers the unified activity-or-health dispatch kind; "fit_activity" is the older
-    # Phase 1 kind kept for backward compatibility -- same convention as rebuild.py's own replay
+    # The older activity-only kind kept for backward compatibility -- same convention as
+    # rebuild.py's own replay
     # loop. Health FIT files decode with no session_mesgs (parse_fit returns
     # kind="unrecognized"), so they're naturally skipped below without a separate kind filter.
     raw_rows = conn.execute(

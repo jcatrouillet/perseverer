@@ -88,7 +88,7 @@ class PlannedWorkoutIn(BaseModel):
     # hiit/strength_training: ignored -- steps below carries the structured content instead.
     source_text: str | None = None
     # "HH:MM", 24h -- Perseverer's own calendar display metadata only (Garmin's own
-    # schedule_workout() has no time-of-day API at all, see docs/adr/0015-scheduled-workouts.md).
+    # schedule_workout() has no time-of-day API at all, docs/ARCHITECTURE.md).
     scheduled_time: str | None = None
     # yoga/bouldering only: sets estimated_duration_s directly (there's no syntax to derive a
     # duration from). Ignored for running/hiit/strength_training, where estimated_duration_s is

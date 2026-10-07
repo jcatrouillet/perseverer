@@ -98,7 +98,7 @@ def post_planned_race(
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
 ) -> PlannedRaceOut:
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     result = conn.execute(
         planned_race.insert().values(
             athlete_id=athlete_id,

@@ -1,6 +1,6 @@
 """DuckDB-backed downsampling of a single activity's full-resolution Parquet stream into a
 fixed number of points for chart display. See
-docs/adr/0006-phase-3-read-api-and-rollups.md decisions 3-4.
+docs/ARCHITECTURE.md.
 
 All bucket-averaging happens in one DuckDB SQL statement against the Parquet file directly --
 no Python-side loop, which is exactly the columnar work the Celeron benefits from offloading.
@@ -17,7 +17,7 @@ from pathlib import Path
 import duckdb
 
 # Fixed target point counts per tier, not client-specified, to keep the response-size contract
-# predictable. See ADR 0006 decision 5.
+# predictable. see docs/ARCHITECTURE.md.
 _TIER_TARGET_POINTS = {"low": 200, "medium": 1000, "high": 20000}
 
 

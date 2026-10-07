@@ -41,7 +41,7 @@ router = APIRouter()
 # matters: the first alias with data for a given day wins (see _merge_logical_metric). Deliberate
 # false positives excluded (e.g. garmin.daily_summary.lastSevenDaysAvgRestingHeartRate is a
 # distinct trailing-average metric, not an alias of the same daily value). See
-# docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+# docs/ARCHITECTURE.md.
 LOGICAL_METRICS: dict[str, list[str]] = {
     "steps": ["garmin.daily_summary.totalSteps", "garmin.export.UDSFile.totalSteps"],
     "calories": [

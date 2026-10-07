@@ -1,5 +1,5 @@
 """Tests for stream_query.downsample against an in-test synthetic Parquet fixture. See
-docs/adr/0006-phase-3-read-api-and-rollups.md decisions 3-5.
+docs/ARCHITECTURE.md.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -130,7 +130,7 @@ def test_unknown_tier_raises(con: duckdb.DuckDBPyConnection, tmp_path: Path) -> 
 
 def test_unrecognized_channel_raises(con: duckdb.DuckDBPyConnection, tmp_path: Path) -> None:
     """The channel-allowlist check that stands between a client-supplied query param and a
-    SQL-identifier-injection-shaped bug -- see ADR 0006 decision 5."""
+    SQL-identifier-injection-shaped bug -- see docs/ARCHITECTURE.md."""
     path = tmp_path / "stream.parquet"
     _write_fixture(path, n_samples=10)
 

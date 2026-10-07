@@ -25,7 +25,7 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      # Phase 9 hardening (ADR 0014): fails the build on a known-vulnerable pinned dependency.
+      # Hardening: fails the build on a known-vulnerable pinned dependency.
       # Zero findings as of this writing (confirmed by running it before wiring it in) -- no
       # allowlist mechanism exists yet because there's nothing to allowlist; add one
       # (`--ignore-vuln <id>`, with a one-line reason) if a real, currently-unfixable advisory
@@ -60,20 +60,16 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
-      # Phase 9 hardening (ADR 0014) -- see the lint job's pip-audit step for the same reasoning
+      # Hardening -- see the lint job's pip-audit step for the same reasoning
       # (zero findings as of this writing, no allowlist needed yet).
       - run: npm audit --audit-level=high
 
   avx-smoke:
-    # The DS1019+ (Celeron J3455 / Goldmont) has SSE4.2 but no AVX/AVX2. GitHub-hosted runners
-    # are AVX2-capable, so we can't rely on the runner's real hardware to catch a dependency
-    # compiled for x86-64-v3. Instead we run the same import/basic-op smoke test under
-    # `qemu-x86_64 -cpu Westmere` — Westmere has SSE4.2 (and AES-NI, also present on Goldmont)
-    # but no AVX, closely matching the real target. `-cpu qemu64` (tried first) is QEMU's
-    # generic baseline and turned out to lack even SSE4.1/SSE4.2 by default, well *below* the
-    # real NAS CPU's actual capability — every push SIGILL'd on numpy's own baseline dispatch
-    # code, a false alarm unrelated to the AVX/AVX2 question this gate exists to answer. See
-    # docs/adr/0001-phase-0-foundations.md decision 5 for the corrected CPU model choice.
+    # Keeps the images runnable on x86-64 CPUs without AVX/AVX2 (SSE4.2 only). GitHub-hosted
+    # runners are AVX2-capable, so the same import/basic-op smoke test runs under
+    # `qemu-x86_64 -cpu Westmere` (SSE4.2 and AES-NI, no AVX): a dependency compiled for
+    # x86-64-v3 without runtime dispatch crashes with SIGILL here. `-cpu qemu64` is not used: it
+    # lacks even SSE4.1/4.2, which fails numpy's own baseline, unrelated to the AVX question.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,7 +87,7 @@ jobs:
           qemu-x86_64 -cpu Westmere "$PYBIN" -m pytest tests/test_avx_smoke.py -q
 
   backup-restore:
-    # Phase 9 acceptance criterion (ADR 0014): an automated restore-from-backup test in CI.
+    # Backup acceptance criterion: an automated restore-from-backup test in CI.
     # `sync backup create --destination`/`sync backup restore` both take a plain local path here
     # instead of a real SSH host -- rsync treats a local path and a `user@host:path` spec
     # identically (backup.py's own docstring), so this exercises the exact same code the real
@@ -184,7 +180,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          # bercy's Quadlet units (quadlet/*.container) pull :latest and rely on
+          # The production Quadlet units (quadlet/*.container) pull :latest and rely on
           # AutoUpdate=registry to pick up a new digest -- sha-<commit> is for traceability/
           # manual rollback, not something anything currently deploys by tag.
           tags: |

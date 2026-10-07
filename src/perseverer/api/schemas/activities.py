@@ -431,7 +431,8 @@ class ActivityRouteOut(BaseModel):
     id: str
     # simplified_polyline (not encoded_polyline): a batch response for a page of thumbnail-sized
     # maps should stay small, and simplified_polyline is exactly the "cheaper to render" variant
-    # route_geom already carries (currently identical bytes to encoded_polyline -- see ADR 0002 --
+    # route_geom already carries (currently identical bytes to encoded_polyline -- see
+    # docs/ARCHITECTURE.md --
     # but this is the field that would shrink if real Douglas-Peucker simplification lands later,
     # so callers that only need a thumbnail shouldn't have to change).
     simplified_polyline: str | None
@@ -439,7 +440,7 @@ class ActivityRouteOut(BaseModel):
 
 class ActivitySourceOut(BaseModel):
     """One `activity_source_link` row -- a source this activity's data actually came from,
-    inspectable per the Phase 8 acceptance criterion ("both sources inspectable"). `link_id`
+    inspectable per the merge-visibility requirement ("both sources inspectable"). `link_id`
     is that row's own id, passed back into POST .../sources/{link_id}/split to undo a wrong
     merge."""
 

@@ -1,4 +1,4 @@
-"""strava_export tests: activities.csv + real-shaped mixed file formats (see ADR 0012),
+"""strava_export tests: activities.csv + real-shaped mixed file formats,
 sport-map correctness, CSV-totals overlay, manual-entry (no-file) rows, idempotent re-import,
 and -- the acceptance criterion this whole phase is measured against -- that a Strava-sourced
 activity matching an existing activity from another source links into the *same* activity
@@ -118,7 +118,7 @@ def _make_archive(tmp_path: Path, *, with_manual_row: bool = True) -> Path:
 
 def test_sport_map_matches_real_verified_fit_derived_values() -> None:
     # Verified by decoding real FIT files of each Strava CSV type from a real export archive
-    # (see ADR 0012) -- not guessed.
+    # -- not guessed.
     assert _map_sport("Run") == ("running", "generic")
     assert _map_sport("Hike") == ("hiking", "generic")
     assert _map_sport("Weight Training") == ("training", "strength_training")
@@ -206,7 +206,7 @@ def test_ingest_automatically_prepends_a_weather_emoji_to_the_title(
 def test_gpx_activity_gets_hr_and_elevation_loss_from_csv(tmp_path: Path) -> None:
     # GPX carries no session-level avg/max HR or elevation-loss field of its own -- these must
     # come from activities.csv's own real Average/Max Heart Rate and Elevation Loss columns
-    # (ADR 0013), registered under source-honest strava.session.* keys, not fit.session.*.
+    # , registered under source-honest strava.session.* keys, not fit.session.*.
     root = tmp_path / "strava"
     (root / "activities").mkdir(parents=True)
     (root / "activities" / "999333.gpx").write_bytes(_GPX_BODY)

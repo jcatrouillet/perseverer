@@ -17,7 +17,7 @@ from perseverer.health.fit_parser import (
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "fit" / "synthetic_health.fit"
 
 
-# --- _resolve_compressed_timestamps: directly tested per ADR 0004 decision 1 -----------------
+# --- _resolve_compressed_timestamps: directly tested per docs/ARCHITECTURE.md -----------------
 
 
 def test_full_timestamp_rows_pass_through_unchanged() -> None:
@@ -85,7 +85,7 @@ def test_no_seed_and_no_full_timestamp_leaves_row_unresolved() -> None:
 
 def test_monitoring_heart_rate_stream_uses_reconstructed_timestamps() -> None:
     """Both monitoring rows in the fixture are timestamp_16-only, seeded from
-    monitoring_info_mesgs -- this is the majority case in real WELLNESS files (ADR 0004)."""
+    monitoring_info_mesgs -- this is the majority case in real WELLNESS files."""
     batch = parse_health_fit(FIXTURE.read_bytes())
     hr_points = sorted(
         (p for p in batch.stream_points if p.metric_key == "heart_rate"),
@@ -141,7 +141,7 @@ def test_sleep_session_and_stages_derived_from_sleep_level_rows() -> None:
 
 
 def test_sleep_assessment_scores_become_generic_observations() -> None:
-    """Every sleep_assessment_mesgs score maps to sleep.<field> -- see ADR 0004 decision 3
+    """Every sleep_assessment_mesgs score maps to sleep.<field> -- see docs/ARCHITECTURE.md
     (no dedicated multi-score sleep table)."""
     batch = parse_health_fit(FIXTURE.read_bytes())
     obs = {o.metric_key: o for o in batch.observations}

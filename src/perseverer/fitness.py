@@ -1,9 +1,9 @@
-"""Fitness & Form (Phase 6): an independently-computed Banister/Coggan CTL (Fitness, 42-day
+"""Fitness & Form: an independently-computed Banister/Coggan CTL (Fitness, 42-day
 EWMA)/ATL (Fatigue, 7-day EWMA)/TSB (Form = yesterday's CTL - yesterday's ATL) model over daily
 training load, displayed alongside (not required to match) Garmin's own precomputed
 TrainingReadinessDTO/TrainingHistory signals -- Garmin's raw exports have no CTL/ATL/TSB triplet
 at all (confirmed against the real ingested database), so there is nothing to reconcile against
-directly. See docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+directly. docs/ARCHITECTURE.md.
 
 Per-activity daily training load prefers `running_load.py`'s `RUNNING_TSS_METRIC_KEY` (a
 pace-based rTSS calibrated to the athlete's own configured threshold pace, on the standard
@@ -17,7 +17,7 @@ never calibrated to that scale -- the EWMA math itself was already correct.
 
 `refresh_fitness_rollup` does a **full recompute of the athlete's entire history** on every
 call, not an incremental "touched dates forward" scheme: the input is a handful-of-thousand-row
-bulk query plus a pure-Python linear EWMA pass, cheap even on the DS1019+'s Celeron (the
+bulk query plus a pure-Python linear EWMA pass, cheap even on low-power hardware (the
 platform's "never aggregate at request time" constraint is about serving, not bounded
 ingest-time computation) -- and a retroactive correction to old training-load data invalidates
 every subsequent day's EWMA forward from that point regardless, so an incremental scheme

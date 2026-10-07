@@ -1,8 +1,8 @@
 // A small pure RGB-lerp helper for the route map's pace-colour gradient (red = faster, blue =
-// slower, per ADR 0013). The two endpoint colours are resolved from this app's existing
+// slower, per docs/ARCHITECTURE.md). The two endpoint colours are resolved from this app's existing
 // `--color-heart-rate`/`--color-pace` theme tokens at render time (see ActivityRouteMap.tsx),
 // not hardcoded here -- this module only does the interpolation math, so no new hex value
-// enters the codebase (ADR 0010's "a hue always identifies a metric" rule).
+// enters the codebase (the design doc's "a hue always identifies a metric" rule).
 export type Rgb = [number, number, number];
 
 /** Parses a `#rrggbb` or `#rgb` string (what `getComputedStyle` resolves CSS colour custom

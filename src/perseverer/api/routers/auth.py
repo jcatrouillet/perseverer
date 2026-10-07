@@ -1,6 +1,6 @@
 """POST /auth/login -- issues a JWT session token for an athlete's username/password. Not
 gated by require_api_key (same unauthenticated-route pattern as /healthz): this endpoint IS the
-credential check. See docs/adr/0008-phase-5-frontend.md.
+credential check. docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations

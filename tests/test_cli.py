@@ -46,7 +46,7 @@ def test_athlete_create_inserts_a_new_row_with_a_fresh_id(tmp_path: Path) -> Non
         patch("perseverer.cli.get_settings", return_value=settings),
         patch("perseverer.cli.make_engine", return_value=engine),
     ):
-        athlete_create(display_name="Erwan", timezone="Europe/Paris", unit_preference="metric")
+        athlete_create(display_name="Alex", timezone="Europe/Paris", unit_preference="metric")
 
     with engine.connect() as conn:
         rows = conn.execute(select(athlete.c.id, athlete.c.display_name)).fetchall()
@@ -54,8 +54,8 @@ def test_athlete_create_inserts_a_new_row_with_a_fresh_id(tmp_path: Path) -> Non
     ids = {r.id for r in rows}
     names = {r.display_name for r in rows}
     assert DEFAULT_ATHLETE_ID in ids
-    assert "Erwan" in names
-    new_id = next(r.id for r in rows if r.display_name == "Erwan")
+    assert "Alex" in names
+    new_id = next(r.id for r in rows if r.display_name == "Alex")
     assert new_id != DEFAULT_ATHLETE_ID
     assert len(new_id) == 26  # a real ULID, matching every other id in this schema
 
@@ -67,13 +67,11 @@ def test_athlete_create_twice_creates_two_distinct_rows(tmp_path: Path) -> None:
         patch("perseverer.cli.get_settings", return_value=settings),
         patch("perseverer.cli.make_engine", return_value=engine),
     ):
-        athlete_create(display_name="Erwan", timezone="UTC", unit_preference="metric")
-        athlete_create(display_name="Erwan", timezone="UTC", unit_preference="metric")
+        athlete_create(display_name="Alex", timezone="UTC", unit_preference="metric")
+        athlete_create(display_name="Alex", timezone="UTC", unit_preference="metric")
 
     with engine.connect() as conn:
-        rows = conn.execute(
-            select(athlete.c.id).where(athlete.c.display_name == "Erwan")
-        ).fetchall()
+        rows = conn.execute(select(athlete.c.id).where(athlete.c.display_name == "Alex")).fetchall()
     assert len({r.id for r in rows}) == 2
 
 

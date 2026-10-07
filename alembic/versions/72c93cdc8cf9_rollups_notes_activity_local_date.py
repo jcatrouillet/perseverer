@@ -1,4 +1,4 @@
-"""phase 3: rollups, notes, activity.local_date
+"""rollups, notes, activity.local_date
 
 Revision ID: 72c93cdc8cf9
 Revises: c9ebfc30ba99

@@ -239,7 +239,8 @@ def _format_pace_or_speed(seconds: float | None, meters: float | None, *, pace_s
 
 def _local_time_label(start_time_utc: datetime, utc_offset_s: int) -> str:
     # Not `strftime("%-I:%M %p")` -- the `-` no-leading-zero flag is a glibc/Linux-only strftime
-    # extension; this module runs on both Windows (dev/tests) and Linux (bercy), so it's built by
+    # extension; this module runs on both Windows (dev/tests) and Linux (production), so it's built
+    # by
     # hand instead of relying on a platform-specific format string.
     local = start_time_utc + timedelta(seconds=utc_offset_s)
     hour12 = local.hour % 12 or 12
@@ -2099,7 +2100,7 @@ def _average_duration_s(activities: list[_PeriodActivity]) -> float | None:
 def _average_speed_kmh(activities: list[_PeriodActivity]) -> float | None:
     """Weighted (sum distance / sum time), not a naive average of each activity's own speed --
     port of yearStats.ts::averageSpeedKmh, same "weighted, not average-of-averages" rule this
-    project's own period rollups already follow (ADR 0009 decision 2)."""
+    project's own period rollups already follow."""
     eligible = [
         a for a in activities if a.distance_m is not None and _effective_duration_s(a) is not None
     ]

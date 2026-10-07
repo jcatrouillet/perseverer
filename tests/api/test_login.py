@@ -1,4 +1,4 @@
-"""Tests for POST /auth/login (Phase 5, ADR 0008)."""
+"""Tests for POST /auth/login."""
 
 from pathlib import Path
 

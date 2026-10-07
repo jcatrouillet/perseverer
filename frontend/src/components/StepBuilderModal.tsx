@@ -1,4 +1,4 @@
-// A GUI alternative to typing workout-syntax lines by hand (docs/adr/0015-scheduled-workouts.md
+// A GUI alternative to typing workout-syntax lines by hand (docs/ARCHITECTURE.md
 // -- the user's own explicit request: "Add a step button to help build the step with a multiple
 // choice popup ... it can also have the repeat"). Deliberately *generates syntax text and
 // inserts it at the cursor* rather than maintaining its own separate structured step state that

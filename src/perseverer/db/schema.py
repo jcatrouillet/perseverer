@@ -3,7 +3,7 @@
 Core (not declarative ORM) was chosen because most of this codebase's data model is
 batch-ingest and open-ended (metric_key/value_num rows rather than fixed attributes per
 class), and Core keeps us close to the SQL that DuckDB will later query across SQLite +
-Parquet in one statement. See docs/adr/0002-phase-1-schema-and-ingestion.md.
+Parquet in one statement. docs/ARCHITECTURE.md.
 
 Every table holding an athlete's own data carries `athlete_id`. The two intentional
 exemptions are `metric_definition` and `source_registry`, which are shared catalogs/registries
@@ -15,10 +15,10 @@ values that are implicitly UTC. This is deliberate, not an oversight: SQLite has
 timestamp-with-timezone type, and SQLAlchemy's SQLite dialect does not actually round-trip
 `tzinfo` through `DateTime()` — a value written as timezone-aware UTC comes back
 naive on read. Declaring `timezone=True` here would advertise a guarantee this backend can't
-keep, and it's exactly what caused a real bug during Phase 1 development (merge-matching
+keep, and it's exactly what caused a real bug during development (merge-matching
 compared a freshly-parsed aware datetime against a DB-read naive one and raised
 `TypeError: can't subtract offset-naive and offset-aware datetimes` on real data — see
-docs/adr/0002-phase-1-schema-and-ingestion.md). Every datetime that reaches this schema must
+docs/ARCHITECTURE.md). Every datetime that reaches this schema must
 already be UTC; callers are responsible for converting, not this layer.
 """
 
@@ -52,10 +52,10 @@ athlete = Table(
     # Set by the garmin_export adapter on successful completion — the "days since last full
     # Garmin export" health signal (spec: nag past 90 days; see perseverer/staleness.py).
     Column("last_full_export_at", DateTime(), nullable=True),
-    # Phase 5: per-athlete credentials (auth/passwords.py, auth/tokens.py). Nullable — an
+    # Per-athlete credentials (auth/passwords.py, auth/tokens.py). Nullable — an
     # athlete may have neither, either, or both a password login and a standing API key. Never
     # backfilled; existing athletes simply have no credentials until `sync athlete
-    # set-password`/`create-key` is run. See docs/adr/0008-phase-5-frontend.md.
+    # set-password`/`create-key` is run. docs/ARCHITECTURE.md.
     Column("username", String, nullable=True, unique=True),
     Column("password_hash", String, nullable=True),
     Column("api_key_hash", String, nullable=True),
@@ -252,7 +252,7 @@ duration_goal = Table(
 # (raw kinds kaya_sessions_json / kaya_ascents_json). Keyed by Kaya ids, never by activity.id,
 # so they survive `sync rebuild` untouched (deliberately NOT in rebuild.py's _REBUILDABLE_TABLES,
 # like the athlete-correction tables): the rebuild replay just re-upserts them from raw and
-# `apply_kaya_sessions` then re-derives the activity/split rows. See ADR 0016.
+# `apply_kaya_sessions` then re-derives the activity/split rows. see docs/ARCHITECTURE.md.
 kaya_session = Table(
     "kaya_session",
     metadata,
@@ -485,7 +485,7 @@ activity = Table(
     # ISO date (e.g. "2026-08-02") the activity belongs to in local time -- mirrors
     # health_observation/sleep_session's own local_date column. Populated at ingest time;
     # without it, rollups.refresh_daily_rollup would need UTC-offset arithmetic inline. See
-    # docs/adr/0006-phase-3-read-api-and-rollups.md decision 2.
+    # docs/ARCHITECTURE.md.
     Column("local_date", String, nullable=True),
     Column("sport", String, nullable=False),
     Column("sub_sport", String, nullable=True),
@@ -831,7 +831,7 @@ route_geom = Table(
     Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
     Column("encoded_polyline", Text, nullable=True),
     # Equal to encoded_polyline for now — real Douglas-Peucker simplification is deferred to
-    # Phase 7 (map explorer), which is when it actually matters. See ADR 0002.
+    # the map explorer, which is where it matters. see docs/ARCHITECTURE.md.
     Column("simplified_polyline", Text, nullable=True),
     Column("min_lat", Float, nullable=True),
     Column("min_lng", Float, nullable=True),
@@ -888,7 +888,7 @@ activity_workout_step = Table(
     Index("ix_activity_workout_step_activity", "activity_id"),
 )
 
-# A *future*, athlete-authored workout scheduled on the calendar (Phase 10-ish, "scheduled
+# A *future*, athlete-authored workout scheduled on the calendar ("scheduled
 # workouts") -- NOT the same table as activity_workout/activity_workout_step above, even though
 # the column shape (duration/target/repeat) deliberately mirrors it: those two are retrospective,
 # keyed 1:1 on a completed activity_id, parsed out of a device's own recorded FIT workout_mesgs;
@@ -925,7 +925,7 @@ planned_workout = Table(
     Column("estimated_duration_s", Float, nullable=True),
     # "HH:MM", 24h, local time -- Perseverer's own calendar display metadata only. Garmin's
     # schedule_workout() is date-only with no time-of-day API at all (confirmed directly against
-    # the installed garminconnect package, see docs/adr/0015-scheduled-workouts.md's own "vendor
+    # the installed garminconnect package, docs/ARCHITECTURE.md's own "vendor
     # facts" section), so this can never make the watch itself prompt at this clock time -- it
     # only ever appears in Perseverer's own UI.
     Column("scheduled_time", String, nullable=True),
@@ -1034,7 +1034,7 @@ planned_workout_step = Table(
     Index("ix_planned_workout_step_workout", "planned_workout_id"),
 )
 
-# --- Health (schema created now; population starts Phase 2) --------------------
+# --- Health ----------------------------------------------------------------------
 
 health_observation = Table(
     "health_observation",
@@ -1111,9 +1111,9 @@ sleep_stage = Table(
     Index("ix_sleep_stage_session", "sleep_session_id"),
 )
 
-# --- Rollups (Phase 3): derived caches, refreshed on ingest via rollups.refresh_daily_rollup,
+# --- Rollups: derived caches, refreshed on ingest via rollups.refresh_daily_rollup,
 # never written to directly by adapters. Wiped/recomputed like any other _REBUILDABLE_TABLES
-# entry -- "never destructive" doesn't apply to a derived cache. See ADR 0006 decisions 1, 3. --
+# entry -- "never destructive" doesn't apply to a derived cache. see docs/ARCHITECTURE.md. --
 
 day_rollup = Table(
     "day_rollup",
@@ -1147,7 +1147,7 @@ health_metric_daily_rollup = Table(
     # value_num of the observation with the latest observed_at_utc that day -- what a
     # point-in-time metric (e.g. resting_heart_rate) usually wants, vs. sum/avg for a
     # cumulative one (e.g. steps). The API picks per metric_key; this table stores all five so
-    # no per-metric aggregation-method registry is needed here. See ADR 0006 decision 1.
+    # no per-metric aggregation-method registry is needed here. see docs/ARCHITECTURE.md.
     Column("value_last", Float, nullable=True),
     Column("n_observations", Integer, nullable=False, default=0),
     Column("refreshed_at", DateTime(), nullable=False),
@@ -1155,12 +1155,12 @@ health_metric_daily_rollup = Table(
     Index("ix_health_rollup_athlete_date", "athlete_id", "local_date"),
 )
 
-# --- Period rollups (Phase 6): the same day_rollup/health_metric_daily_rollup shape, one
+# --- Period rollups: the same day_rollup/health_metric_daily_rollup shape, one
 # level coarser -- week and month share a `period_type` discriminator column rather than four
 # separate tables, since they're the same shape at two grains and a caller almost always wants
 # "periods of type X in this range." Computed as a rollup OF day_rollup/
 # health_metric_daily_rollup (sum-of-sums), never of raw tables -- see rollups.py::
-# refresh_period_rollup and docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+# refresh_period_rollup and docs/ARCHITECTURE.md.
 # period_start/period_end are stored, not derived at query time, since callers (the calendar
 # grid) need them to render period boundaries and they're already known at refresh time.
 
@@ -1215,11 +1215,12 @@ health_metric_period_rollup = Table(
     Index("ix_health_period_rollup_athlete_period", "athlete_id", "period_type", "period_start"),
 )
 
-# --- Fitness & Form (Phase 6): an independently-computed Banister/Coggan CTL(42d)/ATL(7d)/TSB
+# --- Fitness & Form: an independently-computed Banister/Coggan CTL(42d)/ATL(7d)/TSB
 # EWMA over daily fit.session.training_load_peak, compared against (not required to match)
 # Garmin's own TrainingReadinessDTO/TrainingHistory signals in the frontend -- Garmin's raw
 # exports have no CTL/ATL/TSB triplet at all (confirmed). Whole-athlete-history grain, full
-# recompute on every relevant ingest run -- see fitness.py::refresh_fitness_rollup and ADR 0009.
+# recompute on every relevant ingest run -- see fitness.py::refresh_fitness_rollup and
+# docs/ARCHITECTURE.md.
 
 fitness_daily_rollup = Table(
     "fitness_daily_rollup",
@@ -1281,8 +1282,8 @@ performance_daily_rollup = Table(
     UniqueConstraint("athlete_id", "local_date", name="uq_performance_daily_rollup_identity"),
 )
 
-# --- Insights (Phase 8): a rules-based, deterministic derived table -- see
-# src/perseverer/insights/ and docs/adr/0012-phase-8-strava-merge-insights.md. Full
+# --- Insights: a rules-based, deterministic derived table -- see
+# src/perseverer/insights/ and docs/ARCHITECTURE.md. Full
 # delete-and-reinsert per athlete per refresh (same justified precedent as fitness_daily_rollup's
 # full CTL/ATL/TSB recompute above: cheap at this data volume, avoids stale rows lingering).
 # Refreshed both on ingest (like every other rollup here) and once daily by the worker's own
@@ -1312,10 +1313,10 @@ insight = Table(
     Index("ix_insight_athlete_kind_window", "athlete_id", "kind", "window"),
 )
 
-# --- Notes (Phase 3): the write path AGENTS.md's mission statement calls for -- one
+# --- Notes: the write path AGENTS.md's mission statement calls for -- one
 # polymorphic table rather than per-entity note tables, matching the project's existing
 # preference for additively-extensible shapes. Scoped to activities/days/weeks for now; a new
-# entity_type is a data-only addition, not a schema change. See ADR 0006 decision 7. ---------
+# entity_type is a data-only addition, not a schema change. see docs/ARCHITECTURE.md. ---------
 
 note = Table(
     "note",
@@ -1381,7 +1382,7 @@ merge_decision = Table(
     Column("decided_at", DateTime(), nullable=False),
 )
 
-# --- Share links (Phase 10): an athlete-issued token granting unauthenticated, read-only
+# --- Share links: an athlete-issued token granting unauthenticated, read-only
 # access to one activity or one summary period -- see sharing.py and
 # api/routers/share.py. Only viable now that activity.id is deterministic (see
 # fit_folder.py::_derive_activity_id) -- a link into a random-ULID id would go dead on the
@@ -1408,7 +1409,7 @@ share_link = Table(
     Index("ix_share_link_athlete", "athlete_id"),
 )
 
-# --- Login brute-force lockout (Phase 9 hardening, ADR 0014) -- see auth/lockout.py ------
+# --- Login brute-force lockout -- see auth/lockout.py ------
 
 auth_login_attempt = Table(
     "auth_login_attempt",
@@ -1426,7 +1427,7 @@ auth_login_attempt = Table(
 
 # --- Athlete-scoping bookkeeping, enforced by tests/db/test_schema.py -----------
 
-# OAuth 2.1 authorization server state for the MCP endpoint (auth/oauth.py, ADR 0007 decision 10).
+# OAuth 2.1 authorization server state for the MCP endpoint (auth/oauth.py, docs/ARCHITECTURE.md).
 # DB-backed, not in-memory, for the same reason auth_login_attempt is: `api` runs 2 uvicorn workers
 # that share no process memory but do share this one SQLite file, and a dynamically-registered
 # client / an issued token has to be visible to whichever worker gets the next request.

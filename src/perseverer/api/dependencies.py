@@ -4,7 +4,7 @@
 deliberately not created in a `lifespan=` hook -- that's what lets tests swap them via
 `app.dependency_overrides` with no ordering dependency on `get_settings()`'s `@lru_cache` or
 `TestClient` construction order. See tests/api/conftest.py and
-docs/adr/0006-phase-3-read-api-and-rollups.md decision 4.
+docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -57,13 +57,13 @@ def require_api_key(
     x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
     authorization: Annotated[str | None, Header()] = None,
 ) -> str:
-    """Resolves the authenticated athlete_id from any of three credentials (Phase 5, ADR
-    0008): (a) X-API-Key matching the legacy process-wide PERSEVERER_API_KEY -> resolves to
-    DEFAULT_ATHLETE_ID, so existing scripts and the Phase 4 MCP server keep working unchanged;
+    """Resolves the authenticated athlete_id from any of three credentials:
+    (a) X-API-Key matching the legacy process-wide PERSEVERER_API_KEY -> resolves to
+    DEFAULT_ATHLETE_ID, so existing scripts and the MCP server keep working unchanged;
     (b) X-API-Key whose hash matches a per-athlete api_key_hash; (c) Authorization: Bearer
     <jwt> issued by POST /auth/login. Fails closed: no credential presented AND neither
     PERSEVERER_API_KEY nor PERSEVERER_JWT_SECRET configured -> 503, never silently open. See
-    ADR 0006 decision 6 (the original single-key contract this extends) and ADR 0008.
+    docs/ARCHITECTURE.md.
     """
     if x_api_key:
         if settings.api_key and secrets.compare_digest(x_api_key, settings.api_key):

@@ -4,14 +4,14 @@
 Confirmed against the real, live Eufy Life API (not assumed): the endpoint's `limit` query
 param is silently ignored -- it always returns the athlete's entire history in one call (539
 records, 2020-11-12 through today, for the account this was verified against). Each record's
-`scale_data` sub-object carries ~24 fields; the sibling `eufy-health-sync` project (which
+`scale_data` sub-object carries ~24 fields; an existing Eufy sync tool (which
 uploads this same data into Garmin/intervals.icu) only extracts 9 of them. This parser
 generically flattens every scalar field in `scale_data` into an `eufy.scale.<field>`
 observation -- "really everything", matching this project's own "never drop an unknown field"
 mandate -- rather than hand-picking the same narrow subset.
 
 Unit handling is deliberately conservative. Only `weight` gets a confirmed unit conversion:
-Eufy's raw value is in hectograms (`772` -> `77.2kg`), the same factor the sibling project
+Eufy's raw value is in hectograms (`772` -> `77.2kg`), the same factor that tool
 already uses in production, independently cross-validated here against two other fields in the
 same real sample: `muscle_mass` (57.4) / 77.2 = 74.3%, matching the separate `muscle` percentage
 field (74.4) almost exactly; `bone_mass` (3.1) / 77.2 = 4.0%, matching `bone` (4) exactly. Every
@@ -54,7 +54,7 @@ def parse_eufy_scale_reading(raw_bytes: bytes) -> HealthBatch:
     observed_at_utc = datetime.fromtimestamp(create_time, tz=UTC).replace(tzinfo=None)
     # Naive UTC-date truncation, matching every other health parser's local_date convention in
     # this codebase (health data deliberately doesn't apply the offset-adjusted conversion
-    # activity.local_date uses -- see ADR 0009's own documented activity-vs-health distinction).
+    # activity.local_date uses -- see the design doc's documented activity-vs-health distinction).
     local_date = observed_at_utc.date().isoformat()
 
     observations: list[HealthObservation] = []

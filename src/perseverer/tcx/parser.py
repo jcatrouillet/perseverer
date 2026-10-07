@@ -2,7 +2,7 @@
 produces (see fit/types.py), so ingest_canonical_batch and streams.py need zero changes to
 accept TCX output.
 
-Real shape confirmed against a real Strava export archive (Phase 8, ADR 0012): one <Activity>
+Real shape confirmed against a real Strava export archive: one <Activity>
 with one or more <Lap> elements (materialized as real ParsedLap rows -- TCX genuinely has lap
 structure, unlike GPX), each containing <Track><Trackpoint> elements with Time/Position/
 DistanceMeters/HeartRateBpm, and -- device-dependent -- AltitudeMeters (absent for at least one

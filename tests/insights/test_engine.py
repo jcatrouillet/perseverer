@@ -83,7 +83,7 @@ def _seed_activity(engine, activity_id: str, local_date: str) -> None:  # type: 
 
 def _seed_activity_with_strava_alias_metrics(engine, activity_id: str, local_date: str) -> None:  # type: ignore[no-untyped-def]
     """A GPX/TCX-sourced Strava activity: no fit.session.* keys at all, only the
-    strava.session.* aliases the CSV-totals overlay emits (ADR 0013)."""
+    strava.session.* aliases the CSV-totals overlay emits."""
     now = dt.datetime.fromisoformat(local_date + "T08:00:00")
     with engine.connect() as conn:
         conn.execute(

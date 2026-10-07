@@ -1,4 +1,4 @@
-"""phase 6: period rollups and fitness daily rollup
+"""period rollups and fitness daily rollup
 
 Revision ID: b3850d71d2a2
 Revises: 76b0bdab038a

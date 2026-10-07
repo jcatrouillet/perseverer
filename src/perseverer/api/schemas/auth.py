@@ -1,5 +1,5 @@
-"""Request/response models for POST /auth/login (Phase 5). See
-docs/adr/0008-phase-5-frontend.md.
+"""Request/response models for POST /auth/login. See
+docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations

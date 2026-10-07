@@ -2,11 +2,11 @@
 re-archiving anything and without running merge-matching -- the one place outside the original
 ingest adapters that turns raw bytes back into a parsed activity. Used by the sources-split
 endpoint (`api/routers/activities.py`) to reconstruct a standalone activity from one source's
-raw content after a human says two sources were wrongly merged together (see ADR 0012).
+raw content after a human says two sources were wrongly merged together.
 
 Every `raw_object.kind` an `activity_source_link` can actually point at is handled: `"fit"` (the
 one shared kind every FIT-producing adapter -- fit_folder/garmin_export/garmin_connect/
-strava_export -- archives under, via `ingest_dispatch.FIT_KIND`), `"fit_activity"` (the Phase 1
+strava_export -- archives under, via `ingest_dispatch.FIT_KIND`), `"fit_activity"` (the older
 kind predating that unification, still real in this athlete's own archive for anything ingested
 before it -- same `parse_fit`, same rebuild.py `row.kind.startswith("fit")` precedent this
 mirrors; missing here until a real `activity_trim.py::clear_activity_trim` call against one such

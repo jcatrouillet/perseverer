@@ -4,7 +4,7 @@ calls each rule module, and writes the result to the `insight` table as a full
 delete-and-reinsert per athlete per run (same justified precedent as fitness.py's full CTL/ATL/
 TSB recompute -- cheap at this data volume, avoids stale rows lingering).
 
-Called from two places, per ADR 0012's one genuinely non-obvious design point in this phase:
+Called from two places, per the design doc's one genuinely non-obvious design point in this phase:
 every ingest entry point's own touched-dates refresh call (like every other rollup here), *and*
 once daily from the worker's own APScheduler job -- a window like "last 30 days" shifts every
 day even with zero new ingests, unlike every other rollup in this codebase.
@@ -47,7 +47,8 @@ _RESTING_HR_ALIASES = (
 # fit.* keys are only ever emitted by the FIT parser; strava.session.* is the source-honest
 # alternative strava_export.py's CSV-totals overlay emits for GPX/TCX-sourced activities, which
 # have no FIT session message to read avg/max HR or total descent from at all. Same alias-merge
-# shape as api/routers/activities.py's AVG_HR_METRIC_KEYS/MAX_HR_METRIC_KEYS -- see ADR 0013.
+# shape as api/routers/activities.py's AVG_HR_METRIC_KEYS/MAX_HR_METRIC_KEYS -- see
+# docs/ARCHITECTURE.md.
 _AVG_HR_METRIC_KEYS = ("fit.session.avg_heart_rate", "strava.session.avg_heart_rate")
 _MAX_HR_METRIC_KEYS = ("fit.session.max_heart_rate", "strava.session.max_heart_rate")
 _ELEVATION_LOSS_METRIC_KEYS = ("fit.session.total_descent", "strava.session.total_descent")

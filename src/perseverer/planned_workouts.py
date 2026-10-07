@@ -24,7 +24,7 @@ Three sport tiers, not one:
   never parsed from text -- there's no natural "text syntax" for naming a specific Garmin
   exercise the way there is for a pace or HR target.
 
-See docs/adr/0015-scheduled-workouts.md.
+docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -134,7 +134,7 @@ def _step_type_dict(intensity: str | None) -> dict[str, Any]:
 
 # Garmin's own end-condition id for "advance when the athlete presses the lap button", from
 # /workout-service/workout/types -- 1 in the garminconnect release this project pins
-# (`ConditionType.LAP_BUTTON`, verified by reading the installed package, same discipline as ADR
+# (`ConditionType.LAP_BUTTON`, verified by reading the installed package, same discipline as
 # 0015's "vendor facts verified directly" section).
 #
 # Read via `getattr` rather than as a plain attribute because this library renumbers this class
@@ -207,7 +207,7 @@ def _target_fields(
     max_hr_bpm: float | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Returns (targetType dict, extra ExecutableStep kwargs -- targetValueOne/Two, or
-    zoneNumber). Web-confirmed wire format (see docs/adr/0015-scheduled-workouts.md's own
+    zoneNumber). Web-confirmed wire format (docs/ARCHITECTURE.md's own
     "vendor facts" section): pace values in m/s, HR values in bpm, `zoneNumber`/targetValueOne+Two
     are mutually exclusive."""
     if step.target_type == "pace" and step.target_low is not None and step.target_high is not None:
@@ -235,7 +235,7 @@ def _cadence_extra(step: PlannedStepLike) -> dict[str, Any]:
     """ "Ride cadence alongside the primary pace/HR target" via a `secondaryTargetType`/
     `secondaryTargetValueOne`/`secondaryTargetValueTwo` triple -- **live-verified** (2026-09-03,
     a real push + `get_workout_by_id` read-back against the athlete's own Garmin account, see
-    docs/adr/0015-scheduled-workouts.md's Verification section): Garmin's server accepts and
+    docs/ARCHITECTURE.md's Verification section): Garmin's server accepts and
     correctly stores this shape, echoing `workoutTargetTypeKey: "cadence"` back on read (not
     `"cadence.zone"`, this function's own first guess before that verification -- matched here
     for round-trip fidelity even though Garmin's server tolerated the original guess too).
@@ -393,7 +393,7 @@ def build_running_workout(
 # it's specifically the *Workout Builder* service used to push a *planned* workout that has no
 # slot for it, a real constraint of that one Garmin subsystem, not a gap this app's own data
 # model or this library introduced. Falls back to SportType.OTHER (see
-# docs/adr/0015-scheduled-workouts.md decision 9): the workout still pushes and schedules fine,
+# docs/ARCHITECTURE.md): the workout still pushes and schedules fine,
 # it just shows as "Other" rather than "Bouldering" in Garmin Connect/on the watch -- the
 # workout's own `name` field still says "Bouldering" regardless.
 _PLACEHOLDER_SPORT_TYPES: dict[str, tuple[int, str]] = {

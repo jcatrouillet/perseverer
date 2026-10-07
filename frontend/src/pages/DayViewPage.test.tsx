@@ -1,7 +1,7 @@
 // Regression test for a real gap: the "Schedule a workout" affordance was originally wired only
 // into MonthView.tsx's expanded-day card, not into DayViewPage.tsx -- the page /day/:date
 // actually lands on (reached from DateNavigator's own day picker, RunningStats' heatmap cells,
-// etc.). See docs/adr/0015-scheduled-workouts.md.
+// etc.). docs/ARCHITECTURE.md.
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 

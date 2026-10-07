@@ -1,5 +1,5 @@
 """OAuth 2.1 authorization server for the MCP endpoint, so a remote MCP client that can't send a
-custom header (claude.ai's "custom connector") can authenticate. See docs/adr/0007-phase-4-mcp-
+custom header (claude.ai's "custom connector") can authenticate. docs/ARCHITECTURE.md-phase-4-mcp-
 server.md decision 10.
 
 The MCP SDK supplies the protocol surface (`/.well-known/*`, `/authorize`, `/token`, `/register`,
@@ -57,7 +57,7 @@ _REQUEST_AUDIENCE = "perseverer-oauth-request"
 
 
 def _now() -> datetime:
-    """Naive UTC, matching every DateTime column in this schema (ADR 0002 decision 10)."""
+    """Naive UTC, matching every DateTime column in this schema."""
     return datetime.now(UTC).replace(tzinfo=None)
 
 

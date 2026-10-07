@@ -7,7 +7,8 @@ distances are actually present in the activity pool, not a fixed table, so any d
 athlete has genuinely run (5K, 10K, a 17km training run, a 50km ultra) gets its own real band.
 
 Deliberately not shared with frontend/src/runningStats.ts::personalRecords, which still uses
-its own percentage-tolerance match against a fixed list of standard race distances (ADR 0012
+its own percentage-tolerance match against a fixed list of standard race distances
+(docs/ARCHITECTURE.md
 already keeps these two implementations separate) -- personalRecords answers "how does this
 activity compare to my best near this distance", a different question from "what's my best at
 exactly this many km".

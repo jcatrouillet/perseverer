@@ -1,7 +1,7 @@
 // Real "every km" splits, computed client-side from the stream's cumulative `distance_m`
 // channel -- the FIT `split` table is device-detected segment types (run/walk detection,
 // structured-workout intervals), confirmed against the real archive to be a different concept,
-// not per-km splits (see docs/adr/0011-phase-7-map-recaps-pwa.md). This is the same approach
+// not per-km splits (docs/ARCHITECTURE.md). This is the same approach
 // Strava's own Splits tab uses: interpolate the timestamp/elevation at each 1km distance
 // boundary, one row per completed km plus a final partial row for the remainder.
 import { gradeAdjustedPaceMinPerKm } from "./gap";

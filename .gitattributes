@@ -1,4 +1,4 @@
-# Enforce LF line endings for all source files so Windows dev and Linux (NAS/CI) never diverge.
+# Enforce LF line endings for all source files so Windows dev and Linux (production/CI) never diverge.
 * text=auto eol=lf
 
 *.py text eol=lf

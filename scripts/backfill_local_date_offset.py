@@ -1,5 +1,5 @@
 """One-off backfill: recompute activity.local_date as offset-adjusted (start_time_utc +
-utc_offset_s), not the raw UTC date -- see ADR 0009 decision 8. utc_offset_s is already
+utc_offset_s), not the raw UTC date -- see docs/ARCHITECTURE.md. utc_offset_s is already
 correctly stored per activity, so this is a pure SQL recompute, no FIT re-parsing needed.
 Then refreshes every rollup table for every affected day/week/month, plus a full
 fitness_daily_rollup recompute (already whole-history by design).

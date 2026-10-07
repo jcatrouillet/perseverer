@@ -574,7 +574,7 @@ export interface GarminLoginOut {
   success: boolean;
 }
 
-// GET /settings/kaya/status, POST /settings/kaya/login (docs/adr/0016-kaya-bouldering-adapter.md)
+// GET /settings/kaya/status, POST /settings/kaya/login (docs/ARCHITECTURE.md)
 export interface KayaStatusOut {
   session_present: boolean;
   session_age_days: number | null;
@@ -942,8 +942,8 @@ export interface CalendarResponse {
   days: DayRollupOut[];
 }
 
-// --- Period (week/month) rollups, Fitness & Form, health dashboard (Phase 6) -- see
-// docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+// --- Period (week/month) rollups, Fitness & Form, health dashboard -- see
+// docs/ARCHITECTURE.md.
 
 export interface PeriodHealthMetricRollupOut {
   metric_key: string;

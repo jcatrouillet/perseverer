@@ -1,7 +1,7 @@
 """Regenerates frontend/src/data/exerciseCatalog.json from the installed garminconnect
 package's own exercise catalog (garminconnect.exercises._RAW) -- the same 1,527-exercise/
 47-category list `create_strength_exercise_step` accepts, used by the hiit/strength_training
-exercise picker (see docs/adr/0015-scheduled-workouts.md). Re-run this whenever the
+exercise picker (docs/ARCHITECTURE.md). Re-run this whenever the
 garminconnect dependency is upgraded and its own exercise list has changed (that package's own
 module docstring says to regenerate its _RAW list with its own scripts/generate_exercises.py --
 this script instead just re-exports whatever is currently installed for the frontend to bundle).

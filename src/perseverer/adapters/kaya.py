@@ -1,5 +1,5 @@
 """Kaya (kayaclimb.com) authentication and token store -- the first slice of the Kaya adapter
-(ADR 0016). Only login/refresh/status live here so far; session and ascent ingestion come next.
+. Only login/refresh/status live here so far; session and ascent ingestion come next.
 
 Kaya has no public API. This talks to the same private REST login the mobile/web app uses
 (`POST /api/user/login` -> `{token, refresh_token, user: {id}}`), so treat every shape here as

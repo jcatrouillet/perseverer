@@ -1,7 +1,7 @@
 """Pushing a planned workout's GPX route to Garmin as a private course: the pure payload builder,
 the adapter call sequence against a fake client (no real network, ever), and the orchestration
 inside `push_planned_workout` (a course failure never fails the workout). See
-docs/adr/0017-planned-workout-gpx-route.md for the live verification these shapes come from."""
+docs/ARCHITECTURE.md for the live verification these shapes come from."""
 
 from __future__ import annotations
 

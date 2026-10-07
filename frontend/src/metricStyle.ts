@@ -2,7 +2,7 @@
 // health metric gets, so a tile, a chip and a chart series can never disagree about what colour
 // "running" is.
 //
-// The governing rule (see docs/adr/0010-phase-6.1-frontend-design.md): a hue on screen
+// The governing rule (docs/ARCHITECTURE.md): a hue on screen
 // identifies a metric or a sport family. There is no decorative colour. That's what keeps the
 // palette from sprawling as pages get added.
 //

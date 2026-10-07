@@ -107,7 +107,7 @@ def test_rsync_command_includes_ssh_key_and_known_hosts_options(
 @pytest.mark.parametrize(
     ("spec", "expected"),
     [
-        ("user@bercy.local:/srv/backups/perseverer", True),
+        ("user@backup.local:/srv/backups/perseverer", True),
         ("/data/local-backups", False),
         ("C:/Users/jerome/backups", False),  # a Windows drive letter's ':' is not user@host's
     ],

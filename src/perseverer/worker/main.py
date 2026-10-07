@@ -1,6 +1,6 @@
 """Worker container entrypoint: runs the daily garmin_connect sync + staleness check on a
 cron schedule (default 04:15 UTC, jittered — see §6 of the project spec), a separate daily
-backup job (Phase 9, ADR 0014, default 03:30 UTC — see backup.py), and a separate daily
+backup job (docs/ARCHITECTURE.md, default 03:30 UTC — see backup.py), and a separate daily
 scheduled-workout push job (default 04:45 UTC, right after the sync — see planned_workouts.py).
 All three schedules resolve against `schedule_timezone` (an IANA name, default UTC), not the
 container's own system clock -- see that setting's own docstring in config.py for why a real
@@ -17,7 +17,7 @@ monthly report does not get the same treatment.
 CLI-only, human-initiated, never automated (see backup.py's own docstring for why).
 
 Both `run_daily_sync` and `run_daily_workout_push` loop over every row in `athlete`, not one
-hardcoded id -- see docs/adr's second-athlete note and config.py::garmin_tokenstore_dir_for /
+hardcoded id -- see docs/DEPLOY.md's "More athletes" and config.py::garmin_tokenstore_dir_for /
 adapters/eufy.py::resolve_eufy_credentials for how each athlete's own Garmin token store and Eufy
 credentials are resolved per-athlete rather than from one shared global.
 """
@@ -132,7 +132,7 @@ def _sync_one_athlete(
 
 def _import_kaya_for_athlete(conn: Connection, settings: Settings, athlete_id: str) -> None:
     """The Kaya bouldering logbook, right after the Garmin sync so a same-day Garmin session is
-    there to merge into (docs/adr/0016-kaya-bouldering-adapter.md). Only for an athlete who has
+    there to merge into (docs/ARCHITECTURE.md). Only for an athlete who has
     logged in to Kaya (`sync auth kaya-login`); never uses credentials, only the saved tokens.
     Best-effort like the Eufy step: a dead session, a rate limit or any Kaya-side change is logged
     and never blocks the staleness check that follows."""
@@ -235,7 +235,7 @@ def run_daily_workout_push() -> None:
     """Separate scheduled job (its own hour/minute, see main() below), right after the daily
     sync -- automatically pushes every `planned_workout` due within the coming
     `planned_workout_push_window_days` days (default 7, "push it if it's within the coming
-    week" -- the athlete's own choice, see docs/adr/0015-scheduled-workouts.md) that hasn't been
+    week" -- the athlete's own choice, docs/ARCHITECTURE.md) that hasn't been
     pushed yet (`push_status != "pushed"`), across every athlete rather than one hardcoded id.
     `push_planned_workout` already catches and records every per-workout failure itself
     (`push_status="push_failed"` + `push_error`) -- see its own docstring -- so this loop only

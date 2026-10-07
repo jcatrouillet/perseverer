@@ -5,7 +5,7 @@
 // good enough", "coat hanger") repeatedly failed, so those ten are Phosphor Icons
 // (@phosphor-icons/react, MIT) `weight="fill"` pictograms instead: professionally drawn,
 // exactly the bold-filled-silhouette style the user pointed at with reference images. This is
-// this project's one considered dependency for Phase 6.1's icon system (see ADR 0010) --
+// this project's one considered dependency for the icon system --
 // deliberately narrow (10 named imports, tree-shaken) rather than a wholesale replacement of
 // the hand-rolled sprite, since the metric/nav/weather glyphs never had a legibility problem.
 //

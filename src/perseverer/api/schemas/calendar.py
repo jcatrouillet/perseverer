@@ -1,8 +1,7 @@
 """Response model for GET /calendar -- reads day_rollup/health_metric_daily_rollup only, no
 DuckDB, no request-time scan (AGENTS.md's rollup mandate). All five stored aggregates are
 returned per metric so the caller picks whichever one a given metric needs (sum for steps,
-last for resting heart rate, ...) -- see docs/adr/0006-phase-3-read-api-and-rollups.md
-decision 1.
+last for resting heart rate, ...) -- docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -37,7 +36,7 @@ class CalendarResponse(BaseModel):
     days: list[DayRollupOut]
 
 
-# --- Period (week/month) rollups, Phase 6 -- see docs/adr/0009-phase-6-*.md ---
+# --- Period (week/month) rollups -- docs/ARCHITECTURE.md ---
 
 
 class PeriodHealthMetricRollupOut(BaseModel):

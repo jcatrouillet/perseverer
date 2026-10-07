@@ -130,7 +130,7 @@ def create_bouldering_goal(
             status_code=409,
             detail="a goal for this period, grade and 'or harder' setting already exists",
         )
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     result = conn.execute(
         goal_table.insert().values(
             athlete_id=athlete_id,

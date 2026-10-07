@@ -14,7 +14,7 @@
 // never baked into the Vite build, even though (unlike apiBaseUrl) this key isn't actually
 // secret: CARTO's own basemap product is designed to be embedded client-side, the same way a
 // Mapbox public token or Google Maps API key is. Runtime-config still wins over a build-time env
-// var here because it lets bercy's own key be rotated (CARTO's free tier is a shared 5M
+// var here because it lets the deployment's key be rotated (CARTO's free tier is a shared 5M
 // tiles/month fair-use ceiling) without a rebuild, matching every other prod-tunable value in
 // this app.
 export type CartoBasemapStyle = "positron" | "voyager" | "dark-matter";

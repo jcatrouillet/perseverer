@@ -82,7 +82,7 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   const gridStart = weekRows[0]![0]!;
   const gridEnd = weekRows[weekRows.length - 1]![6]!;
   const calendar = useCalendar(gridStart, gridEnd);
-  // Rollup-backed single-month lookup for the year-over-year delta tile (ADR 0011 decision 3) --
+  // Rollup-backed single-month lookup for the year-over-year delta tile --
   // reuses /calendar/months rather than fetching a whole prior-year month's raw activities.
   const priorYearMonth = useCalendarMonths(priorYearRange.start, priorYearRange.end);
   const fitness = useFitness(start, end);
@@ -93,8 +93,8 @@ export function MonthView({ year, month }: { year: number; month: number }) {
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
   const hikes = useActivities({ sport: "hiking", startDate: start, endDate: end, limit: 500 });
   // Unbounded, all-history fetch (distinct from `runs`' period-scoped one) so RunningStats can
-  // tell a genuine all-time PR apart from merely "fastest within this month" -- see ADR 0011
-  // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
+  // tell a genuine all-time PR apart from merely "fastest within this month" -- see docs/ARCHITECTURE.md
+  // and RunningStats.tsx's allTimeRecords prop docstring.
   const allTimeRunning = useAllActivities({ sport: "running" });
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   // Navigating month-to-month (DateNavigator, prev/next) re-renders this same MonthView

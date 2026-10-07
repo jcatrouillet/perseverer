@@ -81,7 +81,7 @@ def post_blood_test_result(
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
 ) -> BloodTestResultOut:
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     result = conn.execute(
         blood_test_result.insert().values(
             athlete_id=athlete_id,

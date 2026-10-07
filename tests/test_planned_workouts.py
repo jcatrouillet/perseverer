@@ -198,7 +198,7 @@ class TestBuildRunningWorkout:
 
 class TestBuildExerciseWorkout:
     """hiit/strength_training: real, named Garmin exercises -- wire format live-verified
-    (2026-09-05, see docs/adr/0015-scheduled-workouts.md) against the athlete's own account."""
+    (2026-09-05, docs/ARCHITECTURE.md) against the athlete's own account."""
 
     def test_reps_based_step_with_weight(self) -> None:
         steps = [

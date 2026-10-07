@@ -1,4 +1,4 @@
-// Categorized stat tiles for the activity detail page (Milestone C). Every value here comes
+// Categorized stat tiles for the activity detail page. Every value here comes
 // from `ActivityDetail.metrics` (the full per-activity EAV list the API already returns) or the
 // core `ActivityDetail` fields -- no new backend endpoint. Each section (and each tile within
 // it) renders only when the underlying field is actually present for this activity: a walk has

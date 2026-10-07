@@ -100,9 +100,9 @@ from perseverer.weather_titles import backfill_weather_titles
 _REBUILDABLE_TABLES = (
     merge_decision,
     # insight.activity_id is nullable but still FK-constrained -- must be cleared before
-    # `activity` itself is deleted below. Missing here until now (Phase 8 added `insight`
+    # `activity` itself is deleted below. (`insight` was once missing here
     # after this table list was last written), which FK-crashed `sync rebuild` for any
-    # athlete with insight rows already computed. See ADR 0013.
+    # athlete with insight rows already computed. see docs/ARCHITECTURE.md.
     insight,
     activity_metric,
     activity_stream,
@@ -124,7 +124,7 @@ _REBUILDABLE_TABLES = (
     day_rollup,
     fitness_daily_rollup,
     # Missing here would silently mean this table's rows are never wiped/replayed by a shadow
-    # rebuild at all -- the exact same class of bug `insight`'s own comment above documents (ADR
+    # rebuild at all -- the exact same class of bug `insight`'s own comment above documents (see
     # 0013), caught the same way: `sync rebuild` ran clean (no FK error, since nothing references
     # this table) but left performance_daily_rollup permanently empty on the live side.
     performance_daily_rollup,
@@ -268,8 +268,9 @@ def rebuild_database(
     for row in rows:
         content = read_raw_bytes(archive_root, row.storage_path)
 
-        # "fit" covers Phase 2's unified dispatch (activity-or-health); "fit_activity" is the
-        # Phase 1 kind, kept for backward compatibility with rows archived before this change.
+        # "fit" covers the unified dispatch (activity-or-health); "fit_activity" is the
+        # older activity-only kind, kept for backward compatibility with rows archived before this
+        # change.
         # archive_raw_bytes is content-addressed and idempotent, so replaying through the same
         # dispatch used at ingest time re-finds this exact raw_object.id rather than duplicating
         # it.
@@ -401,9 +402,9 @@ def rebuild_database(
         elif row.kind == "garmin_export_health_json":
             # report_kind isn't stored as its own column -- re-derive it from source_locator
             # (the original export filename), the same way garmin_export.py derives it at
-            # ingest time. Phase 6: this branch was missing entirely until now, meaning
+            # ingest time. Without this branch,
             # `sync rebuild` silently dropped every garmin.export.* health observation (see
-            # docs/adr/0009-phase-6-calendar-rollups-fitness-health.md).
+            # docs/ARCHITECTURE.md).
             report_kind = report_kind_from_filename(Path(row.source_locator or "").name)
             health_result = ingest_health_batch(
                 conn,
@@ -425,7 +426,7 @@ def rebuild_database(
             # differently-kinded raw_object (confirmed against the real archive: zero
             # strava_export_manual_entry rows exist despite manual-entry activities being
             # present). This *is* the only raw_object such an activity has, so replay must
-            # ingest it right here rather than in a separate kind branch. See ADR 0013.
+            # ingest it right here rather than in a separate kind branch. see docs/ARCHITECTURE.md.
             csv_row = csv_row_from_raw_json(content)
             if row.external_id:
                 csv_rows_by_activity_id[row.external_id] = csv_row
@@ -443,7 +444,7 @@ def rebuild_database(
         elif row.kind in (KIND_SESSIONS, KIND_ASCENTS, KIND_UNSENT):
             # Durable kaya_session/kaya_ascent tables are re-upserted from the archived page
             # here; the activities/splits derived from them are rebuilt by apply_kaya_sessions
-            # after the loop (see ADR 0016).
+            # after the loop.
             store_page(
                 conn,
                 athlete_id=athlete_id,
@@ -454,7 +455,7 @@ def rebuild_database(
         elif row.kind in ("strava_export_gpx", "strava_export_tcx"):
             # Previously silently dropped here (fell into the catch-all `else: continue`
             # below) -- a real violation of "raw first, must be able to re-derive the entire
-            # database from the archive" for every GPX/TCX-sourced Strava activity. See ADR
+            # database from the archive" for every GPX/TCX-sourced Strava activity. See
             # 0013.
             batch = parse_gpx(content) if row.kind == "strava_export_gpx" else parse_tcx(content)
             csv_row = csv_rows_by_activity_id.get(row.external_id or "", {})
@@ -481,7 +482,8 @@ def rebuild_database(
 
     # Every step from here through the end of this function commits on its own rather than
     # sharing one long transaction across all of them -- confirmed necessary live: a real
-    # rebuild on bercy once put this entire tail into a single uncommitted transaction that hung
+    # rebuild in production once put this entire tail into a single uncommitted transaction that
+    # hung
     # partway through (inside a live multi-worker process, most likely a lock/resource
     # contention issue between this long-running writer and the app's own concurrent request
     # handling) and had to be recovered by manually re-running just these calls standalone.
@@ -504,7 +506,7 @@ def rebuild_database(
     conn.commit()
 
     # After the overrides above, not before: for a day Kaya covers, its route list replaces the
-    # Garmin-decoded splits those overrides were keyed to (ADR 0016), so Kaya must win.
+    # Garmin-decoded splits those overrides were keyed to, so Kaya must win.
     touched_dates |= apply_kaya_sessions(conn, athlete_id=athlete_id)
     conn.commit()
 
@@ -696,10 +698,10 @@ def rebuild_database_via_shadow(
     athlete's rows with the shadow's. If the replay raises or is killed at any point, the live
     tables were never opened for writing at all: nothing to roll back, no user-facing impact.
 
-    This exists because a real rebuild on bercy once hung for 5+ hours *after* wiping the live
+    This exists because a real rebuild in production once hung for 5+ hours *after* wiping the live
     tables, leaving the whole app reading broken/incomplete data for the entire outage (and,
     separately, an interrupted rebuild during this same investigation left a local dev database
-    in the identical state) -- see rebuild.py's own module history / the ADR for the incident.
+    in the identical state) -- see rebuild.py's own module history for the incident.
     The replay itself keeps its full existing risk profile (still slow, still capable of
     hanging) -- what changes is that none of that is ever visible to anything reading the live
     database, because the live tables are never touched until the replay has already fully
@@ -762,7 +764,8 @@ def rebuild_database_tracked(
     status the same way sync_garmin_connect's own run already can — mirrors that function's own
     try/except-and-record pattern (adapters/garmin_connect.py). `sync rebuild` (cli.py) uses this
     same shadow path too now (not the plain in-place `rebuild_database`) — a rebuild run directly
-    on a box where perseverer-api/perseverer-worker are already live (bercy, always) hits the
+    on a box where perseverer-api/perseverer-worker are already live (any production server) hits
+    the
     exact same "live tables wiped mid-replay" risk this function's shadow approach exists to
     avoid, whether it's triggered from the CLI or the Settings page.
     """

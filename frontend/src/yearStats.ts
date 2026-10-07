@@ -124,7 +124,7 @@ export function averageDurationS(activities: ActivitySummary[]): number | null {
 
 /** Weighted (sum distance / sum time), not a naive average of each activity's own speed --
  * the same "weighted, not average-of-averages" rule used throughout this project's own period
- * rollups (see docs/adr/0009-phase-6-calendar-rollups-fitness-health.md decision 2). */
+ * rollups (docs/ARCHITECTURE.md). */
 export function averageSpeedKmh(activities: ActivitySummary[]): number | null {
   const eligible = activities.filter((a) => a.distance_m != null && effectiveDurationS(a) != null);
   const totalDistanceM = eligible.reduce((sum, a) => sum + a.distance_m!, 0);

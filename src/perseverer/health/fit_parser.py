@@ -1,13 +1,13 @@
 """Pure health-domain FIT parsing: `parse_health_fit(raw_bytes) -> HealthBatch`.
 
 Handles Garmin device monitoring FIT file kinds confirmed against real files (WELLNESS,
-METRICS, HRV_STATUS, SLEEP_DATA, NAP — see docs/adr/0004-phase-2-health-ingestion.md) without
+METRICS, HRV_STATUS, SLEEP_DATA, NAP — docs/ARCHITECTURE.md) without
 gating on filename: whichever known message types are present get extracted, so this is
 robust to a real export archive organizing these files differently than this project's sample
 set. Called after `fit.parser.parse_fit` returns `kind != "activity"` — see
 `ingest_dispatch.py`.
 
-## Scope boundary (see ADR 0004 for the full reasoning)
+## Scope boundary (see docs/ARCHITECTURE.md for the full reasoning)
 
 - `monitoring_mesgs` is mined for `heart_rate` only. Daily steps/distance/calories are NOT
   reconstructed from its compressed `cycles` fields (needs per-activity-type conversion

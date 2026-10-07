@@ -1,8 +1,8 @@
 // CTL (Fitness) and ATL (Fatigue) share one axis; TSB (Form) gets its own axis since its range
 // doesn't share scale with CTL/ATL, plus a zero-line -- see
-// docs/adr/0009-phase-6-calendar-rollups-fitness-health.md. Built on Recharts (ADR 0010): a
+// docs/ARCHITECTURE.md. Built on Recharts: a
 // dual-axis composed chart is exactly the shape Recharts is meant for, replacing the earlier
-// hand-rolled-SVG version (ADR 0008) now that this app has a real charting need beyond one
+// hand-rolled-SVG version now that this app has a real charting need beyond one
 // simple line.
 import {
   Area,

@@ -2,7 +2,7 @@
 
 Real samples confirmed the schema matches Garmin Connect's own daily-summary API response
 shape closely (camelCase fields: `totalSteps`, `restingHeartRate`, `bodyBatteryChargedValue`,
-`averageSpo2`, sleep durations, etc.) — see docs/adr/0004-phase-2-health-ingestion.md.
+`averageSpo2`, sleep durations, etc.) — docs/ARCHITECTURE.md.
 
 Top-level scalar fields become individual `health_observation` rows keyed
 `garmin.daily_summary.<field>` / `garmin.hydration.<field>`. Nested objects/lists (event
@@ -644,7 +644,7 @@ _DAILY_STRESS_HANDLED_FIELDS = frozenset(
 
 def parse_daily_stress_json(raw_bytes: bytes) -> HealthBatch:
     """`Garmin.get_stress_data(cdate)` -- confirmed live against the real account (not
-    recalled/guessed, see ADR 0003 decision 1-2) to carry a genuinely dense, ~3-minute-cadence
+    recalled/guessed, see docs/ARCHITECTURE.md) to carry a genuinely dense, ~3-minute-cadence
     `bodyBatteryValuesArray` (339 "MEASURED" + a handful of "MODELED" gap-filled points on a
     real day) -- unlike `Garmin.get_body_battery`'s own whole-range "reports/daily" endpoint
     (parse_daily_body_battery_json above), which only returns ~6 sparse checkpoints/day despite
@@ -682,12 +682,12 @@ def parse_daily_stress_json(raw_bytes: bytes) -> HealthBatch:
 
 
 # GDPR export health JSON (DI-Connect-Wellness/Metrics/Aggregator) — see
-# docs/adr/0005-phase-2-garmin-export-real-data.md decisions 3-4. Identifiers, not health
+# docs/ARCHITECTURE.md. Identifiers, not health
 # facts, on top of the ones _parse_generic already excludes.
 _EXPORT_SKIP_FIELDS = _SKIP_FIELDS | {"userProfilePK", "deviceId"}
 
 # Different report kinds name their most-precise timestamp differently; tried in this order
-# rather than a per-report-kind config (ADR 0005 decision 4).
+# rather than a per-report-kind config.
 _EXPORT_ANCHOR_FIELDS = (
     "timestampGmt",
     "wellnessEndTimeGmt",

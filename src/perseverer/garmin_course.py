@@ -1,6 +1,6 @@
 """Garmin Connect "course" payload building -- the pure half of pushing a GPX route to the watch.
 
-Verified live on the athlete's own account (2026-10-03, docs/adr/0017-planned-workout-gpx-route.md),
+Verified live on the athlete's own account (2026-10-03, docs/ARCHITECTURE.md),
 not assumed from documentation (Garmin's official Courses API is partner-only; this uses the same
 `course-service` calls Garmin Connect's own web import makes):
 

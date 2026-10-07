@@ -1,7 +1,8 @@
 """Load & recovery flags: rules over the existing CTL/ATL/TSB fitness rollup
 (`fitness_daily_rollup`, see fitness.py). Thresholds are deliberately-chosen defaults, not
 derived from any sports-science reference this project can verify against real data the way
-every other threshold in this codebase is -- called out explicitly here (and in ADR 0012) for
+every other threshold in this codebase is -- called out explicitly here (and in
+docs/ARCHITECTURE.md) for
 the user to confirm or adjust, per the project brief's own instruction to ask rather than guess
 on threshold-like decisions.
 

@@ -1,5 +1,5 @@
 // A plain client-side "copy a workout, paste it onto a date" clipboard for the calendar's own
-// Copy/Paste affordance (docs/adr/0015-scheduled-workouts.md). Two writers: a "Copy" action on a
+// Copy/Paste affordance (docs/ARCHITECTURE.md). Two writers: a "Copy" action on a
 // completed activity (ActivityDetailPage.tsx's CopyWorkoutButton, running-structured activities
 // only -- source_text derived from ActivityWorkoutStepOut, which has no exercise fields at all)
 // and a "Copy" action on an already-scheduled *planned* workout (WorkoutSummary in

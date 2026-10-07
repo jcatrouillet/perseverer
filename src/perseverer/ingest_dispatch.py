@@ -3,7 +3,7 @@ parsing, else no-ops (truly unrecognized — e.g. a corrupt file). Every entry p
 receive an arbitrary `.fit` file (`fit_folder`, `garmin_export`, and `rebuild`'s replay) goes
 through this, so activity and health FIT files are handled identically everywhere. Confirmed
 necessary on real data: the same device export directory contains both kinds side by side —
-see docs/adr/0004-phase-2-health-ingestion.md.
+docs/ARCHITECTURE.md.
 
 `garmin_connect` does not use this: it only ever downloads activity FIT files, so its direct
 `parse_fit` + `ingest_canonical_batch` call is deliberately unchanged.
@@ -25,7 +25,7 @@ from perseverer.health.ingest import HealthIngestResult, ingest_health_batch
 
 # Archived under one generic kind, not "fit_activity"/"fit_wellness"/etc.: raw-first means we
 # archive before we know which this is. `rebuild.py` replays any raw_object whose kind starts
-# with "fit" (this stays backward-compatible with Phase 1/2's "fit_activity" rows).
+# with "fit" (this stays backward-compatible with older "fit_activity" rows).
 FIT_KIND = "fit"
 
 
@@ -48,7 +48,7 @@ class DispatchResult:
     def affected_local_dates(self) -> set[str]:
         """Distinct local_dates newly touched by this dispatch -- what callers accumulate
         across an ingest run and feed to rollups.refresh_daily_rollup once each, not once per
-        file. See docs/adr/0006-phase-3-read-api-and-rollups.md decision 3.
+        file. docs/ARCHITECTURE.md.
         """
         dates: set[str] = set()
         if self.activity_result is not None and self.activity_result.local_date is not None:

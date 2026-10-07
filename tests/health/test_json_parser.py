@@ -1,6 +1,6 @@
 """Tests for health/json_parser.py, using small redacted/synthetic JSON payloads shaped like
 Garmin Connect's daily-summary/hydration API responses -- not the user's real files, which
-stay out of the repo (see docs/adr/0004-phase-2-health-ingestion.md).
+stay out of the repo (docs/ARCHITECTURE.md).
 """
 
 import json
@@ -83,7 +83,7 @@ def test_daily_summary_booleans_are_skipped_entirely() -> None:
 
 
 def test_daily_summary_nested_values_are_cataloged_not_flattened() -> None:
-    """Nested dict/list values are never turned into observations (ADR 0004 decision 5), but
+    """Nested dict/list values are never turned into observations, but
     their existence is still registered so they're visible, not silently dropped."""
     batch = parse_daily_summary_json(_bytes(DAILY_SUMMARY))
     keys = {o.metric_key for o in batch.observations}
@@ -114,7 +114,7 @@ def test_hydration_has_no_anchor_field_falls_back_to_midnight() -> None:
     assert obs.local_date == "2025-06-01"
 
 
-# --- parse_garmin_export_json: GDPR export's day/event-record-array JSON shape (ADR 0005) ----
+# --- parse_garmin_export_json: GDPR export's day/event-record-array JSON shape ----
 
 SLEEP_DATA_RECORDS: list[dict[str, object]] = [
     {
@@ -724,7 +724,7 @@ def test_lactate_threshold_entry_missing_value_is_skipped_not_fatal() -> None:
 
 # --- parse_daily_body_battery_json: garmin_connect's live get_body_battery() shape -- another
 # range call, one record per day. Field names/shape confirmed against the real account
-# (docs/adr/0003-phase-2-garmin-adapters.md decision 1-2), values below are synthetic. ---------
+# (docs/ARCHITECTURE.md), values below are synthetic. ---------
 
 DAILY_BODY_BATTERY: list[dict[str, object]] = [
     {

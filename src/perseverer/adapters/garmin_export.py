@@ -2,11 +2,12 @@
 archive, imported offline with zero network calls (§6 of the project spec).
 
 FIT files anywhere in the archive (including nested inside further .zip files -- confirmed
-necessary against a real export, see docs/adr/0005-phase-2-garmin-export-real-data.md) go
+necessary against a real export, docs/ARCHITECTURE.md) go
 through the same unified dispatch as `fit_folder` (`ingest_dispatch.ingest_fit_bytes`,
 activity-or-health) -- this adapter is a thin discovery/dispatch layer, not a new parser.
 Health JSON under DI-Connect-Wellness/Metrics/Aggregator goes through a generic,
-report-kind-namespaced parser (`health.json_parser.parse_garmin_export_json`) -- see ADR 0005
+report-kind-namespaced parser (`health.json_parser.parse_garmin_export_json`) -- see
+docs/ARCHITECTURE.md
 for why that's generic rather than bespoke per report kind. `summarizedActivitiesExport` JSON
 (DI-Connect-Fitness) is archived raw during the main walk below like everything else, then
 parsed in a separate post-processing pass (`garmin_activity_summary.py`) to correct
@@ -46,18 +47,19 @@ from perseverer.weather_titles import backfill_weather_titles
 SOURCE_NAME = "garmin_export"
 
 # Garmin's own export naming, confirmed from real filenames in a Garmin export archive (see
-# Phase 1's test data, e.g. "10009743933_ACTIVITY.fit") — the digits are Garmin's own stable
+# hand-organized test data, e.g. "10009743933_ACTIVITY.fit") — the digits are Garmin's own stable
 # activityId, a better external_id than fit_folder's device+timestamp fallback.
 _ACTIVITY_FILENAME_RE = re.compile(r"^(\d+)_ACTIVITY\.fit$", re.IGNORECASE)
 
 # The real GDPR export's own naming, confirmed against a real archive: "<email>_<id>.fit" --
-# tried second, after _ACTIVITY_FILENAME_RE, since it's more permissive (see ADR 0005 decision
+# tried second, after _ACTIVITY_FILENAME_RE, since it's more permissive (see docs/ARCHITECTURE.md
+# decision
 # 2). Files matching neither (e.g. the fixed-name device/training backup FIT files) fall back
 # to ingest_fit_bytes's device-serial+start-time/sha256 heuristic.
 _EXPORT_FIT_ID_RE = re.compile(r"_(\d+)\.fit$", re.IGNORECASE)
 
 # Directories (by immediate parent name) confirmed to hold the GDPR export's own
-# day/event-record-array health JSON shape -- see ADR 0005 decision 5. Everything else (account
+# day/event-record-array health JSON shape -- see docs/ARCHITECTURE.md. Everything else (account
 # data, bulk activity summaries, unrelated product domains) stays on the raw-only path below.
 _EXPORT_HEALTH_JSON_DIRS = frozenset(
     {"DI-Connect-Wellness", "DI-Connect-Metrics", "DI-Connect-Aggregator"}
@@ -66,7 +68,7 @@ _EXPORT_HEALTH_JSON_DIRS = frozenset(
 # Strips a date-range token ("2023-01-12" or "20230112") or a long numeric profile id from a
 # GDPR export filename's underscore-separated parts, leaving the report kind itself -- e.g.
 # "2023-01-12_2023-04-22_87061520_sleepData.json" -> "sleepData",
-# "UDSFile_2022-10-03_2023-01-11.json" -> "UDSFile". See ADR 0005 decision 3.
+# "UDSFile_2022-10-03_2023-01-11.json" -> "UDSFile". see docs/ARCHITECTURE.md.
 _DATE_TOKEN_RE = re.compile(r"^\d{4}-?\d{2}-?\d{2}$")
 _PROFILE_ID_RE = re.compile(r"^\d{5,}$")
 
@@ -74,7 +76,7 @@ _MAX_ZIP_EXTRACT_DEPTH = 5
 
 
 def report_kind_from_filename(name: str) -> str:
-    """Public since Phase 6: also used by rebuild.py to replay garmin_export_health_json raw
+    """Public: also used by rebuild.py to replay garmin_export_health_json raw
     objects, deriving report_kind from the archived source_locator (the original filename)
     rather than re-deciding it.
     """
@@ -128,7 +130,8 @@ def _extract_nested_zips(root: Path) -> None:
     """Repeatedly finds every remaining *.zip under `root` and extracts each into a sibling
     directory, so FIT files nested inside further zips (confirmed real: a real export's
     DI-Connect-Uploaded-Files/UploadedFiles_*.zip, plus a couple of single-file backup zips --
-    see ADR 0005) are reachable by the flat file walk below. Never deletes the nested zip
+    see docs/ARCHITECTURE.md) are reachable by the flat file walk below. Never deletes the nested
+    zip
     itself (non-destructive; the main walk just skips .zip-suffix entries afterward). Real
     data nests exactly one level deep; the depth cap is defensive only.
     """

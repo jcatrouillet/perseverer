@@ -1,7 +1,7 @@
-// Phase 7 Milestone A (docs/adr/0011-phase-7-map-recaps-pwa.md): every GPS-bearing activity's
+// (docs/ARCHITECTURE.md): every GPS-bearing activity's
 // start point on one map. Started on Leaflet + public OpenStreetMap raster tiles -- a deliberate,
 // user-confirmed scope reduction from the project brief's original MapLibre + self-hosted
-// Protomaps proposal (ADR 0011 decision 1) -- and moved onto CARTO's vector Positron basemap
+// Protomaps proposal -- and moved onto CARTO's vector Positron basemap
 // (CartoBasemapLayer.tsx) once a real CARTO API key made that the same low-setup, third-party-
 // hosted option ActivityMap.tsx/ActivityRouteMap.tsx already use, rather than a second, visually
 // inconsistent tile source just for this page. Still never sends raw GPS data anywhere but the

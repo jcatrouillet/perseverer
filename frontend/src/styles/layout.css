@@ -1,4 +1,4 @@
-/* App shell + shared component classes. Plain global CSS, no framework/modules -- see ADR
+/* App shell + shared component classes. Plain global CSS, no framework/modules -- see
    0010: one new dependency (Recharts) for this phase is enough, a CSS framework on top of it
    isn't earning its weight for an app this size. */
 

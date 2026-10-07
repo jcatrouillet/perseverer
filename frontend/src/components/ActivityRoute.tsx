@@ -1,4 +1,4 @@
-// The detailed route section on the activity detail page (Phase 7, folding in the user's
+// The detailed route section on the activity detail page (folding in the
 // "moving point" playback ask -- a scrubber needs precise timestamped position data, which is a
 // detail-view concept, not something the list/day-view thumbnail (ActivityMap.tsx) has room or
 // data for). Ties together the pace-coloured map, the per-km splits panel, and a play/scrub

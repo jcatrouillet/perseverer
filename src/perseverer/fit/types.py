@@ -149,7 +149,7 @@ class CanonicalActivity:
 class CanonicalBatch:
     """The output of parsing one raw object. `kind == "unrecognized"` means the file parsed
     without error but wasn't an activity FIT file (e.g. a monitoring/sleep file) — see
-    docs/adr/0002-phase-1-schema-and-ingestion.md for why full modeling of those is Phase 2.
+    docs/ARCHITECTURE.md for why they are cataloged rather than modeled.
     """
 
     kind: str  # "activity" | "unrecognized"

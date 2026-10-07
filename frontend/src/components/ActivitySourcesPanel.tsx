@@ -1,4 +1,4 @@
-// Phase 8 Milestone B (see docs/adr/0012-phase-8-strava-merge-insights.md): shows every source
+// (docs/ARCHITECTURE.md): shows every source
 // an activity's data actually came from, plus why they were merged together, and lets a human
 // undo a wrong merge -- the "both sources inspectable" acceptance criterion made visible.
 // Presentational only (data-fetching hooks live in ActivityDetailPage), matching this codebase's

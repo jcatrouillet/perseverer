@@ -5,10 +5,10 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
   plugins: [
     react(),
-    // Phase 7 Milestone C (ADR 0011 decision 4): installable app shell only -- precaches the
+    // Installable app shell only -- precaches the
     // built JS/CSS/HTML via a generated Workbox service worker. Deliberately no `runtimeCaching`
     // entries: that would start caching live API responses, which is the "real offline data"
-    // scope explicitly deferred in ADR 0011 decision 1. `registerType: "autoUpdate"` refreshes
+    // scope explicitly deferred in docs/ARCHITECTURE.md. `registerType: "autoUpdate"` refreshes
     // the cached shell silently on the next load rather than prompting the user, since there's
     // no offline-data staleness UI here for a stale-shell prompt to hand off to.
     VitePWA({
@@ -26,7 +26,7 @@ export default defineConfig({
         // Paths the *server* answers, not the SPA. By default the generated service worker
         // serves the cached app shell (index.html) for every browser navigation, so in any
         // browser that had already loaded Perseverer, navigating to /authorize (the MCP OAuth
-        // flow, ADR 0007 decision 10) or /oauth/login rendered the SPA's "Not found" page and
+        // flow, docs/ARCHITECTURE.md) or /oauth/login rendered the SPA's "Not found" page and
         // the request never reached the API -- confirmed live. Share pages (/share/...), raw API
         // and MCP URLs, and the OAuth endpoints must always go to the network.
         navigateFallbackDenylist: [

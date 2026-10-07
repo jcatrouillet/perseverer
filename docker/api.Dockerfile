@@ -1,13 +1,10 @@
 # syntax=docker/dockerfile:1
 FROM python:3.12-slim AS builder
 
-# x86-64-v2 no longer matters for the current deploy target (bercy's i5-6260U has AVX2) but is
-# kept anyway -- see docs/DEPLOY.md's environments table and AGENTS.md's platform-constraints
-# section for why this wasn't ripped out opportunistically. Originally: the DS1019+ (Celeron
-# J3455 / Goldmont) has no AVX/AVX2 — only up to SSE4.2. This only matters if a dependency has
-# no manylinux wheel for this platform and pip/uv falls back to a source build;
+# x86-64-v2 (SSE4.2, no AVX/AVX2) keeps the image runnable on older CPUs. This only matters
+# if a dependency has no manylinux wheel for this platform and pip/uv falls back to a source build;
 # numpy/pyarrow/duckdb ship wheels that runtime-dispatch and ignore these flags. See
-# docs/adr/0001-phase-0-foundations.md and the CI avx-smoke job.
+# docs/ARCHITECTURE.md and the CI avx-smoke job.
 ENV CFLAGS="-march=x86-64-v2 -mtune=generic" \
     CXXFLAGS="-march=x86-64-v2 -mtune=generic" \
     UV_LINK_MODE=copy
@@ -25,10 +22,10 @@ COPY config ./config
 RUN uv sync --frozen --no-dev --no-editable
 
 # Bakes DuckDB's "sqlite" extension in at build time, using the same duckdb version `uv sync`
-# just installed. `INSTALL` fetches over the network on first use, and the NAS container has
-# no reason to have outbound internet and images are never built there (see AGENTS.md) — this
+# just installed. `INSTALL` fetches over the network on first use, and the production container
+# has no reason to have outbound internet and images are never built there (see AGENTS.md) — this
 # must happen here, not on first request in production. See
-# docs/adr/0006-phase-3-read-api-and-rollups.md decision 4.
+# docs/ARCHITECTURE.md.
 RUN /app/.venv/bin/python -c "\
 import duckdb; \
 duckdb.connect(':memory:', config={'extension_directory': '/app/.duckdb_extensions'}).execute('INSTALL sqlite')"
@@ -51,7 +48,7 @@ COPY alembic ./alembic
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
-    # Phase 9 hardening (ADR 0014): the Quadlet unit runs this with ReadOnly=true, so a .pyc
+    # Hardening: the Quadlet unit runs this with ReadOnly=true, so a .pyc
     # write attempt under /app on first import would just silently fail anyway (CPython catches
     # that and proceeds uncached, never fatal) -- this skips the attempt outright instead of
     # relying on that fallback.
@@ -61,6 +58,6 @@ ENV PATH="/app/.venv/bin:${PATH}" \
 USER perseverer
 EXPOSE 8000
 
-# 2 workers, not cpu_count() -- bercy has 32GB RAM, no meaningful budget pressure (see
-# docs/DEPLOY.md); this worker count hasn't been revisited since the move off the old NAS.
+# 2 workers, not cpu_count(): a small, predictable footprint for a single-household app.
+# Shared state (lockout, OAuth, MCP) lives in SQLite, so any worker count is safe.
 CMD ["uvicorn", "perseverer.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

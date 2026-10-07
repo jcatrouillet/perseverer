@@ -12,7 +12,7 @@ Hard requirements from the project spec, all enforced here:
 - **Always archive the original FIT, not just the JSON summary**, for every activity — the
   FIT is what actually gets parsed (via the same `parse_fit` as `fit_folder`/`garmin_export`);
   the JSON summary is archived too but not cross-referenced from `activity_source_link` (see
-  docs/adr/0003-phase-2-garmin-adapters.md).
+  docs/ARCHITECTURE.md).
 
 API verified against the installed `garminconnect` package (introspected directly, not
 recalled from training data — this library changes fast and the project spec says so
@@ -705,7 +705,7 @@ class GarminConnectAdapter:
     ) -> int:
         """Uploads a GPX route to the athlete's Garmin account as a **private running course**
         and returns the new Garmin course id. Verified live, not documented anywhere official --
-        see `garmin_course.py` and docs/adr/0017-planned-workout-gpx-route.md.
+        see `garmin_course.py` and docs/ARCHITECTURE.md.
 
         Three steps, each its own rate-limited call: Garmin parses the GPX into a draft, the draft
         is saved, then the saved course is **checked to really be private** (a course carries the
@@ -766,7 +766,7 @@ class GarminConnectAdapter:
         restriction -- it just posts whatever JSON `to_dict()` produces.
 
         The only place this app writes to a third-party account rather than only reading from
-        it -- see docs/adr/0015-scheduled-workouts.md.
+        it -- docs/ARCHITECTURE.md.
         """
         assert self._client is not None, "call authenticate() first"
         if existing_workout_id is not None:
@@ -1073,11 +1073,11 @@ def sync_garmin_connect(
     # Unconditional, unlike the other four ingest entry points: this is the daily scheduled
     # sync path (worker/main.py runs it once/day regardless of whether new activities were
     # found), so the Fitness & Form series' end date must keep advancing through rest days --
-    # see fitness.py and docs/adr/0009-phase-6-calendar-rollups-fitness-health.md. Runs after
+    # see fitness.py and docs/ARCHITECTURE.md. Runs after
     # the touched_dates block above (moved here so that, on a day with new activities,
     # refresh_running_tss has already run and its rTSS values are what this rollup picks up),
     # but stays unconditional itself. The same reasoning is why refresh_insights is
-    # unconditional here too (ADR 0012): a window like "last 30 days" shifts every day even
+    # unconditional here too: a window like "last 30 days" shifts every day even
     # with zero new ingests, and this daily cron run is this codebase's only naturally-daily
     # trigger point -- no separate scheduled job needed.
     refresh_fitness_rollup(conn, athlete_id=athlete_id)

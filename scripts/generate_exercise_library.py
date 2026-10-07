@@ -3,7 +3,7 @@ exercise the hiit/strength_training picker supports (see ExerciseLibraryPage.tsx
 description, muscle groups, and a link to the exercise's own Garmin Connect page, wherever that
 data actually exists.
 
-Three real, honestly-labeled tiers, not one blended guess -- see docs/adr/0015-scheduled-
+Three real, honestly-labeled tiers, not one blended guess -- docs/ARCHITECTURE.md-scheduled-
 workouts.md's own addendum on why this replaced an earlier draft that repeated one category
 photo across dozens of exercises:
 

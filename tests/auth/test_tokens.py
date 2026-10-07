@@ -1,4 +1,4 @@
-"""Tests for auth/tokens.py -- JWT session tokens (Phase 5, ADR 0008)."""
+"""Tests for auth/tokens.py -- JWT session tokens."""
 
 import datetime as dt
 

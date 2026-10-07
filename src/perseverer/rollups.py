@@ -7,14 +7,14 @@ aggregate a decade of activities per request — every dashboard/calendar/recap 
 (never once per file/record — see each adapter's ingest loop), by every ingest entry point:
 `fit_folder.import_from_folder`, `garmin_export.import_garmin_export`,
 `garmin_connect.sync_garmin_connect`, `rebuild.rebuild_database`. See
-docs/adr/0006-phase-3-read-api-and-rollups.md decisions 1 and 3.
+docs/ARCHITECTURE.md.
 
-`refresh_period_rollup` (Phase 6) is a rollup OF `day_rollup`/`health_metric_daily_rollup`, not
+`refresh_period_rollup` is a rollup OF `day_rollup`/`health_metric_daily_rollup`, not
 of raw tables — it reuses the daily grain's already-solved judgment calls (longest-sleep-session
 -wins, etc.) and guarantees week/month totals stay structurally consistent with the day rows
 shown next to them in the calendar grid. Called once per distinct `(period_type, period_start)`
 touched, derived from the same `touched_dates` every ingest entry point already tracks. See
-docs/adr/0009-phase-6-calendar-rollups-fitness-health.md.
+docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ PeriodHealthRow = tuple[str, float | None, float | None, float | None, float | N
 
 def week_start_monday(local_date: str) -> str:
     """The Monday on/before `local_date` — confirmed against the user's own Garmin Connect
-    account, which weeks Monday-start (see ADR 0009)."""
+    account, which weeks Monday-start."""
     d = date.fromisoformat(local_date)
     return (d - timedelta(days=d.weekday())).isoformat()
 

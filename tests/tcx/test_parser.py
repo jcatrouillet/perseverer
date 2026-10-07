@@ -1,5 +1,5 @@
 """tcx/parser.py tests -- synthetic TCX content shaped like the real Strava export archive
-sample confirmed in Phase 8 (ADR 0012): a Lap with real summary fields (avg/max HR, distance,
+sample confirmed against a real export: a Lap with real summary fields (avg/max HR, distance,
 duration) plus Trackpoints carrying Time/Position/DistanceMeters/HeartRateBpm, and a second
 device's TPX-extension cadence to confirm the local-name-based extension lookup."""
 

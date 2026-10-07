@@ -1,5 +1,5 @@
 """Tests for ingest_dispatch.ingest_fit_bytes: the unified per-.fit-file entry point that
-`fit_folder`, `garmin_export`, and `rebuild` all route through (see docs/adr/0004).
+`fit_folder`, `garmin_export`, and `rebuild` all route through (docs/ARCHITECTURE.md).
 
 Uses the same committed synthetic fixtures as fit/test_parser.py and health/test_fit_parser.py
 -- no real personal data.

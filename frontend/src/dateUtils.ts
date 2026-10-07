@@ -1,6 +1,6 @@
 // Date-grid helpers for the calendar views. Every function here defaults to Monday, mirroring
 // the backend's own rollups.py::week_start_monday exactly (confirmed against the user's Garmin
-// Connect account -- see docs/adr/0009-phase-6-calendar-rollups-fitness-health.md) -- that
+// Connect account -- docs/ARCHITECTURE.md) -- that
 // backend accounting week never changes. The optional `weekStartDay` param on weekRange/
 // monthGridWeeks (read from PersonalizeContext by their callers) is purely a *frontend display*
 // preference layered on top: Week/Month view and client-side weekly charts can start their own

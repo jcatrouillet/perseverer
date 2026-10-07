@@ -472,7 +472,7 @@
       <p>Exchange a username/password for a short-lived bearer token via <code>POST /auth/login</code>, then send it as <code>Authorization: Bearer &lt;token&gt;</code>. This is what the web frontend uses. Tokens expire after <code>PERSEVERER_JWT_EXPIRY_DAYS</code> (default <strong>30 days</strong>); there is no refresh endpoint — log in again once expired.</p>
       <div class="code-block"><button class="copy-btn" data-copy="curl-login">Copy</button><pre id="curl-login">curl -X POST https://your-perseverer-host/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "jerome", "password": "YOUR_PASSWORD"}'
+  -d '{"username": "athlete", "password": "YOUR_PASSWORD"}'
 
 # => {"access_token": "eyJhbGciOi...", "expires_at": "2026-09-18T12:00:00Z"}
 
@@ -1477,7 +1477,7 @@ const GROUPS = [
       ],
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/auth/login \\
   -H "Content-Type: application/json" \\
-  -d '{"username": "jerome", "password": "YOUR_PASSWORD"}'` }
+  -d '{"username": "athlete", "password": "YOUR_PASSWORD"}'` }
     },
   ]},
 
@@ -2011,7 +2011,7 @@ const GROUPS = [
       ],
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/notes \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
-  -d '{"entity_type": "activity", "entity_id": "${EX.ACT}", "body": "Felt strong on the last 2k, negative split.", "author": "jerome"}'` }
+  -d '{"entity_type": "activity", "entity_id": "${EX.ACT}", "body": "Felt strong on the last 2k, negative split.", "author": "coach-agent"}'` }
     },
     { method: "GET", path: "/api/v1/notes", summary: "List notes attached to one entity.",
       description: "",

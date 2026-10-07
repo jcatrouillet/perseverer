@@ -8,19 +8,18 @@ dependencies = [
   "uvicorn[standard]>=0.32",
   "pydantic>=2.9",
   "pydantic-settings>=2.6",
-  # Pulled in now (unused until Phase 1+) so wheel selection and the AVX-masked import
-  # smoke test are validated from Phase 0 onward — see docs/adr/0001-phase-0-foundations.md.
+  # Wheel selection for these is validated by the AVX-masked import smoke test in CI.
   "numpy>=2.1",
   "pyarrow>=17.0",
   "duckdb>=1.1",
-  # Phase 1: raw archive, FIT parsing, schema, fit_folder adapter, merge engine.
+  # Raw archive, FIT parsing, schema, fit_folder adapter, merge engine.
   "garmin-fit-sdk>=21.158",
   "python-ulid>=1.1",
   "typer>=0.13",
   "polyline>=2.0",
   "alembic>=1.13",
   "sqlalchemy>=2.0",
-  # Phase 2: garmin_connect adapter, scheduler, staleness webhook.
+  # garmin_connect adapter, scheduler, staleness webhook.
   "garminconnect>=0.3.5",
   "apscheduler>=3.10",
   "httpx>=0.27",

@@ -1,14 +1,14 @@
 """FastAPI application entrypoint.
 
-Phase 3 added the read API + notes write path (see
-docs/adr/0006-phase-3-read-api-and-rollups.md): activities, streams, health observations,
+The read API and notes write path (see
+docs/ARCHITECTURE.md): activities, streams, health observations,
 sleep, the rollup-backed calendar, and notes. Every data route requires the `X-API-Key` header
 (see api/dependencies.py::require_api_key) except /healthz and /version, which stay
 unauthenticated so the Dockerfile's existing healthcheck keeps working unmodified.
 
-Phase 4 mounts an MCP (Model Context Protocol) server at `/mcp`, exposing that same API as
-tools for an AI agent -- see docs/adr/0007-phase-4-mcp-server.md. It's mounted into this same
-app/container rather than a separate service (a deliberate deviation from ADR 0001's Phase-0
+An MCP (Model Context Protocol) server at `/mcp`, exposing that same API as
+tools for an AI agent -- docs/ARCHITECTURE.md. It's mounted into this same
+app/container rather than a separate service (a deliberate deviation from the design doc's Phase-0
 guess), gated by the same shared API key via a raw ASGI wrapper (`Mount` bypasses FastAPI's own
 `Depends`), and requires composing its session-manager lifespan into this app's own lifespan --
 `streamable_http_app()` must be called (building `mcp_asgi_app` below) before `mcp_lifespan` is
@@ -61,15 +61,17 @@ if _settings.cors_origins_list:
         CORSMiddleware,
         allow_origins=_settings.cors_origins_list,
         # PATCH added for the manual activity-correction endpoints (sport/race overrides,
-        # ADR 0012/this session) -- missing originally, which silently broke both from any real
+        # docs/ARCHITECTURE.md/this session) -- missing originally, which silently broke both from
+        # any real
         # browser tab (curl bypasses CORS preflight entirely, which is why this went unnoticed).
         # PUT added for the settings/hr-zones endpoint, same class of bug if omitted. DELETE
-        # added for the bouldering manual-route endpoint (ADR 0012 bouldering-view redesign) --
+        # added for the bouldering manual-route endpoint (docs/ARCHITECTURE.md bouldering-view
+        # redesign) --
         # same bug again, caught this time by exercising the delete affordance in a real browser
         # tab rather than trusting curl/pytest alone.
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
-        # Authorization added in Phase 5 for JWT bearer-token login (ADR 0008) -- X-API-Key
-        # and Content-Type predate it (ADR 0006 decision 8).
+        # Authorization for JWT bearer-token login -- X-API-Key
+        # and Content-Type predate it.
         allow_headers=["X-API-Key", "Authorization", "Content-Type"],
         allow_credentials=False,
     )

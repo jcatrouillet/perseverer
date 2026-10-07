@@ -55,7 +55,7 @@ export function isPaceSport(sport: string): boolean {
 }
 
 // Mirrors the backend's merge/engine.py::sport_family "run" bucket exactly -- duplicated rather
-// than shared cross-language, same precedent as personalRecords/rules_pb.py (ADR 0012). Used to
+// than shared cross-language, same precedent as personalRecords/rules_pb.py. Used to
 // gate the per-activity "run insights" panel, which is deliberately running-specific (see
 // ActivityDetailPage.tsx) even though the backend endpoint itself is sport-agnostic.
 const RUNNING_SPORTS = new Set([
@@ -464,7 +464,7 @@ export function dailyStats(activities: ActivitySummary[]): Map<string, DailyStat
 
 /** The activity's local hour (0-23), derived from its own recorded UTC offset -- not the
  * browser's timezone, and not a guess: `utc_offset_s` is the same field the offset-adjusted
- * `local_date` fix (ADR 0009 decision 8) already relies on for this athlete. */
+ * `local_date` fix already relies on for this athlete. */
 export function localHour(activity: ActivitySummary): number {
   const localMs = new Date(activity.start_time_utc).getTime() + activity.utc_offset_s * 1000;
   return new Date(localMs).getUTCHours();
@@ -642,8 +642,8 @@ export function personalRecords(activities: ActivitySummary[]): PersonalRecord[]
  * matching `(label, date)` against `allTimeRecords` (personalRecords() over the athlete's
  * entire running history). A period record and its all-time counterpart are the same real
  * effort exactly when they share both the distance label and the date; a coincidentally
- * identical pace on a different date is not a match. Phase 7 "PBs set" recap ingredient, see
- * ADR 0011 decision 3. */
+ * identical pace on a different date is not a match. "PBs set" recap ingredient, see
+ * docs/ARCHITECTURE.md. */
 export function newAllTimePrs(
   periodRecords: PersonalRecord[],
   allTimeRecords: PersonalRecord[],

@@ -146,8 +146,8 @@ export function RunningStats({
    * running history, not just this period) -- optional so RunningStats still works standalone
    * without it. When provided, the personal-records table below can tell "fastest within this
    * period" (which `records` already is, computed from the period-scoped `activities`) apart
-   * from "an actual all-time best that happened to land in this period" (Phase 7's "PBs set"
-   * recap ingredient, ADR 0011 decision 3) -- the same date at the same distance in both lists
+   * from "an actual all-time best that happened to land in this period" (the "PBs set"
+   * recap ingredient, docs/ARCHITECTURE.md) -- the same date at the same distance in both lists
    * means this period's best *is* the all-time best, not just the best of a narrower slice. */
   allTimeRecords?: PersonalRecord[];
   /** Label for the year-over-year comparison period, e.g. "2025" or "Jul 2025" -- see

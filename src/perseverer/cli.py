@@ -72,8 +72,8 @@ import_app = typer.Typer(help="One-shot imports from a source")
 watch_app = typer.Typer(help="Continuously poll a source on an interval")
 auth_app = typer.Typer(help="Garmin Connect authentication")
 report_app = typer.Typer(help="Reports over the ingested data")
-athlete_app = typer.Typer(help="Manage athlete login credentials (Phase 5 -- see ADR 0008)")
-backup_app = typer.Typer(help="Backup + restore automation (Phase 9 -- see ADR 0014)")
+athlete_app = typer.Typer(help="Manage athlete login credentials")
+backup_app = typer.Typer(help="Backup + restore automation")
 app.add_typer(import_app, name="import")
 app.add_typer(watch_app, name="watch")
 app.add_typer(auth_app, name="auth")
@@ -239,7 +239,8 @@ def import_apple_health_cmd(
 @import_app.command("kaya")
 def import_kaya_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Pull the Kaya bouldering logbook (needs `sync auth kaya-login` first), archive it raw, and
-    combine it with Garmin bouldering sessions on the same local date -- see ADR 0016."""
+    combine it with Garmin bouldering sessions on the same local date -- see
+    docs/ARCHITECTURE.md."""
     settings = get_settings()
     engine = make_engine(settings.db_path)
     try:
@@ -374,7 +375,8 @@ def auth_status(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
 @auth_app.command("kaya-login")
 def auth_kaya_login(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Interactive Kaya login: prompts for email/password and stores only the resulting tokens
-    (never the password). The ONLY command that ever uses Kaya credentials -- see ADR 0016.
+    (never the password). The ONLY command that ever uses Kaya credentials -- see
+    docs/ARCHITECTURE.md.
     """
     tokenstore_dir = get_settings().kaya_tokenstore_dir_for(athlete_id)
     email = os.environ.get("KAYA_EMAIL") or typer.prompt("Kaya email")
@@ -432,7 +434,7 @@ def athlete_set_password(
     athlete_id: Annotated[str, typer.Option(help="Athlete id to update")] = DEFAULT_ATHLETE_ID,
 ) -> None:
     """Set or change an athlete's login username/password. Run by a human, interactively --
-    there is no self-service signup UI (see docs/adr/0008-phase-5-frontend.md).
+    there is no self-service signup UI (docs/ARCHITECTURE.md).
     """
     settings = get_settings()
     engine = make_engine(settings.db_path)

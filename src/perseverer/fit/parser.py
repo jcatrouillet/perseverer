@@ -18,11 +18,11 @@ mixed into an otherwise-named message's dict). This parser's rule for those:
   bounded in number (one summary row per message), so this is cheap.
 - High-frequency data — `record_mesgs` (confirmed, real per-second stream) and any entirely
   unrecognized message type with more than a handful of rows — is deliberately NOT expanded
-  into per-occurrence value rows in Phase 1: for `record_mesgs` the well-understood channels
+  into per-occurrence value rows: for `record_mesgs` the well-understood channels
   go to the Parquet stream; for truly unrecognized high-frequency message types, only the
   catalog registration happens. The original bytes are always fully recoverable from
   raw_object regardless, so nothing is destroyed — see
-  docs/adr/0002-phase-1-schema-and-ingestion.md for the full reasoning.
+  docs/ARCHITECTURE.md for the full reasoning.
 """
 
 from __future__ import annotations

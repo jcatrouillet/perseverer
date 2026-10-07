@@ -1,6 +1,5 @@
 """POST/GET/PUT/DELETE /notes -- the agent-writable write path AGENTS.md's mission statement
-calls for. Scoped to activities, days, and weeks. See docs/adr/0006-phase-3-read-api-and-rollups.md
-decision 7.
+calls for. Scoped to activities, days, and weeks. docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations
@@ -38,7 +37,7 @@ def create_note(
     # entity_type == "day" or "week": no existence check -- both are just a date (a week's own
     # entity_id being its Monday), not a row that can be missing.
 
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     result = conn.execute(
         note.insert().values(
             athlete_id=athlete_id,
@@ -109,7 +108,7 @@ def update_note(
     if row is None:
         raise HTTPException(status_code=404, detail="note not found")
 
-    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage (ADR 0002)
+    now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     conn.execute(
         note.update().where(note.c.id == note_id).values(body=payload.body, updated_at=now)
     )

@@ -1,5 +1,5 @@
 """GET /insights -- reads the `insight` table only, no request-time computation (matches this
-codebase's rollup mandate). Refreshed by insights/engine.py on ingest and once daily (see ADR
+codebase's rollup mandate). Refreshed by insights/engine.py on ingest and once daily (see
 0012); this endpoint never recomputes anything itself.
 """
 

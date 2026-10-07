@@ -1,5 +1,5 @@
 """Tests for GET /activities/{id}/sources and POST /activities/{id}/sources/{link_id}/split
-(Phase 8 Milestone B -- see docs/adr/0012-phase-8-strava-merge-insights.md). The "both sources
+(-- docs/ARCHITECTURE.md). The "both sources
 inspectable" and "undo a wrong merge, non-destructively" halves of the acceptance criterion.
 """
 

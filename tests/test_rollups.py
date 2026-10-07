@@ -1,5 +1,5 @@
 """Tests for rollups.refresh_daily_rollup: correctness of each aggregate, and idempotency of
-the delete-then-reinsert recompute model. See docs/adr/0006-phase-3-read-api-and-rollups.md.
+the delete-then-reinsert recompute model. docs/ARCHITECTURE.md.
 """
 
 import datetime as dt

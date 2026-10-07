@@ -73,7 +73,7 @@ def test_import_is_idempotent(tmp_path: Path) -> None:
         activity_ids = conn.execute(select(activity.c.id)).scalars().all()
         rollup_rows = conn.execute(select(day_rollup)).fetchall()
 
-    # Proves the rollup-refresh wiring end to end (ADR 0006 decision 3), not just in isolation.
+    # Proves the rollup-refresh wiring end to end, not just in isolation.
     assert len(rollup_rows) == 1
     assert rollup_rows[0].activity_count == 1
 
@@ -86,7 +86,7 @@ def test_import_is_idempotent(tmp_path: Path) -> None:
 
 def test_local_date_is_offset_adjusted_not_raw_utc_date() -> None:
     # 2024-06-01 03:00 UTC, offset -8h -> 2024-05-31 19:00 local: a real evening activity that
-    # would otherwise roll into the wrong (next) UTC calendar day. See ADR 0009 decision 8 --
+    # would otherwise roll into the wrong (next) UTC calendar day. see docs/ARCHITECTURE.md --
     # this is exactly the bug real Garmin/intervals.icu reconciliation surfaced.
     crossing = dt.datetime(2024, 6, 1, 3, 0, tzinfo=dt.UTC)
     assert _local_date(crossing, -28800) == "2024-05-31"

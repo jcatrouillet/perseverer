@@ -1,8 +1,8 @@
-"""Per-athlete API key generation/hashing (Phase 5). Deliberately NOT PBKDF2 like
+"""Per-athlete API key generation/hashing. Deliberately NOT PBKDF2 like
 auth/passwords.py -- an API key is already a 256-bit random token (secrets.token_urlsafe), not
 a low-entropy human password, so a direct SHA-256 hash gives the same "never store the
 plaintext" property while allowing an O(1) indexed lookup (`WHERE api_key_hash = ?`) instead of
-an O(n) linear scan with a constant-time compare per row. See docs/adr/0008-phase-5-frontend.md.
+an O(n) linear scan with a constant-time compare per row. docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations

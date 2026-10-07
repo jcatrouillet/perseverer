@@ -39,8 +39,8 @@
   width: 12rem;
 }
 
-/* An email address runs well past the general 9ch above (e.g. "erwan@example.com" alone is
-   18 characters) -- same cramped-field problem as the date input above. */
+/* An email address runs well past the general 9ch above (e.g. "athlete@example.com" alone is
+   19 characters) -- same cramped-field problem as the date input above. */
 .settings-form input[type="email"] {
   width: 18rem;
 }

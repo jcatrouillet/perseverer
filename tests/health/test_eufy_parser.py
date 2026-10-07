@@ -83,7 +83,7 @@ def test_percent_fields_get_a_percent_unit_everything_else_is_unconverted() -> N
 
 
 def test_really_everything_all_scale_data_fields_become_observations() -> None:
-    """The whole point of this parser: don't just pull the 9 fields the sibling project does --
+    """The whole point of this parser: don't just pull the 9 fields an existing sync tool does --
     every scalar field in scale_data becomes an observation."""
     batch = parse_eufy_scale_reading(_bytes(RECORD))
     keys = {o.metric_key for o in batch.observations}

@@ -1,4 +1,4 @@
-// The activity list (Milestone B of docs/adr/0010-phase-6.1-frontend-design.md's plan):
+// The activity list:
 // activities grouped by local_date, each day getting a slim wellness strip (sleep, resting HR,
 // steps -- all already available from GET /health/dashboard and GET /sleep, no new endpoint)
 // above that day's ActivityCards.

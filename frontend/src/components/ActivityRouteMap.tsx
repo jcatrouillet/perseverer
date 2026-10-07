@@ -43,7 +43,7 @@ const FINISH_ICON = new DivIcon({
   className: "activity-route-map__finish-icon",
   // Four alternating black/white quadrants via plain arc paths -- no <clipPath> id needed
   // (this HTML string is reused verbatim for every ActivityRouteMap instance on a page, e.g.
-  // one per activity in the Milestone D day view, and SVG ids aren't guaranteed unique across
+  // one per activity in the day view, and SVG ids aren't guaranteed unique across
   // duplicated inline markup). Reads as a checker flag at marker scale; a finer 8-square grid
   // wouldn't be distinguishable at 18px anyway.
   html: `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
@@ -150,7 +150,7 @@ export function ActivityRouteMap({
 
   useEffect(() => {
     // Fast = red (--color-heart-rate), slow = blue (--color-pace) -- confirmed against the
-    // theme's real hex values (ADR 0013); the reverse of the original binding.
+    // theme's real hex values; the reverse of the original binding.
     setTones({ slow: resolveTone("--color-pace"), fast: resolveTone("--color-heart-rate") });
   }, []);
 

@@ -1,7 +1,7 @@
-"""JWT session tokens for athlete login (Phase 5). HS256, signed with
+"""JWT session tokens for athlete login. HS256, signed with
 Settings.jwt_secret -- unset secret means the login endpoint fails closed (503), mirroring the
 existing api_key unset-503 precedent in api/dependencies.py::require_api_key. See
-docs/adr/0008-phase-5-frontend.md.
+docs/ARCHITECTURE.md.
 
 Verified against the installed pyjwt 2.13.0 API directly (jwt.encode/decode signatures,
 ExpiredSignatureError/InvalidTokenError) rather than assumed from memory, per this project's

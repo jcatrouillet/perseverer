@@ -2,7 +2,7 @@
 produces (see fit/types.py), so ingest_canonical_batch and streams.py need zero changes to
 accept GPX output.
 
-Real shape confirmed against a real Strava export archive (Phase 8, ADR 0012): bare
+Real shape confirmed against a real Strava export archive: bare
 lat/lon/ele/time <trkpt> elements; some files (ones a Garmin device itself originally produced,
 re-exported via Strava) additionally carry a <gpxtpx:TrackPointExtension> with a heart_rate
 child -- the v1 schema also defines cadence/temperature children, but only heart_rate was
@@ -16,7 +16,7 @@ summarizedActivities correction pass). GPX also carries no distance/speed field 
 TCX's DistanceMeters), so a *per-point* `distance_m`/`speed_mps` stream -- needed for the Pace/
 GAP chart panels and the per-km splits table, neither of which GPX-sourced activities had before
 this -- is derived here via the haversine great-circle distance between consecutive points
-(ADR 0013); this is a real per-point stream value, not a fabricated summary total.
+; this is a real per-point stream value, not a fabricated summary total.
 
 Matches child elements by local tag name (ignoring namespace prefix/URI) rather than exact
 qualified names -- GPX 1.1's core elements are always in the default GPX namespace, but the
@@ -44,7 +44,7 @@ def _haversine_m(a: _LatLon, b: _LatLon) -> float:
     """Great-circle distance between two lat/lon points, in metres (mean Earth radius) -- GPX
     carries no distance field of its own, unlike TCX's DistanceMeters, so this is the only way
     to get a per-point distance/speed stream for the Pace/GAP chart panels and the per-km splits
-    table, both of which need one (see ADR 0013)."""
+    table, both of which need one."""
     lat1, lon1 = radians(a[0]), radians(a[1])
     lat2, lon2 = radians(b[0]), radians(b[1])
     dlat = lat2 - lat1

@@ -17,7 +17,7 @@ COPY config ./config
 RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.12-slim AS runtime
-# rsync + ssh client: backup.py shells out to both for the Phase 9 daily backup job (ADR 0014).
+# rsync + ssh client: backup.py shells out to both for the daily backup job.
 # Neither ships in the slim base image. No server-side sshd needed here -- this container only
 # ever connects *out* to the backup host, never accepts inbound connections.
 RUN apt-get update && apt-get install -y --no-install-recommends rsync openssh-client \

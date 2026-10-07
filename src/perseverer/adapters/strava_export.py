@@ -2,7 +2,7 @@
 archive, imported offline with zero network calls -- mirrors garmin_export.py's shape (a
 directory-or-zip, zero-network importer), not a new architecture.
 
-Real shape confirmed against a real archive (Phase 8, ADR 0012; do not re-derive this from
+Real shape confirmed against a real archive (docs/ARCHITECTURE.md; do not re-derive this from
 memory or public docs -- it was wrong in ways that matter): a top-level `activities.csv` (one
 row per activity, Strava's own numeric `Activity ID` as the stable join key -- **not** the
 number embedded in the per-activity filename, which is a different internal id and only
@@ -12,7 +12,7 @@ GPS/sensor file -- ~0.6% of rows in the sample archive) or one file in whatever 
 original upload was: `.fit`/`.fit.gz` (the majority -- literally the same Garmin FIT bytes
 already reachable via `garmin_export`/`garmin_connect` when Garmin auto-uploads to Strava, so
 this is exactly the cross-source duplicate case the merge engine (`merge/engine.py`, already
-source-agnostic since Phase 1) needs to catch), `.gpx`/`.gpx.gz` (new `gpx/parser.py`), or
+source-agnostic) needs to catch), `.gpx`/`.gpx.gz` (new `gpx/parser.py`), or
 `.tcx.gz` (new `tcx/parser.py`).
 
 Every original file's exact bytes are archived before any decompression/parsing (raw-first,
@@ -32,7 +32,7 @@ gain, calories) are overlaid onto the parser's bare-geometry output via `datacla
 since Strava's own numbers are already available and more complete than anything re-derivable
 from a GPX/TCX stream, and `activities.csv`'s own `Activity Type` (mapped through
 `_STRAVA_SPORT_MAP`, built by decoding real FIT files that are the *same underlying activity* as
-a same-typed GPX/TCX row -- see ADR 0012 -- not guessed) supplies sport/sub_sport, since
+a same-typed GPX/TCX row -- see docs/ARCHITECTURE.md -- not guessed) supplies sport/sub_sport, since
 GPX/TCX carry that far less reliably than Strava's own classification. `.fit`/`.fit.gz` files
 are left untouched by this overlay -- they go through the existing `ingest_dispatch.
 ingest_fit_bytes` exactly like every other FIT source, since FIT's own session-level fields are
@@ -74,7 +74,7 @@ SOURCE_NAME = "strava_export"
 # actually the Garmin FIT SDK's own enum string set (fit/parser.py::parse_fit just uses
 # session.get("sport")/("sub_sport") verbatim -- confirmed by reading that code, not assumed).
 # Every entry here was derived by decoding a real FIT file of that exact Strava-CSV type from
-# the same real archive (see ADR 0012) and reading its real sport/sub_sport, not guessed --
+# the same real archive and reading its real sport/sub_sport, not guessed --
 # this is what makes cross-source merge matching (which compares sport *family*, see
 # merge/engine.py::sport_family) actually recognize a GPX/TCX-only Strava activity as the same
 # real-world activity as its Garmin-FIT-sourced twin. "Workout" is Strava's own generic catch-
@@ -107,7 +107,8 @@ _STRAVA_SPORT_MAP: dict[str, tuple[str, str | None]] = {
 # have no session-level HR/descent field of their own to read, but activities.csv's own
 # Average/Max Heart Rate and Elevation Loss columns are real vendor-supplied summary data, not
 # derived here. The three read sites that need these values (routers/activities.py,
-# insights/engine.py, ActivityStatsGrid.tsx) coalesce both key namespaces -- see ADR 0013.
+# insights/engine.py, ActivityStatsGrid.tsx) coalesce both key namespaces -- see
+# docs/ARCHITECTURE.md.
 _CSV_EXTRA_METRIC_COLUMNS: tuple[tuple[str, str], ...] = (
     ("Relative Effort", "strava.relative_effort"),
     ("Perceived Exertion", "strava.perceived_exertion"),
@@ -138,7 +139,7 @@ def _parse_activity_date(text: str) -> datetime | None:
     # embedded UTC timestamp instead, which is unambiguous. This text field's timezone is not
     # documented by Strava and wasn't independently verifiable for the manual-entry subset, so
     # it's treated as naive-implicitly-UTC per this project's datetime convention -- a real,
-    # small, called-out limitation (see ADR 0012), not a silent assumption.
+    # small, called-out limitation, not a silent assumption.
     try:
         return datetime.strptime(text, "%b %d, %Y, %I:%M:%S %p")
     except ValueError:

@@ -1,7 +1,7 @@
 """Tests for require_api_key: fail-closed on an unset key, 401 on wrong/missing, /healthz and
-/version stay open. See docs/adr/0006-phase-3-read-api-and-rollups.md decision 6.
+/version stay open. docs/ARCHITECTURE.md.
 
-Phase 5 (ADR 0008) broadens require_api_key to resolve *which* athlete authenticated, from any
+require_api_key resolves to resolve *which* athlete authenticated, from any
 of three credentials -- the additional tests below cover per-athlete API keys, JWT bearer
 tokens, and that resolution actually scopes queries (not just gates access).
 """
@@ -46,7 +46,7 @@ def test_healthz_and_version_stay_open_with_no_key(client: TestClient) -> None:
 def test_unset_api_key_and_jwt_secret_fails_closed_503_with_no_credential(
     tmp_path: Path, engine: Engine, duckdb_con: duckdb.DuckDBPyConnection
 ) -> None:
-    """Phase 5 (ADR 0008) narrows the 503 case: it now only fires when NO credential is
+    """The 503 case: it now only fires when NO credential is
     presented at all and neither the legacy shared key nor JWT signing is configured -- once
     per-athlete API keys exist as an independent mechanism, a *presented* X-API-Key that
     simply doesn't match anything is correctly a 401 (see test below), not a 503, even if the

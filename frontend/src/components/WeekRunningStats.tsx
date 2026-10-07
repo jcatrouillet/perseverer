@@ -93,7 +93,7 @@ export function WeekRunningStats({
   );
   if (thisWeek.length === 0) return null;
 
-  // Phase 7 "PBs set" recap ingredient (ADR 0011 decision 3) -- same cross-reference as
+  // "PBs set" recap ingredient -- same cross-reference as
   // RunningStats.tsx's year/month tables, just without the full records table this card
   // doesn't otherwise have.
   const newPrsThisWeek = newAllTimePrs(personalRecords(thisWeek), allTimeRecords ?? []);

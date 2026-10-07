@@ -1,6 +1,6 @@
 # Non-secret default configuration.
 # Loaded first; overridden by environment variables (PERSEVERER_*) and .env in that order.
-# Flat keys for now — nested tables will be introduced once ingestion/adapter config lands (Phase 2+).
+# Flat keys for now — nested tables will be introduced if adapter config ever needs them.
 
 environment = "development"
 log_level = "INFO"

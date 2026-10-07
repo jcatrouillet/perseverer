@@ -1,6 +1,6 @@
 """Tests for transport_mix.py against synthetic Parquet fixtures shaped like the real activity
 that motivated this feature (a hike with a sustained fast segment touching one boundary). See
-docs/adr/0012-... (bouldering-merge-insights ADR era; this feature has no dedicated ADR yet) and
+docs/ARCHITECTURE.md and
 transport_mix.py's own module docstring for the real-data numbers this mirrors.
 """
 

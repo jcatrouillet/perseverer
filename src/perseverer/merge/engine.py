@@ -1,9 +1,9 @@
 """Pure activity-matching logic: is a newly-parsed activity the same real-world activity as
 one already in the database?
 
-This is the merge engine *core* — used from Phase 1 onward (even with a single source,
+This is the merge engine *core* — used on every ingest (even with a single source,
 duplicate files happen: re-exports, corrected re-syncs) and becomes the full cross-source
-reconciliation engine from Phase 2+ once garmin_connect/strava_export exist. The rule below
+reconciliation engine across garmin_connect/garmin_export/strava_export. The rule below
 is the project spec's own definition, verbatim: two records are the same activity when
 |Δstart_time| <= 180s AND sport families match AND |Δduration| <= max(60s, 5%).
 """
@@ -97,7 +97,7 @@ def _as_naive_utc(value: datetime) -> datetime:
     or one read back from SQLite (naive — see db/schema.py's naive-UTC convention; SQLAlchemy's
     SQLite dialect does not round-trip tzinfo). Comparing the two directly raises `TypeError:
     can't subtract offset-naive and offset-aware datetimes`, which is exactly what happened on
-    real data during Phase 1 development once merge-matching had an existing activity to compare
+    real data during development once merge-matching had an existing activity to compare
     against. Normalizing both sides here, once, closes that off regardless of which shape either
     side arrives in.
     """

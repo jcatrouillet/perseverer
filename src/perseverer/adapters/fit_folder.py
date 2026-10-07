@@ -63,12 +63,12 @@ def _local_date(start_time_utc: datetime, utc_offset_s: int) -> str:
     """The calendar date the athlete would call "today" for an activity starting at
     `start_time_utc`, given that activity's own recorded offset -- not the raw UTC date. An
     evening activity in a negative-offset (west of UTC) timezone can otherwise roll into the
-    next UTC day. See ADR 0009 decision 8."""
+    next UTC day. see docs/ARCHITECTURE.md."""
     return (start_time_utc + timedelta(seconds=utc_offset_s)).date().isoformat()
 
 
 # fit_folder's charter is FIT files, plus these two specific Garmin Connect-shaped JSON
-# filename patterns confirmed against real data (see docs/adr/0004-phase-2-health-ingestion.md)
+# filename patterns confirmed against real data (docs/ARCHITECTURE.md)
 # — not a general JSON importer.
 _DAILY_SUMMARY_JSON_RE = re.compile(r"^daily_summary_\d{4}-\d{2}-\d{2}\.json$", re.IGNORECASE)
 _HYDRATION_JSON_RE = re.compile(r"^hydration_\d{4}-\d{2}-\d{2}\.json$", re.IGNORECASE)
@@ -91,7 +91,7 @@ class FitFolderAdapter:
     def list_changed(self, since: datetime) -> list[ObjectRef]:
         # Explicit suffix/filename checks (not path.glob("*.fit")): glob is case-insensitive
         # on Windows but case-sensitive on Linux, so "*.fit" alone would silently miss
-        # ACTIVITY.FIT on the NAS. Content hashing (in fetch_raw/archive) is the real
+        # ACTIVITY.FIT in production. Content hashing (in fetch_raw/archive) is the real
         # idempotency mechanism — mtime here is only a cheap pre-filter, not a correctness
         # requirement.
         refs = []
@@ -123,7 +123,7 @@ class IngestResult:
     activity_id: str | None
     created: bool
     # Set only when created=True -- a matched/merged activity touches no new rollup-relevant
-    # rows, so its date needs no refresh. See rollups.py / ADR 0006 decision 3.
+    # rows, so its date needs no refresh. See rollups.py / docs/ARCHITECTURE.md.
     local_date: str | None = None
 
 
@@ -273,7 +273,7 @@ def insert_new_activity(
             # athlete (and Garmin Connect/any third-party platform) considers "today",
             # breaking week/month reconciliation. start_time_utc itself stays untouched
             # (still the raw, naive-UTC instant); only this derived column is adjusted.
-            # See ADR 0009 decision 8. NB: health_observation/sleep_session's local_date is
+            # see docs/ARCHITECTURE.md. NB: health_observation/sleep_session's local_date is
             # still plain UTC-date (no reliable per-record offset for every health FIT
             # message type has been verified yet) -- a known, documented inconsistency.
             local_date=_local_date(a.start_time_utc, a.utc_offset_s),

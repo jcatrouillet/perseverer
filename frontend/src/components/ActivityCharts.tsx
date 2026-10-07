@@ -1,5 +1,4 @@
-// Multi-panel per-second activity charts (Milestone C of docs/adr/0010-phase-6.1-frontend-
-// design.md's plan) -- replaces StreamChart.tsx's single-channel-with-a-selector approach with
+// Multi-panel per-second activity charts -- replaces StreamChart.tsx's single-channel-with-a-selector approach with
 // one small chart per channel the activity actually has, all sharing one Recharts `syncId` so
 // hovering any panel moves a synced cursor/tooltip across all of them at once. Lap boundaries
 // draw as vertical reference lines using each lap's own start time, converted to the same

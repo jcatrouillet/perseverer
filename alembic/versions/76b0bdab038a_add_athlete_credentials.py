@@ -1,4 +1,4 @@
-"""add athlete credentials for phase 5 auth
+"""add athlete login credentials
 
 Revision ID: 76b0bdab038a
 Revises: 72c93cdc8cf9

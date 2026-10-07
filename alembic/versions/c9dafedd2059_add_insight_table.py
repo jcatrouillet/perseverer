@@ -1,4 +1,4 @@
-"""add insight table for phase 8
+"""add insight table
 
 Revision ID: c9dafedd2059
 Revises: a6c58d78f6fc

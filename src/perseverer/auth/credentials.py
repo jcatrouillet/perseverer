@@ -1,6 +1,6 @@
 """The one username/password check, shared by `POST /auth/login` (JWT session) and the MCP OAuth
 login page (`api/routers/oauth.py`) so the lockout and constant-time discipline has a single
-implementation to audit, not two. See auth/lockout.py and docs/adr/0008-phase-5-frontend.md.
+implementation to audit, not two. See auth/lockout.py and docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations

@@ -45,7 +45,7 @@ export function YearView({ year }: { year: number }) {
   const months = useCalendarMonths(start, end);
   // Rollup-backed (not a raw activity fetch) -- reuses the same /calendar/months endpoint the
   // month-tile grid below already calls, summed across all 12 months, for the year-over-year
-  // delta tile (ADR 0011 decision 3).
+  // delta tile.
   const priorYearMonths = useCalendarMonths(priorYear.start, priorYear.end);
   const fitness = useFitness(start, end);
   const health = useHealthDashboard(start, end);
@@ -55,8 +55,8 @@ export function YearView({ year }: { year: number }) {
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
   const hikes = useActivities({ sport: "hiking", startDate: start, endDate: end, limit: 500 });
   // Unbounded, all-history fetch (distinct from `runs`' period-scoped one) so RunningStats can
-  // tell a genuine all-time PR apart from merely "fastest within this year" -- see ADR 0011
-  // decision 3 and RunningStats.tsx's allTimeRecords prop docstring.
+  // tell a genuine all-time PR apart from merely "fastest within this year" -- see docs/ARCHITECTURE.md
+  // and RunningStats.tsx's allTimeRecords prop docstring.
   const allTimeRunning = useAllActivities({ sport: "running" });
   const byMonth = new Map(months.data?.periods.map((p) => [p.period_start.slice(5, 7), p]));
   const weeklySleep = weeklyAverageSleepHours(sleep.data ?? [], start, end);

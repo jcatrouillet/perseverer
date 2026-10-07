@@ -177,7 +177,7 @@ class WeatherSummary(NamedTuple):
     cloud_cover_max_pct: float | None = None
     apparent_temperature_min_c: float | None = None
     apparent_temperature_max_c: float | None = None
-    # Naive-implicit-UTC (ADR 0002), like every other internal datetime in this codebase -- the
+    # Naive-implicit-UTC, like every other internal datetime in this codebase -- the
     # API route attaches tzinfo via to_utc() when building the response, same as start_time_utc.
     sunrise_utc: datetime | None = None
     sunset_utc: datetime | None = None

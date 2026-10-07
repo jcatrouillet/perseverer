@@ -1,6 +1,6 @@
-// Milestone C of docs/adr/0010-phase-6.1-frontend-design.md's plan: multi-panel stream charts
+// Activity detail: multi-panel stream charts
 // (ActivityCharts, replacing StreamChart's single-channel-with-a-selector), a categorized stats
-// grid, a time-in-zone breakdown, and a styled laps table -- all built on the Milestone A/B
+// grid, a time-in-zone breakdown, and a styled laps table -- all built on the shared
 // design system (Icon, StatTile, sportStyle, tone colours).
 import { useMemo, useState } from "react";
 import { Link } from "wouter";

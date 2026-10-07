@@ -1,4 +1,4 @@
-"""The resource-owner login page for the MCP OAuth flow (auth/oauth.py, ADR 0007 decision 10).
+"""The resource-owner login page for the MCP OAuth flow (auth/oauth.py, docs/ARCHITECTURE.md).
 
 The SDK's `/authorize` redirects the browser here with a signed `req` token describing the pending
 authorization request; a correct Perseverer username/password mints a single-use authorization

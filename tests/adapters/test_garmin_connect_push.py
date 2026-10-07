@@ -1,6 +1,6 @@
 """GarminConnectAdapter.push_planned_workout against a fake Garmin client (no real network calls,
 ever) -- the one place this app writes to a third-party account rather than only reading from it
-(see docs/adr/0015-scheduled-workouts.md). Covers the same non-negotiable properties every other
+(docs/ARCHITECTURE.md). Covers the same non-negotiable properties every other
 adapter method in this codebase is held to: abort immediately on a 429, never retry, never
 construct its own credentialed client. DB write-back (`push_status`/`garmin_workout_id`) is
 covered by tests/test_planned_workouts.py, which exercises the full `push_planned_workout`

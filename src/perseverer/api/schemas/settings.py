@@ -254,7 +254,7 @@ class GarminLoginOut(BaseModel):
 
 
 # GET /settings/kaya/status, POST /settings/kaya/login, POST /settings/kaya/sync -- the Kaya
-# bouldering logbook (docs/adr/0016-kaya-bouldering-adapter.md). Sync progress is polled through
+# bouldering logbook (docs/ARCHITECTURE.md). Sync progress is polled through
 # GET /settings/jobs/latest?source=kaya like the other triggers.
 class KayaLoginIn(BaseModel):
     email: str

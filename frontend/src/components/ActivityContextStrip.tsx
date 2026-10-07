@@ -1,4 +1,4 @@
-// Milestone E of docs/adr/0010-phase-6.1-frontend-design.md's plan: a compact bubble/sparkline
+// A compact bubble/sparkline
 // strip reading GET /activities/{id}/context. A deliberately smaller, honest analog of Strava/
 // intervals.icu's richer comparison views -- not a reproduction of their proprietary models,
 // just the athlete's own real recent efforts (bubble size = distance) plus a plain percentile

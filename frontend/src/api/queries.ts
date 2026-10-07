@@ -390,7 +390,7 @@ export function useSetActivityShoe(activityId: string) {
   });
 }
 
-/** Every GPS-bearing activity's start point (ADR 0011) -- a bounded, unpaginated response by
+/** Every GPS-bearing activity's start point -- a bounded, unpaginated response by
  * design (real scale: 904 of 1250 activities), so the map explorer fetches it in one shot. */
 export function useActivityMapPoints(filters: ActivityFilters) {
   return useQuery({
@@ -677,8 +677,8 @@ export function useActivityWorkout(activityId: string) {
   });
 }
 
-/** `tier` defaults to "low" (matches the Phase 4 MCP tool's own choice, ADR 0007 decision 7) --
- * fine for a compact single overview chart, but the Milestone C multi-panel activity detail
+/** `tier` defaults to "low" (matches the MCP tool's default) --
+ * fine for a compact single overview chart, but the multi-panel activity detail
  * view asks for "medium" explicitly since several synced panels at once can use the extra
  * resolution. */
 export function useActivityStream(activityId: string, enabled: boolean, tier: string = "low") {
@@ -1362,7 +1362,7 @@ export function useDeleteDurationGoal() {
 }
 
 // --- Scheduled workouts (planned_workout) -- see api/routers/planned_workouts.py and
-// docs/adr/0015-scheduled-workouts.md. A day can hold any number of independently id-addressed
+// docs/ARCHITECTURE.md. A day can hold any number of independently id-addressed
 // workouts. `usePlannedWorkoutsList` backs the calendar grid's own per-day indicator (summary
 // rows across a date range); `usePlannedWorkoutsForDate` backs the day panel/schedule form once
 // a day is expanded (full detail, every workout on that one date).

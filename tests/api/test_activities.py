@@ -208,7 +208,7 @@ def test_strava_session_hr_alias_is_read_when_fit_key_absent(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
     # GPX/TCX-sourced Strava activities have no fit.session.* metric at all -- avg/max HR must
-    # still surface via the strava.session.* alias (ADR 0013), in both list and detail.
+    # still surface via the strava.session.* alias, in both list and detail.
     with engine.connect() as conn:
         seed_activity(conn, activity_id="a1")
     _add_metric(engine, activity_id="a1", metric_key="strava.session.avg_heart_rate", value=130.0)

@@ -1,7 +1,7 @@
 // The one stat presentation used everywhere (year/month/all-time stats, running stats, health).
 // Replaces the ad-hoc `.stat-tile` markup that was duplicated across five files.
 //
-// Shape follows the "split on a race clock" idea from the Phase 6.1 design: a small tracked-out
+// Shape follows the "split on a race clock" idea from the design system: a small tracked-out
 // caption, a large tabular numeral, and the unit demoted inside the value so the figure itself
 // carries the line. Colour arrives only through `tone` (an icon chip in that metric's hue).
 //

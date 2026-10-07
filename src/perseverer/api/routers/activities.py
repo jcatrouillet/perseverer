@@ -126,7 +126,7 @@ router = APIRouter()
 # session field for fit_folder/garmin_export/garmin_connect, or activities.csv's own Average/Max
 # Heart Rate columns (strava_export.py's CSV-totals overlay) for GPX/TCX-sourced Strava
 # activities, which have no FIT session message to read a value from at all. Same alias-merge
-# shape as api/routers/health.py::LOGICAL_METRICS -- see ADR 0013.
+# shape as api/routers/health.py::LOGICAL_METRICS -- see docs/ARCHITECTURE.md.
 AVG_HR_METRIC_KEYS = ("fit.session.avg_heart_rate", "strava.session.avg_heart_rate")
 MAX_HR_METRIC_KEYS = ("fit.session.max_heart_rate", "strava.session.max_heart_rate")
 
@@ -468,7 +468,7 @@ def list_activity_map_points(
     sport: str | None = Query(None),
 ) -> list[ActivityMapPointOut]:
     """Every GPS-bearing activity's start point in one response -- the map explorer's whole data
-    need (ADR 0011 decision 2). Real scale confirmed against the archive before building this:
+    need. Real scale confirmed against the archive before building this:
     904 of 1250 activities have a route_geom row with a start point; the rest are indoor/no-GPS
     activities that correctly have none. That keeps this one unbounded query with no pagination,
     matching the phase's own "renders in under 1s" acceptance criterion -- 904 rows is nowhere
@@ -1774,8 +1774,8 @@ def get_activity_sources(
     conn: Connection = Depends(get_conn),
 ) -> ActivitySourcesOut:
     """Every source this activity's data actually came from, plus the merge decisions that
-    linked them together -- the "both sources inspectable" half of the Phase 8 acceptance
-    criterion (see ADR 0012). The other half, undoing a wrong merge, is
+    linked them together -- the "both sources inspectable" half of the merge-visibility
+    criterion. The other half, undoing a wrong merge, is
     POST .../sources/{link_id}/split below."""
     exists = conn.execute(
         select(activity.c.id).where(

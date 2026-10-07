@@ -1,5 +1,5 @@
-"""Tests for GET /activities/{id}/context (Milestone E of Phase 6.1 -- see
-docs/adr/0010-phase-6.1-frontend-design.md's plan). percentile_rank and the distance-band
+"""Tests for GET /activities/{id}/context (see
+docs/ARCHITECTURE.md's plan). percentile_rank and the distance-band
 comparison pool are cross-checked independently below (not just re-asserting whatever the
 endpoint itself computes), matching the manual cross-check already run against the real
 archive during development.

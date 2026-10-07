@@ -1,6 +1,6 @@
-"""Password hashing for athlete login (Phase 5). Stdlib PBKDF2-HMAC-SHA256, not
+"""Password hashing for athlete login. Stdlib PBKDF2-HMAC-SHA256, not
 bcrypt/argon2/passlib -- this is a single-operator, low-QPS login endpoint, and adding a
-dependency for it isn't worth it. See docs/adr/0008-phase-5-frontend.md.
+dependency for it isn't worth it. docs/ARCHITECTURE.md.
 """
 
 from __future__ import annotations

@@ -20,7 +20,7 @@ import { formatMinPerKm, isPaceSport, streamSpeedValue } from "./runningStats";
 // intensity shape (deliberately -- see db/schema.py::planned_workout_step's own docstring), so
 // expand/group need only this common subset, not either concrete type -- letting the planned-
 // workout schedule form reuse the exact same grouping/expansion this file already had for
-// recorded activities, per docs/adr/0015-scheduled-workouts.md.
+// recorded activities, per docs/ARCHITECTURE.md.
 interface WorkoutStepLike {
   step_index: number;
   duration_type: string | null;

@@ -98,7 +98,7 @@ def compute_progress(
     """
     period_first, period_last = period_bounds(period_type, period_start)
     # Matches insights/engine.py's own "today" convention (activity.local_date is itself
-    # offset-adjusted, ADR 0009 decision 8, but not per-athlete-timezone-aware at the instant
+    # offset-adjusted, docs/ARCHITECTURE.md, but not per-athlete-timezone-aware at the instant
     # this function runs -- UTC-today is the same pragmatic anchor used there).
     today = as_of or datetime.now(UTC).date()
     # Actual data can't extend past today, and never before the period even started.

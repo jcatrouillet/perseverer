@@ -1,5 +1,5 @@
 // Browsable reference for every exercise the hiit/strength_training picker supports
-// (docs/adr/0015-scheduled-workouts.md's own addendum) -- categories collapsed by default
+// (docs/ARCHITECTURE.md's own addendum) -- categories collapsed by default
 // (native <details>, same convention as ActivitySourcesPanel.tsx's "Why these were merged"),
 // each expanding to its own exercise list. A search narrows the list and auto-expands whichever
 // categories still have a match, same UX as ExerciseStepEditor's own picker. Clicking a thumbnail

@@ -1,4 +1,4 @@
-"""Backup + restore automation (Phase 9, ADR 0014).
+"""Backup + restore automation.
 
 Backs up the SQLite database (via `VACUUM INTO` -- a live, consistent snapshot that needs no app
 downtime, unlike stopping the app to copy the file) plus the raw archive and Parquet trees (via
@@ -65,8 +65,8 @@ def _ssh_options(*, ssh_key_path: str | None, known_hosts_path: str | None) -> s
     *changed* key outright -- not a blanket disable of host-key verification.
 
     `known_hosts_path`, when given, points ssh at a specific file to record newly-trusted host
-    keys into instead of its own default `~/.ssh/known_hosts`. This matters because Phase 9's
-    container hardening (ADR 0014) mounts the SSH key directory read-only -- `accept-new` still
+    keys into instead of its own default `~/.ssh/known_hosts`. This matters because the
+    container hardening mounts the SSH key directory read-only -- `accept-new` still
     needs to *write* a first-contact host key somewhere, so that write has to land under a path
     that's actually writable (under `/data`) rather than the read-only key mount."""
     opts = "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
@@ -120,7 +120,7 @@ def _prune_local_snapshots(backups_dir: Path, *, keep: int) -> int:
     (%Y%m%dT%H%M%SZ) sorts lexically in chronological order, so a plain sort suffices. Only the
     *local* copy is pruned -- the remote destination is the real backup and is deliberately left
     to accumulate full history; local snapshots exist only to be rsync'd from, so there's no
-    reason to let them grow bercy's own disk usage unbounded.
+    reason to let them grow the server's own disk usage unbounded.
 
     `keep <= 0` prunes everything -- guarded explicitly because `list[:-0]` is `list[:0]`, not
     "all but the last 0", a real Python footgun `-keep` would otherwise hit silently at keep=0.

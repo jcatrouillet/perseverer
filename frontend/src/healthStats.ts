@@ -3,7 +3,7 @@ import { isoDate, mondayOf, parseIsoDate } from "./dateUtils";
 
 /** Weighted average across every day with data -- `sum(value_sum) / sum(n_observations)`, the
  * same "weighted, not naive average-of-averages" rule the backend's own period rollups use
- * (see docs/adr/0009-phase-6-calendar-rollups-fitness-health.md decision 2), applied here at
+ * (docs/ARCHITECTURE.md), applied here at
  * the client since there's no year-grain rollup endpoint to read it from directly. */
 export function weightedAverage(metric: HealthDashboardMetricOut | undefined): number | null {
   if (!metric) return null;

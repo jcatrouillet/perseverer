@@ -1,5 +1,5 @@
 """Kaya ingestion: fetch -> archive raw -> parse into kaya_session/kaya_ascent -> derive bouldering
-activities and route splits (ADR 0016).
+activities and route splits.
 
 Three separable steps, so `sync rebuild` can replay everything from the raw archive alone:
 
