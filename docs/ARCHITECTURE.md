@@ -51,7 +51,7 @@ flowchart LR
         W[worker<br/>APScheduler jobs]
         A[api<br/>FastAPI + MCP]
         F[frontend<br/>nginx + React SPA]
-        subgraph data[/data volume/]
+        subgraph data["/data volume"]
             R[(raw archive<br/>gzip, content-addressed)]
             S[(SQLite WAL<br/>metadata, rollups)]
             P[(Parquet<br/>per-second streams)]
@@ -67,10 +67,10 @@ flowchart LR
     FF --> A
     W --> R & S & P
     A --> R & S & P
-    W -- workouts, courses --> GC
-    F -- /api, /mcp, /share --> A
+    W -- "workouts, courses" --> GC
+    F -- "/api, /mcp, /share" --> A
     Browser --> F
-    Agent[AI agent] -- MCP / REST --> A
+    Agent[AI agent] -- "MCP / REST" --> A
 ```
 
 | Container | Role |
