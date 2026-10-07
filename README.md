@@ -14,6 +14,9 @@ your history behind its own account, Perseverer brings it together in one place:
 Your watch still uploads to Garmin Connect, and Perseverer syncs from it in the background: you
 keep the device ecosystem but no longer need the three apps to see, analyse or plan your training.
 
+*About the name:* Strava takes its name from the Swedish verb *att sträva*, "to strive". Perseverer
+follows the same idea in French, the author's language: *persévérer* means "to persevere".
+
 **Own your training data.** Perseverer is a self-hosted fitness and health platform: it pulls
 everything your Garmin watch, your smart scale and your climbing logbook record, keeps the
 original files forever, and turns them into a fast calendar-centred web app, a REST API and an
