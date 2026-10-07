@@ -23,6 +23,7 @@ the HTTP interface see [API.md](API.md).
 - [Notifications and sharing](#notifications-and-sharing)
 - [Multiple athletes](#multiple-athletes)
 - [Performance](#performance)
+- [Configuration](#configuration)
 - [Deployment topology](#deployment-topology)
 - [Testing and CI](#testing-and-ci)
 - [Repository layout](#repository-layout)
@@ -334,8 +335,9 @@ Recharts for charts, Leaflet with a MapLibre-rendered CARTO vector basemap for m
 
 - **Pages:** calendar (day, week, month, year, all time), activities, activity detail, fitness,
   health, map explorer, insights, gear, exercise library, settings.
-- **Runtime configuration:** the API base URL and map key are written into `config.js` when the
-  frontend container starts, never baked into the build, so one image works behind any hostname.
+- **Runtime configuration:** `config.js` (API base URL, map key) is written when the frontend
+  container starts, or served by the Vite dev server, from `perseverer.env`, never baked into the
+  build, so one image works behind any hostname. An empty API URL means the page's own origin.
 - **Single origin:** nginx proxies `/api/`, `/mcp`, `/share/` and the OAuth paths to `api`.
 - **PWA:** installable, with an offline app shell; the service worker never intercepts API, MCP,
   share or OAuth navigations.
@@ -393,6 +395,17 @@ config, and every worker job loops over all athletes.
 - The frontend fetches a long daily series once and windows it client-side; navigation needs no
   further requests.
 
+## Configuration
+
+Everything deployment-specific is in one file, `perseverer.env` (template:
+`perseverer.env.example`): the public URL, secrets, time zone, image location, host data
+directory, ports, optional integrations and tuning. It is read by the settings loader
+(`config.py`, then real environment variables override it), the Vite dev server, Docker/Podman
+Compose (`env_file` plus `--env-file`), the frontend container (`config.js` and the nginx
+upstream, rendered at start) and `scripts/install-production.sh`, which renders the Quadlet units
+from it and installs it beside them. Every setting has a default in code; the container images
+set `PERSEVERER_DATA_DIR=/data` themselves.
+
 ## Deployment topology
 
 - **Dev host:** Podman Desktop with Compose for the full stack, or the API under uvicorn and the
@@ -430,9 +443,9 @@ src/perseverer/
 alembic/          migrations
 frontend/src/     React app (pages, components, api client, styles, pure logic modules)
 docker/           Dockerfiles, nginx config, frontend entrypoint
-quadlet/          systemd Quadlet units and env template for production
+quadlet/          systemd Quadlet unit templates for production
 tests/            pytest suite and fixtures
-scripts/          code generators and one-off maintenance scripts
+scripts/          install-production.sh, code generators and maintenance scripts
 ```
 
 ## Design decisions

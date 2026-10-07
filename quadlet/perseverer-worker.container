@@ -1,3 +1,5 @@
+# Template: scripts/install-production.sh renders the ${PERSEVERER_*} placeholders from perseverer.env
+# and installs the result -- don't install this file directly. See docs/DEPLOY.md.
 # See perseverer-api.container for the shared design notes (bind mount, AutoUpdate, env file).
 
 [Unit]
@@ -6,19 +8,14 @@ After=network-online.target
 Wants=network-online.target
 
 [Container]
-Image=ghcr.io/jcatrouillet/perseverer-worker:latest
+Image=${PERSEVERER_IMAGE_PREFIX}/perseverer-worker:${PERSEVERER_IMAGE_TAG}
 ContainerName=perseverer-worker
 AutoUpdate=registry
 EnvironmentFile=%h/.config/containers/systemd/perseverer.env
-Environment=PERSEVERER_DATA_DIR=/data
-# worker/main.py schedules the daily sync at PERSEVERER_SCHEDULE_HOUR/MINUTE "local" time --
-# the python:3.12-slim base image's clock is UTC with no TZ set otherwise (confirmed live: a
-# default container reports UTC for `date`), which silently turned "04:15 local" into 04:15 UTC
-# == 9:15pm Pacific the evening before, well before a late workout or that day's sleep data
-# would even exist yet. tzdata is already present in the base image, just unset -- TZ alone is
-# enough, no package install needed.
-Environment=TZ=America/Los_Angeles
-Volume=%h/perseverer/data:/data
+# The container clock follows the configured time zone (the base image defaults to UTC); the
+# schedules themselves are resolved against PERSEVERER_SCHEDULE_TIMEZONE in worker/main.py.
+Environment=TZ=${PERSEVERER_SCHEDULE_TIMEZONE}
+Volume=${PERSEVERER_HOST_DATA_DIR}:/data
 # SSH key for the daily backup job (docs/ARCHITECTURE.md, backup.py) -- mounted read-only at the
 # container's default `.ssh` lookup path so plain `ssh`/`rsync` pick up the key with no extra
 # flags. Deliberately :ro even though ssh's own accept-new host-key trust would normally want to
@@ -31,7 +28,7 @@ Volume=%h/perseverer/data:/data
 # takes effect once PERSEVERER_BACKUP_HOST/USER/PATH are actually set in perseverer.env;
 # create_backup() skips gracefully otherwise, so this mount is harmless to leave in place even
 # before that's configured.
-Volume=%h/perseverer/backup-ssh:/home/perseverer/.ssh:ro
+Volume=${PERSEVERER_HOST_BACKUP_SSH_DIR}:/home/perseverer/.ssh:ro
 # Ingestion must never starve the API or the host -- a deliberate resource cap.
 PodmanArgs=--cpus=1.0 --memory=512m
 # Hardening: the only path this container ever writes to is /data (bind

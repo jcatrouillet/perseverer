@@ -61,6 +61,11 @@ Apply these to every change:
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for any structural change.
 - **Migrations:** `uv run alembic revision --autogenerate -m "..."` after changing
   `db/schema.py`; review the generated file; migrations must be additive.
+- **One configuration file.** Every deployment-specific value (URLs, secrets, ports, paths, image
+  location, integrations) is a `PERSEVERER_*` key in `perseverer.env.example` with a default in
+  `config.py`. Never hardcode one in a unit file, Dockerfile, nginx config or frontend file:
+  template it (`quadlet/*.container` placeholders rendered by `scripts/install-production.sh`,
+  `docker/nginx.conf.template`, the `config.js` entrypoint) and document it in the template.
 - **Deploy only when the owner asks.** Develop and verify locally first.
 - **Preserve unrelated work** in a dirty working tree; commit only your own changes.
 
@@ -117,9 +122,10 @@ Things that are easy to get wrong, each learned from a real bug:
 ## Commands
 
 ```bash
+cp perseverer.env.example perseverer.env   # the one config file
 uv sync                                    # Python deps
 uv run alembic upgrade head                # create/migrate the database (seeds the first athlete)
-uv run uvicorn perseverer.api.main:app --port 8008
+uv run uvicorn perseverer.api.main:app --port 8000
 uv run sync --help                         # every CLI command
 uv run sync auth login                     # Garmin, interactive (MFA)
 uv run sync import garmin-connect          # incremental sync

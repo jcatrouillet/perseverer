@@ -1,4 +1,5 @@
-# Secrets / local env
+# Secrets / local configuration (perseverer.env.example is the committed template)
+perseverer.env
 .env
 *.env.local
 

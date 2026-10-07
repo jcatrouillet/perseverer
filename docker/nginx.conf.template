@@ -1,3 +1,5 @@
+# Rendered at container start by the nginx image's envsubst step (only PERSEVERER_* variables,
+# see NGINX_ENVSUBST_FILTER in frontend.Dockerfile), so the API port comes from perseverer.env.
 server {
     listen 80;
     server_name _;
@@ -16,7 +18,7 @@ server {
     # memorable URL, so this one path is forwarded to the API container instead of falling
     # through to the SPA's own index.html like everything else here.
     location /share/ {
-        proxy_pass http://host.containers.internal:8000;
+        proxy_pass http://host.containers.internal:${PERSEVERER_HOST_API_PORT};
         proxy_set_header Host $host;
     }
 
@@ -28,12 +30,12 @@ server {
     # prefix so a future route that isn't under either path (there is none today) fails loudly
     # instead of silently proxying.
     location /api/ {
-        proxy_pass http://host.containers.internal:8000;
+        proxy_pass http://host.containers.internal:${PERSEVERER_HOST_API_PORT};
         proxy_set_header Host $host;
     }
 
     location /mcp {
-        proxy_pass http://host.containers.internal:8000;
+        proxy_pass http://host.containers.internal:${PERSEVERER_HOST_API_PORT};
         proxy_set_header Host $host;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
@@ -52,7 +54,7 @@ server {
     # MCP client (claude.ai's custom connector) can authenticate against this one origin. Exact
     # paths on purpose -- none of them overlap a frontend route.
     location ~ ^/(\.well-known/oauth-|authorize$|token$|register$|revoke$|oauth/) {
-        proxy_pass http://host.containers.internal:8000;
+        proxy_pass http://host.containers.internal:${PERSEVERER_HOST_API_PORT};
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
     }

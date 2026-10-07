@@ -1,9 +1,11 @@
 name: perseverer
 
-# Base service definitions, for local development (Docker or Podman Compose) — see
-# compose.override.yml (auto-merged) for the published-port overlay. Production uses systemd
-# Quadlet units instead (quadlet/), not Compose — see docs/DEPLOY.md. Local images are tagged
-# `perseverer-<service>:local`, independent of any registry prefix.
+# The full stack for the dev host (Docker or Podman Compose). Every service reads the one
+# configuration file, perseverer.env; pass it for port interpolation too:
+#   docker compose --env-file perseverer.env up --build
+# compose.override.yml (auto-merged) publishes the ports. Production uses systemd Quadlet units
+# rendered from the same file (scripts/install-production.sh) — see docs/DEPLOY.md. Local images
+# are tagged `perseverer-<service>:local`; the images set PERSEVERER_DATA_DIR=/data themselves.
 
 services:
   api:
@@ -12,25 +14,7 @@ services:
       dockerfile: docker/api.Dockerfile
     image: perseverer-api:local
     restart: unless-stopped
-    environment:
-      PERSEVERER_ENVIRONMENT: ${PERSEVERER_ENVIRONMENT:-development}
-      PERSEVERER_LOG_LEVEL: ${PERSEVERER_LOG_LEVEL:-INFO}
-      PERSEVERER_API_PORT: ${PERSEVERER_API_PORT:-8000}
-      # Unset -> every data route fails closed (503), never open. See
-      # docs/ARCHITECTURE.md.
-      PERSEVERER_API_KEY: ${PERSEVERER_API_KEY:-}
-      # Unset -> no CORS middleware at all (no cross-origin browser access by default).
-      PERSEVERER_CORS_ALLOWED_ORIGINS: ${PERSEVERER_CORS_ALLOWED_ORIGINS:-}
-      # Signs athlete login session JWTs (POST /auth/login). Unset -> that route 503s. See
-      # docs/ARCHITECTURE.md.
-      PERSEVERER_JWT_SECRET: ${PERSEVERER_JWT_SECRET:-}
-      PERSEVERER_JWT_EXPIRY_DAYS: ${PERSEVERER_JWT_EXPIRY_DAYS:-30}
-      # Hardcoded, not templated from .env: this is the container-internal mount point
-      # (matches the volumes: entry below), an implementation detail of this compose file,
-      # not something a host .env should override. .env's PERSEVERER_DATA_DIR is for
-      # host-side tooling (alembic, the CLI run directly via `uv run`) and means something
-      # different there (a local relative path) — see .env.example.
-      PERSEVERER_DATA_DIR: /data
+    env_file: perseverer.env
     volumes:
       - perseverer-data:/data
     healthcheck:
@@ -65,15 +49,7 @@ services:
       dockerfile: docker/worker.Dockerfile
     image: perseverer-worker:local
     restart: unless-stopped
-    environment:
-      PERSEVERER_ENVIRONMENT: ${PERSEVERER_ENVIRONMENT:-development}
-      PERSEVERER_LOG_LEVEL: ${PERSEVERER_LOG_LEVEL:-INFO}
-      # Hardcoded, not templated from .env: this is the container-internal mount point
-      # (matches the volumes: entry below), an implementation detail of this compose file,
-      # not something a host .env should override. .env's PERSEVERER_DATA_DIR is for
-      # host-side tooling (alembic, the CLI run directly via `uv run`) and means something
-      # different there (a local relative path) — see .env.example.
-      PERSEVERER_DATA_DIR: /data
+    env_file: perseverer.env
     volumes:
       - perseverer-data:/data
     # See the api service's own comment above -- same reasoning, mirrors
@@ -92,12 +68,13 @@ services:
       dockerfile: docker/frontend.Dockerfile
     image: perseverer-frontend:local
     restart: unless-stopped
-    environment:
-      # Regenerates frontend/public/config.js at container start (docker/frontend-entrypoint.d)
-      # -- never baked into the Vite build. Unset -> the image's committed dev-default
-      # (http://localhost:8008) is served as-is, which only matters for a raw `docker run`
-      # without this compose file. See docs/DEPLOY.md and docs/ARCHITECTURE.md.
-      PERSEVERER_API_BASE_URL: ${PERSEVERER_API_BASE_URL:-}
+    # config.js and the nginx upstream (PERSEVERER_HOST_API_PORT) are rendered from this at
+    # container start -- see docker/frontend-entrypoint.d and docker/nginx.conf.template.
+    env_file: perseverer.env
+    # nginx reaches the API through the host's published port; Podman provides this name
+    # natively, Docker needs it mapped to the host gateway.
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
 
 volumes:
   perseverer-data:

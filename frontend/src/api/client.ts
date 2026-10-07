@@ -15,14 +15,14 @@ export class ServerUnconfiguredError extends Error {}
 // 401 came from a background query, e.g. a JWT that expired mid-session.
 export const AUTH_CLEARED_EVENT = "perseverer:auth-cleared";
 
+// An empty apiBaseUrl means "this page's own origin": the frontend's nginx proxies /api/ to the
+// api container, so production needs no API URL setting at all.
 function getBaseUrl(): string {
   const config = window.__PERSEVERER_CONFIG__;
-  if (!config?.apiBaseUrl) {
-    throw new Error(
-      "window.__PERSEVERER_CONFIG__.apiBaseUrl is not set -- did /config.js fail to load?",
-    );
+  if (!config) {
+    throw new Error("window.__PERSEVERER_CONFIG__ is not set -- did /config.js fail to load?");
   }
-  return config.apiBaseUrl;
+  return (config.apiBaseUrl ?? "").replace(/\/$/, "");
 }
 
 interface StoredCredential {

@@ -1,36 +1,27 @@
-"""Settings loader: config/default.toml provides defaults, environment variables
-(PERSEVERER_*) and .env override them. Env takes precedence over TOML so a container's
-runtime environment always wins over the baked-in default file.
+"""Settings loader: every setting has a default here, overridden by `perseverer.env` (the one
+configuration file, see perseverer.env.example) and then by real environment variables
+(PERSEVERER_*), so a container's runtime environment always wins.
 """
 
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic_settings import (
-    BaseSettings,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
-    TomlConfigSettingsSource,
-)
-
-_DEFAULT_TOML = Path(__file__).resolve().parents[2] / "config" / "default.toml"
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        toml_file=_DEFAULT_TOML,
         env_prefix="PERSEVERER_",
-        env_file=".env",
+        env_file="perseverer.env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     environment: str = "development"
     log_level: str = "INFO"
-    api_host: str = "0.0.0.0"
-    api_port: int = 8000
-    data_dir: Path = Path("/data")
+    # ./data on the dev host; the container images set PERSEVERER_DATA_DIR=/data themselves.
+    data_dir: Path = Path("data")
 
     # --- garmin_connect rate limiting, rolling window, staleness, scheduler ---
     garmin_rolling_window_days: int = 10
@@ -58,9 +49,6 @@ class Settings(BaseSettings):
     # Comma-separated origins for CORSMiddleware; unset -> no CORS middleware at all (no
     # cross-origin browser access by default). see docs/ARCHITECTURE.md.
     cors_allowed_origins: str | None = None
-    # Reserved, not yet wired to uvicorn's --forwarded-allow-ips (needs an api.Dockerfile CMD
-    # change of its own).
-    trusted_proxy_ip: str | None = None
     # Where the DuckDB sqlite extension is baked in at Docker build time (api.Dockerfile) --
     # None locally, where DuckDB's own default cache/INSTALL is fine. see docs/ARCHITECTURE.md.
     duckdb_extension_dir: Path | None = None
@@ -199,24 +187,6 @@ class Settings(BaseSettings):
         if not self.cors_allowed_origins:
             return []
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # Priority, highest first: explicit init kwargs, env vars, .env file, TOML defaults.
-        return (
-            init_settings,
-            env_settings,
-            dotenv_settings,
-            TomlConfigSettingsSource(settings_cls),
-            file_secret_settings,
-        )
 
 
 @lru_cache

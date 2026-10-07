@@ -1,13 +1,16 @@
 # Deployment and operations
 
-Two environments:
+All configuration lives in **one file, `perseverer.env`**, created from
+[`perseverer.env.example`](../perseverer.env.example) at the repository root. Fill in its
+"Required" section (public URL, two secrets, time zone), adjust the infrastructure section if
+the defaults don't suit you, and every component picks it up:
 
 | | Dev host | Production server |
 |---|---|---|
-| Runtime | uv + Vite on the host, or Podman/Docker Compose | Rootless Podman with systemd Quadlet units |
-| Images | Built locally when needed | Pulled from GHCR, never built on the server |
-| Ingress | `localhost` (API on 8008, frontend on 5173) | Your existing TLS reverse proxy in front of the frontend container |
-| Config | `.env` (from `.env.example`) | `~/.config/containers/systemd/perseverer.env` (from `quadlet/perseverer.env.example`) |
+| Runtime | uv + Vite on the host, or Docker/Podman Compose | Rootless Podman with systemd Quadlet units |
+| Reads `perseverer.env` | The app (`uv run ...`), the Vite dev server, Compose (`--env-file`) | `scripts/install-production.sh` renders the units from it and installs it next to them |
+| Images | Built locally when needed | Pulled from `PERSEVERER_IMAGE_PREFIX`, never built on the server |
+| Ingress | `localhost` | Your existing TLS reverse proxy in front of the frontend port |
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for what each container does.
 
@@ -18,11 +21,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for what each container does.
 ### Host workflow (recommended for day-to-day work)
 
 ```bash
-cp .env.example .env
+cp perseverer.env.example perseverer.env   # set PERSEVERER_API_KEY and PERSEVERER_JWT_SECRET
 uv sync
 uv run alembic upgrade head        # creates ./data/perseverer.db and the default athlete
 uv run sync athlete set-password   # your login
-uv run uvicorn perseverer.api.main:app --host 0.0.0.0 --port 8008
+uv run uvicorn perseverer.api.main:app --port 8000
 ```
 
 ```bash
@@ -31,9 +34,10 @@ npm install
 npm run dev                        # http://localhost:5173, hot reload
 ```
 
-The committed `frontend/public/config.js` points the dev frontend at `http://localhost:8008`.
-`PERSEVERER_CORS_ALLOWED_ORIGINS` in `.env` must include the Vite origin (default
-`http://localhost:5173`; Vite moves to 5174, 5175... if the port is taken).
+The Vite dev server serves `/config.js` from `perseverer.env`, pointing the app at
+`http://localhost:<PERSEVERER_HOST_API_PORT>` (8000 by default; set `PERSEVERER_HOST_API_PORT` if
+you run uvicorn on another port). `PERSEVERER_CORS_ALLOWED_ORIGINS` must include the Vite origin
+(`http://localhost:5173` in the template; Vite moves to 5174, 5175... if the port is taken).
 
 Run a single uvicorn worker in development: with `--workers 2` on Windows, a reload can leave an
 orphaned worker serving old code.
@@ -41,12 +45,13 @@ orphaned worker serving old code.
 ### Full stack in containers
 
 ```bash
-podman compose up --build          # or: docker compose up --build
-curl http://localhost:8008/api/v1/healthz
+docker compose --env-file perseverer.env up --build    # or: podman compose ...
+curl http://localhost:8000/api/v1/healthz
 ```
 
-`compose.override.yml` (merged automatically) publishes the API on `DEV_API_PUBLISHED_PORT`
-(8008) and the frontend on `DEV_FRONTEND_PUBLISHED_PORT` (5173). Rebuild after code changes.
+Every service reads `perseverer.env`; `--env-file` also feeds it to Compose itself, which
+publishes the API on `PERSEVERER_HOST_API_PORT` and the frontend on
+`PERSEVERER_HOST_FRONTEND_PORT` (open <http://localhost:8080>). Rebuild after code changes.
 
 Notes for Podman Desktop on Windows:
 
@@ -82,76 +87,62 @@ CI runs the same checks on every push.
 ## Images
 
 GitHub Actions builds `perseverer-api`, `perseverer-worker` and `perseverer-frontend` on every
-push to `main` that passes CI and pushes them to GHCR as `:latest`. The production server only
-pulls. To use your own registry, change the `Image=` lines in `quadlet/*.container`.
+push to `main` that passes CI and pushes them to GHCR as `:latest` (and `:sha-<commit>`). The
+production server only pulls `PERSEVERER_IMAGE_PREFIX/perseverer-*:PERSEVERER_IMAGE_TAG`; the
+template's default points at this repository's published images. If you build your own, push
+them to your registry and change the prefix.
 
 ---
 
 ## Production server
 
-The units run rootless under a regular user, managed by `systemctl --user`. Paths below use `~` for
-that user's home directory (`%h` in the unit files).
+The services run rootless under a regular user, managed by `systemctl --user`. You need Podman
+(with Quadlet, 4.4+) and a copy of this repository on the server.
 
-### One-time setup
+### Install
 
-1. **Data directory.** The units bind-mount `~/perseverer/data` (a plain directory, so the
-   archive stays browsable and easy to back up). The container user (uid 1000) must own it inside
-   rootless Podman's user namespace:
-   ```bash
-   mkdir -p ~/perseverer/data
-   podman unshare chown -R 1000:1000 ~/perseverer/data
-   ```
-2. **Environment file.** Copy `quadlet/perseverer.env.example` to
-   `~/.config/containers/systemd/perseverer.env` and fill it in. Required:
-   `PERSEVERER_API_KEY`, `PERSEVERER_JWT_SECRET`, `PERSEVERER_API_BASE_URL` (the public origin, e.g.
-   `https://perseverer.example.com`), `PERSEVERER_PUBLIC_BASE_URL` (same origin),
-   `PERSEVERER_CORS_ALLOWED_ORIGINS`, `PERSEVERER_SCHEDULE_TIMEZONE`. Optional blocks: CARTO map key,
-   staleness webhook, Eufy, backups, SMTP. All three containers read the same file and ignore the
-   keys they don't use. Never commit it.
-3. **Install and start the units:**
-   ```bash
-   podman quadlet install quadlet/perseverer-api.container \
-     quadlet/perseverer-worker.container quadlet/perseverer-frontend.container
-   systemctl --user enable --now perseverer-api perseverer-worker perseverer-frontend
-   ```
-4. **Create the schema** (Alembic is baked into the api image):
-   ```bash
-   podman exec perseverer-api alembic upgrade head
-   ```
-5. **Create your login:**
-   ```bash
-   podman exec -it perseverer-api sync athlete set-password
-   ```
-6. **Automatic updates.** Each unit has `AutoUpdate=registry`; enable the timer that applies it:
-   ```bash
-   systemctl --user enable --now podman-auto-update.timer
-   ```
-7. **Keep running after logout and start at boot:**
-   ```bash
-   sudo loginctl enable-linger "$USER"
-   ```
+```bash
+git clone <this repository> perseverer && cd perseverer
+cp perseverer.env.example perseverer.env
+$EDITOR perseverer.env                     # Required section + anything you want to change
+scripts/install-production.sh              # renders the units, installs, starts, migrates
+podman exec -it perseverer-api sync athlete set-password   # your login
+sudo loginctl enable-linger "$USER"        # keep running after logout, start at boot
+```
+
+`install-production.sh`:
+
+1. checks that the required values are set;
+2. creates the data and backup-key directories if they don't exist, owned by the container user;
+3. renders `quadlet/*.container` with the image, data directory, ports and time zone from
+   `perseverer.env` and installs them, with a copy of `perseverer.env`, into
+   `~/.config/containers/systemd/` (all three containers read that copy);
+4. restarts the services, enables `podman-auto-update.timer`, waits for the API and runs the
+   database migrations.
 
 ### Updating
 
-```bash
-podman auto-update                         # or wait for the timer
-podman exec perseverer-api alembic upgrade head
-```
+- **New images:** each unit has `AutoUpdate=registry`, so the timer pulls new images and restarts
+  the services. Apply migrations afterwards:
+  ```bash
+  podman exec perseverer-api alembic upgrade head
+  ```
+- **Configuration change or new repository version:** edit `perseverer.env` (or `git pull`) and
+  re-run `scripts/install-production.sh`. It is safe to re-run at any time.
 
-Run the migration after every update that ships one; migrations are additive and safe to run
-while the app is up.
+Migrations are additive and safe to run while the app is up.
 
 ### Reverse proxy
 
-The frontend container listens on 8080 and its nginx forwards `/api/`, `/mcp`, `/share/`,
-`/oauth/`, `/authorize`, `/token`, `/register`, `/revoke` and `/.well-known/` to the api container,
-so the whole app is one origin. Point your TLS-terminating reverse proxy at port 8080 of the
-production server; the api's own port (8000) does not need to be exposed.
+The frontend container listens on `PERSEVERER_HOST_FRONTEND_PORT` (8080) and its nginx forwards
+`/api/`, `/mcp`, `/share/`, `/oauth/`, `/authorize`, `/token`, `/register`, `/revoke` and
+`/.well-known/` to the API on `PERSEVERER_HOST_API_PORT`, so the whole app is one origin and the
+web app needs no API URL. Point your TLS-terminating reverse proxy at the frontend port; the API
+port does not need to be exposed.
 
 If the public hostname resolves differently inside your network (split-horizon DNS, no hairpin
 NAT), make the internal record point at the reverse proxy rather than at the production server,
-which only speaks plain HTTP. `PERSEVERER_API_BASE_URL` is applied when the frontend container
-starts, so changing it needs only `systemctl --user restart perseverer-frontend`.
+which only speaks plain HTTP.
 
 ---
 
@@ -182,21 +173,23 @@ vendor is contacted.
 ### Backups and restore
 
 The worker snapshots SQLite with `VACUUM INTO` and rsyncs it with the raw archive and Parquet
-files to a backup host over SSH every day (`PERSEVERER_BACKUP_HOST`, `_USER`, `_PATH`; default
-03:30). Local snapshots are pruned to `PERSEVERER_BACKUP_KEEP_LOCAL_SNAPSHOTS`; the remote copy
+files to a backup host over SSH every day (the backup block of `perseverer.env`:
+`PERSEVERER_BACKUP_HOST`, `_USER`, `_PATH`; default 03:30). Local snapshots are pruned to `PERSEVERER_BACKUP_KEEP_LOCAL_SNAPSHOTS`; the remote copy
 keeps everything.
 
 One-time SSH key setup on the production server:
 
 ```bash
+# the directory is PERSEVERER_HOST_BACKUP_SSH_DIR (default ~/perseverer/backup-ssh)
 mkdir -p ~/perseverer/backup-ssh
 ssh-keygen -t ed25519 -f ~/perseverer/backup-ssh/id_ed25519 -N ""
 ssh-copy-id -i ~/perseverer/backup-ssh/id_ed25519.pub <backup_user>@<backup_host>
-podman unshare chown -R 1000:1000 ~/perseverer/backup-ssh
 chmod 700 ~/perseverer/backup-ssh && chmod 600 ~/perseverer/backup-ssh/id_ed25519
+podman unshare chown -R 1000:1000 ~/perseverer/backup-ssh   # last: hands it to the container user
 ```
 
-The worker unit mounts that directory read-only as the container's `~/.ssh`. Run a backup by hand
+The worker mounts that directory (`PERSEVERER_HOST_BACKUP_SSH_DIR`, created by the install
+script) read-only as the container's `~/.ssh`. Run a backup by hand
 with `podman exec perseverer-worker sync backup create`.
 
 Restore is deliberately command-line only, because it overwrites the live data directory:
@@ -209,8 +202,8 @@ CI runs a full backup → wipe → restore round trip on every push.
 
 ### Email reports
 
-Set the SMTP block in the env file (`PERSEVERER_SMTP_HOST`, `_PORT`, `_USERNAME`, `_PASSWORD`,
-`_FROM`, `_SECURITY`). Port 587 uses `starttls`; port 465 uses `ssl`. Each athlete then sets an
+Fill in the SMTP block of `perseverer.env` (`PERSEVERER_SMTP_HOST`, `_PORT`, `_USERNAME`,
+`_PASSWORD`, `_FROM`, `_SECURITY`) and re-run `scripts/install-production.sh`. Port 587 uses `starttls`; port 465 uses `ssl`. Each athlete then sets an
 email address in Settings → Profile and enables the weekly and/or monthly summary in Settings →
 External tools, where "Send test email" sends the current weekly report immediately.
 

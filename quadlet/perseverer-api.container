@@ -1,5 +1,6 @@
-# Deploys via `podman quadlet install` -- see docs/DEPLOY.md. Rootless, user-level (installs
-# to ~/.config/containers/systemd/), managed by `systemctl --user`.
+# Template: scripts/install-production.sh renders the ${PERSEVERER_*} placeholders from perseverer.env
+# and installs the result -- don't install this file directly. See docs/DEPLOY.md.
+# Rootless, user-level (installed to ~/.config/containers/systemd/), managed by `systemctl --user`.
 
 [Unit]
 Description=Perseverer API
@@ -7,24 +8,21 @@ After=network-online.target
 Wants=network-online.target
 
 [Container]
-Image=ghcr.io/jcatrouillet/perseverer-api:latest
+Image=${PERSEVERER_IMAGE_PREFIX}/perseverer-api:${PERSEVERER_IMAGE_TAG}
 ContainerName=perseverer-api
 # Lets `podman auto-update` (podman-auto-update.timer) pull a newer digest under the same
-# :latest tag and restart automatically -- images are only ever built on Windows/CI (never on
-# this host, see docs/DEPLOY.md), so this is the pull step, not a build trigger.
+# :latest tag and restart automatically -- images are only ever built in CI or on the dev host
+# (never on this host), so this is the pull step, not a build trigger.
 AutoUpdate=registry
 EnvironmentFile=%h/.config/containers/systemd/perseverer.env
-# Hardcoded, not from perseverer.env: this is the container-internal mount point (matches the
-# Volume= line below), an implementation detail of this unit, not something the shared env file
-# should override -- same reasoning compose.yaml's own PERSEVERER_DATA_DIR line documented.
-Environment=PERSEVERER_DATA_DIR=/data
+Environment=TZ=${PERSEVERER_SCHEDULE_TIMEZONE}
 # Bind mount, not a Podman-managed named volume: this project's whole ethos is an inspectable,
 # directly-browsable data archive (raw bytes + SQLite + Parquet you can rsync/back up with plain
 # file tools), not something opaque under Podman's own storage tree. The Dockerfile's own `USER
 # perseverer` (uid 1000) needs the host directory owned to match under rootless Podman's user
 # namespace -- see the one-time `podman unshare chown` step in docs/DEPLOY.md.
-Volume=%h/perseverer/data:/data
-PublishPort=8000:8000
+Volume=${PERSEVERER_HOST_DATA_DIR}:/data
+PublishPort=${PERSEVERER_HOST_API_PORT}:8000
 HealthCmd=["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/healthz', timeout=3)"]
 HealthInterval=30s
 HealthTimeout=5s

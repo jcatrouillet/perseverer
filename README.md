@@ -203,11 +203,11 @@ These clients can still break when a vendor changes something.
 Requirements: Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node 22+.
 
 ```bash
-cp .env.example .env              # set PERSEVERER_API_KEY and PERSEVERER_JWT_SECRET
+cp perseverer.env.example perseverer.env   # the one config file: set the two secrets
 uv sync
 uv run alembic upgrade head       # creates data/perseverer.db and the first athlete
 uv run sync athlete set-password  # choose your login
-uv run uvicorn perseverer.api.main:app --port 8008
+uv run uvicorn perseverer.api.main:app --port 8000
 ```
 
 In a second terminal:
@@ -225,8 +225,10 @@ uv run sync import garmin-connect               # recent days
 uv run sync import garmin-export ~/garmin.zip   # full history
 ```
 
-To run the whole stack in containers (`api`, `worker`, `frontend`), use `docker compose up --build`
-or `podman compose up --build`. For a production server, see [docs/DEPLOY.md](docs/DEPLOY.md).
+All configuration, dev and production alike, lives in that one `perseverer.env`. To run the
+whole stack in containers, use `docker compose --env-file perseverer.env up --build` (or
+`podman compose ...`). On a production server, `scripts/install-production.sh` sets everything up
+from the same file; see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Documentation
 

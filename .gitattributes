@@ -16,7 +16,8 @@
 *.sql text eol=lf
 Dockerfile text eol=lf
 *.Dockerfile text eol=lf
-.env.example text eol=lf
+perseverer.env.example text eol=lf
+quadlet/*.container text eol=lf
 
 # Binary assets — never touch line endings.
 *.png binary

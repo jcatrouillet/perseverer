@@ -18,7 +18,6 @@ RUN pip install --no-cache-dir uv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY src ./src
-COPY config ./config
 RUN uv sync --frozen --no-dev --no-editable
 
 # Bakes DuckDB's "sqlite" extension in at build time, using the same duckdb version `uv sync`
@@ -35,7 +34,6 @@ RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin perseverer
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
-COPY --from=builder /app/config /app/config
 COPY --from=builder /app/.duckdb_extensions /app/.duckdb_extensions
 # Migrations were never runnable against a containerized deploy's data volume until now --
 # alembic itself was already a runtime dependency (uv sync pulled it in), but alembic.ini and
@@ -47,6 +45,7 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 
 ENV PATH="/app/.venv/bin:${PATH}" \
+    PERSEVERER_DATA_DIR=/data \
     PYTHONUNBUFFERED=1 \
     # Hardening: the Quadlet unit runs this with ReadOnly=true, so a .pyc
     # write attempt under /app on first import would just silently fail anyway (CPython catches
