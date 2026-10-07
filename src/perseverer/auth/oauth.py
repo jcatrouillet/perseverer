@@ -1,6 +1,6 @@
 """OAuth 2.1 authorization server for the MCP endpoint, so a remote MCP client that can't send a
-custom header (claude.ai's "custom connector") can authenticate. docs/ARCHITECTURE.md-phase-4-mcp-
-server.md decision 10.
+custom header (claude.ai's "custom connector") can authenticate. See docs/ARCHITECTURE.md
+("MCP server").
 
 The MCP SDK supplies the protocol surface (`/.well-known/*`, `/authorize`, `/token`, `/register`,
 `/revoke`, PKCE verification, redirect-URI checks); this module supplies the storage and the one

@@ -1,5 +1,5 @@
-// "Copy" half of the calendar's copy/paste scheduling affordance (docs/ARCHITECTURE.md-scheduled-
-// workouts.md) -- writes this activity's own structure into the workout clipboard
+// "Copy" half of the calendar's copy/paste scheduling affordance (docs/ARCHITECTURE.md,
+// "Writing back to Garmin") -- writes this activity's own structure into the workout clipboard
 // (workoutClipboard.ts) as workout-syntax text, ready for "Paste" on any calendar day cell
 // (ScheduleWorkoutForm.tsx). A one-time starting point the athlete edits before saving, never a
 // live link back to this activity.

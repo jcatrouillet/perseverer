@@ -3,9 +3,8 @@ exercise the hiit/strength_training picker supports (see ExerciseLibraryPage.tsx
 description, muscle groups, and a link to the exercise's own Garmin Connect page, wherever that
 data actually exists.
 
-Three real, honestly-labeled tiers, not one blended guess -- docs/ARCHITECTURE.md-scheduled-
-workouts.md's own addendum on why this replaced an earlier draft that repeated one category
-photo across dozens of exercises:
+Three real, honestly-labeled tiers, not one blended guess (an earlier draft that
+repeated one category photo across dozens of exercises was rejected):
 
 1. **Garmin's own "detailed" exercises** (~10% of the catalog, confirmed live 2026-09 --
    `GET https://connect.garmin.com/web-data/exercises/en-US/<CATEGORY>/<EXERCISE>.json`, no auth

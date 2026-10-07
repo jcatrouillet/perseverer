@@ -24,6 +24,7 @@ MCP server an AI coach can read and plan with.
 ### Calendar
 
 Day, week, month, year and all-time views, each with the stats that make sense at that scale.
+The day view adds that day's sleep stages, wellness figures and an intraday body-battery chart.
 Weeks show sleep, steps, planned workouts and the weather forecast for every day; months and years
 add totals against the same period last year, streaks, activities by type, running and climbing
 breakdowns, Fitness & Form and health summaries.
@@ -40,8 +41,8 @@ distance, time of day, a calendar heatmap and personal records for the period.
 ### Activities
 
 Every activity has a detail page: weather at the time, pace variability, distance, heart rate and
-elevation stats, training effect, the route on a map with a replay, and a per-km split table with
-grade-adjusted pace. Activities from several sources are merged into one, with the evidence shown
+elevation stats, training effect, the place name, the route on a map with a replay (exportable as
+an image or an animated GIF), and a per-km split table with grade-adjusted pace. Activities from several sources are merged into one, with the evidence shown
 and a one-click split if the merge was wrong.
 
 | Run | Route and splits |
@@ -70,8 +71,10 @@ note to a route, and it shows again whenever you repeat that route.
 | ![Hike detail](docs/screenshots/activity-hike.png) | ![Bouldering routes](docs/screenshots/activity-bouldering.png) |
 
 You can correct what the devices got wrong: sport, race flag, title, trim a forgotten-stop tail,
-log fueling, assign shoes, fix a climbing route's grade or add a route the watch missed. Every
-correction survives a full rebuild.
+log fueling, assign shoes, fix a climbing route's grade or add a route the watch missed. Duplicates
+the automatic matcher missed can be merged by hand, choosing field by field which source wins;
+Settings lists likely duplicates and activities that probably need trimming. Every correction
+survives a full rebuild.
 
 ### Activity list and map
 
@@ -131,12 +134,18 @@ Running analytics computed from your own history:
     cadence, repeats, and lap-button steps.
   - **HIIT and strength** use 1,527 Garmin exercises with sets, reps and weights.
   - **Yoga and bouldering** are timed sessions.
+  - A step-by-step builder for running workouts if you'd rather not type the syntax, and comments
+    on a whole workout (sent to the watch) or on individual steps.
+  - **Copy and paste across the calendar:** copy any planned workout (steps, exercises, time,
+    duration and comments) or the structure of a completed run, and paste it onto another day.
   - Several workouts per day, recurring workouts, and a GPX route that is sent to the watch as a
     private course.
 - **Races** with goal times, compared with the predicted finish.
 - **Goals** per week, month or year: distance, time spent in any sport, and bouldering sends by
   grade, each with a pace-to-target chart.
 - **Compliance** per sport in the week view, matched automatically against recorded activities.
+- **Notes** on any activity, day or week, written by you or by an AI agent through the API; the
+  coming week's notes also appear in the weekly email.
 
 ### Gear and exercises
 
@@ -155,6 +164,9 @@ step-by-step instructions.
   database from the archive.
 - **Personalize:** week start, 12/24-hour time, kilometres or miles, starting page, light or dark
   theme.
+- **Profile and physical profile:** home location and time zone (for forecasts), birthdate,
+  height and sex (for estimates before real data exists), heart-rate zones, and your threshold
+  pace, which switches running load to a pace-based TSS.
 - **Share links** for one activity or one period, readable without an account.
 - **A calendar feed** of your plan for Google Calendar.
 - **Weekly and monthly email summaries.**

@@ -184,8 +184,8 @@ def test_rebuild_replays_garmin_connect_daily_summary_json(tmp_path: Path) -> No
 
 def test_rebuild_replays_garmin_connect_daily_sleep_json(tmp_path: Path) -> None:
     """This raw object kind was missing from rebuild.py entirely until now -- exactly the same
-    class of bug the garmin_export_health_json test above already caught for a different kind
-    (docs/ARCHITECTURE.md-...): a `sync rebuild` would have silently dropped every sleep_session
+    class of bug the garmin_export_health_json test above already caught for a different kind:
+    a `sync rebuild` would have silently dropped every sleep_session
     row garmin_connect.py's live sleep fetch ever produced."""
     archive_root = tmp_path / "archive"
     parquet_dir = tmp_path / "parquet"

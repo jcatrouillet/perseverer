@@ -265,6 +265,10 @@ Perseverer writes to one third-party account: Garmin Connect.
   bouldering are timed placeholders; HIIT and strength workouts use Garmin's 1,527-exercise
   catalog with sets, reps, weights and rests. A daily job pushes everything due within the next
   7 days; any workout can also be pushed on demand.
+- **Copy and paste.** Any planned workout (all sports, with its steps, time, duration and
+  comments) or the executed structure of a completed run (converted back to workout syntax) can be
+  copied and pasted onto another day. The clipboard is per browser (`workoutClipboard.ts`,
+  localStorage); a paste opens a normal editable workout, never a link to the source.
 - **Courses.** A GPX route attached to a planned run is archived, summarised for the calendar, and
   pushed to Garmin as a **private** course; if Garmin does not confirm it is private, the course
   is deleted and the push refused.
