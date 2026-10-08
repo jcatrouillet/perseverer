@@ -141,7 +141,8 @@ Main table groups (see [DATA_DICTIONARY.md](DATA_DICTIONARY.md) for every column
   `planned_workout_step`, `planned_race`, `shoe`, `athlete_default_shoe`, `blood_test_result`,
   `kaya_climb_note`.
 - **Durable overrides:** `activity_sport_override`, `activity_trim_override`,
-  `activity_merge_override`, `bouldering_route_status_override`, `bouldering_manual_route`.
+  `activity_merge_override`, `bouldering_route_status_override`, `bouldering_manual_route`,
+  `kaya_dismissed_effort`.
 - **Kaya logbook:** `kaya_session`, `kaya_ascent`, `kaya_attempt`, `kaya_unsent_climb`.
 - **Config and auth:** `athlete`, `athlete_*_config`, `share_link`, `auth_login_attempt`,
   `oauth_client`, `oauth_authorization_code`, `oauth_token`.

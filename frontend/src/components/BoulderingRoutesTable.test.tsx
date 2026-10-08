@@ -348,4 +348,29 @@ describe("BoulderingRoutesTable", () => {
     );
     expect(screen.getByRole("alert")).toHaveTextContent("Could not save");
   });
+
+  it("offers removal for manual routes and watch-only extras, not for Kaya or watch routes", () => {
+    const onDeleteRoute = vi.fn();
+    render(
+      <BoulderingRoutesTable
+        splits={[
+          split({ split_index: 0, climb_name: "Pink - A8", source: "kaya" }),
+          split({ split_index: 1, climb_name: null, source: "garmin_extra" }),
+          split({ split_index: 2, climb_name: null, is_manual: true }),
+          split({ split_index: 3, climb_name: null }),
+        ]}
+        onSetStatus={noop}
+        onSetGrade={noop}
+        onAddRoute={noop}
+        onDeleteRoute={onDeleteRoute}
+        isSaving={false}
+        isError={false}
+      />,
+    );
+    const buttons = screen.getAllByRole("button", { name: "Remove this route" });
+    expect(buttons).toHaveLength(2);
+    const extraRow = screen.getByText("Watch only (not in Kaya)").closest("tr")!;
+    fireEvent.click(within(extraRow).getByRole("button", { name: "Remove this route" }));
+    expect(onDeleteRoute).toHaveBeenCalledWith(1);
+  });
 });

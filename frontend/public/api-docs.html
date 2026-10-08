@@ -1611,10 +1611,10 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"grade": 4, "result": "completed"}'` }
     },
-    { method: "DELETE", path: "/api/v1/activities/{activity_id}/climb-routes/{split_index}", summary: "Remove a manually-added route.",
-      description: "Never a FIT-derived one, which would just be re-derived by the next ingest/rebuild regardless.",
+    { method: "DELETE", path: "/api/v1/activities/{activity_id}/climb-routes/{split_index}", summary: "Remove a manually-added route or a watch-only extra.",
+      description: "A manually-added route is deleted. A watch effort the Kaya merge added back because Kaya has no entry for it (source \"garmin_extra\") is dismissed durably, so later Kaya syncs and rebuilds leave it out; it stays a superseded effort whose duration and heart rate still count toward climb time. Any other route from the watch can't be removed, since the next ingest/rebuild would re-derive it.",
       params: [ ["activity_id","path","req","string","—",""], ["split_index","path","req","integer","—",""] ],
-      responses: [ { code: 204, note: "" }, { code: 400, note: "this split isn't a manually-added route (or doesn't exist)" } ],
+      responses: [ { code: 204, note: "" }, { code: 400, note: "this split isn't a manually-added route or a watch-only extra (or doesn't exist)" } ],
       example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/activities/${EX.ACT}/climb-routes/0 \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },

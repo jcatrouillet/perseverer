@@ -45,6 +45,7 @@ from perseverer.db.schema import (
     insight,
     kaya_ascent,
     kaya_attempt,
+    kaya_dismissed_effort,
     kaya_session,
     kaya_unsent_climb,
     split,
@@ -396,19 +397,23 @@ def _replace_splits(
     for i, route in enumerate(to_insert):
         _insert_route(conn, athlete_id, activity_id, next_index + i, route)
     if garmin_activity:
-        _promote_unlogged_garmin_efforts(conn, base, routes, next_index + len(to_insert))
+        _promote_unlogged_garmin_efforts(
+            conn, athlete_id, activity_id, routes, next_index + len(to_insert)
+        )
 
 
 def _promote_unlogged_garmin_efforts(
-    conn: Connection, base: list[Any], routes: list[_Route], next_index: int
+    conn: Connection, athlete_id: str, activity_id: str, routes: list[_Route], next_index: int
 ) -> None:
     """Garmin recorded efforts Kaya has no entry for (e.g. coach-set problems that cannot be logged
     in Kaya) are added back to the route list. Garmin's efforts are matched to Kaya's by (grade,
     result); Garmin's that are left over after every Kaya route has claimed one are the extras.
     A Kaya route with no grade ("v?") could be any grade, so each one absorbs one leftover (same
-    result first). Extras keep Garmin's duration/HR and are marked source="garmin_extra"."""
+    result first). Extras keep Garmin's duration/HR and are marked source="garmin_extra". An effort
+    the athlete removed from the route list (`kaya_dismissed_effort`) is never promoted."""
+    base = [split.c.athlete_id == athlete_id, split.c.activity_id == activity_id]
     garmin = conn.execute(
-        select(split.c.id, split.c.garmin_grade, split.c.garmin_result)
+        select(split.c.id, split.c.garmin_grade, split.c.garmin_result, split.c.start_time_utc)
         .where(
             *base,
             split.c.split_type == "climb_active_superseded",
@@ -429,6 +434,19 @@ def _promote_unlogged_garmin_efforts(
         pick = same if same is not None else (leftover[0] if leftover else None)
         if pick is not None:
             leftover.remove(pick)
+    dismissed = set(
+        conn.execute(
+            select(kaya_dismissed_effort.c.effort_start_time_utc)
+            .select_from(kaya_dismissed_effort)
+            .join(
+                activity,
+                (activity.c.athlete_id == kaya_dismissed_effort.c.athlete_id)
+                & (activity.c.start_time_utc == kaya_dismissed_effort.c.activity_start_time_utc),
+            )
+            .where(kaya_dismissed_effort.c.athlete_id == athlete_id, activity.c.id == activity_id)
+        ).scalars()
+    )
+    leftover = [g for g in leftover if g.start_time_utc not in dismissed]
     for offset, g in enumerate(leftover):
         conn.execute(
             update(split)

@@ -316,6 +316,27 @@ kaya_climb_note = Table(
     UniqueConstraint("athlete_id", "climb_kaya_id", name="uq_kaya_climb_note_identity"),
 )
 
+# A watch effort the athlete removed from a Kaya-merged session's route list. When Kaya replaces a
+# Garmin session's routes, efforts Kaya has no entry for come back as extra routes
+# (`split.source="garmin_extra"`); one listed here stays a plain superseded effort instead (its
+# time and HR still count). Keyed by the activity's and the effort's own start times, both parsed
+# from the archived FIT file, so it survives a rebuild. Athlete input: never wiped.
+kaya_dismissed_effort = Table(
+    "kaya_dismissed_effort",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("activity_start_time_utc", DateTime(), nullable=False),
+    Column("effort_start_time_utc", DateTime(), nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id",
+        "activity_start_time_utc",
+        "effort_start_time_utc",
+        name="uq_kaya_dismissed_effort_identity",
+    ),
+)
+
 kaya_ascent = Table(
     "kaya_ascent",
     metadata,

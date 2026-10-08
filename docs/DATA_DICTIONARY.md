@@ -434,6 +434,10 @@ archive):
 - **`kaya_unsent_climb`**: each unsent climb's lifetime attempt count (`attemptedClimbsForUser`).
 - **`kaya_climb_note`**: the athlete's note on a route (`athlete_id`, `climb_kaya_id`, `note`,
   `updated_at`), set with `PUT /kaya-climbs/{id}/note` (empty removes it), never wiped by a rebuild.
+- **`kaya_dismissed_effort`**: a watch effort the athlete removed from a Kaya-merged session's
+  route list (`athlete_id`, `activity_start_time_utc`, `effort_start_time_utc` = the effort's own
+  `split.start_time_utc`, `created_at`), set with `DELETE /activities/{id}/climb-routes/{n}` on a
+  `garmin_extra` row. Both times come from the FIT file, so it survives a rebuild; never wiped.
 
 `apply_kaya_sessions` derives `activity`, `split` and `activity_source_link` rows after every
 import and rebuild (after the bouldering overrides). Only bouldering ascents are used; sessions
@@ -447,7 +451,8 @@ are grouped by local date:
   rows become `climb_active_superseded`, with grade and result cleared (kept in
   `split.garmin_grade`/`garmin_result`), so nothing counts twice while their duration and HR stay.
   Garmin efforts Kaya has no entry for (matched by grade and result; a Kaya `v?` route absorbs one
-  leftover) are promoted back to routes with `source="garmin_extra"`. Total time, calories, HR,
+  leftover) are promoted back to routes with `source="garmin_extra"`, except efforts listed in
+  `kaya_dismissed_effort`, which stay superseded. Total time, calories, HR,
   training effect, the HR chart and climb time (`climb_active` + `climb_active_superseded`
   durations) stay Garmin's. Kaya is linked with `source="kaya"`, `external_id="session:<id>"`.
 - **No or several Garmin candidates:** each Kaya session with routes becomes its own activity

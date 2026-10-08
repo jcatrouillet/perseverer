@@ -4,10 +4,12 @@ two read endpoints built on the same data (GET .../climb-comparisons, GET .../cl
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
-from sqlalchemy import Engine
+from datetime import datetime
 
-from perseverer.db.schema import split
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, select
+
+from perseverer.db.schema import kaya_dismissed_effort, split
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from tests.api.conftest import seed_activity
 
@@ -228,6 +230,39 @@ class TestDeleteClimbRoute:
 
         r = client.delete("/api/v1/activities/a1/climb-routes/0", headers=auth_headers)
         assert r.status_code == 400
+
+    def test_dismisses_a_watch_effort_added_back_by_the_kaya_merge(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="a1", sport="rock_climbing", sub_sport="bouldering")
+            conn.execute(
+                split.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    split_index=5,
+                    split_type="climb_active",
+                    source="garmin_extra",
+                    start_time_utc=datetime(2024, 6, 1, 7, 10),
+                    climb_grade=3,
+                    climb_result="attempt",
+                    duration_s=40.0,
+                )
+            )
+            conn.commit()
+
+        r = client.delete("/api/v1/activities/a1/climb-routes/5", headers=auth_headers)
+        assert r.status_code == 204
+        with engine.connect() as conn:
+            row = conn.execute(select(split)).one()
+            dismissed = conn.execute(select(kaya_dismissed_effort)).one()
+        assert (row.split_type, row.source, row.climb_grade, row.duration_s) == (
+            "climb_active_superseded",
+            None,
+            None,
+            40.0,
+        )
+        assert dismissed.effort_start_time_utc == datetime(2024, 6, 1, 7, 10)
 
 
 class TestClimbComparisons:

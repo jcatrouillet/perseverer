@@ -21,6 +21,7 @@ from perseverer.adapters.kaya_ingest import (
     store_page,
 )
 from perseverer.archive import archive_raw_bytes
+from perseverer.bouldering_overrides import dismiss_garmin_extra_route
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import activity, athlete, metadata, split
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
@@ -123,6 +124,7 @@ def _garmin_boulder(conn: Connection, act_id: str, local_date: str) -> None:
             activity_id=act_id,
             split_index=0,
             split_type="climb_active",
+            start_time_utc=start + dt.timedelta(minutes=5),
             climb_grade=9,
             climb_result="attempt",
         )
@@ -499,3 +501,34 @@ def test_import_records_an_ingest_run_on_success_and_on_failure(
         runs = conn.execute(select(ingest_run).order_by(ingest_run.c.id)).fetchall()
         assert [r.status for r in runs] == ["success", "failed"]
         assert "Kaya session expired" in runs[1].errors
+
+
+def test_a_dismissed_watch_effort_stays_off_the_route_list(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _garmin_boulder(conn, "g1", "2026-05-14")  # Garmin's V9 attempt, which Kaya never logged
+        conn.execute(split.update().values(duration_s=100.0))
+        _kaya_day(conn, tmp_path, attempted=["v4"])
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        extra = conn.execute(select(split).where(split.c.source == "garmin_extra")).one()
+        kaya_row = conn.execute(select(split).where(split.c.source == "kaya")).first()
+        assert kaya_row is not None
+        with pytest.raises(ValueError):  # only a watch extra can be dismissed this way
+            dismiss_garmin_extra_route(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                activity_id="g1",
+                split_index=kaya_row.split_index,
+            )
+
+        dismiss_garmin_extra_route(
+            conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="g1", split_index=extra.split_index
+        )
+        # A later Kaya sync (or a rebuild, which re-runs the same merge) keeps it dismissed.
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        apply_kaya_sessions(conn, athlete_id=DEFAULT_ATHLETE_ID)
+        rows = conn.execute(select(split.c.split_type, split.c.source, split.c.duration_s)).all()
+        assert ("climb_active", "garmin_extra") not in {(t, src) for t, src, _ in rows}
+        assert sorted(r.source for r in rows if r.split_type == "climb_active") == ["kaya", "kaya"]
+        # Its time still counts toward the session's climb time.
+        assert ("climb_active_superseded", None, 100.0) in rows

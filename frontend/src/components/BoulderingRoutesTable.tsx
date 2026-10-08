@@ -6,7 +6,8 @@
 // Also the editing surface for two athlete-driven corrections (see bouldering_overrides.py's own
 // docstring for why both are durable, rebuild-safe records rather than one-off mutations):
 // overriding a route's own status when it was logged wrong, and adding a route the device never
-// tracked at all. Purely presentational, like ActivitySportCorrection/ActivityNameCorrection --
+// tracked at all. Rows the Kaya merge added back from the watch (source "garmin_extra") can be
+// removed too; the backend remembers the removal so later Kaya syncs leave them out. Purely presentational, like ActivitySportCorrection/ActivityNameCorrection --
 // the caller (ActivityDetailPage) owns the actual mutations and passes bound callbacks +
 // pending/error state down, rather than this component reaching for React Query itself.
 // Status editing is a plain always-visible <select> per row (not a "Fix it" click-to-reveal --
@@ -102,7 +103,9 @@ export function BoulderingRoutesTable({
                   }
                 >
                   <td>{r.routeNumber}</td>
-                  <td>{r.name ?? "—"}</td>
+                  <td>
+                    {r.name ?? (r.source === "garmin_extra" ? "Watch only (not in Kaya)" : "—")}
+                  </td>
                   <td>
                     <select
                       value={r.grade ?? ""}
@@ -163,11 +166,15 @@ export function BoulderingRoutesTable({
                     </td>
                   )}
                   <td>
-                    {r.isManual && (
+                    {(r.isManual || r.source === "garmin_extra") && (
                       <button
                         type="button"
                         className="bouldering-routes-table__delete-btn"
-                        title="Remove this route"
+                        title={
+                          r.isManual
+                            ? "Remove this route"
+                            : "Remove this watch effort from the routes (its time still counts)"
+                        }
                         aria-label="Remove this route"
                         disabled={isSaving}
                         onClick={() => onDeleteRoute(r.splitIndex)}

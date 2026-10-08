@@ -81,7 +81,8 @@ similar recent efforts and the run insights flag records ("longest run in the la
 
 Hikes and bouldering get their own treatment. Bouldering sessions combine Garmin's heart rate and
 timing with the route list from the Kaya app: names, grades, attempts and sends. You can add a
-note to a route, and it shows again whenever you repeat that route.
+note to a route, and it shows again whenever you repeat that route. Efforts the watch recorded
+that Kaya doesn't have are listed as "Watch only" and can be removed from the route list.
 
 | Hike | Bouldering |
 |---|---|

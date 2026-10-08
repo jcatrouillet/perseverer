@@ -344,8 +344,12 @@ the watch was already stopped, etc. Durable, rebuild-safe record, not a one-off 
 
 ### `DELETE /activities/{activity_id}/climb-routes/{split_index}`
 
-Removes a manually-added route — never a FIT-derived one, which would just be re-derived by the
-next ingest/rebuild regardless.
+Removes a route from the list. A manually-added route is deleted. A watch effort that the Kaya
+merge added back because Kaya has no entry for it (`SplitOut.source == "garmin_extra"`) is
+dismissed: it is recorded in `kaya_dismissed_effort` so later Kaya syncs and rebuilds leave it out,
+and it becomes a plain superseded effort whose duration and heart rate still count toward climb
+time. Any other route from the watch can't be removed (the next ingest or rebuild would re-derive
+it): `400`.
 
 | Param | In | Required | Type |
 |---|---|---|---|

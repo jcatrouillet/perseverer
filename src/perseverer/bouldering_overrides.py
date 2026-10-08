@@ -34,6 +34,7 @@ from perseverer.db.schema import (
     activity,
     bouldering_manual_route,
     bouldering_route_status_override,
+    kaya_dismissed_effort,
     split,
 )
 
@@ -253,6 +254,51 @@ def delete_manual_route(
             split.c.athlete_id == athlete_id,
             split.c.activity_id == activity_id,
             split.c.split_index == split_index,
+        )
+    )
+
+
+def dismiss_garmin_extra_route(
+    conn: Connection, *, athlete_id: str, activity_id: str, split_index: int
+) -> None:
+    """Removes a watch effort that the Kaya merge added back as an extra route
+    (`source="garmin_extra"`, see `adapters/kaya_ingest.py`) from the route list. The effort is
+    remembered in `kaya_dismissed_effort` by its own start time, so later Kaya syncs and rebuilds
+    leave it out too, and its live row goes back to a superseded effort: its duration and heart
+    rate still count toward climb time, it is just no longer a route. Raises `ValueError` if
+    `split_index` doesn't identify a garmin_extra route on this activity."""
+    start_time_utc = _start_time_for(conn, athlete_id=athlete_id, activity_id=activity_id)
+    row = conn.execute(
+        select(split.c.id, split.c.start_time_utc).where(
+            split.c.athlete_id == athlete_id,
+            split.c.activity_id == activity_id,
+            split.c.split_index == split_index,
+            split.c.split_type == "climb_active",
+            split.c.source == "garmin_extra",
+        )
+    ).fetchone()
+    if row is None or row.start_time_utc is None:
+        raise ValueError(
+            f"activity {activity_id!r} has no watch-only route at split_index {split_index}"
+        )
+    conn.execute(
+        sqlite_insert(kaya_dismissed_effort)
+        .values(
+            athlete_id=athlete_id,
+            activity_start_time_utc=start_time_utc,
+            effort_start_time_utc=row.start_time_utc,
+            created_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        .on_conflict_do_nothing()
+    )
+    conn.execute(
+        split.update()
+        .where(split.c.id == row.id)
+        .values(
+            split_type="climb_active_superseded",
+            climb_grade=None,
+            climb_result=None,
+            source=None,
         )
     )
 

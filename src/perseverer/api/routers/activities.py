@@ -76,6 +76,7 @@ from perseverer.archive import read_raw_bytes
 from perseverer.bouldering_overrides import (
     add_manual_route,
     delete_manual_route,
+    dismiss_garmin_extra_route,
     set_route_grade_override,
     set_route_status_override,
 )
@@ -1473,13 +1474,20 @@ def delete_climb_route(
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
 ) -> None:
-    """Removes a manually-added route -- never a FIT-derived one (see
-    bouldering_overrides.py::delete_manual_route's own docstring for why that's never allowed:
-    it would just be re-derived by the next ingest/rebuild regardless)."""
-    try:
-        delete_manual_route(
-            conn, athlete_id=athlete_id, activity_id=activity_id, split_index=split_index
+    """Removes a route from the list: a manually-added route is deleted; a watch effort the Kaya
+    merge added back (`source="garmin_extra"`) is dismissed durably and goes back to a plain
+    superseded effort. Any other FIT-derived route can't be removed (the next ingest or rebuild
+    would just re-derive it)."""
+    source = conn.execute(
+        select(split_table.c.source).where(
+            split_table.c.athlete_id == athlete_id,
+            split_table.c.activity_id == activity_id,
+            split_table.c.split_index == split_index,
         )
+    ).scalar_one_or_none()
+    remove = dismiss_garmin_extra_route if source == "garmin_extra" else delete_manual_route
+    try:
+        remove(conn, athlete_id=athlete_id, activity_id=activity_id, split_index=split_index)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     conn.commit()
