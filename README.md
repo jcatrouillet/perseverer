@@ -38,22 +38,42 @@ MCP server an AI coach can read and plan with.
 
 ## Features
 
+Every sport a Garmin watch records is imported and shown: cycling, swimming, yoga, strength,
+HIIT, skiing and the rest all appear on the calendar with their stats, maps and charts. So far the
+deepest analysis is for **runs, hikes and bouldering**, which get dedicated sections, records and
+insights.
+
 ### Calendar
 
 Day, week, month, year and all-time views, each with the stats that make sense at that scale.
-The day view adds that day's sleep stages, wellness figures and an intraday body-battery chart.
-Weeks show sleep, steps, planned workouts and the weather forecast for every day; months and years
-add totals against the same period last year, streaks, activities by type, running and climbing
-breakdowns, Fitness & Form and health summaries.
+The day view lists the day's activities with their maps, then that day's sleep stages, wellness
+figures and an intraday body-battery chart. Weeks show sleep, steps, planned workouts and the
+weather forecast for every day, followed by the week's stats (with the previous week for
+comparison), Fitness & Form, compliance with the plan per sport, and a summary per sport. Months
+and years add totals against the same period last year, streaks, activities by type, Fitness &
+Form and health summaries.
+
+| Week | Day |
+|---|---|
+| ![Week stats and compliance](docs/screenshots/calendar-week-stats.png) | ![Day view](docs/screenshots/calendar-day.png) |
 
 | Month | Year |
 |---|---|
 | ![Month view](docs/screenshots/calendar-month.png) | ![Year view](docs/screenshots/calendar-year.png) |
 
-Running gets its own section in every period: distance per day, trailing totals, pace versus
-distance, time of day, a calendar heatmap and personal records for the period.
+Runs, hikes and bouldering each get their own section in every period summary (week, month,
+year and all time):
 
-![Running statistics for a month](docs/screenshots/calendar-month-stats.png)
+- **Running:** distance per day, trailing totals, pace versus distance, time of day, a calendar
+  heatmap and personal records for the period.
+- **Hiking:** number of hikes, distance, time, average and maximum elevation gain, and featured
+  hikes (longest, longest by time, most climbing, highest point reached) with their place names.
+- **Bouldering:** sessions, climb time, routes, hardest grade sent, and routes attempted and
+  completed per grade.
+
+| Running | Hiking and bouldering |
+|---|---|
+| ![Running statistics for a month](docs/screenshots/calendar-month-stats.png) | ![Hiking and bouldering for a month](docs/screenshots/calendar-month-hikes.png) |
 
 ### Activities
 
@@ -90,9 +110,18 @@ that Kaya doesn't have are listed as "Watch only" and can be removed from the ro
 
 You can correct what the devices got wrong: sport, race flag, title, trim a forgotten-stop tail,
 log fueling, assign shoes, fix a climbing route's grade or add a route the watch missed. Duplicates
-the automatic matcher missed can be merged by hand, choosing field by field which source wins;
-Settings lists likely duplicates and activities that probably need trimming. Every correction
-survives a full rebuild.
+the automatic matcher missed can be merged by hand, choosing field by field which source wins.
+Every correction survives a full rebuild.
+
+- **Duplicate detection:** activities recorded by two sources that were never merged (a Garmin
+  recording and the same session from a Strava export, for example) are flagged, both on the
+  activity page and in a list under Settings → Activities.
+- **Trimming detection:** hikes and walks that end or start with a fast stretch, usually a drive
+  with the recording still running, are flagged for review. Trimming recomputes distance, time,
+  elevation and heart rate from the part you keep, without changing the original file, and can be
+  undone.
+- **Share links:** share one activity, or a whole week, month or year, through a link that opens
+  without an account. The shared page shows the stats, charts, map and laps, never health data.
 
 ### Activity list and map
 
@@ -175,17 +204,19 @@ step-by-step instructions.
 |---|---|
 | ![Gear](docs/screenshots/gear.png) | ![Exercise library](docs/screenshots/exercises.png) |
 
-### Settings, sharing and reports
+### Settings and reports
 
-- **External tools:** connect Garmin, Kaya and the Eufy scale from the Settings page, sync on
-  demand, upload Garmin or Strava exports (Apple Health from the CLI), or rebuild the whole
-  database from the archive.
+- **External tools:** connect Garmin, Kaya and the Eufy scale and sync them on demand, publish the
+  calendar feed, and turn on the email summaries.
+- **Activities:** bulk import a Garmin or Strava "export your data" archive (.zip) to bring in
+  your full history (Apple Health from the CLI), rebuild the whole database from the raw archive,
+  and review the activities flagged as possible duplicates or as needing a trim.
 - **Personalize:** week start, 12/24-hour time, kilometres or miles, starting page (week, month, day,
   activity list, or the last activity imported), light or dark theme.
 - **Profile and physical profile:** home location and time zone (for forecasts), birthdate,
   height and sex (for estimates before real data exists), heart-rate zones, and your threshold
   pace, which switches running load to a pace-based TSS.
-- **Share links** for one activity or one period, readable without an account.
+- **API access:** create an API key and read the API reference from the Profile tab.
 - **A calendar feed** of your plan for Google Calendar.
 - **Weekly and monthly email summaries.**
 
