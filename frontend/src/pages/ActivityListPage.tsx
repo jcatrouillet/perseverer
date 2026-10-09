@@ -7,11 +7,13 @@ import { Link } from "wouter";
 
 import { useActivities, useActivityRoutes, useHealthDashboard, useSleep } from "../api/queries";
 import { ActivityCard } from "../components/ActivityCard";
+import { calendarHomeHref } from "../calendarHome";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricChip } from "../components/StatTile";
 import { localIsoDate } from "../dateUtils";
 import { valueForDate } from "../healthStats";
 import { healthMetricStyle, KNOWN_SPORTS } from "../metricStyle";
+import { usePersonalize } from "../PersonalizeContext";
 import { groupByLocalDate } from "../yearStats";
 import "../styles/activity-list.css";
 
@@ -32,6 +34,7 @@ function formatDayHeading(localDate: string): { date: string; weekday: string } 
 }
 
 export function ActivityListPage() {
+  const { default_view: defaultView } = usePersonalize();
   const [sport, setSport] = useState("");
   const [offset, setOffset] = useState(0);
   const activities = useActivities({ sport: sport || undefined, limit: PAGE_SIZE, offset });
@@ -62,7 +65,7 @@ export function ActivityListPage() {
   return (
     <main>
       <h1>Activities</h1>
-      <Link href="/">← Calendar</Link>
+      <Link href={calendarHomeHref(defaultView)}>← Calendar</Link>
 
       <form className="activity-filter">
         <label className="field">

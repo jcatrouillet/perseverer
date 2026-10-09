@@ -7,6 +7,7 @@ import { Icon, type IconName } from "./components/Icon";
 import { useLastImportedActivity } from "./api/queries";
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import { LogoutButton } from "./components/LogoutButton";
+import { calendarHomeHref, startingPageIsCalendar } from "./calendarHome";
 import { localIsoDate } from "./dateUtils";
 import { usePersonalize, PersonalizeProvider } from "./PersonalizeContext";
 import "./styles/gear.css";
@@ -120,15 +121,26 @@ function NavLink({
   );
 }
 
+// The Calendar tab links to a calendar view, never to "/" (the starting page, which may be the
+// activity list or a redirect to the last imported activity). It owns "/" only when "/" shows one.
+function CalendarNavLink() {
+  const { default_view: defaultView } = usePersonalize();
+  const matches = ["/calendar", "/day"];
+  if (startingPageIsCalendar(defaultView)) matches.push("/");
+  return (
+    <NavLink href={calendarHomeHref(defaultView)} icon="grid" matches={matches}>
+      Calendar
+    </NavLink>
+  );
+}
+
 export function App() {
   return (
     <AuthGate>
       <PersonalizeProvider>
         <nav className="app-nav">
           <div className="app-nav__links">
-            <NavLink href="/" icon="grid" matches={["/", "/calendar", "/day"]}>
-              Calendar
-            </NavLink>
+            <CalendarNavLink />
             <NavLink href="/activities" icon="list">
               Activities
             </NavLink>
