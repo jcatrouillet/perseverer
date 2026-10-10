@@ -1297,6 +1297,8 @@ const SCHEMAS = [
       ["success","boolean",""],
     ] },
   { name: "LoginResponse", fields: [ ["access_token","string","JWT — send as Authorization: Bearer <token>."], ["expires_at","string(date-time)",""] ] },
+  { name: "ForgotPasswordResponse", fields: [ ["email_configured","boolean","Whether this server can send a reset email at all; says nothing about the account."] ] },
+  { name: "ResetPasswordResponse", fields: [ ["success","boolean",""] ] },
   { name: "GarminAuthStatusOut", note: "Returned by GET /settings/garmin/status. No real token expiry is reportable -- Garmin exposes no readable expiry for the refresh token that actually matters -- so staleness_severity/staleness_message (how many days the last sync has been failing) is the practical substitute.", fields: [
       ["token_store_present","boolean",""],
       ["token_store_age_days","integer|null",""],
@@ -1486,6 +1488,37 @@ const GROUPS = [
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/auth/login \\
   -H "Content-Type: application/json" \\
   -d '{"username": "athlete", "password": "YOUR_PASSWORD"}'` }
+    },
+    { method: "POST", path: "/api/v1/auth/forgot-password", summary: "Email a one-time password reset link.",
+      description: "If an account's username or email matches (case-insensitive), it has an email address, and the server can send mail, the account is emailed a link to <PERSEVERER_PUBLIC_BASE_URL>/reset-password?token=…, valid once for one hour (a signed JWT tied to the current password hash, so a new password invalidates it and every older link). The response is identical whether or not an account matched and the email is sent after the response, so neither body nor timing reveals whether an account exists. Limited to five requests per account per 15 minutes; extra requests send nothing.",
+      auth: "none",
+      body: { schema: "ForgotPasswordRequest", fields: [
+        ["identifier","string","req","","Username or email address (1–320 characters)."],
+      ]},
+      responses: [
+        { code: 200, schema: "ForgotPasswordResponse", note: "email_configured false means the server can't send email and nothing was sent." },
+        { code: 422, note: "empty identifier" },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/auth/forgot-password \\
+  -H "Content-Type: application/json" \\
+  -d '{"identifier": "athlete"}'` }
+    },
+    { method: "POST", path: "/api/v1/auth/reset-password", summary: "Set a new password from a reset link.",
+      description: "Clears the account's recorded failed logins, so the new password works at once even after a lockout.",
+      auth: "none",
+      body: { schema: "ResetPasswordRequest", fields: [
+        ["token","string","req","","The token query parameter of the emailed link."],
+        ["new_password","string","req","","At least 8 characters."],
+      ]},
+      responses: [
+        { code: 200, schema: "ResetPasswordResponse", note: "" },
+        { code: 400, note: 'detail: "this reset link is invalid, expired or already used"' },
+        { code: 422, note: "password shorter than 8 characters" },
+        { code: 503, note: 'detail: "JWT signing not configured"' },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/auth/reset-password \\
+  -H "Content-Type: application/json" \\
+  -d '{"token": "TOKEN_FROM_EMAIL", "new_password": "NEW_PASSWORD"}'` }
     },
   ]},
 

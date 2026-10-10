@@ -151,6 +151,52 @@ username exists.
 | `401` | `detail: "invalid username or password"` |
 | `503` | `detail: "JWT signing not configured"` (`PERSEVERER_JWT_SECRET` unset) |
 
+### `POST /auth/forgot-password`
+
+Starts a forgotten-password reset. Not gated by an API key. If an account's username or email
+address matches `identifier` (case-insensitive), the account has an email address, and the server
+can send mail (`PERSEVERER_SMTP_*` and `PERSEVERER_JWT_SECRET` set), it is emailed a link to
+`<PERSEVERER_PUBLIC_BASE_URL>/reset-password?token=...`. The link works once, for one hour: the
+token is a signed JWT tied to the account's current password hash, so setting a new password
+invalidates it and every older link. The response is identical whether or not an account matched,
+and the email is sent after the response, so neither the body nor the timing reveals whether an
+account exists. Requests are limited to five per account per 15 minutes; extra requests get the
+same response and send nothing.
+
+**Request body** (`ForgotPasswordRequest`):
+
+| Field | Type | Required |
+|---|---|---|
+| `identifier` | string (username or email, 1–320 chars) | required |
+
+**Responses:**
+
+| Status | Body |
+|---|---|
+| `200` | `ForgotPasswordResponse`: `email_configured` (boolean) — whether this server can send a reset email at all. `false` means nothing was sent; an administrator can set a password with `sync athlete set-password`. |
+| `422` | validation error (empty identifier) |
+
+### `POST /auth/reset-password`
+
+Sets a new password from a reset link. Not gated by an API key. Failed logins recorded for the
+account are cleared, so the new password works immediately even after a lockout.
+
+**Request body** (`ResetPasswordRequest`):
+
+| Field | Type | Required |
+|---|---|---|
+| `token` | string (the `token` query parameter of the emailed link) | required |
+| `new_password` | string, at least 8 characters | required |
+
+**Responses:**
+
+| Status | Body |
+|---|---|
+| `200` | `ResetPasswordResponse`: `success` (`true`) |
+| `400` | `detail: "this reset link is invalid, expired or already used"` |
+| `422` | validation error (password shorter than 8 characters) |
+| `503` | `detail: "JWT signing not configured"` |
+
 ---
 
 ## Activities

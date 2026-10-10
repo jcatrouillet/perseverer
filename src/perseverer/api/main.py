@@ -15,9 +15,9 @@ guess), gated by the same shared API key via a raw ASGI wrapper (`Mount` bypasse
 entered.
 
 `GET /share/{token}` (share.py) and `GET /share/calendar/{token}.ics` (calendar_feed.py) are the
-other deliberately unauthenticated routes besides /healthz/version/auth/login -- an athlete-issued
-link/feed viewable by anyone who has it, with no X-API-Key/JWT at all. See each module's own
-docstring.
+other deliberately unauthenticated routes besides /healthz, /version and /auth/* (login,
+forgot-password, reset-password) -- an athlete-issued link/feed viewable by anyone who has it,
+with no X-API-Key/JWT at all. See each module's own docstring.
 """
 
 from fastapi import FastAPI
@@ -97,7 +97,7 @@ app.include_router(weather_forecast.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(share.management_router, prefix="/api/v1")
 # No prefix, no auth -- the one deliberately public surface in this app besides
-# /healthz//version/auth/login. See share.py's own module docstring for why (and how the
+# /healthz, /version and /auth/*. See share.py's own module docstring for why (and how the
 # reverse proxy/nginx get a same-origin /share/{token} URL to this route at all).
 app.include_router(share.router)
 app.include_router(oauth.router)  # /oauth/login -- the MCP OAuth consent page (public by design)

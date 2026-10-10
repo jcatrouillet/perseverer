@@ -64,3 +64,14 @@ def record_attempt(
             auth_login_attempt.c.attempted_at < naive_now - _RETENTION,
         )
     )
+
+
+def clear_failed_attempts(conn: Connection, username: str) -> None:
+    """Forgets `username`'s failed logins -- after a password reset, the new password must work
+    at once rather than wait out a lockout the old guesses caused."""
+    conn.execute(
+        delete(auth_login_attempt).where(
+            auth_login_attempt.c.username == username,
+            auth_login_attempt.c.success.is_(False),
+        )
+    )

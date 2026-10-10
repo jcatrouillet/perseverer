@@ -1212,6 +1212,12 @@ export interface LoginResponse {
   expires_at: string;
 }
 
+/** POST /auth/forgot-password: whether this server can email a reset link at all. The answer
+ * is the same whether or not the account exists. */
+export interface ForgotPasswordResponse {
+  email_configured: boolean;
+}
+
 export interface GoalOut {
   id: number;
   period_type: "week" | "month" | "year";

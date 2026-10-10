@@ -2,13 +2,15 @@
 // POST /auth/login, or a pasted per-athlete API key -- see components/AuthGate.tsx) and
 // branches on 401 vs 503 rather than treating every failure alike. See
 // docs/ARCHITECTURE.md.
-import type { LoginRequest, LoginResponse } from "./types";
+import type { ForgotPasswordResponse, LoginRequest, LoginResponse } from "./types";
 
 const JWT_STORAGE_KEY = "perseverer_jwt";
 const API_KEY_STORAGE_KEY = "perseverer_api_key";
 
 export class AuthError extends Error {}
 export class ServerUnconfiguredError extends Error {}
+/** A password reset link that is invalid, expired or already used. */
+export class ResetLinkError extends Error {}
 
 // Fired whenever a stored credential is cleared (a 401 on any request, anywhere in the app --
 // not just from the login form). AuthGate listens for this to re-show itself even when the
@@ -130,4 +132,31 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
     throw new Error(`login failed (${response.status})`);
   }
   return (await response.json()) as LoginResponse;
+}
+
+// The two forgotten-password calls, also made before any credential exists.
+export async function requestPasswordReset(identifier: string): Promise<ForgotPasswordResponse> {
+  const response = await fetch(`${getBaseUrl()}/api/v1/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ identifier }),
+  });
+  if (!response.ok) {
+    throw new Error(`password reset request failed (${response.status})`);
+  }
+  return (await response.json()) as ForgotPasswordResponse;
+}
+
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  const response = await fetch(`${getBaseUrl()}/api/v1/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (response.status === 400) {
+    throw new ResetLinkError("this reset link is invalid, expired or already used");
+  }
+  if (!response.ok) {
+    throw new Error(`password reset failed (${response.status})`);
+  }
 }

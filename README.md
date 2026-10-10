@@ -217,6 +217,9 @@ step-by-step instructions.
   height and sex (for estimates before real data exists), heart-rate zones, and your threshold
   pace, which switches running load to a pace-based TSS.
 - **API access:** create an API key and read the API reference from the Profile tab.
+- **Forgotten password:** "Forgot your password?" on the login page emails a one-time link, valid
+  for an hour, to the address in your profile, where you choose a new password (needs the SMTP
+  settings used for the email summaries).
 - **A calendar feed** of your plan for Google Calendar.
 - **Weekly and monthly email summaries.**
 
@@ -236,7 +239,7 @@ The app is responsive and installable as a PWA.
 
 ### API and MCP server
 
-- A **REST API** (133 endpoints) with a per-athlete API key or password login. Documented in
+- A **REST API** (137 endpoints) with a per-athlete API key or password login. Documented in
   [docs/API.md](docs/API.md) and served by the app at `/api-docs.html`.
 - An **MCP server** at `/mcp` with 74 tools, including writing workouts, races, goals and notes.
   Connect it to Claude Code with an API key, or to claude.ai as a custom connector over OAuth.

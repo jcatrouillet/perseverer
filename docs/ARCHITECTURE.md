@@ -289,7 +289,7 @@ Safety rules for every Garmin call:
 
 ## REST API
 
-FastAPI under `/api/v1`, 133 endpoints across 22 routers, all scoped to the authenticated athlete.
+FastAPI under `/api/v1`, 137 endpoints across 22 routers, all scoped to the authenticated athlete.
 The full reference is [API.md](API.md), also served by the frontend at `/api-docs.html`.
 
 | Area | Routers |
@@ -326,6 +326,12 @@ claude.ai's can sign in with the athlete's normal password on Perseverer's own c
   is; nothing is fail-open (no key configured means 503, not public).
 - **Brute-force lockout:** five failures in 15 minutes lock a username, stored in SQLite so both
   uvicorn workers share it, with the same response cost as a wrong password.
+- **Forgotten passwords:** the login page emails a one-time reset link to the address in the
+  athlete's profile (needs SMTP). The link carries a one-hour signed JWT with a `purpose` claim
+  and a fingerprint of the current password hash, so it can't be used as a session token and dies
+  as soon as the password changes; no reset table is needed. The request endpoint answers the same
+  whether or not the account exists, sends after responding, and is rate limited per account
+  through the lockout table. Without SMTP, an administrator resets passwords with the CLI.
 - **Accounts** are created with the CLI only; there is no self-service signup.
 - **Containers:** `api` and `worker` run read-only with `NoNewPrivileges`; every write goes to
   `/data`.

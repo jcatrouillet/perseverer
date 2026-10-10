@@ -205,6 +205,8 @@ Derived caches, written only by the refresh functions and recomputed by `sync re
 - **`auth_login_attempt`**: `username`, `attempted_at`, `success` per login attempt; five failures
   for a username within 15 minutes lock it out with the same 401 as a wrong password. Not
   athlete-scoped (an unknown username must still count); rows older than 24 h are pruned on insert.
+  Password reset requests are recorded here too, under `password-reset:<athlete id>`, which limits
+  them to five per account per 15 minutes; a successful reset deletes the account's failed logins.
 - **`share_link`**: see [API.md](API.md#sharing); **`oauth_*`**: see
   [OAuth](#oauth-authorization-server-for-the-mcp-endpoint-oauth_client-oauth_authorization_code-oauth_token).
 

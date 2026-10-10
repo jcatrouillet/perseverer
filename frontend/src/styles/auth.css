@@ -108,6 +108,45 @@
   gap: var(--space-4);
 }
 
+.auth-form__hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.auth-form__notice {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+/* "Forgot your password?" / "Back to log in": a quiet text link, not a second button. */
+.auth-form__link {
+  align-self: center;
+  background: none;
+  border: none;
+  padding: var(--space-1);
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.auth-form__link:hover {
+  text-decoration: underline;
+}
+
+.auth-form__link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
 .auth-form__error {
   margin: 0;
   padding: var(--space-2) var(--space-3);
