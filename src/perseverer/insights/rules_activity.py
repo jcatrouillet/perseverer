@@ -37,6 +37,12 @@ to fetch it for); distance, pace, heart rate, elevation, altitude, and start tim
 essentially every activity, so the same population check would just suppress ordinary, real
 "longest run" claims for a normal-sized history.
 
+A run of 5 km or more also gets a `pacing` insight first (`pacing_insight`): whether it was a
+negative, even or positive split, with its halves', start's and finish's paces -- an analysis of
+this run on its own, shown whether or not it set a record. Start/finish/negative-split *records*
+are ordinary effort dimensions (rules_efforts.py), pool-checked like temperature since only longer
+runs with a stream have pacing values.
+
 Every surviving running Insight's title is then rewritten (`_relabel`) into a period-explicit
 phrase -- "Longest run in the last 12 months" or "Longest run ever" rather than the athlete-wide
 engine's generic "Longest distance (run)" -- so the panel never leaves the athlete guessing
@@ -76,7 +82,22 @@ _MIN_NOTABLE_STREAK_DAYS = 4
 # both hottest-in-6-months and coldest-in-12-months because almost nothing else in either window
 # had weather data at all). Only applied to _POOL_CHECKED_DIMENSIONS.
 _MIN_COMPARISON_POOL = 3
-_POOL_CHECKED_DIMENSIONS = frozenset({"temperature_high", "temperature_low"})
+# Pacing values exist only for runs of 5 km or more with a stream, so they are as sparse as
+# weather: "fastest start of the 2 runs this month" is not a real record either.
+_POOL_CHECKED_DIMENSIONS = frozenset(
+    {
+        "temperature_high",
+        "temperature_low",
+        "start_fast",
+        "start_slow",
+        "finish_fast",
+        "finish_slow",
+        "negative_split",
+    }
+)
+
+# Halves within this fraction of each other are an even split rather than a negative/positive one.
+EVEN_SPLIT_FRACTION = 0.01
 
 _WINDOW_LABELS: dict[str, str] = {
     "30d": "in the last 30 days",
@@ -108,6 +129,11 @@ _EFFORT_PHRASES: dict[str, str] = {
     "start_latest": "Latest start",
     "temperature_high": "Hottest run",
     "temperature_low": "Coldest run",
+    "start_fast": "Fastest start",
+    "start_slow": "Slowest start",
+    "finish_fast": "Fastest finish",
+    "finish_slow": "Slowest finish",
+    "negative_split": "Biggest negative split",
 }
 
 
@@ -231,6 +257,49 @@ def _relabel(insight: Insight) -> Insight:
     return insight
 
 
+def _clock(seconds: float) -> str:
+    total = round(abs(seconds))
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def pacing_insight(a: InsightActivity) -> Insight | None:
+    """How this run was paced, whatever earlier runs did: a negative, even or positive split,
+    with the halves', start's and finish's paces in `detail` (s/km) so a client can show them in
+    the athlete's own units. None for a run without pacing values (under 5 km, or no stream)."""
+    first, second = a.pace_first_half_s_per_km, a.pace_second_half_s_per_km
+    if first is None or second is None or first <= 0:
+        return None
+    delta = second - first
+    fraction = delta / first
+    if abs(fraction) < EVEN_SPLIT_FRACTION:
+        split, title = "even", "Even split: both halves at the same pace"
+    elif delta < 0:
+        split = "negative"
+        title = f"Negative split: second half {_clock(delta)} /km faster than the first"
+    else:
+        split = "positive"
+        title = f"Positive split: second half {_clock(delta)} /km slower than the first"
+    return Insight(
+        kind="pacing",
+        window=_ALL_TIME_WINDOW,
+        subject_key="pacing:run",
+        title=title,
+        detail={
+            "activity_id": a.id,
+            "split": split,
+            "unit": "s_per_km",
+            "first_half_s_per_km": first,
+            "second_half_s_per_km": second,
+            "start_s_per_km": a.pace_start_s_per_km,
+            "finish_s_per_km": a.pace_finish_s_per_km,
+        },
+        value_num=fraction,
+        sport_family=a.sport_family,
+        activity_id=a.id,
+        local_date=a.local_date,
+    )
+
+
 def _climbing_activities(activities: list[InsightActivity]) -> list[InsightActivity]:
     """Only sessions with a real graded route belong in bouldering comparisons.
 
@@ -321,6 +390,11 @@ def compute_activity_insights(
     results = (
         effort_final + _dedupe_widest_window(pb, as_of) + _dedupe_widest_window(window_best, as_of)
     )
+    # The run's own pacing comes first: it describes this run, with or without a record.
+    this_run = next((a for a in bounded_activities if a.id == activity_id), None)
+    pacing = pacing_insight(this_run) if this_run is not None else None
+    if pacing is not None:
+        results.insert(0, pacing)
 
     # Restricted to running activities only -- a "run streak" (consecutive days with a run), not
     # the athlete-wide engine's cross-sport "activity streak". Not filtered by activity_id:

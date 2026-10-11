@@ -6,6 +6,7 @@ import json
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from math import asin, cos, radians, sin, sqrt
+from pathlib import Path
 from typing import Annotated, Any
 
 import duckdb
@@ -107,6 +108,7 @@ from perseverer.performance import VDOT_METRIC_KEY
 from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.reparse import reparse_raw_object
 from perseverer.rollups import refresh_daily_and_period_rollups
+from perseverer.run_pacing import refresh_run_pacing
 from perseverer.running_load import RUNNING_TSS_METRIC_KEY
 from perseverer.sport_override import (
     set_fueling_override,
@@ -2083,7 +2085,7 @@ def override_activity_fueling(
 
 
 def _refresh_after_activity_change(
-    conn: Connection, *, athlete_id: str, local_date: str | None
+    conn: Connection, *, athlete_id: str, local_date: str | None, parquet_dir: Path
 ) -> None:
     """The rollup/fitness/insights cascade a trim or merge commit/undo needs -- the first PATCH/
     POST-style correction endpoints in this router to need it, since every other correction here
@@ -2096,6 +2098,8 @@ def _refresh_after_activity_change(
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates={local_date})
     refresh_fitness_rollup(conn, athlete_id=athlete_id)
     refresh_performance_rollup(conn, athlete_id=athlete_id)
+    # A trim or merge changes what a run's start, finish and halves cover.
+    refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
     refresh_insights(conn, athlete_id=athlete_id)
 
 
@@ -2137,7 +2141,12 @@ def post_activity_trim(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    _refresh_after_activity_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
+    _refresh_after_activity_change(
+        conn,
+        athlete_id=athlete_id,
+        local_date=activity_row.local_date,
+        parquet_dir=settings.parquet_dir,
+    )
     conn.commit()
     return get_activity(activity_id, athlete_id, conn=conn, con=con, settings=settings)
 
@@ -2168,7 +2177,12 @@ def delete_activity_trim(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    _refresh_after_activity_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
+    _refresh_after_activity_change(
+        conn,
+        athlete_id=athlete_id,
+        local_date=activity_row.local_date,
+        parquet_dir=settings.parquet_dir,
+    )
     conn.commit()
     return get_activity(activity_id, athlete_id, conn=conn, con=con, settings=settings)
 
@@ -2229,7 +2243,12 @@ def post_activity_merge(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    _refresh_after_activity_change(conn, athlete_id=athlete_id, local_date=activity_row.local_date)
+    _refresh_after_activity_change(
+        conn,
+        athlete_id=athlete_id,
+        local_date=activity_row.local_date,
+        parquet_dir=settings.parquet_dir,
+    )
     conn.commit()
     return get_activity(activity_id, athlete_id, conn=conn, con=con, settings=settings)
 

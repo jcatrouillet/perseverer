@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import replace
 
 from perseverer.insights.rules_activity import compute_activity_insights
 from perseverer.insights.types import InsightActivity
@@ -325,3 +326,60 @@ def test_window_best_dedupes_to_the_widest_window_still_true() -> None:
     # "recent" is the only non-all-time-best candidate across every window here, so only the
     # single widest true claim should survive, not five near-identical repeats.
     assert len(window_best) == 1
+
+
+def _paced(
+    id_: str, local_date: str, first: float, second: float, start: float, finish: float
+) -> InsightActivity:
+    return replace(
+        _activity(id_, local_date, 10_000.0, (first + second) * 5),
+        pace_first_half_s_per_km=first,
+        pace_second_half_s_per_km=second,
+        pace_start_s_per_km=start,
+        pace_finish_s_per_km=finish,
+    )
+
+
+def test_every_paced_run_opens_with_its_split() -> None:
+    cases = [
+        (_paced("neg", "2026-03-01", 330, 300, 340, 290), "negative", "0:30 /km faster"),
+        (_paced("pos", "2026-03-02", 300, 320, 300, 330), "positive", "0:20 /km slower"),
+        (_paced("even", "2026-03-03", 300, 302, 300, 300), "even", "same pace"),
+    ]
+    for run, split, phrase in cases:
+        insights = compute_activity_insights(run.id, [run], dt.date.fromisoformat(run.local_date))
+        first = insights[0]
+        assert (first.kind, first.detail["split"]) == ("pacing", split)
+        assert phrase in first.title
+        assert first.detail["start_s_per_km"] == run.pace_start_s_per_km
+
+
+def test_a_run_without_pacing_gets_no_split_insight() -> None:
+    run = _activity("short", "2026-03-01", 4_000.0, 1_200.0)
+    insights = compute_activity_insights("short", [run], dt.date(2026, 3, 1))
+    assert all(i.kind != "pacing" for i in insights)
+
+
+def test_start_finish_and_negative_split_records() -> None:
+    history = [
+        _paced("a", "2026-02-01", 320, 318, 330, 310),
+        _paced("b", "2026-02-10", 310, 305, 320, 300),
+        _paced("c", "2026-02-20", 300, 310, 305, 315),
+    ]
+    today = _paced("today", "2026-03-01", 360, 300, 380, 270)  # slowest start, fastest finish
+    titles = {
+        i.title for i in compute_activity_insights("today", [*history, today], dt.date(2026, 3, 1))
+    }
+    assert "Slowest start ever" in titles
+    assert "Fastest finish ever" in titles
+    assert "Biggest negative split ever" in titles
+    assert "Fastest start ever" not in titles
+
+
+def test_pacing_records_need_a_real_comparison_pool() -> None:
+    lone = [
+        _paced("x", "2026-02-01", 320, 318, 330, 310),
+        _paced("y", "2026-03-01", 360, 300, 380, 270),
+    ]
+    titles = {i.title for i in compute_activity_insights("y", lone, dt.date(2026, 3, 1))}
+    assert not any(t.startswith(("Slowest start", "Fastest finish")) for t in titles)

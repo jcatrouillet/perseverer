@@ -125,6 +125,19 @@
   font-size: var(--font-size-sm);
 }
 
+/* The run's own pacing leads the list: a little room below it, its paces on a muted line. */
+.activity-insights__row--pacing {
+  padding-bottom: var(--space-2);
+  font-weight: 600;
+}
+
+.activity-insights__paces {
+  display: block;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .activity-detail__header {
   display: flex;
   align-items: center;

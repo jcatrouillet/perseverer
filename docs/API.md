@@ -407,7 +407,15 @@ it): `400`.
 ### `GET /activities/{activity_id}/insights`
 
 Point-in-time insights for one activity, computed fresh at request time — unlike `GET /insights`,
-which reads a precomputed table. Running activities can return pace and distance records;
+which reads a precomputed table. A run of 5 km or more starts with a `kind: "pacing"` insight
+describing how it was paced, record or not: `title` like "Negative split: second half 0:31 /km
+faster than the first" (or an even/positive split, halves within 1% being even), `value_num` the
+second half's pace change as a fraction of the first (negative = faster), and `detail` with
+`split` (`"negative"|"even"|"positive"`), `first_half_s_per_km`, `second_half_s_per_km`,
+`start_s_per_km` (first 2 km), `finish_s_per_km` (last 2 km) and `unit: "s_per_km"` — moving-time
+paces, see DATA_DICTIONARY.md's "Run pacing". Running activities can return pace and distance
+records, including fastest/slowest start, fastest/slowest finish and biggest negative split
+(these need at least three runs with pacing in the period);
 bouldering activities can return records for route count, highest attempted/completed V-grade,
 active climb time, and high/low average and peak heart rate. Each claim uses the last 30 days,
 last 90 days, calendar year, or all history, and only compares activities that happened no later

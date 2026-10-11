@@ -1,10 +1,11 @@
 """Notable-effort extremes: for each of five time windows, find the activity that's the
 max/min for each of a fixed set of real, already-stored dimensions -- distance, duration, pace,
 avg/max heart rate (both directions), avg/max cadence, elevation gained/lost, highest point
-reached, calories burned, start-time-of-day
-(earliest/latest), and outside temperature (hottest/coldest). One generic `find_extreme`
-function driven by a declarative `_DIMENSIONS` table, not one hand-written function per
-combination -- see docs/ARCHITECTURE.md.
+reached, calories burned, start-time-of-day (earliest/latest), outside temperature
+(hottest/coldest), and how a run was paced: its start and finish (fastest/slowest first and last
+2 km) and its biggest negative split. One generic `find_extreme` function driven by a
+declarative `_DIMENSIONS` table, not one hand-written function per combination -- see
+docs/ARCHITECTURE.md.
 
 Distance/duration/pace/HR/cadence/elevation dimensions are scoped within the same sport family
 (comparing a hike's elevation gain to a run's is not a meaningful "record") -- one insight per
@@ -49,6 +50,16 @@ def _start_hour(a: InsightActivity) -> float | None:
     return local.hour + local.minute / 60
 
 
+def negative_split_fraction(a: InsightActivity) -> float | None:
+    """How much faster the second half was than the first, as a fraction of the first-half pace
+    (-0.05 = 5% faster); None unless the run was a negative split."""
+    first, second = a.pace_first_half_s_per_km, a.pace_second_half_s_per_km
+    if first is None or second is None or first <= 0:
+        return None
+    delta = (second - first) / first
+    return delta if delta < 0 else None
+
+
 @dataclass(frozen=True)
 class _Dimension:
     key: str
@@ -90,6 +101,27 @@ _DIMENSIONS: tuple[_Dimension, ...] = (
     ),
     _Dimension(
         "temperature_low", "Coldest conditions", "low", lambda a: a.temperature_min_c, True, "c"
+    ),
+    # Pacing (run_pacing.py): start = first 2 km, finish = last 2 km, moving-time pace in s/km.
+    _Dimension(
+        "start_fast", "Fastest start", "low", lambda a: a.pace_start_s_per_km, True, "s_per_km"
+    ),
+    _Dimension(
+        "start_slow", "Slowest start", "high", lambda a: a.pace_start_s_per_km, True, "s_per_km"
+    ),
+    _Dimension(
+        "finish_fast", "Fastest finish", "low", lambda a: a.pace_finish_s_per_km, True, "s_per_km"
+    ),
+    _Dimension(
+        "finish_slow", "Slowest finish", "high", lambda a: a.pace_finish_s_per_km, True, "s_per_km"
+    ),
+    _Dimension(
+        "negative_split",
+        "Biggest negative split",
+        "low",
+        negative_split_fraction,
+        True,
+        "fraction",
     ),
 )
 

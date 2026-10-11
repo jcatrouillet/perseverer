@@ -89,6 +89,7 @@ from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
 from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.rollups import refresh_daily_and_period_rollups
+from perseverer.run_pacing import refresh_run_pacing
 from perseverer.running_load import refresh_running_tss
 from perseverer.sport_override import apply_sport_overrides
 from perseverer.tcx.parser import parse_tcx
@@ -563,6 +564,7 @@ def rebuild_database(
         # running_tss's pace-calibrated value over training_load_peak wherever one exists.
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
         conn.commit()
+        refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
         refresh_insights(conn, athlete_id=athlete_id)
         conn.commit()
         # After apply_sport_overrides above, not before -- that call already restores any

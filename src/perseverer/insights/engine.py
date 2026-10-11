@@ -35,6 +35,7 @@ from perseverer.insights.rules_pb import compute_pb_insights, compute_window_bes
 from perseverer.insights.rules_streaks import compute_streak_insights
 from perseverer.insights.types import Insight, InsightActivity
 from perseverer.merge.engine import sport_family
+from perseverer.run_pacing import FINISH_KEY, FIRST_HALF_KEY, SECOND_HALF_KEY, START_KEY
 
 # Same alias list/priority as api/routers/health.py::LOGICAL_METRICS["resting_heart_rate"] --
 # duplicated rather than imported to keep the insight engine from depending on the API layer.
@@ -99,6 +100,10 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
     max_cadence_raw_subq = _scalar_metric_subquery(_MAX_CADENCE_METRIC_KEY)
     temp_min_subq = _scalar_metric_subquery(_WEATHER_MIN_KEY)
     temp_max_subq = _scalar_metric_subquery(_WEATHER_MAX_KEY)
+    first_half_subq = _scalar_metric_subquery(FIRST_HALF_KEY)
+    second_half_subq = _scalar_metric_subquery(SECOND_HALF_KEY)
+    start_pace_subq = _scalar_metric_subquery(START_KEY)
+    finish_pace_subq = _scalar_metric_subquery(FINISH_KEY)
     climb_route_count_subq = (
         select(func.count())
         .select_from(split)
@@ -152,6 +157,10 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
             climb_max_attempted_grade_subq.label("climb_max_attempted_grade"),
             climb_max_completed_grade_subq.label("climb_max_completed_grade"),
             climb_time_s_subq.label("climb_time_s"),
+            first_half_subq.label("pace_first_half"),
+            second_half_subq.label("pace_second_half"),
+            start_pace_subq.label("pace_start"),
+            finish_pace_subq.label("pace_finish"),
         )
         .where(
             activity.c.athlete_id == athlete_id,
@@ -199,6 +208,10 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
                 climb_max_attempted_grade=r.climb_max_attempted_grade,
                 climb_max_completed_grade=r.climb_max_completed_grade,
                 climb_time_s=r.climb_time_s,
+                pace_first_half_s_per_km=r.pace_first_half,
+                pace_second_half_s_per_km=r.pace_second_half,
+                pace_start_s_per_km=r.pace_start,
+                pace_finish_s_per_km=r.pace_finish,
             )
         )
     return out

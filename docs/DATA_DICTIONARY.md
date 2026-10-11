@@ -282,6 +282,26 @@ they are never confused with a vendor's own figures. Recomputations are full del
 per athlete, run at every ingest entry point in dependency order (VDOT, pace bands, average GAP,
 running TSS, then the rollups and insights).
 
+### Run pacing (halves, start, finish)
+
+How each run was paced, from its per-second stream (`run_pacing.py::refresh_run_pacing`), as
+`activity_metric` rows with `source="perseverer"`, in seconds per km of **moving time** (samples
+that don't advance for 5 s or more, such as a traffic light or an auto-pause gap, are left out;
+shorter GPS stalls count as running):
+
+- **`perseverer.pacing.first_half_pace_s_per_km`** / **`perseverer.pacing.second_half_pace_s_per_km`**:
+  the first and second half of the run's distance. A faster second half is a negative split.
+- **`perseverer.pacing.start_pace_s_per_km`**: the first 2 km. **`perseverer.pacing.finish_pace_s_per_km`**:
+  the last 2 km.
+- **`perseverer.pacing.signature`** (`value_text`): the inputs the values came from (algorithm
+  version, stream file, trim window). Present on every processed run, including those too short
+  to pace, so a run is recomputed only when it changes.
+
+Only `sport == "running"` activities of at least 5 km with a `distance_m` stream get paces; an
+active trim is honoured. Computed incrementally at every import, trim, merge and rebuild (only new
+or changed runs are read). Feeds the run insights: the per-run `pacing` insight and the
+fastest/slowest start, fastest/slowest finish and biggest-negative-split records.
+
 ### Running performance index (VDOT)
 
 - **`perseverer.performance.vdot`**: Daniels–Gilbert VDOT for every `sport == "running"` activity,

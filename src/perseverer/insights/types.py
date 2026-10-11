@@ -44,6 +44,12 @@ class InsightActivity:
     climb_time_s: float | None = None
     # Energy burned (kcal) as recorded by the device.
     calories: float | None = None
+    # How the run was paced, in s/km of moving time (run_pacing.py): the first and second half of
+    # the distance, the first 2 km and the last 2 km. Runs of 5 km or more only.
+    pace_first_half_s_per_km: float | None = None
+    pace_second_half_s_per_km: float | None = None
+    pace_start_s_per_km: float | None = None
+    pace_finish_s_per_km: float | None = None
 
 
 @dataclass(frozen=True)
