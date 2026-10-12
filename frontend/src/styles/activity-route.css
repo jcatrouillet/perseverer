@@ -11,7 +11,8 @@
 .activity-route__map-col {
   position: relative;
   flex: 2 1 420px;
-  min-width: 320px;
+  /* Never wider than the card: on a 375px phone a plain 320px floor overflowed the card. */
+  min-width: min(320px, 100%);
 }
 
 /* A full-viewport overlay rather than the browser Fullscreen API -- no permission prompt, works
@@ -96,6 +97,20 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   pointer-events: none;
+}
+
+/* On a phone the map's credit line wraps under the legend: shrink it to one line, as the route
+   thumbnails do (activity-map.css), and lift the legend clear of it. */
+@media (max-width: 640px) {
+  .activity-route-map .leaflet-control-attribution {
+    font-size: 8px;
+    padding: 0 4px;
+    line-height: 1.4;
+  }
+
+  .activity-route-map__legend {
+    bottom: 1.5rem;
+  }
 }
 
 .activity-route-map__legend-bar {

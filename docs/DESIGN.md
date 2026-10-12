@@ -13,6 +13,7 @@ UI change; see [AGENTS.md](../AGENTS.md).
 - [Components](#components)
 - [Charts](#charts)
 - [Layout and responsiveness](#layout-and-responsiveness)
+- [Mobile](#mobile)
 - [Light and dark themes](#light-and-dark-themes)
 - [Units, numbers and dates](#units-numbers-and-dates)
 - [Writing](#writing)
@@ -207,6 +208,89 @@ same tokens.
   `align-items: stretch`, so a chart never keeps a desktop width on a phone.
 - The app is installable as a PWA; a phone layout is a first-class layout, not an afterthought.
 
+## Mobile
+
+Many athletes open Perseverer on a phone right after a run, often from the installed app, so a
+phone layout is a design target of its own, not a shrunken desktop.
+
+| Phone layout | Phone activity page |
+|---|---|
+| ![Week view on a phone](screenshots/mobile-week.png) | ![Activity on a phone](screenshots/mobile-activity.png) |
+
+### What "phone" means
+
+- **640px** is the phone breakpoint. CSS uses `@media (max-width: 640px)`; components that must
+  render *different content* (not just hide or restyle it) use the `useIsMobile()` hook, which
+  reads the same 640px query, so the two can never disagree.
+- **720px** switches multi-column layouts to one column (the metric explorer, the week view).
+- **A minimum width must never exceed the screen.** Write `min-width: min(320px, 100%)`, not
+  `min-width: 320px`: on a 375px phone the plain value pushed the route map past its card.
+- Pages with a dense form or grid add their own steps where they need them (gear: 760 and 520px;
+  sign-in: 900, 700 and 520px). Prefer fluid grids (`auto-fill`, `minmax()`, `clamp()`) to a new
+  breakpoint.
+- Design and check at **375px** wide, the narrowest common phone.
+
+### Patterns used on a phone
+
+| Element | Desktop | Phone |
+|---|---|---|
+| Top navigation | One row of tabs with icons | Tabs wrap onto extra rows; no hamburger menu, every section stays one tap away |
+| Date navigator | A 7-year window with ‹ › arrows | Every year in one row that scrolls sideways; the arrows are dropped |
+| Week view | Seven day columns | Day columns at least 140px wide in a strip that scrolls sideways |
+| Metric explorer (Fitness, Health, Insights) | Metric list beside the chart | The list stacks above the chart as collapsible groups |
+| Charts | Inline at full card width | The chart's title becomes a button that opens it full screen (`ChartFullscreen`) |
+| Tables (splits, routes, laps) | Full width | Scroll sideways inside the card (`.table-scroll`); the page itself never scrolls sideways |
+| Modals | Centred panel | Nearly full screen, smaller margins, body scrolls inside |
+| Forms | Fields side by side where it helps | One field per row |
+| Route map | Map beside the splits table | Map above the table, with a full-screen button |
+
+### Touch
+
+- **Nothing important may depend on hover.** A phone has no hover, so information shown in a
+  hover tooltip must also be reachable another way: a tap, a details line, or the page the item
+  links to. Recharts tooltips open on tap; the PR-progress chart selects a dot on touch and shows
+  its details in a strip below.
+- **Known gaps:** the running heatmap's day tooltip is CSS `:hover` only (on a phone, a tap
+  follows the link to that day instead), and a few rows reveal secondary details on hover. Fix
+  these when the component is next touched rather than adding more.
+- **Maps must not trap scrolling.** Small route thumbnails (activity cards, the day view) don't
+  pan or zoom, so a swipe scrolls the page; the large route map is interactive and has a
+  full-screen button.
+- **Overlays on a map** (the pace legend, the credit line, zoom and full-screen buttons) must not
+  cover each other at 375px. On a phone the route map's credit line is shrunk to one line and
+  the legend sits above it.
+- **Targets:** buttons and links keep the standard padding (`.button` is
+  `--space-2` × `--space-3` on a 15px font), and small controls such as the routes table's ×
+  sit apart from other controls. Don't make tap targets smaller to fit more on a row; let the
+  row wrap.
+- Text inputs use the right `type` and `autoComplete` (`username`, `current-password`,
+  `new-password`) so phone keyboards and password managers behave.
+
+### The installed app (PWA)
+
+- Installable from the browser's "Add to home screen"; it opens **standalone** (no browser bar)
+  with the dark background `#12151c` as its splash and status-bar colour, and its own icons
+  (192px, 512px and a maskable 512px).
+- The service worker precaches the app shell, so the app opens instantly and offline. Heavy
+  pages and libraries (maps, the exercise catalogue) are lazy-loaded, and every precached file
+  stays under 2 MB.
+- New versions install in the background (`registerType: "autoUpdate"`); an open app switches to
+  the new version on its next load, so after a deploy, closing and reopening the app (or one
+  refresh) picks it up.
+- The service worker never answers `/api/`, `/mcp`, `/share/`, `/oauth/`, the OAuth endpoints or
+  `/.well-known/` from its cache (`navigateFallbackDenylist` in `vite.config.ts`, kept in step
+  with nginx). Opening a share link or signing in an AI connector on a phone that has the app
+  installed must reach the server.
+
+### Checking a phone layout
+
+- In the browser at 375 × 812 (and 390 wide), in light and dark: no sideways page scroll
+  (`document.documentElement.scrollWidth` equals the viewport width), nothing clipped, charts
+  sized to the screen.
+- Tap through anything that has a hover effect on desktop.
+- For a layout bug report from a real phone, also check the installed app after a refresh: a
+  stale service-worker shell is the most common "it still looks old" cause.
+
 ## Light and dark themes
 
 - Both themes are complete and equal. Every component styles only through tokens, so it works in
@@ -263,7 +347,9 @@ These render outside the React app but follow the same charter:
 - [ ] Colours come from tokens; a metric uses its tone from `metricStyle.ts`.
 - [ ] Existing components are reused (`StatTile`, `TrendChart`, `.card`, `.button`, formatters).
 - [ ] Distances, paces and times go through the shared formatters.
-- [ ] Checked in the browser at desktop width and at 375px: no horizontal page scroll.
+- [ ] Checked in the browser at desktop width and at 375px: no horizontal page scroll (see
+      [Mobile](#mobile)).
+- [ ] Nothing important is reachable only by hovering.
 - [ ] Checked in light and dark themes.
 - [ ] Keyboard focus is visible; icon-only buttons have an `aria-label`.
 - [ ] Empty, loading and error states are handled.
