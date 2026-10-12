@@ -412,9 +412,11 @@ describing how it was paced, record or not: `title` like "Negative split: second
 faster than the first" (or an even/positive split, halves within 1% being even), `value_num` the
 second half's pace change as a fraction of the first (negative = faster), and `detail` with
 `split` (`"negative"|"even"|"positive"`), `first_half_s_per_km`, `second_half_s_per_km`,
-`start_s_per_km` (first 2 km), `finish_s_per_km` (last 2 km) and `unit: "s_per_km"` — moving-time
+`start_s_per_km` (first 2 km), `finish_s_per_km` (last 2 km), `negative_km_splits`
+(second-half kilometres faster than the first half's average pace) of `second_half_km_count`, and
+`unit: "s_per_km"` — moving-time
 paces, see DATA_DICTIONARY.md's "Run pacing". Running activities can return pace and distance
-records, including fastest/slowest start, fastest/slowest finish and biggest negative split
+records, including fastest/slowest start, fastest/slowest finish and most negative km splits
 (these need at least three runs with pacing in the period);
 bouldering activities can return records for route count, highest attempted/completed V-grade,
 active climb time, and high/low average and peak heart rate. Each claim uses the last 30 days,

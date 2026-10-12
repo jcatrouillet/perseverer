@@ -82,6 +82,22 @@ def test_seconds_where_gps_distance_stalls_still_count_as_running() -> None:
     assert pacing.second_half_s_per_km == pytest.approx(300, abs=2)
 
 
+def test_counts_second_half_kilometres_faster_than_the_first_half() -> None:
+    # First half: 5 km at 5:00. Second half km: 5:10, 4:55, 4:50, 5:00, 4:40.
+    second = [310.0, 295.0, 290.0, 300.0, 280.0]
+    pacing = compute_run_pacing(*_track([(5000.0, 300.0)] + [(1000.0, p) for p in second]))
+    assert pacing is not None
+    # 4:55, 4:50 and 4:40 beat the first half's 5:00; 5:00 itself is a tie, not counted.
+    assert (pacing.negative_km_splits, pacing.second_half_km_count) == (3, 5)
+
+
+def test_the_km_straddling_the_middle_and_the_partial_last_km_are_left_out() -> None:
+    # 10.4 km: half at 5.2 km, so the second half's full kilometres are km 7 to 10 (6-10 km).
+    pacing = compute_run_pacing(*_track([(5200.0, 330.0), (5200.0, 300.0)]))
+    assert pacing is not None
+    assert (pacing.negative_km_splits, pacing.second_half_km_count) == (4, 4)
+
+
 def test_runs_under_5_km_have_no_pacing() -> None:
     assert compute_run_pacing(*_track([(4900, 300)])) is None
     assert compute_run_pacing(np.array([]), np.array([])) is None

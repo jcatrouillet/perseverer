@@ -50,6 +50,9 @@ class InsightActivity:
     pace_second_half_s_per_km: float | None = None
     pace_start_s_per_km: float | None = None
     pace_finish_s_per_km: float | None = None
+    # Second-half kilometres faster than the first half's average pace, out of how many.
+    negative_km_splits: int | None = None
+    second_half_km_count: int | None = None
 
 
 @dataclass(frozen=True)

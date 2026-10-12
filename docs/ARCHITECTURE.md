@@ -256,7 +256,7 @@ own numbers:
   full running history.
 - **Insights:** deterministic rules (`insights/`) for records over 30/90/180 days, the year and
   12 months (longest, fastest, most climbing, most calories, earliest/latest start, hottest and
-  coldest, fastest/slowest start and finish, biggest negative split, per sport), personal bests
+  coldest, fastest/slowest start and finish, most negative km splits, per sport), personal bests
   per distance, streaks, load spikes and resting-HR or
   sleep-score anomalies. The activity page computes the same rules bounded to that activity's own
   date, so an old activity never sees later results, and opens a run's list with its pacing: a

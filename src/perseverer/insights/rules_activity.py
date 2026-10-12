@@ -39,7 +39,7 @@ essentially every activity, so the same population check would just suppress ord
 
 A run of 5 km or more also gets a `pacing` insight first (`pacing_insight`): whether it was a
 negative, even or positive split, with its halves', start's and finish's paces -- an analysis of
-this run on its own, shown whether or not it set a record. Start/finish/negative-split *records*
+this run on its own, shown whether or not it set a record. Start/finish/negative-km-split *records*
 are ordinary effort dimensions (rules_efforts.py), pool-checked like temperature since only longer
 runs with a stream have pacing values.
 
@@ -92,7 +92,7 @@ _POOL_CHECKED_DIMENSIONS = frozenset(
         "start_slow",
         "finish_fast",
         "finish_slow",
-        "negative_split",
+        "negative_km_splits",
     }
 )
 
@@ -133,7 +133,7 @@ _EFFORT_PHRASES: dict[str, str] = {
     "start_slow": "Slowest start",
     "finish_fast": "Fastest finish",
     "finish_slow": "Slowest finish",
-    "negative_split": "Biggest negative split",
+    "negative_km_splits": "Most negative km splits",
 }
 
 
@@ -265,7 +265,9 @@ def _clock(seconds: float) -> str:
 def pacing_insight(a: InsightActivity) -> Insight | None:
     """How this run was paced, whatever earlier runs did: a negative, even or positive split,
     with the halves', start's and finish's paces in `detail` (s/km) so a client can show them in
-    the athlete's own units. None for a run without pacing values (under 5 km, or no stream)."""
+    the athlete's own units, and how many second-half kilometres were faster than the first
+    half's average pace (`negative_km_splits` of `second_half_km_count`). None for a run without
+    pacing values (under 5 km, or no stream)."""
     first, second = a.pace_first_half_s_per_km, a.pace_second_half_s_per_km
     if first is None or second is None or first <= 0:
         return None
@@ -292,6 +294,8 @@ def pacing_insight(a: InsightActivity) -> Insight | None:
             "second_half_s_per_km": second,
             "start_s_per_km": a.pace_start_s_per_km,
             "finish_s_per_km": a.pace_finish_s_per_km,
+            "negative_km_splits": a.negative_km_splits,
+            "second_half_km_count": a.second_half_km_count,
         },
         value_num=fraction,
         sport_family=a.sport_family,

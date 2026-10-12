@@ -7,6 +7,10 @@ Definitions (all paces in seconds per km, over *moving* time):
 - **halves**: the first and second half of the run's distance; the second half faster than the
   first is a negative split.
 - **start**: the first START_FINISH_M (2 km); **finish**: the last START_FINISH_M.
+- **negative km splits**: how many kilometres of the second half were faster than the first
+  half's average pace. The second half's kilometres are the full ones that start at or after the
+  halfway point (a kilometre straddling the middle belongs to neither half, the final partial one
+  is left out); paces are compared rounded to the second, so a tie is not counted.
 - Only `sport == "running"` activities of at least MIN_DISTANCE_M (5 km) get paces, so the start
   and the finish never overlap and the halves are long enough to mean something.
 - Moving time leaves out stops: samples that don't advance for MIN_STOP_S (5 s) or more, such as
@@ -46,15 +50,17 @@ MIN_MOVING_SPEED_MPS = 0.5
 MIN_STOP_S = 5.0
 # Part of every run's signature: bump it when a definition above changes, and the next refresh
 # recomputes every run.
-PACING_VERSION = 1
+PACING_VERSION = 3
 
 FIRST_HALF_KEY = "perseverer.pacing.first_half_pace_s_per_km"
 SECOND_HALF_KEY = "perseverer.pacing.second_half_pace_s_per_km"
 START_KEY = "perseverer.pacing.start_pace_s_per_km"
 FINISH_KEY = "perseverer.pacing.finish_pace_s_per_km"
+NEGATIVE_KM_SPLITS_KEY = "perseverer.pacing.negative_km_splits"
+SECOND_HALF_KM_KEY = "perseverer.pacing.second_half_km_count"
 SIGNATURE_KEY = "perseverer.pacing.signature"
 PACE_KEYS = (FIRST_HALF_KEY, SECOND_HALF_KEY, START_KEY, FINISH_KEY)
-ALL_KEYS = (*PACE_KEYS, SIGNATURE_KEY)
+ALL_KEYS = (*PACE_KEYS, NEGATIVE_KM_SPLITS_KEY, SECOND_HALF_KM_KEY, SIGNATURE_KEY)
 
 _SOURCE = "perseverer"
 _DISPLAY_NAMES = {
@@ -71,6 +77,8 @@ class RunPacing:
     second_half_s_per_km: float
     start_s_per_km: float
     finish_s_per_km: float
+    negative_km_splits: int
+    second_half_km_count: int
 
 
 def compute_run_pacing(elapsed_s: np.ndarray, distance_m: np.ndarray) -> RunPacing | None:
@@ -122,7 +130,15 @@ def compute_run_pacing(elapsed_s: np.ndarray, distance_m: np.ndarray) -> RunPaci
         return None
     first, second, start, finish = paces
     assert first is not None and second is not None and start is not None and finish is not None
-    return RunPacing(first, second, start, finish)
+
+    # 1 m of slack either way, so GPS rounding (a 10 km run measured 9,999.8 m) doesn't drop a
+    # kilometre at the halfway point or at the end.
+    km_starts = np.arange(np.ceil((half - 1.0) / 1000) * 1000.0, total - 999.0, 1000.0)
+    km_paces = np.round(
+        np.interp(km_starts + 1000.0, d, moving_t) - np.interp(km_starts, d, moving_t)
+    )
+    negative = int(np.sum(km_paces < round(first)))
+    return RunPacing(first, second, start, finish, negative, int(km_starts.size))
 
 
 def _read_stream(path: Path, window: tuple[float, float] | None) -> tuple[np.ndarray, np.ndarray]:
@@ -144,6 +160,19 @@ def _register_metrics(conn: Connection) -> None:
             source=_SOURCE,
             display_name=name,
             unit_si="s/km",
+            category="performance",
+            value_type="numeric",
+        )
+    for key, name in (
+        (NEGATIVE_KM_SPLITS_KEY, "Negative km splits"),
+        (SECOND_HALF_KM_KEY, "Second-half kilometres"),
+    ):
+        get_or_register_metric(
+            conn,
+            metric_key=key,
+            source=_SOURCE,
+            display_name=name,
+            unit_si=None,
             category="performance",
             value_type="numeric",
         )
@@ -233,15 +262,19 @@ def refresh_run_pacing(conn: Connection, parquet_dir: Path, *, athlete_id: str) 
         if "distance_m" in json.loads(run.channels) and path.exists():
             elapsed, distance = _read_stream(path, window)
             pacing = compute_run_pacing(elapsed, distance)
-        values: list[tuple[str, float | None, str | None]] = [(SIGNATURE_KEY, None, signature)]
+        values: list[tuple[str, float | None, str | None, str | None]] = [
+            (SIGNATURE_KEY, None, signature, None)
+        ]
         if pacing is not None:
             values += [
-                (FIRST_HALF_KEY, pacing.first_half_s_per_km, None),
-                (SECOND_HALF_KEY, pacing.second_half_s_per_km, None),
-                (START_KEY, pacing.start_s_per_km, None),
-                (FINISH_KEY, pacing.finish_s_per_km, None),
+                (FIRST_HALF_KEY, pacing.first_half_s_per_km, None, "s/km"),
+                (SECOND_HALF_KEY, pacing.second_half_s_per_km, None, "s/km"),
+                (START_KEY, pacing.start_s_per_km, None, "s/km"),
+                (FINISH_KEY, pacing.finish_s_per_km, None, "s/km"),
+                (NEGATIVE_KM_SPLITS_KEY, float(pacing.negative_km_splits), None, None),
+                (SECOND_HALF_KM_KEY, float(pacing.second_half_km_count), None, None),
             ]
-        for key, num, text in values:
+        for key, num, text, unit in values:
             conn.execute(
                 activity_metric.insert().values(
                     athlete_id=athlete_id,
@@ -249,7 +282,7 @@ def refresh_run_pacing(conn: Connection, parquet_dir: Path, *, athlete_id: str) 
                     metric_key=key,
                     value_num=num,
                     value_text=text,
-                    unit="s/km" if num is not None else None,
+                    unit=unit,
                     source=_SOURCE,
                     created_at=now,
                 )

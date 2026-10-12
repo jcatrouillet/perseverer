@@ -9,7 +9,8 @@ const KM_PER_MILE = 1.609344;
 
 export interface PacingText {
   title: string;
-  /** Halves, first 2 km and last 2 km; null when the detail has no paces. */
+  /** Halves, first 2 km, last 2 km and the negative km splits; null when the detail has no
+   * paces. */
   paces: string | null;
 }
 
@@ -45,5 +46,10 @@ export function pacingText(
   const finish = num(detail.finish_s_per_km);
   if (start != null) parts.push(`first 2 km ${formatPaceValue(start, unit)}`);
   if (finish != null) parts.push(`last 2 km ${formatPaceValue(finish, unit)}`);
+  const negativeKms = num(detail.negative_km_splits);
+  const secondHalfKms = num(detail.second_half_km_count);
+  if (negativeKms != null && secondHalfKms != null) {
+    parts.push(`${negativeKms} of ${secondHalfKms} second-half km faster than the first half`);
+  }
   return { title, paces: parts.join(" · ") };
 }

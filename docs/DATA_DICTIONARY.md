@@ -293,6 +293,11 @@ shorter GPS stalls count as running):
   the first and second half of the run's distance. A faster second half is a negative split.
 - **`perseverer.pacing.start_pace_s_per_km`**: the first 2 km. **`perseverer.pacing.finish_pace_s_per_km`**:
   the last 2 km.
+- **`perseverer.pacing.negative_km_splits`**: how many kilometres of the second half were faster
+  than the first half's average pace (compared to the second, so a tie doesn't count).
+  **`perseverer.pacing.second_half_km_count`**: how many kilometres the second half has: the full
+  ones starting at or after the halfway point (one straddling the middle belongs to neither half;
+  the final partial one is left out).
 - **`perseverer.pacing.signature`** (`value_text`): the inputs the values came from (algorithm
   version, stream file, trim window). Present on every processed run, including those too short
   to pace, so a run is recomputed only when it changes.
@@ -300,7 +305,7 @@ shorter GPS stalls count as running):
 Only `sport == "running"` activities of at least 5 km with a `distance_m` stream get paces; an
 active trim is honoured. Computed incrementally at every import, trim, merge and rebuild (only new
 or changed runs are read). Feeds the run insights: the per-run `pacing` insight and the
-fastest/slowest start, fastest/slowest finish and biggest-negative-split records.
+fastest/slowest start, fastest/slowest finish and most-negative-km-splits records.
 
 ### Running performance index (VDOT)
 

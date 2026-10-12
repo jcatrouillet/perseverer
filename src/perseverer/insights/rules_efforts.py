@@ -3,7 +3,7 @@ max/min for each of a fixed set of real, already-stored dimensions -- distance, 
 avg/max heart rate (both directions), avg/max cadence, elevation gained/lost, highest point
 reached, calories burned, start-time-of-day (earliest/latest), outside temperature
 (hottest/coldest), and how a run was paced: its start and finish (fastest/slowest first and last
-2 km) and its biggest negative split. One generic `find_extreme` function driven by a
+2 km) and its number of negative km splits. One generic `find_extreme` function driven by a
 declarative `_DIMENSIONS` table, not one hand-written function per combination -- see
 docs/ARCHITECTURE.md.
 
@@ -50,14 +50,10 @@ def _start_hour(a: InsightActivity) -> float | None:
     return local.hour + local.minute / 60
 
 
-def negative_split_fraction(a: InsightActivity) -> float | None:
-    """How much faster the second half was than the first, as a fraction of the first-half pace
-    (-0.05 = 5% faster); None unless the run was a negative split."""
-    first, second = a.pace_first_half_s_per_km, a.pace_second_half_s_per_km
-    if first is None or second is None or first <= 0:
-        return None
-    delta = (second - first) / first
-    return delta if delta < 0 else None
+def _negative_km_splits(a: InsightActivity) -> float | None:
+    """Second-half kilometres faster than the first half's average pace; None when there are
+    none, so a run without any never holds the "most negative km splits" record."""
+    return float(a.negative_km_splits) if a.negative_km_splits else None
 
 
 @dataclass(frozen=True)
@@ -116,12 +112,12 @@ _DIMENSIONS: tuple[_Dimension, ...] = (
         "finish_slow", "Slowest finish", "high", lambda a: a.pace_finish_s_per_km, True, "s_per_km"
     ),
     _Dimension(
-        "negative_split",
-        "Biggest negative split",
-        "low",
-        negative_split_fraction,
+        "negative_km_splits",
+        "Most negative km splits",
+        "high",
+        _negative_km_splits,
         True,
-        "fraction",
+        "km",
     ),
 )
 

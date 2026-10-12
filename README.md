@@ -93,9 +93,10 @@ planned workout's steps shaded behind them.
 
 Structured workouts are compared lap by lap with what was planned. Each run is ranked against
 similar recent efforts. The run insights start with how the run was paced (a negative, even or
-positive split, with the pace of each half, the first 2 km and the last 2 km) and flag records
-("longest run in the last 12 months", "most calories burned", "slowest start in the last 90
-days", "fastest finish ever", "biggest negative split in the last 6 months").
+positive split, with the pace of each half, the first 2 km and the last 2 km, and how many
+second-half kilometres beat the first half's average) and flag records ("longest run in the last 12
+months", "most calories burned", "slowest start in the last 90 days", "fastest finish ever",
+"most negative km splits in the last 30 days").
 
 | Intervals vs. plan | Recent efforts, zones, intervals |
 |---|---|

@@ -329,7 +329,13 @@ def test_window_best_dedupes_to_the_widest_window_still_true() -> None:
 
 
 def _paced(
-    id_: str, local_date: str, first: float, second: float, start: float, finish: float
+    id_: str,
+    local_date: str,
+    first: float,
+    second: float,
+    start: float,
+    finish: float,
+    negative_kms: int = 2,
 ) -> InsightActivity:
     return replace(
         _activity(id_, local_date, 10_000.0, (first + second) * 5),
@@ -337,6 +343,8 @@ def _paced(
         pace_second_half_s_per_km=second,
         pace_start_s_per_km=start,
         pace_finish_s_per_km=finish,
+        negative_km_splits=negative_kms,
+        second_half_km_count=10,
     )
 
 
@@ -366,14 +374,31 @@ def test_start_finish_and_negative_split_records() -> None:
         _paced("b", "2026-02-10", 310, 305, 320, 300),
         _paced("c", "2026-02-20", 300, 310, 305, 315),
     ]
-    today = _paced("today", "2026-03-01", 360, 300, 380, 270)  # slowest start, fastest finish
+    # slowest start, fastest finish, most second-half kilometres faster than the first half
+    today = _paced("today", "2026-03-01", 360, 300, 380, 270, negative_kms=7)
     titles = {
         i.title for i in compute_activity_insights("today", [*history, today], dt.date(2026, 3, 1))
     }
     assert "Slowest start ever" in titles
     assert "Fastest finish ever" in titles
-    assert "Biggest negative split ever" in titles
+    assert "Most negative km splits ever" in titles
     assert "Fastest start ever" not in titles
+
+
+def test_a_run_without_negative_km_splits_never_holds_that_record() -> None:
+    runs = [
+        _paced("a", "2026-02-01", 320, 318, 330, 310, negative_kms=0),
+        _paced("b", "2026-02-10", 310, 305, 320, 300, negative_kms=0),
+        _paced("c", "2026-03-01", 300, 310, 305, 315, negative_kms=0),
+    ]
+    titles = {i.title for i in compute_activity_insights("c", runs, dt.date(2026, 3, 1))}
+    assert not any("negative km splits" in t for t in titles)
+
+
+def test_the_pacing_insight_carries_the_km_split_count() -> None:
+    run = _paced("r", "2026-03-01", 330, 300, 340, 290, negative_kms=4)
+    pacing = compute_activity_insights("r", [run], dt.date(2026, 3, 1))[0]
+    assert (pacing.detail["negative_km_splits"], pacing.detail["second_half_km_count"]) == (4, 10)
 
 
 def test_pacing_records_need_a_real_comparison_pool() -> None:
