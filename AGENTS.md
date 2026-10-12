@@ -54,12 +54,13 @@ Apply these to every change:
   `uv run ruff format --check .`, `uv run mypy`, `uv run alembic check`, and in `frontend/`:
   `npm run typecheck`, `npm run format:check`, `npm test`, `npm run build`; plus `uv run pip-audit`
   and `npm audit --audit-level=high` when dependencies change. Report any check you could not run.
-- **UI changes:** follow the existing design system (`metricStyle.ts` tones and icons, theme
-  tokens, shared components) and check the rendered page at desktop and phone (375 px) widths,
+- **UI changes:** follow the graphic charter in [docs/DESIGN.md](docs/DESIGN.md) (`metricStyle.ts`
+  tones and icons, theme tokens, shared components) and check the rendered page at desktop and phone (375 px) widths,
   light and dark, before claiming it works.
 - **Docs:** update [docs/API.md](docs/API.md) *and* `frontend/public/api-docs.html` for any API
   change, [docs/DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) for any stored field, and
-  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for any structural change.
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for any structural change, and
+  [docs/DESIGN.md](docs/DESIGN.md) when a visual rule or shared component changes.
 - **Migrations:** `uv run alembic revision --autogenerate -m "..."` after changing
   `db/schema.py`; review the generated file; migrations must be additive.
 - **One configuration file.** Every deployment-specific value (URLs, secrets, ports, paths, image
@@ -150,6 +151,6 @@ cd frontend && npm install && npm run dev  # web app on :5173
 | `src/perseverer/worker/main.py` | Scheduled jobs |
 | `frontend/src/` | React app; pure logic in `*.ts` modules next to components |
 | `quadlet/`, `docker/` | Production units and images |
-| `docs/` | Architecture, deployment, API, data dictionary |
+| `docs/` | Architecture, design (graphic charter), deployment, API, data dictionary |
 
 `CLAUDE.md` only imports this file; edit `AGENTS.md`, never `CLAUDE.md`.

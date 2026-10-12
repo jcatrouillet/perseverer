@@ -301,6 +301,7 @@ from the same file; see [docs/DEPLOY.md](docs/DEPLOY.md).
 | Document | Contents |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, storage, ingestion, analytics, API, MCP, security, design decisions |
+| [docs/DESIGN.md](docs/DESIGN.md) | Graphic charter: colours, typography, icons, components, charts, writing |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Dev setup, production deployment, operations |
 | [docs/API.md](docs/API.md) | Every REST endpoint, parameter and response |
 | [docs/DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md) | Every table, column and metric key, and where it comes from |

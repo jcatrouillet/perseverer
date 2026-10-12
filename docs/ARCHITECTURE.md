@@ -10,7 +10,7 @@ REST API and an MCP server an AI agent can work with.
 
 This document describes how the system is built and why. For setup and operations see
 [DEPLOY.md](DEPLOY.md); for every stored field see [DATA_DICTIONARY.md](DATA_DICTIONARY.md); for
-the HTTP interface see [API.md](API.md).
+the HTTP interface see [API.md](API.md); for the look of the web app see [DESIGN.md](DESIGN.md).
 
 - [System overview](#system-overview)
 - [Core principles](#core-principles)
