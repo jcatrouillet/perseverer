@@ -304,8 +304,8 @@ shorter GPS stalls count as running):
 
 Only `sport == "running"` activities of at least 5 km with a `distance_m` stream get paces; an
 active trim is honoured. Computed incrementally at every import, trim, merge and rebuild (only new
-or changed runs are read). Feeds the run insights: the per-run `pacing` insight and the
-fastest/slowest start, fastest/slowest finish and most-negative-km-splits records.
+or changed runs are read). Feeds the run insights' fastest/slowest start, fastest/slowest finish
+and most-negative-km-splits records.
 
 ### Running performance index (VDOT)
 

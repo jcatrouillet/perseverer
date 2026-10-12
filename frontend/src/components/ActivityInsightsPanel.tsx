@@ -6,11 +6,8 @@
 // see rules_activity.py's activity_id filter -- so a link would only ever point back to the
 // page already open). Deliberately plain rows, not icon-chip cards: compact enough to stack
 // many at once, same "bare text row" density as ActivityFastestTable rather than the boxed
-// InsightCard style the athlete-wide Insights tab uses. The one exception is a run's "pacing"
-// row (negative/even/positive split), shown in the athlete's own unit with its paces beneath.
+// InsightCard style the athlete-wide Insights tab uses.
 import type { InsightOut } from "../api/types";
-import { useDistanceFormat } from "../formatDistance";
-import { pacingText } from "../runPacing";
 
 export function ActivityInsightsPanel({
   insights,
@@ -19,30 +16,17 @@ export function ActivityInsightsPanel({
   insights: InsightOut[];
   heading: string;
 }) {
-  const { unit } = useDistanceFormat();
   if (insights.length === 0) return null;
 
   return (
     <section className="card activity-insights">
       <h2>{heading}</h2>
       <ul className="activity-insights__list">
-        {insights.map((insight, i) => {
-          const key = `${insight.kind}-${insight.window}-${i}`;
-          if (insight.kind === "pacing") {
-            const { title, paces } = pacingText(insight.detail, insight.title, unit);
-            return (
-              <li key={key} className="activity-insights__row activity-insights__row--pacing">
-                {title}
-                {paces && <span className="activity-insights__paces">{paces}</span>}
-              </li>
-            );
-          }
-          return (
-            <li key={key} className="activity-insights__row">
-              {insight.title}
-            </li>
-          );
-        })}
+        {insights.map((insight, i) => (
+          <li key={`${insight.kind}-${insight.window}-${i}`} className="activity-insights__row">
+            {insight.title}
+          </li>
+        ))}
       </ul>
     </section>
   );

@@ -259,10 +259,10 @@ own numbers:
   coldest, fastest/slowest start and finish, most negative km splits, per sport), personal bests
   per distance, streaks, load spikes and resting-HR or
   sleep-score anomalies. The activity page computes the same rules bounded to that activity's own
-  date, so an old activity never sees later results, and opens a run's list with its pacing: a
-  negative, even or positive split, with the halves', first 2 km's and last 2 km's paces. Those
-  paces come from the stream, so they are computed once per run at import (`run_pacing.py`,
-  incremental: a run is re-read only when its stream or trim changes) rather than per request.
+  date, so an old activity never sees later results. The start, finish and negative-km-split
+  records need paces from the stream, so those are computed once per run at import
+  (`run_pacing.py`, incremental: a run is re-read only when its stream or trim changes) rather
+  than per request.
 
 ## Writing back to Garmin
 

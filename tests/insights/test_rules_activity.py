@@ -348,24 +348,10 @@ def _paced(
     )
 
 
-def test_every_paced_run_opens_with_its_split() -> None:
-    cases = [
-        (_paced("neg", "2026-03-01", 330, 300, 340, 290), "negative", "0:30 /km faster"),
-        (_paced("pos", "2026-03-02", 300, 320, 300, 330), "positive", "0:20 /km slower"),
-        (_paced("even", "2026-03-03", 300, 302, 300, 300), "even", "same pace"),
-    ]
-    for run, split, phrase in cases:
-        insights = compute_activity_insights(run.id, [run], dt.date.fromisoformat(run.local_date))
-        first = insights[0]
-        assert (first.kind, first.detail["split"]) == ("pacing", split)
-        assert phrase in first.title
-        assert first.detail["start_s_per_km"] == run.pace_start_s_per_km
-
-
-def test_a_run_without_pacing_gets_no_split_insight() -> None:
-    run = _activity("short", "2026-03-01", 4_000.0, 1_200.0)
-    insights = compute_activity_insights("short", [run], dt.date(2026, 3, 1))
-    assert all(i.kind != "pacing" for i in insights)
+def test_runs_get_no_period_less_pacing_insight() -> None:
+    run = _paced("neg", "2026-03-01", 330, 300, 340, 290)
+    insights = compute_activity_insights("neg", [run], dt.date(2026, 3, 1))
+    assert all(i.kind != "pacing" and "split:" not in i.title for i in insights)
 
 
 def test_start_finish_and_negative_split_records() -> None:
@@ -393,12 +379,6 @@ def test_a_run_without_negative_km_splits_never_holds_that_record() -> None:
     ]
     titles = {i.title for i in compute_activity_insights("c", runs, dt.date(2026, 3, 1))}
     assert not any("negative km splits" in t for t in titles)
-
-
-def test_the_pacing_insight_carries_the_km_split_count() -> None:
-    run = _paced("r", "2026-03-01", 330, 300, 340, 290, negative_kms=4)
-    pacing = compute_activity_insights("r", [run], dt.date(2026, 3, 1))[0]
-    assert (pacing.detail["negative_km_splits"], pacing.detail["second_half_km_count"]) == (4, 10)
 
 
 def test_pacing_records_need_a_real_comparison_pool() -> None:
