@@ -18,13 +18,54 @@ import {
   storeApiKey,
   storeJwt,
 } from "../api/client";
+import type { Tone } from "../metricStyle";
 import "../styles/auth.css";
+import { Icon, type IconName } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
 
 type Tab = "login" | "api-key";
 
 const RESET_PATH = "/reset-password";
 const MIN_PASSWORD_LENGTH = 8;
+
+const FEATURES: { icon: IconName; tone: Tone; title: string; description: string }[] = [
+  {
+    icon: "calendar",
+    tone: "pace",
+    title: "Your whole training history",
+    description: "One calendar for every sport, with day-to-all-time views, maps and records.",
+  },
+  {
+    icon: "route",
+    tone: "elevation",
+    title: "Every effort in detail",
+    description: "Explore routes, splits and charts for runs, hikes, rides and climbing sessions.",
+  },
+  {
+    icon: "trend",
+    tone: "cadence",
+    title: "Insights from your data",
+    description: "Fitness & Form, training zones, VO₂max, race predictions and personal bests.",
+  },
+  {
+    icon: "bolt",
+    tone: "load",
+    title: "Plans that reach your watch",
+    description: "Build workouts, set goals and send planned sessions and courses to Garmin.",
+  },
+  {
+    icon: "heart",
+    tone: "hr",
+    title: "Health in context",
+    description: "See sleep, HRV, body composition, steps and blood test trends together.",
+  },
+  {
+    icon: "download",
+    tone: "power",
+    title: "An archive you own",
+    description: "Original files stay yours, with a REST API and MCP tools for your own analysis.",
+  },
+];
 
 /** The token of the reset link this page was opened with, if any. */
 function resetTokenFromUrl(): string | null {
@@ -324,13 +365,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  let subtitle = "Sign in to view your training and health data";
+  let heading = "Welcome back";
+  let subtitle = "Sign in to your training space";
   let content: React.ReactNode;
   if (resetToken) {
-    subtitle = "Choose a new password";
+    heading = "Choose a new password";
+    subtitle = "Set a new password for your account.";
     content = <ResetPasswordForm token={resetToken} onDone={leaveReset} />;
   } else if (forgot) {
-    subtitle = "Reset your password";
+    heading = "Reset your password";
+    subtitle = "Get back to your training space.";
     content = <ForgotPasswordForm onBack={() => setForgot(false)} />;
   } else {
     content = (
@@ -371,16 +415,61 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="auth-page">
-      <div className="auth-page__toggle">
-        <ThemeToggle />
-      </div>
-      <main className="auth-card">
-        <div className="auth-card__brand">
-          <div className="auth-card__logo">P</div>
-          <h1>Perseverer</h1>
-          <p className="auth-card__subtitle">{subtitle}</p>
+      <header className="auth-page__header">
+        <div className="auth-page__brand">
+          <span className="auth-page__mark" aria-hidden="true">
+            P
+          </span>
+          <span>Perseverer</span>
         </div>
-        {content}
+        <ThemeToggle />
+      </header>
+      <main className="auth-page__main">
+        <section className="auth-intro" aria-labelledby="auth-intro-heading">
+          <p className="auth-intro__eyebrow">TRAINING, ALL TOGETHER</p>
+          <h1 id="auth-intro-heading">Every effort. One clear picture.</h1>
+          <p className="auth-intro__lead">
+            Your activities, health and training plans in one self-hosted space. See the full story
+            of your progress, from the first workout to what comes next.
+          </p>
+          <div className="auth-sources" aria-label="Supported data sources">
+            <span>Garmin</span>
+            <span>Strava</span>
+            <span>Apple Health</span>
+            <span>Eufy</span>
+            <span>Kaya</span>
+          </div>
+        </section>
+
+        <section className="auth-card" aria-labelledby="auth-card-heading">
+          <div className="auth-card__brand">
+            <p className="auth-card__eyebrow">YOUR SPACE</p>
+            <h2 id="auth-card-heading">{heading}</h2>
+            <p className="auth-card__subtitle">{subtitle}</p>
+          </div>
+          {content}
+          <p className="auth-card__footer">Private by design. Your data stays on your server.</p>
+        </section>
+
+        <section className="auth-features" aria-labelledby="auth-features-heading">
+          <div className="auth-features__heading">
+            <p className="auth-intro__eyebrow">BUILT FOR THE WHOLE JOURNEY</p>
+            <h2 id="auth-features-heading">More than a workout log</h2>
+          </div>
+          <div className="auth-features__grid">
+            {FEATURES.map((feature) => (
+              <article className="auth-feature" key={feature.title}>
+                <span className={`icon-chip icon-chip--lg tone-${feature.tone}`}>
+                  <Icon name={feature.icon} />
+                </span>
+                <div>
+                  <h3>{feature.title}</h3>
+                  <p>{feature.description}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       </main>
     </div>
   );
