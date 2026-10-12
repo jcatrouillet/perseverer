@@ -247,12 +247,16 @@ phone layout is a design target of its own, not a shrunken desktop.
 ### Touch
 
 - **Nothing important may depend on hover.** A phone has no hover, so information shown in a
-  hover tooltip must also be reachable another way: a tap, a details line, or the page the item
-  links to. Recharts tooltips open on tap; the PR-progress chart selects a dot on touch and shows
-  its details in a strip below.
-- **Known gaps:** the running heatmap's day tooltip is CSS `:hover` only (on a phone, a tap
-  follows the link to that day instead), and a few rows reveal secondary details on hover. Fix
-  these when the component is next touched rather than adding more.
+  hover tooltip must also be reachable another way. Recharts tooltips open on tap; the PR-progress
+  chart selects a dot on touch and shows its details in a strip below.
+- **Tooltips on links use `useTapTooltip`** (`frontend/src/useTapTooltip.ts`), as the running
+  heatmap's days and weeks do: with touch, the first tap shows the tooltip, a second tap on the
+  same item follows the link, and a tap elsewhere or any scroll closes it; a mouse keeps hover then
+  click, and keyboard focus shows the tooltip too. The open tooltip is pinned to the screen at the
+  item's position, because the item usually sits in a sideways-scrolling strip that would clip it;
+  near a screen edge it anchors to that side, and with no room above it opens below.
+- **Known gaps:** a few rows still reveal secondary details only on hover. Move them to
+  `useTapTooltip` (or show the detail inline) when the component is next touched.
 - **Maps must not trap scrolling.** Small route thumbnails (activity cards, the day view) don't
   pan or zoom, so a swipe scrolls the page; the large route map is interactive and has a
   full-screen button.
@@ -349,7 +353,7 @@ These render outside the React app but follow the same charter:
 - [ ] Distances, paces and times go through the shared formatters.
 - [ ] Checked in the browser at desktop width and at 375px: no horizontal page scroll (see
       [Mobile](#mobile)).
-- [ ] Nothing important is reachable only by hovering.
+- [ ] Nothing important is reachable only by hovering (use `useTapTooltip` for link tooltips).
 - [ ] Checked in light and dark themes.
 - [ ] Keyboard focus is visible; icon-only buttons have an `aria-label`.
 - [ ] Empty, loading and error states are handled.

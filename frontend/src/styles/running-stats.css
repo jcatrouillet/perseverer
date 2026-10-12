@@ -206,8 +206,44 @@
   box-shadow: var(--shadow-card);
 }
 
-.running-heatmap__cell:not(.is-empty):hover .running-heatmap__tooltip {
+/* Hover with a mouse, keyboard focus, or the first tap on a touch screen (`is-open`, set by
+   useTapTooltip -- a phone has no hover, and the tap would otherwise just open the day). */
+.running-heatmap__cell:not(.is-empty):hover .running-heatmap__tooltip,
+.running-heatmap__cell:not(.is-empty):focus-visible .running-heatmap__tooltip,
+.running-heatmap__cell.is-open .running-heatmap__tooltip {
   display: flex;
+}
+
+/* A tapped cell's tooltip is pinned to the screen at the cell's position (--tip-x/--tip-y, set
+   by useTapTooltip): on a phone the heatmap scrolls sideways, and that strip would clip a tooltip
+   poking out of it. Near a screen edge it anchors to that side; with no room above, below. */
+.running-heatmap__cell.is-open .running-heatmap__tooltip {
+  position: fixed;
+  left: var(--tip-x);
+  top: var(--tip-y);
+  bottom: auto;
+  z-index: 50;
+  transform: translate(-50%, calc(-100% - 6px));
+}
+
+.running-heatmap__cell.is-open--left .running-heatmap__tooltip {
+  transform: translate(0, calc(-100% - 6px));
+}
+
+.running-heatmap__cell.is-open--right .running-heatmap__tooltip {
+  transform: translate(-100%, calc(-100% - 6px));
+}
+
+.running-heatmap__cell.is-open--below .running-heatmap__tooltip {
+  transform: translate(-50%, 6px);
+}
+
+.running-heatmap__cell.is-open--below.is-open--left .running-heatmap__tooltip {
+  transform: translate(0, 6px);
+}
+
+.running-heatmap__cell.is-open--below.is-open--right .running-heatmap__tooltip {
+  transform: translate(-100%, 6px);
 }
 
 .running-stats__pie-caption {

@@ -28,6 +28,7 @@ import { ChartFullscreen } from "./ChartFullscreen";
 import { ChartLegend } from "./ChartLegend";
 import { Icon } from "./Icon";
 import { StatTile } from "./StatTile";
+import { useTapTooltip } from "../useTapTooltip";
 import { isoDate, monthName, parseIsoDate, startOfWeek, weekdayLabels } from "../dateUtils";
 import { useDistanceFormat } from "../formatDistance";
 import { usePersonalize } from "../PersonalizeContext";
@@ -166,9 +167,18 @@ export function RunningStats({
   // Driven by onMouseEnter/Leave rather than a CSS :hover rule, matching the legend's own
   // pattern above -- keeps row-highlight behavior consistent and directly testable.
   const [hoveredRecordLabel, setHoveredRecordLabel] = useState<string | null>(null);
+  // Heatmap day/week tooltips on touch: first tap shows the tooltip, a second tap opens the day.
+  const heatmapTooltip = useTapTooltip();
   const { week_start_day: weekStartDay } = usePersonalize();
-  const { metersToDisplay, unitLabel, paceMinPerDisplayUnit, kmhToDisplay, speedUnitLabel } =
-    useDistanceFormat();
+  const {
+    metersToDisplay,
+    unitLabel,
+    paceMinPerDisplayUnit,
+    kmhToDisplay,
+    speedUnitLabel,
+    formatDistance,
+    formatPace,
+  } = useDistanceFormat();
 
   if (activities.length === 0) {
     return (
@@ -366,14 +376,18 @@ export function RunningStats({
     const bucket = km > 0 ? nearestLegendKm(km, heatmapScale) : "none";
     const hoverClass =
       hoveredLegendKm == null ? "" : bucket === hoveredLegendKm ? " is-highlighted" : " is-dimmed";
+    const isOpen = heatmapTooltip.openKey === key;
+    const openClass = isOpen ? heatmapTooltip.openClassName : "";
     return (
       <Link
         key={key}
         href={href}
-        className={`running-heatmap__cell${extraClassName}${hoverClass}`}
+        {...heatmapTooltip.itemProps(key)}
+        className={`running-heatmap__cell${extraClassName}${hoverClass}${openClass}`}
         style={
           {
             "--heat-pct": `${long ? 0 : shortRunHeatPct(km, heatmapScale)}%`,
+            ...(isOpen ? heatmapTooltip.openStyle : {}),
           } as React.CSSProperties
         }
       >
@@ -387,7 +401,7 @@ export function RunningStats({
           <strong>{tooltipTitle}</strong>
           {km > 0 ? (
             <span>
-              {km.toFixed(1)} km · {paceMinPerKm!.toFixed(2)} min/km
+              {formatDistance(km * 1000)} · {formatPace(paceMinPerKm! * 60)}
               {elevationM > 0 && ` · +${Math.round(elevationM)}m`}
             </span>
           ) : (
