@@ -35,12 +35,13 @@ a:hover {
 h1,
 h2,
 h3 {
-  font-weight: 600;
+  font-weight: 650;
   margin: 0 0 var(--space-3);
 }
 
 h1 {
   font-size: var(--font-size-xl);
+  letter-spacing: -0.025em;
 }
 
 h2 {
@@ -60,8 +61,8 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
+  gap: var(--space-2);
+  padding: 0 var(--space-5);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
@@ -79,16 +80,20 @@ select {
 .app-nav__links {
   display: flex;
   align-self: stretch;
-  gap: var(--space-4);
+  gap: var(--space-1);
   flex-wrap: wrap;
 }
 
 .app-nav__links a {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   color: var(--color-text-muted);
   font-weight: 500;
+  font-size: var(--font-size-sm);
+  padding: var(--space-3) var(--space-2);
+  white-space: nowrap;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   position: relative;
 }
 
@@ -105,6 +110,7 @@ select {
 .app-nav__links a.is-active {
   color: var(--color-accent);
   text-decoration: none;
+  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
 }
 
 /* Underline sits on the nav's own bottom border rather than under the text, so the active
@@ -114,7 +120,7 @@ select {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(-1 * var(--space-3) - 1px);
+  bottom: -1px;
   height: 2px;
   border-radius: 2px 2px 0 0;
   background: var(--color-accent);
@@ -124,6 +130,31 @@ select {
   max-width: 1080px;
   margin: 0 auto;
   padding: var(--space-5);
+}
+
+@media (max-width: 640px) {
+  .app-nav {
+    padding: 0 var(--space-2);
+    align-items: flex-start;
+  }
+
+  .app-nav__links a {
+    padding: var(--space-2) var(--space-1);
+    font-size: 0.75rem;
+  }
+
+  .app-nav__links a .icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .app-nav__actions {
+    padding-top: var(--space-2);
+  }
+
+  .app-main {
+    padding: var(--space-3);
+  }
 }
 
 /* Shared building blocks */
@@ -191,6 +222,7 @@ select {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   padding: var(--space-4);
+  min-width: 0;
 }
 
 .card + .card {
@@ -216,6 +248,8 @@ select {
   background: var(--color-surface-raised);
   color: var(--color-text);
   cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 550;
 }
 
 .button:hover {
@@ -338,8 +372,8 @@ select {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(min(130px, 100%), 1fr));
+  gap: var(--space-2);
   align-items: start;
 }
 
@@ -353,6 +387,10 @@ select {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 /* Caption is deliberately smaller and quieter than the figure it labels -- previously both sat
@@ -612,8 +650,8 @@ tbody tr:last-child td {
    footprint should stay small relative to the actual content below it. */
 
 .date-nav {
-  display: inline-block;
-  width: max-content;
+  display: block;
+  width: 405px;
   max-width: 100%;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -623,28 +661,26 @@ tbody tr:last-child td {
   font-size: 0.75rem;
 }
 
-/* flex-wrap: nowrap + overflow-x: auto, not wrap -- on desktop `.date-nav`'s own width is
-   max-content (sized to fit every row without wrapping at all, so this never visibly does
-   anything there), but the max-width: 100% cap above forces a narrower width on a phone
-   screen, and wrap was the wrong response to that: confirmed live, the years row alone wrapped
-   to 4 lines, months to 2, for a navigation bar meant to be a slim strip pinned above every
-   calendar page. Scrolling within its own box (same pattern this session's other wide-content
-   fixes already use) keeps it a single dense line and still reaches every year/month by
-   swiping, rather than ballooning into a multi-line block that pushes the actual page content
-   down. */
+/* Every row fits inside the same compact box. Years page with arrows on both desktop and phone;
+   months use twelve equal cells. Week and day links remain directly available below them. */
 .date-nav__row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: space-between;
+  gap: var(--space-1);
   flex-wrap: nowrap;
-  overflow-x: auto;
   line-height: 1.6;
 }
 
-/* Years has far fewer items than months (9 vs 12) -- extra gap keeps the two rows visually
-   about the same length instead of years looking cramped/short by comparison. */
 .date-nav__row--years {
-  gap: var(--space-4);
+  gap: var(--space-1);
+}
+
+.date-nav__row--months {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0;
+  text-align: center;
 }
 
 .date-nav__row + .date-nav__row {
@@ -656,9 +692,6 @@ tbody tr:last-child td {
 .date-nav__row a,
 .date-nav__row button,
 .date-nav__week-row a {
-  /* Without this, default flex-shrink lets each year/month squish narrower before the row's
-     own overflow-x: auto ever kicks in -- every item keeps its natural width instead, so
-     overflow (not shrinking) is what triggers the scroll. */
   flex-shrink: 0;
 }
 
@@ -685,6 +718,16 @@ tbody tr:last-child td {
 .date-nav__all-time {
   margin-right: var(--space-1);
   text-transform: uppercase;
+}
+
+@media (max-width: 480px) {
+  .date-nav__row--months {
+    font-size: 0.625rem;
+  }
+
+  .date-nav__row--months a.is-active {
+    padding: 0 0.125rem;
+  }
 }
 
 .date-nav__page {

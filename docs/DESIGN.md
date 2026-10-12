@@ -176,6 +176,15 @@ Patterns:
 - **Empty states** say what is missing and how to get it; an empty card is not shown at all
   when there is nothing useful to say.
 - **Loading** shows `LoadingSpinner`; errors show a short `role="alert"` message in the card.
+- **Activity details** start with a compact weather, pace-variability and fueling summary when
+  those values exist. Section links jump to the recorded route and splits, performance metrics,
+  charts and sharing. The route and stream charts keep their real data and existing controls.
+- **Sign-in page** is chosen under Settings > Personalize. Feature showcase is the default;
+  Classic centers the sign-in card. This preference is stored on the device so it is available
+  before authentication.
+- **Insights** subsection tabs fit on one desktop line and form a compact grid on narrower
+  screens, without a horizontal slider.
+- **Gear** opens with the athlete's shoes, followed by the add-shoes form and sport defaults.
 
 ## Charts
 
@@ -222,9 +231,13 @@ phone layout is a design target of its own, not a shrunken desktop.
 - **640px** is the phone breakpoint. CSS uses `@media (max-width: 640px)`; components that must
   render *different content* (not just hide or restyle it) use the `useIsMobile()` hook, which
   reads the same 640px query, so the two can never disagree.
-- **720px** switches multi-column layouts to one column (the metric explorer, the week view).
+- **720px** stacks the metric explorer. The week view uses two columns at that width and one
+  column below 480px.
 - **A minimum width must never exceed the screen.** Write `min-width: min(320px, 100%)`, not
   `min-width: 320px`: on a 375px phone the plain value pushed the route map past its card.
+- The compact date navigator shows only the twelve month links at the year level. Opening a
+  month reveals its week numbers and day cells, which open their corresponding views directly,
+  without a horizontal strip.
 - Pages with a dense form or grid add their own steps where they need them (gear: 760 and 520px;
   sign-in: 900, 700 and 520px). Prefer fluid grids (`auto-fill`, `minmax()`, `clamp()`) to a new
   breakpoint.
@@ -235,8 +248,8 @@ phone layout is a design target of its own, not a shrunken desktop.
 | Element | Desktop | Phone |
 |---|---|---|
 | Top navigation | One row of tabs with icons | Tabs wrap onto extra rows; no hamburger menu, every section stays one tap away |
-| Date navigator | A 7-year window with ‹ › arrows | Every year in one row that scrolls sideways; the arrows are dropped |
-| Week view | Seven day columns | Day columns at least 140px wide in a strip that scrolls sideways |
+| Date navigator | A 7-year window with ‹ › arrows | Four years at a time with ‹ › arrows; no sideways scrolling |
+| Week view | Seven day columns | Two day columns, then one column below 480px; no sideways scrolling |
 | Metric explorer (Fitness, Health, Insights) | Metric list beside the chart | The list stacks above the chart as collapsible groups |
 | Charts | Inline at full card width | The chart's title becomes a button that opens it full screen (`ChartFullscreen`) |
 | Tables (splits, routes, laps) | Full width | Scroll sideways inside the card (`.table-scroll`); the page itself never scrolls sideways |

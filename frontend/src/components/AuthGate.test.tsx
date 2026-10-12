@@ -25,6 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   window.history.replaceState(null, "", "/");
+  localStorage.removeItem("perseverer.signInPage");
 });
 
 function renderGate() {
@@ -34,6 +35,20 @@ function renderGate() {
     </AuthGate>,
   );
 }
+
+describe("AuthGate sign-in page choice", () => {
+  it("shows the feature showcase by default and the compact card when chosen", () => {
+    const showcase = renderGate();
+    expect(screen.getByText("Every effort. One clear picture.")).toBeInTheDocument();
+    expect(showcase.container.querySelector(".auth-page--showcase")).toBeInTheDocument();
+    showcase.unmount();
+
+    localStorage.setItem("perseverer.signInPage", "classic");
+    const classic = renderGate();
+    expect(classic.container.querySelector(".auth-page--classic")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+  });
+});
 
 describe("AuthGate forgotten password", () => {
   it("sends a reset link from the log-in page", async () => {

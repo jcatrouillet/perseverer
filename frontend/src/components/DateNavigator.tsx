@@ -14,10 +14,12 @@ import { usePersonalize } from "../PersonalizeContext";
 import { useIsMobile } from "../useIsMobile";
 
 const YEARS_PER_WINDOW = 7;
+const MOBILE_YEARS_PER_WINDOW = 4;
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 /** The persistent year -> month -> week navigation bar shared by the year/month/week/day
- * views. The day grid is a real Monday-aligned mini calendar (one row per week): clicking the
+ * views. The year level offers months; the month level shows a real mini calendar (one row per
+ * week). Clicking the
  * week affordance at the start of a row goes to that week (`/calendar/week/:monday`); clicking
  * a specific day goes straight to that day (`/day/:date`). `selectedDate` highlights one day
  * cell (Day View); `selectedWeekStart` highlights an entire week row (Week View) instead --
@@ -55,24 +57,21 @@ export function DateNavigator({
   // Index into `availableYears`, not a raw year number -- years with data aren't necessarily
   // contiguous, so "window - 7" arithmetic on the year value itself could land on a gap.
   const [windowIndex, setWindowIndex] = useState(0);
+  const windowSize = isMobile ? MOBILE_YEARS_PER_WINDOW : YEARS_PER_WINDOW;
   useEffect(() => {
     const idx = availableYears.indexOf(year);
-    if (idx !== -1 && (idx < windowIndex || idx >= windowIndex + YEARS_PER_WINDOW)) {
+    if (idx !== -1 && (idx < windowIndex || idx >= windowIndex + windowSize)) {
       setWindowIndex(idx);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availableYears.join(","), year]);
+  }, [availableYears.join(","), year, windowSize]);
 
   // Descending, most recent first (left) to oldest last (right) -- so "‹ newer" sits next to
   // the most recent year shown and "older ›" sits next to the oldest one, each arrow pointing
   // in the direction it actually moves the window.
   //
-  // Mobile shows every available year with no paging arrows at all, rather than a 7-year window
-  // -- the years row already scrolls horizontally there (layout.css), so paging buttons next to
-  // a swipeable strip are redundant, not a second way to reach the same years.
-  const years = isMobile
-    ? availableYears
-    : availableYears.slice(windowIndex, windowIndex + YEARS_PER_WINDOW);
+  // Both widths page years with buttons, so the navigator itself never needs a horizontal strip.
+  const years = availableYears.slice(windowIndex, windowIndex + windowSize);
   const { start: monthStart, end: monthEnd } = month
     ? monthRange(year, month)
     : { start: "", end: "" };
@@ -87,17 +86,15 @@ export function DateNavigator({
         >
           All
         </Link>
-        {!isMobile && (
-          <button
-            type="button"
-            className="date-nav__page"
-            onClick={() => setWindowIndex((i) => Math.max(0, i - YEARS_PER_WINDOW))}
-            disabled={windowIndex === 0}
-            aria-label="Show newer years"
-          >
-            ‹
-          </button>
-        )}
+        <button
+          type="button"
+          className="date-nav__page"
+          onClick={() => setWindowIndex((i) => Math.max(0, i - windowSize))}
+          disabled={windowIndex === 0}
+          aria-label="Show newer years"
+        >
+          ‹
+        </button>
         {years.map((y) => (
           <Link
             key={y}
@@ -107,24 +104,19 @@ export function DateNavigator({
             {y}
           </Link>
         ))}
-        {!isMobile && (
-          <button
-            type="button"
-            className="date-nav__page"
-            onClick={() =>
-              setWindowIndex((i) =>
-                Math.min(
-                  Math.max(0, availableYears.length - YEARS_PER_WINDOW),
-                  i + YEARS_PER_WINDOW,
-                ),
-              )
-            }
-            disabled={windowIndex + YEARS_PER_WINDOW >= availableYears.length}
-            aria-label="Show older years"
-          >
-            ›
-          </button>
-        )}
+        <button
+          type="button"
+          className="date-nav__page"
+          onClick={() =>
+            setWindowIndex((i) =>
+              Math.min(Math.max(0, availableYears.length - windowSize), i + windowSize),
+            )
+          }
+          disabled={windowIndex + windowSize >= availableYears.length}
+          aria-label="Show older years"
+        >
+          ›
+        </button>
       </div>
 
       <div className="date-nav__row date-nav__row--months">
@@ -135,7 +127,7 @@ export function DateNavigator({
         ))}
       </div>
 
-      {month != null && weeks.length > 0 && (
+      {weeks.length > 0 && (
         <div className="date-nav__weeks">
           {weeks.map((week) => {
             const isSelectedWeek = week[0] === selectedWeekStart;

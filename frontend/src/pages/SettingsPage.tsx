@@ -824,7 +824,7 @@ export function SettingsPage() {
   ];
 
   return (
-    <main>
+    <main className="settings-page">
       <h1>Settings</h1>
       <MetricExplorer metrics={sections} selected={selectedSection} onSelect={setSelectedSection} />
     </main>

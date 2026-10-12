@@ -10,6 +10,7 @@ import { BoulderingGoalsSection } from "./BoulderingGoalsSection";
 import { DurationGoalsSection } from "./DurationGoalsSection";
 import { GoalForm } from "./GoalForm";
 import { GoalProgressChart } from "./GoalProgressChart";
+import { Icon } from "./Icon";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { Modal } from "./Modal";
 import "../styles/goals.css";
@@ -32,6 +33,7 @@ export function GoalButton({
   return (
     <>
       <button type="button" className="button goal-button" onClick={() => setOpen(true)}>
+        <Icon name="target" />
         Goals
       </button>
 

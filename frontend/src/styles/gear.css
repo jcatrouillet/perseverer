@@ -146,7 +146,7 @@
 }
 
 .gear-inventory {
-  margin-top: var(--space-5);
+  margin-bottom: var(--space-5);
 }
 
 .gear-inventory__heading {

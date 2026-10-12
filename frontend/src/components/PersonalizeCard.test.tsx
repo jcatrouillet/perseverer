@@ -35,6 +35,7 @@ function settings(overrides: Partial<PersonalizeSettingsOut> = {}): PersonalizeS
 beforeEach(() => {
   settingsState = { data: settings(), isLoading: false, isSuccess: true };
   mockSetMutate.mockClear();
+  localStorage.removeItem("perseverer.signInPage");
 });
 
 describe("PersonalizeCard", () => {
@@ -113,5 +114,14 @@ describe("PersonalizeCard", () => {
     expect(screen.getByLabelText("Light")).toBeChecked();
     expect(screen.getByLabelText("Dark")).not.toBeChecked();
     localStorage.removeItem("perseverer.theme");
+  });
+
+  it("chooses the sign-in page on this device without changing account settings", () => {
+    render(<PersonalizeCard />);
+    expect(screen.getByLabelText("Feature showcase")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Classic"));
+    expect(screen.getByLabelText("Classic")).toBeChecked();
+    expect(localStorage.getItem("perseverer.signInPage")).toBe("classic");
+    expect(mockSetMutate).not.toHaveBeenCalled();
   });
 });

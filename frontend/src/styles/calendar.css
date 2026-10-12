@@ -99,16 +99,8 @@
   color: var(--color-text);
 }
 
-/* WeekView's own day-by-day column strip -- one column per weekday, left-to-right like a real
-   week rather than the old top-to-bottom stack of day sections. A fixed 7-column grid, not
-   `grid-auto-flow` + a minimum column width -- the app's own `.app-main` content area caps out
-   at 1080px, so a "minimum" width above roughly 130px always forced a horizontal scrollbar in
-   practice, on every ordinary desktop width, not just narrow ones. Real columns this narrow only
-   work because `.week-columns__activities` below overrides ActivityCard's own header layout,
-   which was built for a full-width list, not a ~130px sliver. Falls back to the old
-   scrollable-strip behaviour only below 720px (same breakpoint MetricExplorer's own
-   desktop/mobile switch already uses), where even seven evenly-divided columns can't hold
-   anything readable at all. */
+/* Seven compact day columns on desktop. At smaller widths the days stack, keeping every day
+   reachable without a horizontal calendar scrollbar. */
 .week-columns {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -118,11 +110,17 @@
 
 @media (max-width: 720px) {
   .week-columns {
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(140px, 1fr);
-    overflow-x: auto;
-    padding-bottom: var(--space-2);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .week-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .week-columns__day {
+    padding: var(--space-2) var(--space-3);
   }
 }
 

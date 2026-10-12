@@ -12,16 +12,23 @@
   gap: 2px;
 }
 
-/* Breaks out of .app-main's 1080px column so the trend chart can use most of the viewport --
-   width:100vw capped by max-width, then re-centered via its own rendered width (not 50vw) so
-   the recentring stays correct however narrow the max-width cap makes it on a wide monitor. */
+/* Give the desktop chart more room than .app-main while leaving a viewport gutter. The gutter
+   also avoids 100vw including a classic scrollbar and making the page scroll sideways. */
 .pace-trends--wide {
-  width: 100vw;
+  width: calc(100vw - 2 * var(--space-5));
   max-width: 1680px;
   position: relative;
   left: 50%;
   transform: translateX(-50%);
   box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .pace-trends--wide {
+    width: 100%;
+    left: auto;
+    transform: none;
+  }
 }
 
 .pace-trends__selection-bar {

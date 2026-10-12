@@ -1,11 +1,19 @@
 /* Match Pace trends' viewport-wide chart and 1680px maximum. */
 .pr-progress {
-  width: 100vw;
+  width: calc(100vw - 2 * var(--space-5));
   max-width: 1680px;
   position: relative;
   left: 50%;
   transform: translateX(-50%);
   box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .pr-progress {
+    width: 100%;
+    left: auto;
+    transform: none;
+  }
 }
 .pr-progress__chart {
   margin-top: var(--space-4);

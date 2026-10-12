@@ -27,6 +27,7 @@ import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { Icon } from "../../components/Icon";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { NotesPanel } from "../../components/NotesPanel";
+import { PeriodShareButton } from "../../components/ShareButton";
 import { MetricChip, StatTile } from "../../components/StatTile";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
 import { WeekWellnessCharts } from "../../components/WeekWellnessCharts";
@@ -338,6 +339,7 @@ export function WeekView({ date }: { date: string }) {
           Week of {start} – {end}
         </h1>
         <GoalButton periodType="week" periodStart={start} periodLabel={`Week of ${start}`} />
+        <PeriodShareButton periodType="week" periodStart={start} />
       </div>
 
       <section className="card">

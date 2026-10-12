@@ -73,4 +73,11 @@ describe("GearPage", () => {
     fireEvent.click(screen.getByLabelText("Show retired"));
     expect(mockUseShoes).toHaveBeenLastCalledWith(true);
   });
+
+  it("shows the shoe inventory before the add form and sport defaults", () => {
+    render(<GearPage />);
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(["Your shoes", "Add shoes", "Default shoes by sport"]);
+  });
 });

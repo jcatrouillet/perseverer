@@ -93,6 +93,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   // ActivityCharts panel -- mirrors SplitsTable/ActivityRouteMap's existing hover-highlight
   // pattern for per-km splits, just for laps instead.
   const [hoveredLapIndex, setHoveredLapIndex] = useState<number | null>(null);
+  const [activeSection, setActiveSection] = useState("overview");
   const [isTrimming, setIsTrimming] = useState(false);
   const [mergeCandidateId, setMergeCandidateId] = useState<string | null>(null);
   const { metersToDisplay, unitLabel, formatPace, kmhToDisplay, speedUnitLabel } =
@@ -232,8 +233,10 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const displayName = displayActivityName(a);
 
   return (
-    <main>
-      <Link href="/activities">← Activities</Link>
+    <main className="activity-detail-page">
+      <Link className="activity-detail__back" href="/activities">
+        ← Activities
+      </Link>
 
       <div className="activity-detail__header">
         <span className={`icon-chip icon-chip--lg tone-${style.tone}`}>
@@ -285,6 +288,9 @@ export function ActivityDetailPage({ id }: { id: string }) {
             />
           </div>
         </div>
+        <div className="activity-detail__header-actions">
+          <ActivityShareButton activityId={id} />
+        </div>
       </div>
       <p className="activity-detail__meta">
         {a.local_date ?? a.start_time_utc.slice(0, 10)} · {localTimeLabel(a, timeFormat)}
@@ -296,30 +302,76 @@ export function ActivityDetailPage({ id }: { id: string }) {
           ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
         <ActivityShoePicker activityId={id} hasDistance={(a.distance_m ?? 0) > 0} />
       </p>
-      {((weather.data && weather.data.available) || paceVariability) && (
-        <div className="activity-detail__weather-pace-row">
-          {weather.data && <ActivityWeather weather={weather.data} />}
-          {paceVariability && (
-            <div className="activity-detail__pace-variability">
-              <ChartFullscreen
-                as="h3"
-                className="activity-detail__weather-heading"
-                title="Pace variability"
-              >
-                <PaceVariabilityChart result={paceVariability} />
-              </ChartFullscreen>
+      <nav className="activity-detail__sections" aria-label="Activity sections">
+        <a
+          href="#activity-overview"
+          className={activeSection === "overview" ? "is-active" : undefined}
+          onClick={() => setActiveSection("overview")}
+        >
+          Overview
+        </a>
+        {routeStream.data && (
+          <a
+            href="#activity-route"
+            className={activeSection === "route" ? "is-active" : undefined}
+            onClick={() => setActiveSection("route")}
+          >
+            Route &amp; splits
+          </a>
+        )}
+        <a
+          href="#activity-performance"
+          className={activeSection === "performance" ? "is-active" : undefined}
+          onClick={() => setActiveSection("performance")}
+        >
+          Performance
+        </a>
+        {a.stream_available && (
+          <a
+            href="#activity-charts"
+            className={activeSection === "charts" ? "is-active" : undefined}
+            onClick={() => setActiveSection("charts")}
+          >
+            Charts
+          </a>
+        )}
+        <a
+          href="#activity-share"
+          className={activeSection === "share" ? "is-active" : undefined}
+          onClick={() => setActiveSection("share")}
+        >
+          Share
+        </a>
+      </nav>
+      <span id="activity-overview" />
+      {((weather.data && weather.data.available) || paceVariability || isRunningSport(sport)) && (
+        <div className="activity-detail__snapshot">
+          {((weather.data && weather.data.available) || paceVariability) && (
+            <div className="activity-detail__weather-pace-row">
+              {weather.data && <ActivityWeather weather={weather.data} />}
+              {paceVariability && (
+                <div className="activity-detail__pace-variability">
+                  <ChartFullscreen
+                    as="h3"
+                    className="activity-detail__weather-heading"
+                    title="Pace variability"
+                  >
+                    <PaceVariabilityChart result={paceVariability} />
+                  </ChartFullscreen>
+                </div>
+              )}
             </div>
           )}
+          {isRunningSport(sport) && (
+            <ActivityFueling
+              carbohydratesG={a.carbohydrates_g}
+              sodiumMg={a.sodium_mg}
+              onSubmit={(values) => fuelingOverride.mutate(values)}
+              isSubmitting={fuelingOverride.isPending}
+              isError={fuelingOverride.isError}
+            />
+          )}
         </div>
-      )}
-      {isRunningSport(sport) && (
-        <ActivityFueling
-          carbohydratesG={a.carbohydrates_g}
-          sodiumMg={a.sodium_mg}
-          onSubmit={(values) => fuelingOverride.mutate(values)}
-          isSubmitting={fuelingOverride.isPending}
-          isError={fuelingOverride.isError}
-        />
       )}
 
       {/* Insights sit beside Distance & time / Heart rate only -- not beside the map, which is
@@ -401,9 +453,13 @@ export function ActivityDetailPage({ id }: { id: string }) {
         />
       )}
 
-      {!isTrimming && routeStream.data && <ActivityRoute stream={routeStream.data} sport={sport} />}
+      {!isTrimming && routeStream.data && (
+        <div className="activity-detail__route-block" id="activity-route">
+          <ActivityRoute stream={routeStream.data} sport={sport} />
+        </div>
+      )}
 
-      <div className="activity-detail__layout">
+      <div className="activity-detail__layout" id="activity-performance">
         <div className="activity-detail__main-col">
           <ActivityStatsGridSecondary activity={a} />
         </div>
@@ -564,7 +620,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
       )}
 
       {a.stream_available && (
-        <section className="activity-charts-section">
+        <section className="card activity-charts-section" id="activity-charts">
           <h2>Charts</h2>
           {stream.isLoading && <p>Loading stream…</p>}
           {stream.isError && <p role="alert">Could not load stream data.</p>}
@@ -586,9 +642,9 @@ export function ActivityDetailPage({ id }: { id: string }) {
         <ActivityComparisonTable activity={a} comparisons={comparisons.data} sport={sport} />
       )}
 
-      <section className="card">
+      <section className="card activity-detail__share-card" id="activity-share">
         <h2>Share</h2>
-        <p className="chart-note">Generate a link anyone can open without signing in.</p>
+        <p className="chart-note">Generate a public activity link. Health records stay private.</p>
         <ActivityShareButton activityId={id} />
       </section>
 

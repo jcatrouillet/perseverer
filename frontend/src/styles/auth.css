@@ -345,3 +345,16 @@
     grid-template-columns: 1fr;
   }
 }
+
+.auth-page--classic .auth-intro,
+.auth-page--classic .auth-features {
+  display: none;
+}
+
+.auth-page--classic .auth-page__main {
+  display: grid;
+  grid-template-columns: minmax(0, 410px);
+  grid-template-areas: "card";
+  justify-content: center;
+  padding-top: clamp(3rem, 12vh, 8rem);
+}

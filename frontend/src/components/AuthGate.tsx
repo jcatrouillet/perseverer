@@ -19,6 +19,7 @@ import {
   storeJwt,
 } from "../api/client";
 import type { Tone } from "../metricStyle";
+import { getSignInPage } from "../signInPage";
 import "../styles/auth.css";
 import { Icon, type IconName } from "./Icon";
 import { ThemeToggle } from "./ThemeToggle";
@@ -414,7 +415,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="auth-page">
+    <div className={`auth-page auth-page--${getSignInPage()}`}>
       <header className="auth-page__header">
         <div className="auth-page__brand">
           <span className="auth-page__mark" aria-hidden="true">

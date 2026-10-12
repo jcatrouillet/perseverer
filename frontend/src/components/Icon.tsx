@@ -41,6 +41,8 @@ export type IconName =
   | "heart"
   | "flame"
   | "calendar"
+  | "target"
+  | "share"
   | "trophy"
   | "bolt"
   | "sunrise"
@@ -108,6 +110,17 @@ export function IconSprite() {
         <symbol viewBox="0 0 24 24" id="i-calendar">
           <rect x="3.6" y="5.2" width="16.8" height="15.2" rx="2.6" />
           <path d="M3.6 10h16.8M8.2 3.2v4M15.8 3.2v4" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-target">
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="5.5" />
+          <circle cx="12" cy="12" r="1.5" />
+        </symbol>
+        <symbol viewBox="0 0 24 24" id="i-share">
+          <circle cx="18" cy="5" r="2.3" />
+          <circle cx="5" cy="12" r="2.3" />
+          <circle cx="18" cy="19" r="2.3" />
+          <path d="m7.1 11 8.8-4.9M7.1 13l8.8 4.9" />
         </symbol>
         <symbol viewBox="0 0 24 24" id="i-trophy">
           <path d="M8.1 3.8h7.8v5.1a3.9 3.9 0 0 1-7.8 0V3.8Z" />

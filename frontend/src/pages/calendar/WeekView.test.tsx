@@ -121,8 +121,9 @@ vi.mock("../../api/queries", () => ({
   useNotes: (...args: unknown[]) => mockUseNotes(...args),
   useCreateNote: () => mockUseCreateNote(),
   useWeatherForecast: () => mockUseWeatherForecast(),
-  // The single Goals header button (a week only has bouldering goals; the distance query is skipped).
+  // The week header exposes Goals and Share, neither action is triggered by these tests.
   useGoalProgress: () => ({ data: undefined, isLoading: false, isError: false }),
+  useCreatePeriodShare: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useSetGoal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useDeleteGoal: () => ({ mutate: vi.fn() }),
   useRepeatGoal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),

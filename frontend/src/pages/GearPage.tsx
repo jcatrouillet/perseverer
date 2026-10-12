@@ -65,6 +65,86 @@ export function GearPage() {
         </div>
       </div>
 
+      <section className="gear-inventory">
+        <div className="gear-inventory__heading">
+          <h2>Your shoes</h2>
+          <label className="gear-show-retired">
+            <input
+              type="checkbox"
+              checked={showRetired}
+              onChange={(e) => setShowRetired(e.target.checked)}
+            />
+            Show retired
+          </label>
+        </div>
+        {shoes.isLoading ? (
+          <p className="gear-empty">Loading shoes…</p>
+        ) : shoes.data?.length ? (
+          <div className="gear-list">
+            {shoes.data.map((shoe) => (
+              <article
+                className={shoe.over_limit ? "gear-shoe gear-shoe--limit" : "gear-shoe"}
+                key={shoe.id}
+              >
+                <div className="gear-shoe__header">
+                  <span className="icon-chip">
+                    <Icon name="shoe" />
+                  </span>
+                  <div>
+                    <h3>
+                      {shoe.brand} {shoe.model}
+                    </h3>
+                    <div className="gear-shoe__badges">
+                      {shoe.retired && <span className="badge">Retired</span>}
+                      {shoe.size && <span className="badge">Size {shoe.size}</span>}
+                      {shoe.default_sports.map((sport) => (
+                        <span className="badge" key={sport}>
+                          {sport.replace(/_/g, " ")}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="gear-shoe__mileage">
+                  <strong>{shoe.distance_km.toFixed(1)} km</strong>
+                  <span>
+                    {shoe.max_distance_km == null
+                      ? "No mileage limit"
+                      : shoe.over_limit
+                        ? `Limit of ${shoe.max_distance_km.toFixed(0)} km reached`
+                        : `${shoe.remaining_km?.toFixed(1)} km remaining`}
+                  </span>
+                  {shoe.max_distance_km != null && (
+                    <progress
+                      max={shoe.max_distance_km}
+                      value={Math.min(shoe.distance_km, shoe.max_distance_km)}
+                    />
+                  )}
+                </div>
+                {shoe.comments && <p className="gear-shoe__comments">{shoe.comments}</p>}
+                {!shoe.retired && (
+                  <button
+                    className="button"
+                    onClick={() => retire.mutate(shoe.id)}
+                    disabled={retire.isPending}
+                  >
+                    Retire shoes
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="card gear-empty">
+            <span className="icon-chip icon-chip--lg">
+              <Icon name="shoe" />
+            </span>
+            <h3>No shoes added yet</h3>
+            <p>Add your first pair below to start tracking its mileage.</p>
+          </div>
+        )}
+      </section>
+
       <section className="card gear-card">
         <h2>Add shoes</h2>
         <p className="gear-card__description">
@@ -210,86 +290,6 @@ export function GearPage() {
                 </select>
               </label>
             ))}
-          </div>
-        )}
-      </section>
-
-      <section className="gear-inventory">
-        <div className="gear-inventory__heading">
-          <h2>Your shoes</h2>
-          <label className="gear-show-retired">
-            <input
-              type="checkbox"
-              checked={showRetired}
-              onChange={(e) => setShowRetired(e.target.checked)}
-            />
-            Show retired
-          </label>
-        </div>
-        {shoes.isLoading ? (
-          <p className="gear-empty">Loading shoes…</p>
-        ) : shoes.data?.length ? (
-          <div className="gear-list">
-            {shoes.data.map((shoe) => (
-              <article
-                className={shoe.over_limit ? "gear-shoe gear-shoe--limit" : "gear-shoe"}
-                key={shoe.id}
-              >
-                <div className="gear-shoe__header">
-                  <span className="icon-chip">
-                    <Icon name="shoe" />
-                  </span>
-                  <div>
-                    <h3>
-                      {shoe.brand} {shoe.model}
-                    </h3>
-                    <div className="gear-shoe__badges">
-                      {shoe.retired && <span className="badge">Retired</span>}
-                      {shoe.size && <span className="badge">Size {shoe.size}</span>}
-                      {shoe.default_sports.map((sport) => (
-                        <span className="badge" key={sport}>
-                          {sport.replace(/_/g, " ")}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="gear-shoe__mileage">
-                  <strong>{shoe.distance_km.toFixed(1)} km</strong>
-                  <span>
-                    {shoe.max_distance_km == null
-                      ? "No mileage limit"
-                      : shoe.over_limit
-                        ? `Limit of ${shoe.max_distance_km.toFixed(0)} km reached`
-                        : `${shoe.remaining_km?.toFixed(1)} km remaining`}
-                  </span>
-                  {shoe.max_distance_km != null && (
-                    <progress
-                      max={shoe.max_distance_km}
-                      value={Math.min(shoe.distance_km, shoe.max_distance_km)}
-                    />
-                  )}
-                </div>
-                {shoe.comments && <p className="gear-shoe__comments">{shoe.comments}</p>}
-                {!shoe.retired && (
-                  <button
-                    className="button"
-                    onClick={() => retire.mutate(shoe.id)}
-                    disabled={retire.isPending}
-                  >
-                    Retire shoes
-                  </button>
-                )}
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="card gear-empty">
-            <span className="icon-chip icon-chip--lg">
-              <Icon name="shoe" />
-            </span>
-            <h3>No shoes added yet</h3>
-            <p>Add your first pair above to start tracking its mileage.</p>
           </div>
         )}
       </section>

@@ -15,12 +15,20 @@
 /* Matches pace-trends.css's own .pace-trends--wide exactly -- breaks out of .app-main's 1080px
    column so this tab's charts use the same amount of the viewport Pace trends' own do. */
 .training-bands--wide {
-  width: 100vw;
+  width: calc(100vw - 2 * var(--space-5));
   max-width: 1680px;
   position: relative;
   left: 50%;
   transform: translateX(-50%);
   box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .training-bands--wide {
+    width: 100%;
+    left: auto;
+    transform: none;
+  }
 }
 
 /* Matches pace-trends.css's own .pace-trends__reset exactly -- "clear this filter" affordance,

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { usePersonalizeSettings, useSetPersonalizeSettings } from "../api/queries";
 import type { DefaultView, TimeFormat, UnitPreference, WeekStartDay } from "../api/types";
 import { getEffectiveTheme, setStoredTheme, type Theme } from "../theme";
+import { getSignInPage, setSignInPage, type SignInPage } from "../signInPage";
 import "../styles/settings.css";
 
 export function PersonalizeCard() {
@@ -20,10 +21,16 @@ export function PersonalizeCard() {
   // theme.ts) rather than an account setting, so it applies the moment it is picked and is not
   // part of the Save button's payload.
   const [theme, setTheme] = useState<Theme>(getEffectiveTheme);
+  const [signInPage, setSignInPageChoice] = useState<SignInPage>(getSignInPage);
 
   const chooseTheme = (next: Theme) => {
     setStoredTheme(next);
     setTheme(next);
+  };
+
+  const chooseSignInPage = (next: SignInPage) => {
+    setSignInPage(next);
+    setSignInPageChoice(next);
   };
 
   useEffect(() => {
@@ -75,6 +82,29 @@ export function PersonalizeCard() {
             Dark
           </label>
           <span className="chart-note">Applies immediately, on this device only.</span>
+        </fieldset>
+
+        <fieldset className="settings-form__row">
+          <legend>Sign-in page</legend>
+          <label>
+            <input
+              type="radio"
+              name="sign_in_page"
+              checked={signInPage === "classic"}
+              onChange={() => chooseSignInPage("classic")}
+            />
+            Classic
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="sign_in_page"
+              checked={signInPage === "showcase"}
+              onChange={() => chooseSignInPage("showcase")}
+            />
+            Feature showcase
+          </label>
+          <span className="chart-note">Shown on this device the next time you sign in.</span>
         </fieldset>
 
         <fieldset className="settings-form__row">

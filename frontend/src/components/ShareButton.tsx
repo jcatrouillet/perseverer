@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { useCreateActivityShare, useCreatePeriodShare } from "../api/queries";
 import "../styles/share-button.css";
+import { Icon } from "./Icon";
 import { Modal } from "./Modal";
 
 function ShareLinkModal({ url, onClose }: { url: string; onClose: () => void }) {
@@ -47,6 +48,7 @@ export function ActivityShareButton({ activityId }: { activityId: string }) {
         disabled={share.isPending}
         onClick={() => share.mutate(undefined, { onSuccess: () => setOpen(true) })}
       >
+        <Icon name="share" />
         {share.isPending ? "Creating link…" : "Share"}
       </button>
       {share.isError && (
@@ -77,6 +79,7 @@ export function PeriodShareButton({
         disabled={share.isPending}
         onClick={() => share.mutate(undefined, { onSuccess: () => setOpen(true) })}
       >
+        <Icon name="share" />
         {share.isPending ? "Creating link…" : "Share"}
       </button>
       {share.isError && (
