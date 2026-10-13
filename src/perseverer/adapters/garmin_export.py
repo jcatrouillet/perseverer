@@ -247,15 +247,25 @@ def import_garmin_export(
             conn.rollback()
             summary.errors.append({"file": str(file_path), "error": str(e)})
 
+    # Commit after each step: a step's write must not stay open while the next one reads every
+    # run's stream (VDOT, pace bands, GAP, pacing), or the API's writers wait and time out.
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
+    conn.commit()
     if touched_dates:
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         refresh_performance_rollup(conn, athlete_id=athlete_id)
+        conn.commit()
         refresh_running_tss(conn, athlete_id=athlete_id)
+        conn.commit()
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
+        conn.commit()
         refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 

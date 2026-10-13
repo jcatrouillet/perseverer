@@ -414,24 +414,9 @@ def compute_lap_gap_speeds_mps(
 
 
 def refresh_avg_gap(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> int:
-    """Returns the number of activities an average-GAP value was written for."""
-    get_or_register_metric(
-        conn,
-        metric_key=AVG_GAP_METRIC_KEY,
-        source=_SOURCE,
-        display_name="Average Grade Adjusted Pace",
-        unit_si="m/s",
-        category="performance",
-        value_type="numeric",
-    )
-
-    conn.execute(
-        activity_metric.delete().where(
-            activity_metric.c.athlete_id == athlete_id,
-            activity_metric.c.metric_key == AVG_GAP_METRIC_KEY,
-        )
-    )
-
+    """Returns the number of activities an average-GAP value was written for. Every value is
+    computed (reading the streams) before the first write, so the write transaction stays short
+    and never blocks the API while hundreds of Parquet files are read."""
     streams_by_activity_id = {
         row.activity_id: row
         for row in conn.execute(
@@ -455,8 +440,7 @@ def refresh_avg_gap(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> 
         .all()
     )
 
-    now = datetime.now(UTC).replace(tzinfo=None)
-    written = 0
+    values: list[tuple[str, float]] = []
     for activity_id in activity_ids:
         stream_row = streams_by_activity_id.get(activity_id)
         if stream_row is None:
@@ -476,21 +460,40 @@ def refresh_avg_gap(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> 
             continue
 
         avg_gap_speed = compute_avg_gap_speed_mps(timestamps, distances, altitudes)
-        if avg_gap_speed is None:
-            continue
+        if avg_gap_speed is not None:
+            values.append((activity_id, avg_gap_speed))
 
-        conn.execute(
-            activity_metric.insert().values(
-                athlete_id=athlete_id,
-                activity_id=activity_id,
-                metric_key=AVG_GAP_METRIC_KEY,
-                value_num=avg_gap_speed,
-                value_text=None,
-                unit="m/s",
-                source=_SOURCE,
-                created_at=now,
-            )
+    get_or_register_metric(
+        conn,
+        metric_key=AVG_GAP_METRIC_KEY,
+        source=_SOURCE,
+        display_name="Average Grade Adjusted Pace",
+        unit_si="m/s",
+        category="performance",
+        value_type="numeric",
+    )
+    conn.execute(
+        activity_metric.delete().where(
+            activity_metric.c.athlete_id == athlete_id,
+            activity_metric.c.metric_key == AVG_GAP_METRIC_KEY,
         )
-        written += 1
-
-    return written
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if values:
+        conn.execute(
+            activity_metric.insert(),
+            [
+                {
+                    "athlete_id": athlete_id,
+                    "activity_id": activity_id,
+                    "metric_key": AVG_GAP_METRIC_KEY,
+                    "value_num": speed,
+                    "value_text": None,
+                    "unit": "m/s",
+                    "source": _SOURCE,
+                    "created_at": now,
+                }
+                for activity_id, speed in values
+            ],
+        )
+    return len(values)

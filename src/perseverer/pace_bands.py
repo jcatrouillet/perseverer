@@ -123,26 +123,9 @@ def compute_pace_band_seconds(
 
 def refresh_pace_bands(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> int:
     """Returns the number of (activity, band) rows written -- not the number of activities, since
-    one activity can contribute to several bands."""
-    for band in PACE_BANDS:
-        get_or_register_metric(
-            conn,
-            metric_key=band.metric_key,
-            source=_SOURCE,
-            display_name=f"Pace band: {band.label}",
-            unit_si="s",
-            category="performance",
-            value_type="numeric",
-        )
-
-    band_metric_keys = [band.metric_key for band in PACE_BANDS]
-    conn.execute(
-        activity_metric.delete().where(
-            activity_metric.c.athlete_id == athlete_id,
-            activity_metric.c.metric_key.in_(band_metric_keys),
-        )
-    )
-
+    one activity can contribute to several bands. Every value is computed (reading the streams)
+    before the first write, so the write transaction stays short and never blocks the API while
+    hundreds of Parquet files are read."""
     streams_by_activity_id = {
         row.activity_id: row
         for row in conn.execute(
@@ -166,8 +149,7 @@ def refresh_pace_bands(conn: Connection, parquet_dir: Path, *, athlete_id: str) 
         .all()
     )
 
-    now = datetime.now(UTC).replace(tzinfo=None)
-    written = 0
+    values: list[tuple[str, str, float]] = []
     for activity_id in activity_ids:
         stream_row = streams_by_activity_id.get(activity_id)
         if stream_row is None:
@@ -188,20 +170,41 @@ def refresh_pace_bands(conn: Connection, parquet_dir: Path, *, athlete_id: str) 
         totals = compute_pace_band_seconds(timestamps, speeds)
         for band in PACE_BANDS:
             seconds = totals[band.metric_key]
-            if seconds <= 0:
-                continue
-            conn.execute(
-                activity_metric.insert().values(
-                    athlete_id=athlete_id,
-                    activity_id=activity_id,
-                    metric_key=band.metric_key,
-                    value_num=seconds,
-                    value_text=None,
-                    unit="s",
-                    source=_SOURCE,
-                    created_at=now,
-                )
-            )
-            written += 1
+            if seconds > 0:
+                values.append((activity_id, band.metric_key, seconds))
 
-    return written
+    for band in PACE_BANDS:
+        get_or_register_metric(
+            conn,
+            metric_key=band.metric_key,
+            source=_SOURCE,
+            display_name=f"Pace band: {band.label}",
+            unit_si="s",
+            category="performance",
+            value_type="numeric",
+        )
+    conn.execute(
+        activity_metric.delete().where(
+            activity_metric.c.athlete_id == athlete_id,
+            activity_metric.c.metric_key.in_([band.metric_key for band in PACE_BANDS]),
+        )
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if values:
+        conn.execute(
+            activity_metric.insert(),
+            [
+                {
+                    "athlete_id": athlete_id,
+                    "activity_id": activity_id,
+                    "metric_key": metric_key,
+                    "value_num": seconds,
+                    "value_text": None,
+                    "unit": "s",
+                    "source": _SOURCE,
+                    "created_at": now,
+                }
+                for activity_id, metric_key, seconds in values
+            ],
+        )
+    return len(values)

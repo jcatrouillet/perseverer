@@ -236,19 +236,10 @@ class GarminConnectAdapter:
         assert self._client is not None, "call authenticate() first"
         activity_id = str(activity_summary["activityId"])
 
-        # Archive the JSON summary regardless of what happens to the FIT download below —
-        # raw-first holds even if the rest of this activity's ingest fails.
-        archive_raw_bytes(
-            conn,
-            archive_root,
-            athlete_id=athlete_id,
-            source=SOURCE_NAME,
-            kind="garmin_connect_json",
-            content=json.dumps(activity_summary).encode("utf-8"),
-            locator=f"activity/{activity_id}",
-            external_id=activity_id,
-        )
-
+        # Download first, write after: the first database write opens a write transaction, and
+        # holding it through the rate-limit pause and the download locked every other writer
+        # out (the MCP connector's OAuth token refresh failed with "database is locked" when it
+        # landed during a daily sync). Both raw payloads are still archived before parsing.
         self.rate_limiter.wait()
         try:
             raw_download = self._client.download_activity(
@@ -259,6 +250,17 @@ class GarminConnectAdapter:
                 f"429 from Garmin while downloading activity {activity_id}"
             ) from e
         fit_bytes = _unwrap_fit_bytes(raw_download)
+
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_json",
+            content=json.dumps(activity_summary).encode("utf-8"),
+            locator=f"activity/{activity_id}",
+            external_id=activity_id,
+        )
 
         raw_fit_id = archive_raw_bytes(
             conn,
@@ -1054,23 +1056,32 @@ def sync_garmin_connect(
     except (GarminAuthRequired, GarminRateLimitAborted) as e:
         summary.errors.append({"error": str(e)})
 
+    # Commit after each step: a step's write must not stay open while the next one reads every
+    # run's stream (VDOT, pace bands, GAP, pacing), or the API's writers wait and time out.
     refresh_daily_and_period_rollups(conn, athlete_id=athlete_id, touched_dates=touched_dates)
+    conn.commit()
     # Unlike fitness/insights below, VDOT/pace-bands/avg-GAP/running_tss have no rolling-window
     # dependency on "today" -- they're pure per-activity values, so a rest day with zero new
     # activities has nothing to recompute. Gated on touched_dates to keep the daily cron cheap
     # (no Parquet reads) on those days.
     if touched_dates:
         refresh_vdot(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         refresh_pace_bands(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         refresh_avg_gap(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
         # After refresh_avg_gap, not before -- running_tss's rTSS formula consumes the
         # grade-adjusted speed refresh_avg_gap just wrote.
         refresh_running_tss(conn, athlete_id=athlete_id)
+        conn.commit()
         # Must run before backfill_weather_titles: this corrects a still-generic-default name
         # (e.g. "Run") using Garmin's own richer activityName before the weather emoji is
         # prepended, so the emoji lands on the final title, not on the generic placeholder.
         backfill_garmin_activity_names(conn, archive_root, athlete_id=athlete_id)
+        conn.commit()
         backfill_weather_titles(conn, archive_root, athlete_id=athlete_id)
+        conn.commit()
     # Unconditional, unlike the other four ingest entry points: this is the daily scheduled
     # sync path (worker/main.py runs it once/day regardless of whether new activities were
     # found), so the Fitness & Form series' end date must keep advancing through rest days --
@@ -1082,11 +1093,14 @@ def sync_garmin_connect(
     # with zero new ingests, and this daily cron run is this codebase's only naturally-daily
     # trigger point -- no separate scheduled job needed.
     refresh_fitness_rollup(conn, athlete_id=athlete_id)
+    conn.commit()
     # Same "must keep advancing through rest days" reasoning as refresh_fitness_rollup above --
     # rolling_vdot/max_hr_bpm are trailing-window maxima, so a run that ages out of its own
     # window still needs today's row to reflect that even with zero new activity.
     refresh_performance_rollup(conn, athlete_id=athlete_id)
+    conn.commit()
     refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
+    conn.commit()
     refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 

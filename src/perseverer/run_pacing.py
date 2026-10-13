@@ -202,7 +202,6 @@ def _delete(conn: Connection, athlete_id: str, activity_ids: Iterable[str]) -> N
 
 def refresh_run_pacing(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> int:
     """Brings every run's pacing rows up to date; returns the number of runs (re)computed."""
-    _register_metrics(conn)
 
     runs = conn.execute(
         select(
@@ -239,11 +238,11 @@ def refresh_run_pacing(conn: Connection, parquet_dir: Path, *, athlete_id: str) 
         )
     }
 
-    run_ids = {r.id for r in runs}
-    _delete(conn, athlete_id, (i for i in signatures if i not in run_ids))
-
+    # Read and compute every changed run first, then write: the first write opens the write
+    # transaction, and holding it while streams are read would block the API meanwhile.
+    rows: list[dict[str, object]] = []
+    changed: list[str] = []
     now = datetime.now(UTC).replace(tzinfo=None)
-    computed = 0
     for run in runs:
         window = trims.get(run.start_time_utc)
         signature = json.dumps(
@@ -256,7 +255,7 @@ def refresh_run_pacing(conn: Connection, parquet_dir: Path, *, athlete_id: str) 
         )
         if signatures.get(run.id) == signature:
             continue
-        _delete(conn, athlete_id, [run.id])
+        changed.append(run.id)
         pacing: RunPacing | None = None
         path = parquet_dir / run.parquet_path
         if "distance_m" in json.loads(run.channels) and path.exists():
@@ -274,18 +273,26 @@ def refresh_run_pacing(conn: Connection, parquet_dir: Path, *, athlete_id: str) 
                 (NEGATIVE_KM_SPLITS_KEY, float(pacing.negative_km_splits), None, None),
                 (SECOND_HALF_KM_KEY, float(pacing.second_half_km_count), None, None),
             ]
-        for key, num, text, unit in values:
-            conn.execute(
-                activity_metric.insert().values(
-                    athlete_id=athlete_id,
-                    activity_id=run.id,
-                    metric_key=key,
-                    value_num=num,
-                    value_text=text,
-                    unit=unit,
-                    source=_SOURCE,
-                    created_at=now,
-                )
-            )
-        computed += 1
-    return computed
+        rows += [
+            {
+                "athlete_id": athlete_id,
+                "activity_id": run.id,
+                "metric_key": key,
+                "value_num": num,
+                "value_text": text,
+                "unit": unit,
+                "source": _SOURCE,
+                "created_at": now,
+            }
+            for key, num, text, unit in values
+        ]
+
+    run_ids = {r.id for r in runs}
+    stale = [i for i in signatures if i not in run_ids]
+    if not stale and not changed:
+        return 0
+    _register_metrics(conn)
+    _delete(conn, athlete_id, [*stale, *changed])
+    if rows:
+        conn.execute(activity_metric.insert(), rows)
+    return len(changed)

@@ -44,24 +44,9 @@ def _gap_factor_from_stream(parquet_dir: Path, stream_row: object) -> float | No
 
 
 def refresh_vdot(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> int:
-    """Returns the number of activities a VDOT value was written for."""
-    get_or_register_metric(
-        conn,
-        metric_key=VDOT_METRIC_KEY,
-        source=_SOURCE,
-        display_name="VDOT",
-        unit_si=None,
-        category="performance",
-        value_type="numeric",
-    )
-
-    conn.execute(
-        activity_metric.delete().where(
-            activity_metric.c.athlete_id == athlete_id,
-            activity_metric.c.metric_key == VDOT_METRIC_KEY,
-        )
-    )
-
+    """Returns the number of activities a VDOT value was written for. Every value is computed
+    (reading the streams) before the first write, so the write transaction stays short and never
+    blocks the API while hundreds of Parquet files are read."""
     streams_by_activity_id = {
         row.activity_id: row
         for row in conn.execute(
@@ -81,26 +66,45 @@ def refresh_vdot(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> int
         )
     ).fetchall()
 
-    now = datetime.now(UTC).replace(tzinfo=None)
-    written = 0
+    values: list[tuple[str, float]] = []
     for row in rows:
         stream_row = streams_by_activity_id.get(row.id)
         gap_factor = _gap_factor_from_stream(parquet_dir, stream_row) if stream_row else None
         vdot = compute_vdot(row.distance_m, row.moving_duration_s, gap_factor=gap_factor)
-        if vdot is None:
-            continue
-        conn.execute(
-            activity_metric.insert().values(
-                athlete_id=athlete_id,
-                activity_id=row.id,
-                metric_key=VDOT_METRIC_KEY,
-                value_num=vdot,
-                value_text=None,
-                unit=None,
-                source=_SOURCE,
-                created_at=now,
-            )
-        )
-        written += 1
+        if vdot is not None:
+            values.append((row.id, vdot))
 
-    return written
+    get_or_register_metric(
+        conn,
+        metric_key=VDOT_METRIC_KEY,
+        source=_SOURCE,
+        display_name="VDOT",
+        unit_si=None,
+        category="performance",
+        value_type="numeric",
+    )
+    conn.execute(
+        activity_metric.delete().where(
+            activity_metric.c.athlete_id == athlete_id,
+            activity_metric.c.metric_key == VDOT_METRIC_KEY,
+        )
+    )
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if values:
+        conn.execute(
+            activity_metric.insert(),
+            [
+                {
+                    "athlete_id": athlete_id,
+                    "activity_id": activity_id,
+                    "metric_key": VDOT_METRIC_KEY,
+                    "value_num": vdot,
+                    "value_text": None,
+                    "unit": None,
+                    "source": _SOURCE,
+                    "created_at": now,
+                }
+                for activity_id, vdot in values
+            ],
+        )
+    return len(values)

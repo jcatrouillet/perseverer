@@ -102,6 +102,10 @@ Things that are easy to get wrong, each learned from a real bug:
 **Runtime**
 - `api` runs two uvicorn workers: no state in process memory (sessions, locks, MCP sessions). Use
   SQLite.
+- SQLite has one writer at a time, and the API writes too (OAuth token refreshes, notes,
+  settings) with a 10 s busy timeout. Never hold a write transaction across a vendor call or
+  while reading many stream files: download or compute first, then write and commit, and commit
+  between the steps of an import's refresh chain (`tests/test_short_write_transactions.py`).
 - Every container write goes under `/data`; `api` and `worker` run read-only.
 - Vendor lookups that cost money or are rate limited (weather, geocoding) are cached and archived;
   public pages read the cache only.
