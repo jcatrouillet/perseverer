@@ -244,7 +244,34 @@ def list_activities(
     sport: str | None = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    q: str | None = Query(
+        None, max_length=200, description="Case-insensitive text the activity's name contains."
+    ),
+    min_distance_m: float | None = Query(None, ge=0),
+    max_distance_m: float | None = Query(None, ge=0),
+    ids: list[str] | None = Query(
+        None, max_length=50, description="Only these activities (repeat the parameter)."
+    ),
 ) -> Page[ActivitySummary]:
+    # One filter list for both the page query and the count query below, so they can't disagree.
+    filters = [activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None)]
+    if start_date is not None:
+        filters.append(activity.c.local_date >= start_date.isoformat())
+    if end_date is not None:
+        filters.append(activity.c.local_date <= end_date.isoformat())
+    if sport is not None:
+        filters.append(activity.c.sport == sport)
+    if q:
+        # Escaped, so a "%" or "_" the athlete types is matched literally.
+        escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        filters.append(func.lower(activity.c.name).like(f"%{escaped.lower()}%", escape="\\"))
+    if min_distance_m is not None:
+        filters.append(activity.c.distance_m >= min_distance_m)
+    if max_distance_m is not None:
+        filters.append(activity.c.distance_m <= max_distance_m)
+    if ids:
+        filters.append(activity.c.id.in_(ids))
+
     stream_exists = (
         select(activity_stream.c.activity_id)
         .where(activity_stream.c.activity_id == activity.c.id)
@@ -366,29 +393,12 @@ def list_activities(
         climb_route_count_subq.label("climb_route_count"),
         climb_max_completed_grade_subq.label("climb_max_completed_grade"),
         climb_time_s_subq.label("climb_time_s"),
-    ).where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
-
-    if start_date is not None:
-        query = query.where(activity.c.local_date >= start_date.isoformat())
-    if end_date is not None:
-        query = query.where(activity.c.local_date <= end_date.isoformat())
-    if sport is not None:
-        query = query.where(activity.c.sport == sport)
+    ).where(*filters)
 
     # Counted directly against `activity` -- not `select(func.count()).select_from(query.
     # subquery())`, which would force the engine to evaluate the avg/max heart rate correlated
     # subqueries (and stream_exists) for every matching row a second time just to discard them.
-    count_query = (
-        select(func.count())
-        .select_from(activity)
-        .where(activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None))
-    )
-    if start_date is not None:
-        count_query = count_query.where(activity.c.local_date >= start_date.isoformat())
-    if end_date is not None:
-        count_query = count_query.where(activity.c.local_date <= end_date.isoformat())
-    if sport is not None:
-        count_query = count_query.where(activity.c.sport == sport)
+    count_query = select(func.count()).select_from(activity).where(*filters)
     total = conn.execute(count_query).scalar_one()
 
     rows = conn.execute(

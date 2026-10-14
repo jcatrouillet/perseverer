@@ -289,6 +289,11 @@ export function ActivityDetailPage({ id }: { id: string }) {
           </div>
         </div>
         <div className="activity-detail__header-actions">
+          {a.sport === "running" && (
+            <Link href={`/activities/compare?ids=${id}`} className="button">
+              Compare
+            </Link>
+          )}
           <ActivityShareButton activityId={id} />
         </div>
       </div>

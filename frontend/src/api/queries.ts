@@ -1,7 +1,7 @@
 // One useQuery/useMutation hook per REST endpoint (src/perseverer/api/routers/*.py). Note
 // mutations invalidate both the calendar and the activity/day's own note list, since a note
 // can be created from either the calendar page or the activity detail page.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm, apiPut } from "./client";
 import type {
@@ -692,6 +692,54 @@ export function useActivityWorkout(activityId: string) {
  * fine for a compact single overview chart, but the multi-panel activity detail
  * view asks for "medium" explicitly since several synced panels at once can use the extra
  * resolution. */
+/** Run search for the comparison page: name text, distance range (metres) and date range, newest
+ * first. With no criterion it simply lists the most recent runs. */
+export interface ActivitySearch {
+  q?: string;
+  minDistanceM?: number;
+  maxDistanceM?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+export function useActivitySearch(search: ActivitySearch, sport: string, limit = 20) {
+  const params = buildQuery({
+    sport,
+    q: search.q || undefined,
+    min_distance_m: search.minDistanceM,
+    max_distance_m: search.maxDistanceM,
+    start_date: search.startDate || undefined,
+    end_date: search.endDate || undefined,
+    limit,
+  });
+  return useQuery({
+    queryKey: ["activity-search", params],
+    queryFn: () => apiGet<Page<ActivitySummary>>(`/api/v1/activities${params}`),
+  });
+}
+
+/** The summaries of a known set of activities (the runs being compared). */
+export function useActivitiesByIds(ids: string[]) {
+  const search = new URLSearchParams();
+  for (const id of ids) search.append("ids", id);
+  search.set("limit", String(Math.max(ids.length, 1)));
+  return useQuery({
+    queryKey: ["activities-by-ids", [...ids].sort()],
+    queryFn: () => apiGet<Page<ActivitySummary>>(`/api/v1/activities?${search.toString()}`),
+    enabled: ids.length > 0,
+  });
+}
+
+/** Several activities' streams at once, one query each (cached per activity). */
+export function useActivityStreams(activityIds: string[], tier: string = "medium") {
+  return useQueries({
+    queries: activityIds.map((id) => ({
+      queryKey: ["activity-stream", id, tier],
+      queryFn: () => apiGet<StreamResponse>(`/api/v1/activities/${id}/stream?tier=${tier}`),
+    })),
+  });
+}
+
 export function useActivityStream(activityId: string, enabled: boolean, tier: string = "low") {
   return useQuery({
     queryKey: ["activity-stream", activityId, tier],

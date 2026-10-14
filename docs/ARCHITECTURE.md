@@ -298,7 +298,7 @@ The full reference is [API.md](API.md), also served by the frontend at `/api-doc
 
 | Area | Routers |
 |---|---|
-| Activities | list and detail, streams (DuckDB-downsampled tiers, optional time window), route, laps/splits, workout, context and comparisons, insights, weather, location, sources/merge/split, trim, corrections, climbing routes and notes |
+| Activities | list (filtered by date, sport, name, distance or ids) and detail, streams (DuckDB-downsampled tiers, optional time window), route, laps/splits, workout, context and comparisons, insights, weather, location, sources/merge/split, trim, corrections, climbing routes and notes |
 | Calendar | daily rollups, weekly and monthly periods |
 | Health | dashboard (logical metrics merged across sources), observations, intraday streams, sleep, blood tests |
 | Fitness & performance | fitness rollup, performance rollup, pace/HR zones, VO2max analysis, race readiness, performance curve |
@@ -352,8 +352,10 @@ claude.ai's can sign in with the athlete's normal password on Perseverer's own c
 React 19 + TypeScript (strict) built with Vite; `wouter` for routing, TanStack Query for data,
 Recharts for charts, Leaflet with a MapLibre-rendered CARTO vector basemap for maps.
 
-- **Pages:** calendar (day, week, month, year, all time), activities, activity detail, fitness,
-  health, map explorer, insights, gear, exercise library, settings.
+- **Pages:** calendar (day, week, month, year, all time), activities (the list, and a comparison of
+  up to eight runs, resampled onto one distance or moving-time axis in the browser from each
+  run's stream), activity detail, fitness, health, map explorer, insights, gear, exercise library,
+  settings.
 - **Runtime configuration:** `config.js` (API base URL, map key) is written when the frontend
   container starts, or served by the Vite dev server, from `perseverer.env`, never baked into the
   build, so one image works behind any hostname. An empty API URL means the page's own origin.

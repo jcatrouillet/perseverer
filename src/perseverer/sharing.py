@@ -1668,6 +1668,12 @@ def render_activity_share_html(conn: Connection, settings: Settings, activity_id
                             (1000 / v / 60 if pace_sport else v * 3.6) if v else None
                             for v in values
                         ]
+                    elif channel == "cadence":
+                        # Stored per foot for a foot sport (FIT's convention): steps per minute
+                        # is twice that. A bike's cadence is already revolutions per minute.
+                        unit = " spm" if pace_sport else " rpm"
+                        if pace_sport:
+                            values = [v * 2 if v is not None else None for v in values]
                     svg = _svg_series_chart(
                         values,
                         elapsed_s,

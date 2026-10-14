@@ -1524,13 +1524,17 @@ const GROUPS = [
 
   { id: "activities", title: "Activities", endpoints: [
     { method: "GET", path: "/api/v1/activities", summary: "List activities, most recent first.",
-      description: "Paginated activity summaries, optionally filtered by date range and/or sport.",
+      description: "Paginated activity summaries, optionally filtered by date range, sport, name text, distance range or a list of ids. Every filter applies to total too.",
       params: [
         ["start_date","query","opt","string(date)","—","Only activities with local_date ≥ this."],
         ["end_date","query","opt","string(date)","—","Only activities with local_date ≤ this."],
         ["sport","query","opt","string","—","Exact match, e.g. running."],
         ["limit","query","opt","integer","50","1–500."],
         ["offset","query","opt","integer","0","≥ 0."],
+        ["q","query","opt","string","—","Case-insensitive text the activity's name contains (≤ 200 characters; % and _ match literally)."],
+        ["min_distance_m","query","opt","number","—","Only activities at least this long, metres."],
+        ["max_distance_m","query","opt","number","—","Only activities at most this long, metres."],
+        ["ids","query","opt","string (repeatable)","—","Only these activity ids (up to 50), e.g. ids=a&ids=b — the run comparison fetches its selected runs this way."],
       ],
       responses: [ { code: 200, ref: "Page&lt;ActivitySummary&gt;" } ],
       example: { qs: "?start_date=2026-07-01&end_date=2026-07-31&sport=running&limit=20" }

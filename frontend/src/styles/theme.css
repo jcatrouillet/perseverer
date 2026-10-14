@@ -48,6 +48,18 @@
   --color-zone-4: #e8a33d;
   --color-zone-5: #ef5a6f;
 
+  /* Run comparison: one colour per compared activity (up to 8), so here a colour identifies a
+     run rather than a metric -- the one place that rule is inverted (docs/DESIGN.md). Six reuse
+     the data hues so they follow the theme; pink is the only colour of its own. */
+  --color-compare-1: var(--color-pace);
+  --color-compare-2: var(--color-heart-rate);
+  --color-compare-3: var(--color-elevation);
+  --color-compare-4: var(--color-load);
+  --color-compare-5: var(--color-power);
+  --color-compare-6: var(--color-cadence);
+  --color-compare-7: #f472b6;
+  --color-compare-8: var(--color-zone-3);
+
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -103,6 +115,8 @@
   --color-zone-4: #c47f1a;
   --color-zone-5: #d43a52;
 
+  --color-compare-7: #c2417f;
+
   --shadow-card: 0 1px 3px rgba(20, 25, 35, 0.08);
 }
 
@@ -134,6 +148,7 @@
     --color-zone-3: #a8850a;
     --color-zone-4: #c47f1a;
     --color-zone-5: #d43a52;
+    --color-compare-7: #c2417f;
     --shadow-card: 0 1px 3px rgba(20, 25, 35, 0.08);
   }
 }

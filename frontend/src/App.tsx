@@ -28,6 +28,9 @@ import { WeekView } from "./pages/calendar/WeekView";
 const ActivityDetailPage = lazy(() =>
   import("./pages/ActivityDetailPage").then((m) => ({ default: m.ActivityDetailPage })),
 );
+const CompareRunsPage = lazy(() =>
+  import("./pages/CompareRunsPage").then((m) => ({ default: m.CompareRunsPage })),
+);
 const ActivityListPage = lazy(() =>
   import("./pages/ActivityListPage").then((m) => ({ default: m.ActivityListPage })),
 );
@@ -174,6 +177,7 @@ export function App() {
         <div className="app-main">
           <Suspense fallback={<LoadingSpinner size="lg" />}>
             <Switch>
+              <Route path="/activities/compare" component={CompareRunsPage} />
               <Route path="/activities/:id">
                 {(params) => <ActivityDetailPage id={params.id} />}
               </Route>

@@ -1,0 +1,281 @@
+/* Run comparison (CompareRunsPage.tsx) and the Activities tab strip it shares with the list.
+   Each compared run's colour arrives as --run-color (a --color-compare-N token): the one place a
+   colour identifies a run rather than a metric (docs/DESIGN.md). */
+
+.activities-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.activities-tabs__tab {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.activities-tabs__tab:hover {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.activities-tabs__tab.is-active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+/* Selected runs */
+
+.compare-runs {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+.compare-run {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-top: 4px solid var(--run-color);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--run-color) 6%, var(--color-surface));
+}
+
+.compare-run__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.compare-run__title {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.compare-run__remove {
+  flex: none;
+  background: none;
+  border: none;
+  padding: 0 var(--space-1);
+  font-size: 1.2em;
+  line-height: 1;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+
+.compare-run__remove:hover,
+.compare-run__remove:focus-visible {
+  color: var(--color-danger);
+}
+
+.compare-run__date {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.compare-run__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+
+.compare-run__stats dt {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.compare-run__stats dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Charts */
+
+.compare-charts__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.compare-charts__header h2 {
+  margin: 0;
+}
+
+.compare-axis {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+.compare-axis__option {
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.compare-axis__option.is-active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+.compare-charts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.compare-charts__panel {
+  min-width: 0;
+}
+
+.compare-charts__panel h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-base);
+}
+
+/* Icon chip and title on one line (the chip is a grid box, which would otherwise break the
+   inline title span). Only the visible variant is restyled: the full-screen button stays a
+   phone-only control (layout.css). */
+.compare-charts__panel .chart-fullscreen-static-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+@media (max-width: 640px) {
+  .compare-charts__panel .chart-fullscreen-static-title {
+    display: none;
+  }
+
+  .compare-charts__panel .chart-fullscreen-trigger {
+    gap: var(--space-2);
+  }
+}
+
+.compare-swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.compare-tooltip {
+  max-width: 280px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+.compare-tooltip__x {
+  margin-bottom: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.compare-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.compare-tooltip__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compare-tooltip__value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Search */
+
+.compare-search__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.compare-search__title {
+  grid-column: 1 / -1;
+}
+
+.compare-results {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+
+.compare-results__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.compare-results__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.compare-results__meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .compare-results__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .compare-results__meta {
+    grid-column: 1;
+    grid-row: 2;
+    white-space: normal;
+  }
+
+  .compare-results__row .button {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}

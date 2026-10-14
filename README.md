@@ -134,6 +134,15 @@ and steps, and a map of everything you have ever recorded.
 |---|---|
 | ![Activity list](docs/screenshots/activities-list.png) | ![Map explorer](docs/screenshots/map-explorer.png) |
 
+**Compare runs** (Activities → Compare runs, or "Compare" on a run's page) puts up to eight runs
+side by side. Find runs by title, distance or date and add them; each gets its own colour. Every
+run's title, date, distance, moving time, load and VDOT sit above charts of pace, grade-adjusted
+pace, heart rate, cadence, elevation and power, on a shared distance or moving-time axis so one
+tooltip reads every run at the same point. The selection lives in the page address, so a
+comparison can be bookmarked.
+
+![Comparing four runs](docs/screenshots/compare-runs.png)
+
 ### Fitness & Form and health
 
 Fitness (CTL), Fatigue (ATL) and Form (TSB) from your own training load, VO2max, HRV and lactate

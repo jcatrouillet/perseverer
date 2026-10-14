@@ -212,6 +212,12 @@ List activity summaries, most recent first, paginated.
 | `sport` | query | optional | string | — | Exact match, e.g. `running`. |
 | `limit` | query | optional | integer | `50` | 1–500. |
 | `offset` | query | optional | integer | `0` | ≥ 0. |
+| `q` | query | optional | string | — | Case-insensitive text the activity's name contains (≤ 200 characters; `%` and `_` match literally). |
+| `min_distance_m` | query | optional | number | — | Only activities at least this long, metres. |
+| `max_distance_m` | query | optional | number | — | Only activities at most this long, metres. |
+| `ids` | query | optional | string (repeatable) | — | Only these activity ids (up to 50), e.g. `ids=a&ids=b` — the run comparison fetches its selected runs this way. |
+
+Every filter applies to `total` too.
 
 **Response `200`:** `Page<ActivitySummary>` (see [Schema Reference](#schema-reference)).
 

@@ -118,9 +118,11 @@ function panelsFor(sport: string): Panel[] {
       icon: "steps",
       tone: "cadence",
       kind: "line",
-      unit: "spm",
-      transform: (v) => v,
-      formatValue: (v) => `${v.toFixed(0)} spm`,
+      unit: paceSport ? "spm" : "rpm",
+      // The stream stores a foot sport's cadence per foot (FIT's convention); steps per minute
+      // is twice that. A bike's cadence is already revolutions per minute.
+      transform: (v) => (v != null && paceSport ? v * 2 : v),
+      formatValue: (v) => `${v.toFixed(0)} ${paceSport ? "spm" : "rpm"}`,
     },
     {
       key: "power",

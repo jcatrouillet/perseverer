@@ -91,6 +91,16 @@ stay separate tokens so changing one never changes the other. Use them for error
 orange, red) for heart-rate and pace zones and anything else that is a ranked intensity. Don't
 use data tones for a scale: they are chosen to differ from each other, not to read in order.
 
+### Comparison colours
+
+The run comparison is the one place where a colour identifies an *activity* rather than a metric:
+`--color-compare-1` to `--color-compare-8`, one per compared run (blue, red, green, orange,
+purple, teal, pink, yellow). Six reuse the data tones, so they follow the theme; pink
+(`#f472b6` dark, `#c2417f` light) is the only colour of its own. A run keeps its colour while
+others are added or removed (`compareRuns.ts`), and the colour appears on the run's card (a top
+border and a 6% wash) and on every line of that run in the charts, so the two read together.
+Don't reuse these tokens to mean anything else.
+
 ### Tinted surfaces
 
 Every tinted surface is a `color-mix()` of `--tone` with transparency, never a new colour:
@@ -191,7 +201,8 @@ Patterns:
 All charts are Recharts components (or, for the share pages, hand-built SVG) styled with the
 same tokens.
 
-- **Colour:** each series takes its metric's tone through `toneColor()` from `metricStyle.ts`,
+- **Colour:** each series takes its metric's tone through `toneColor()` from `metricStyle.ts`
+  (the run comparison is the exception: one comparison colour per run, see above),
   never a colour picked by array index. Zones use the zone scale. Status colours mark
   out-of-range points (blood results outside the lab's range are larger red dots).
 - **Grid and axes:** grid `--color-border` dashed `3 3`; axes and ticks `--color-text-muted`,

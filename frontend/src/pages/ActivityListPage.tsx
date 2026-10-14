@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 
 import { useActivities, useActivityRoutes, useHealthDashboard, useSleep } from "../api/queries";
+import { ActivitiesTabs } from "../components/ActivitiesTabs";
 import { ActivityCard } from "../components/ActivityCard";
 import { calendarHomeHref } from "../calendarHome";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -16,6 +17,7 @@ import { healthMetricStyle, KNOWN_SPORTS } from "../metricStyle";
 import { usePersonalize } from "../PersonalizeContext";
 import { groupByLocalDate } from "../yearStats";
 import "../styles/activity-list.css";
+import "../styles/compare.css";
 
 const PAGE_SIZE = 50;
 const RESTING_HR_STYLE = healthMetricStyle("resting_heart_rate");
@@ -66,6 +68,7 @@ export function ActivityListPage() {
     <main>
       <h1>Activities</h1>
       <Link href={calendarHomeHref(defaultView)}>← Calendar</Link>
+      <ActivitiesTabs />
 
       <form className="activity-filter">
         <label className="field">
