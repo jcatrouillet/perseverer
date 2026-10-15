@@ -221,7 +221,8 @@ step-by-step instructions.
 
 - **External tools:** connect Garmin, Kaya and the Eufy scale and sync them on demand, publish the
   calendar feed, and turn on the email summaries.
-- **Activities:** bulk import a Garmin or Strava "export your data" archive (.zip) to bring in
+- **Activities:** bulk import a Garmin or Strava "export your data" archive (.zip; a "How do I get
+  this file?" popup gives each vendor's steps) to bring in
   your full history (Apple Health from the CLI), rebuild the whole database from the raw archive,
   and review the activities flagged as possible duplicates or as needing a trim.
 - **Personalize:** week start, 12/24-hour time, kilometres or miles, starting page (week, month, day,

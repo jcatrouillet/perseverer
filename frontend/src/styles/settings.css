@@ -279,6 +279,30 @@ fieldset.settings-form__row input {
   width: 100%;
 }
 
+/* "How do I get this file?" (BulkImportHelp.tsx): a quiet text link opening the steps popup. */
+.bulk-import-help__link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.bulk-import-help__link:hover {
+  text-decoration: underline;
+}
+
+.bulk-import-help__steps {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  line-height: 1.5;
+}
+
 /* Shared by GarminConnectCard/RebuildCard/BulkImportCard -- see JobStatusBanner.tsx. */
 .settings-job {
   margin-top: var(--space-2);

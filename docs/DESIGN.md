@@ -174,7 +174,7 @@ Use these before writing new markup. All live in `frontend/src/components/`.
 | `TrendChart` | Any metric over time: one or two Y axes, optional area fill, reference lines. |
 | `ChartLegend` | The legend under a chart (plain HTML, not Recharts' own). |
 | `ChartFullscreen` | On a phone, a chart's title opens the chart full screen. |
-| `Modal` | Dialogs and lightboxes. |
+| `Modal` | Dialogs and lightboxes. Near full width by default (for charts); `panelClassName="modal__panel--text"` gives a 600px reading width for a popup of text, `modal__panel--image` hugs an image. |
 | `LoadingSpinner` | Every loading state. |
 | `TimeOfDayField` | Every time-of-day input (honours the 12/24-hour setting; never a native time input). |
 | `.table-scroll` | Wraps any table wider than a phone, so it scrolls inside its card. |

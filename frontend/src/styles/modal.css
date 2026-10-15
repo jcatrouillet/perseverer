@@ -59,6 +59,12 @@
 
 /* An image lightbox should hug its content, not take most of the viewport like this
    component's own "big popup" default -- see Modal.tsx's own panelClassName prop. */
+/* A popup of text (instructions, a short explanation): a comfortable reading width rather than
+   the default near-full-width panel built for charts. */
+.modal__panel--text {
+  width: min(600px, 100%);
+}
+
 .modal__panel--image {
   width: auto;
   max-width: min(90vw, 720px);

@@ -3,9 +3,10 @@
 import { useState } from "react";
 
 import { useLatestJob, useUploadBulkExport } from "../api/queries";
+import { BulkImportHelp, type BulkImportSource } from "./BulkImportHelp";
 import { JobStatusBanner } from "./JobStatusBanner";
 
-type Kind = "garmin" | "strava";
+type Kind = BulkImportSource;
 
 export function BulkImportCard() {
   const upload = useUploadBulkExport();
@@ -48,6 +49,7 @@ export function BulkImportCard() {
             <option value="strava">Strava export</option>
           </select>
         </label>
+        <BulkImportHelp source={kind} />
         <label className="field">
           Export file (.zip)
           <input
