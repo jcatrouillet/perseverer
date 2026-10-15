@@ -13,11 +13,14 @@ import { CompareCharts, type ComparedRun } from "../components/CompareCharts";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import {
   addToSlots,
+  averagePaceSPerKm,
   compareColor,
+  fastestSimilarRun,
   MAX_COMPARED,
   parseSlots,
   prepareRunSeries,
   removeFromSlots,
+  similarDistanceBand,
   slotsToParam,
   type CompareAxis,
 } from "../compareRuns";
@@ -92,6 +95,70 @@ function SelectedRun({
         </div>
       </dl>
     </li>
+  );
+}
+
+/** How many similar-distance runs the suggestion looks through (the most recent ones). */
+const SUGGESTION_POOL = 500;
+
+/** With a single run selected: suggests the fastest run of the same whole distance (32.0 to
+ * 32.99 km for a 32.02 km run) to compare it with. */
+function SimilarRunSuggestion({
+  selected,
+  onAdd,
+}: {
+  selected: ActivitySummary;
+  onAdd: (id: string) => void;
+}) {
+  const { formatDistance, formatPace, unit, unitLabel } = useDistanceFormat();
+  const band = selected.distance_m ? similarDistanceBand(selected.distance_m, unit) : null;
+  // Always run the query (hooks can't be conditional); a run with no band asks for nothing useful
+  // and gets no suggestion below.
+  const similar = useActivitySearch(
+    { minDistanceM: band?.lowM ?? 0, maxDistanceM: band?.highM ?? 0 },
+    RUNNING,
+    SUGGESTION_POOL,
+  );
+  if (band == null || !similar.data) return null;
+  const suggestion = fastestSimilarRun(selected, similar.data.items, band);
+  if (suggestion == null) {
+    return (
+      <p className="chart-note compare-suggestion__none">
+        No other {band.whole} {unitLabel} run to compare with yet.
+      </p>
+    );
+  }
+  const { run, selectedIsFastest } = suggestion;
+  const pace = averagePaceSPerKm(run);
+  const distanceLabel = `${band.whole} ${unitLabel}`;
+  const partial = similar.data.total > similar.data.items.length;
+
+  return (
+    <div className="compare-suggestion">
+      <p className="compare-suggestion__lead">
+        {selectedIsFastest
+          ? `This is your fastest ${distanceLabel} run. Compare it with the next fastest:`
+          : `Compare with your fastest ${distanceLabel} run:`}
+      </p>
+      <div className="compare-suggestion__run">
+        <Link href={`/activities/${run.id}`} className="compare-suggestion__title">
+          {runTitle(run)}
+        </Link>
+        <span className="compare-suggestion__meta">
+          {formatDate(run.local_date)}
+          {run.distance_m != null && ` · ${formatDistance(run.distance_m, 2)}`}
+          {pace != null && ` · ${formatPace(pace)}`}
+        </span>
+        <button type="button" className="button button--primary" onClick={() => onAdd(run.id)}>
+          Add
+        </button>
+      </div>
+      {partial && (
+        <p className="chart-note">
+          Among your {similar.data.items.length} most recent runs of that distance.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -279,6 +346,12 @@ export function CompareRunsPage() {
                 );
               })}
             </ul>
+            {ids.length === 1 && byId.get(ids[0]!) && (
+              <SimilarRunSuggestion
+                selected={byId.get(ids[0]!)!}
+                onAdd={(id) => setSlots(addToSlots(slots, id))}
+              />
+            )}
           </>
         )}
       </section>

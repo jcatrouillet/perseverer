@@ -138,8 +138,9 @@ and steps, and a map of everything you have ever recorded.
 side by side. Find runs by title, distance or date and add them; each gets its own colour. Every
 run's title, date, distance, moving time, load and VDOT sit above charts of pace, grade-adjusted
 pace, heart rate, cadence, elevation and power, on a shared distance or moving-time axis so one
-tooltip reads every run at the same point. The selection lives in the page address, so a
-comparison can be bookmarked.
+tooltip reads every run at the same point. With a single run selected, it suggests your fastest
+run of the same whole distance (any 10.x km run for a 10.02 km one). The selection lives in the
+page address, so a comparison can be bookmarked.
 
 ![Comparing four runs](docs/screenshots/compare-runs.png)
 

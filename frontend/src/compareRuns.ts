@@ -12,7 +12,8 @@
 //   into the same COMPARE_BUCKETS buckets of distance (or of moving time) before charting: one row
 //   per bucket, one column per run, which is what lets a single tooltip show every run at the
 //   same point of the course.
-import type { StreamResponse } from "./api/types";
+import type { StreamResponse, UnitPreference } from "./api/types";
+import { displayDistanceToMeters, metersToDisplayDistance } from "./formatDistance";
 import { gapSeriesMinPerKm } from "./gap";
 import {
   buildPauseCompressor,
@@ -173,4 +174,61 @@ export function alignRuns(
 /** Whether any compared run has data for this channel (an absent power meter, say). */
 export function channelHasData(runs: { series: RunSeries }[], channel: CompareChannel): boolean {
   return runs.some(({ series }) => series.channels[channel].some((v) => v != null));
+}
+
+/** "Similar distance" for the comparison's suggestion: the same whole kilometre (or mile, with
+ * the miles setting), rounded down -- a 32.02 km run is compared with runs from 32.00 to 32.99 km.
+ * `lowM` is included and `highM` excluded. Null for a run under one whole unit. */
+export function similarDistanceBand(
+  distanceM: number,
+  unit: UnitPreference,
+): { whole: number; lowM: number; highM: number } | null {
+  // A hair of tolerance, so a run stored as 9999.9999 m still counts as 10 km.
+  const whole = Math.floor(metersToDisplayDistance(distanceM, unit) + 1e-6);
+  if (whole < 1) return null;
+  return {
+    whole,
+    lowM: displayDistanceToMeters(whole, unit),
+    highM: displayDistanceToMeters(whole + 1, unit),
+  };
+}
+
+/** Average moving pace, seconds per km; null without a distance or a time. */
+export function averagePaceSPerKm(run: {
+  distance_m: number | null;
+  moving_duration_s: number | null;
+  duration_s: number | null;
+}): number | null {
+  const seconds = run.moving_duration_s ?? run.duration_s;
+  if (!run.distance_m || run.distance_m <= 0 || !seconds || seconds <= 0) return null;
+  return seconds / (run.distance_m / 1000);
+}
+
+/** The run to suggest comparing `selected` with: the fastest other run in the same distance band
+ * (`similarDistanceBand`, by average moving pace), and whether `selected` itself is faster than all of them -- then the
+ * suggestion is the next fastest. Null when there's no other similar run with a pace. */
+export function fastestSimilarRun<
+  T extends {
+    id: string;
+    distance_m: number | null;
+    moving_duration_s: number | null;
+    duration_s: number | null;
+  },
+>(
+  selected: T,
+  candidates: T[],
+  band: { lowM: number; highM: number },
+): { run: T; selectedIsFastest: boolean } | null {
+  const low = band.lowM;
+  const high = band.highM;
+  let best: { run: T; pace: number } | null = null;
+  for (const run of candidates) {
+    if (run.id === selected.id || run.distance_m == null) continue;
+    if (run.distance_m < low || run.distance_m >= high) continue;
+    const pace = averagePaceSPerKm(run);
+    if (pace != null && (best == null || pace < best.pace)) best = { run, pace };
+  }
+  if (best == null) return null;
+  const selectedPace = averagePaceSPerKm(selected);
+  return { run: best.run, selectedIsFastest: selectedPace != null && selectedPace < best.pace };
 }

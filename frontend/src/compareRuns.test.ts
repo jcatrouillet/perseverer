@@ -5,10 +5,12 @@ import {
   addToSlots,
   alignRuns,
   compareColor,
+  fastestSimilarRun,
   MAX_COMPARED,
   parseSlots,
   prepareRunSeries,
   removeFromSlots,
+  similarDistanceBand,
   slotsToParam,
   type RunSeries,
 } from "./compareRuns";
@@ -105,5 +107,47 @@ describe("alignRuns", () => {
 
   it("returns nothing when no run has an axis", () => {
     expect(alignRuns([], "pace", "time")).toEqual([]);
+  });
+});
+
+function run(id: string, km: number, minutes: number) {
+  return { id, distance_m: km * 1000, moving_duration_s: minutes * 60, duration_s: minutes * 60 };
+}
+
+describe("similar-distance suggestion", () => {
+  it("uses the same whole kilometre, rounded down, or the same whole mile", () => {
+    expect(similarDistanceBand(32_020, "metric")).toEqual({
+      whole: 32,
+      lowM: 32_000,
+      highM: 33_000,
+    });
+    expect(similarDistanceBand(9_999.99999, "metric")?.whole).toBe(10);
+    const miles = similarDistanceBand(16_100, "imperial")!; // 10.004 mi
+    expect(miles.whole).toBe(10);
+    expect(miles.lowM).toBeCloseTo(16_093.44, 2);
+    expect(similarDistanceBand(800, "metric")).toBeNull();
+  });
+
+  it("suggests the fastest other run in the band, or the next fastest when this one is fastest", () => {
+    const selected = run("me", 32.02, 200); // 6:15 /km
+    const band = similarDistanceBand(32_020, "metric")!;
+    const candidates = [
+      selected,
+      run("slow", 32.5, 210),
+      run("fast", 32.1, 185), // 5:46 /km
+      run("faster-but-33", 33.0, 170), // outside: 33 km is the next band
+      run("short", 31.9, 150), // outside: 31 km band
+    ];
+    expect(fastestSimilarRun(selected, candidates, band)).toEqual({
+      run: candidates[2],
+      selectedIsFastest: false,
+    });
+
+    const quick = run("me", 32.02, 180);
+    expect(fastestSimilarRun(quick, candidates, band)).toEqual({
+      run: candidates[2],
+      selectedIsFastest: true,
+    });
+    expect(fastestSimilarRun(selected, [selected], band)).toBeNull();
   });
 });

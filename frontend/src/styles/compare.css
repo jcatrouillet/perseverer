@@ -105,6 +105,50 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Suggestion when a single run is selected */
+
+.compare-suggestion {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.compare-suggestion__none {
+  margin-top: var(--space-3);
+}
+
+.compare-suggestion__lead {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.compare-suggestion__run {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.compare-suggestion__title {
+  font-weight: 600;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.compare-suggestion__meta {
+  grid-column: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-suggestion__run .button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
 /* Charts */
 
 .compare-charts__header {
