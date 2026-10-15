@@ -42,3 +42,35 @@
 .map-explorer__popup strong {
   text-transform: capitalize;
 }
+
+/* Legend under the map: one entry per colour on it (mapLegend.ts). Round swatches, like the
+   start-point markers. */
+.map-explorer__legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.map-explorer__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.map-explorer__legend-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  opacity: 0.85;
+}
+
+.map-explorer__legend-count {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

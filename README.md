@@ -128,7 +128,8 @@ Every correction survives a full rebuild.
 ### Activity list and map
 
 A filterable list of every activity with route thumbnails and each day's sleep, resting heart rate
-and steps, and a map of everything you have ever recorded.
+and steps, and a map of everything you have ever recorded: one point per activity start,
+coloured by sport family, with a legend naming the sports behind each colour.
 
 | Activities | Map explorer |
 |---|---|

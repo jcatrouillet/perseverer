@@ -8,6 +8,9 @@
 // map-viewport tile requests themselves (which stay server-side for everything except the
 // rendered basemap).
 //
+// Each point is an activity's start, coloured by sport family; the legend under the map
+// (mapLegend.ts) names the sports behind each colour and counts them, for the filtered points.
+//
 // One bounded fetch (no filters sent to the API -- real scale is 904 points, confirmed against
 // the archive, so there's nothing to paginate), then sport/date filtering happens entirely
 // client-side against that one already-loaded set: instant filtering, and the sport dropdown's
@@ -24,6 +27,7 @@ import { CartoBasemapLayer } from "../components/CartoBasemapLayer";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { EARLIEST_PLAUSIBLE_DATE } from "../dateUtils";
 import { useDistanceFormat } from "../formatDistance";
+import { mapLegendEntries } from "../mapLegend";
 import { sportStyle, toneColor } from "../metricStyle";
 import "../styles/map-explorer.css";
 
@@ -57,6 +61,8 @@ export function MapExplorerPage() {
     if (endDate && (p.local_date == null || p.local_date > endDate)) return false;
     return true;
   });
+
+  const legend = mapLegendEntries(filtered);
 
   const bounds: LatLngBoundsExpression =
     filtered.length > 0 ? filtered.map((p) => [p.start_lat, p.start_lng]) : WORLD_BOUNDS;
@@ -110,6 +116,20 @@ export function MapExplorerPage() {
           ))}
         </MapContainer>
       </div>
+      {legend.length > 0 && (
+        <ul
+          className="map-explorer__legend"
+          aria-label="Map legend: activity start points by sport"
+        >
+          {legend.map((entry) => (
+            <li key={entry.tone} className="map-explorer__legend-item">
+              <span className="map-explorer__legend-dot" style={{ background: entry.color }} />
+              <span>{entry.label}</span>
+              <span className="map-explorer__legend-count">{entry.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </main>
   );
 }
