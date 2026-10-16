@@ -1925,11 +1925,26 @@ importers are idempotent full-archive rescans, so an overlapping/updated export 
 no-op for anything already ingested. Runs in the background — poll `GET /settings/jobs/latest?
 source=garmin_export` (or `strava_export`) for progress.
 
-**Request body:** `multipart/form-data` — `kind` (`"garmin"|"strava"`), `file` (the `.zip`).
+**Query parameters:** `kind` (`"garmin"|"strava"`, required), `filename` (the archive's name,
+required, must end in `.zip`).
 
-**Response `200`:** `JobTriggerOut` — `{"triggered": true}`. **`422`** — the uploaded file isn't
-a `.zip`. Note: a reverse proxy in front of this API may reject a very large export before it
-reaches this endpoint at all — outside this app's own configuration.
+**Request body:** the `.zip` itself, sent as-is (`Content-Type: application/zip`), not
+`multipart/form-data`. It is streamed straight to the data volume, so a multi-GB export never sits
+in memory, and the credential is checked before any of it is read. The largest accepted size is
+`PERSEVERER_MAX_UPLOAD_MB` (default 8192), which the frontend's nginx applies to this route too.
+
+**Response `200`:** `JobTriggerOut` — `{"triggered": true}`. Every rejection carries a readable
+`detail` with the sizes involved:
+
+| Status | When |
+|---|---|
+| `400` | the upload was interrupted, or fewer bytes arrived than `Content-Length` announced |
+| `413` | the file is larger than `PERSEVERER_MAX_UPLOAD_MB` |
+| `422` | the name doesn't end in `.zip`, or the content isn't a readable zip archive |
+| `507` | the data volume lacks room for the archive plus its extraction (about 3× its size), or writing it failed |
+
+A `413` *without* a JSON `detail` came from a reverse proxy in front of the app; its request body
+limit must be at least `PERSEVERER_MAX_UPLOAD_MB` (see docs/DEPLOY.md).
 
 ### `GET /settings/jobs/latest`
 

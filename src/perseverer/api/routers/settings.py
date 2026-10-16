@@ -56,8 +56,10 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import subprocess
 import sys
+import zipfile
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import uuid4
@@ -67,15 +69,14 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    Form,
     HTTPException,
     Query,
     Request,
-    UploadFile,
 )
 from garminconnect import GarminConnectAuthenticationError, GarminConnectTooManyRequestsError
 from sqlalchemy import Connection, Row, desc, select
 from sqlalchemy.engine import Engine
+from starlette.requests import ClientDisconnect
 
 from perseverer.adapters.eufy import EufyAuthError, EufyClient
 from perseverer.adapters.garmin_connect import (
@@ -888,34 +889,107 @@ def post_rebuild(
     return JobTriggerOut(triggered=True)
 
 
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
+# Room left on the data volume after the upload: the import extracts the archive next to it.
+_UPLOAD_HEADROOM_FACTOR = 3
+
+
+def _human_mb(n_bytes: int) -> str:
+    return f"{n_bytes / (1024 * 1024):,.0f} MB"
+
+
 @router.post("/settings/import/bulk-export")
 async def post_bulk_export_import(
+    request: Request,
     background_tasks: BackgroundTasks,
     athlete_id: Annotated[str, Depends(require_api_key)],
-    kind: Annotated[Literal["garmin", "strava"], Form()],
-    file: UploadFile,
+    kind: Annotated[Literal["garmin", "strava"], Query()],
+    filename: Annotated[str, Query(min_length=1)],
     engine: Engine = Depends(get_engine),
     settings: Settings = Depends(get_settings),
 ) -> JobTriggerOut:
     """Web counterpart of `sync import garmin-export`/`sync import strava-export <path>` -- the
-    same idempotent full-archive-rescan importers, just fed an uploaded .zip instead of a path
-    already on disk. The upload is streamed to a per-upload-unique temp path (not the CLI's own
-    fixed extract_root, which would collide across two concurrent web uploads) before the
-    background import runs; poll GET /settings/jobs/latest?source=garmin_export|strava_export
-    for progress -- both importers already write their own ingest_run row.
+    same idempotent full-archive-rescan importers, fed an uploaded .zip instead of a path on
+    disk. The request body *is* the zip (not multipart): it is streamed straight to a
+    per-upload-unique file under the data volume, so a multi-GB export never sits in the
+    container's RAM-backed /tmp (where Starlette's multipart parser would spool it), and
+    authentication runs before a single byte is read. Every rejection says why, with sizes, so
+    the Settings page can show something actionable. Poll GET /settings/jobs/latest?
+    source=garmin_export|strava_export for the import's progress."""
+    if not filename.lower().endswith(".zip"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"'{filename}' is not a .zip file. Upload the export archive as downloaded, "
+            "without unzipping it.",
+        )
 
-    Known limitation: a reverse proxy in front of this API may cap request body size below a
-    large export's real size; that's outside this app's own config."""
-    if not (file.filename or "").lower().endswith(".zip"):
-        raise HTTPException(status_code=422, detail="only .zip uploads are supported")
+    limit_bytes = settings.max_upload_mb * 1024 * 1024
+    declared = request.headers.get("content-length")
+    declared_bytes = int(declared) if declared and declared.isdigit() else None
+    if declared_bytes is not None and declared_bytes > limit_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"The file is {_human_mb(declared_bytes)}, more than this server's "
+            f"{_human_mb(limit_bytes)} limit (PERSEVERER_MAX_UPLOAD_MB).",
+        )
 
-    upload_id = uuid4().hex
     upload_dir = settings.data_dir / "tmp" / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
+    if declared_bytes is not None:
+        free = shutil.disk_usage(upload_dir).free
+        needed = declared_bytes * _UPLOAD_HEADROOM_FACTOR
+        if free < needed:
+            raise HTTPException(
+                status_code=507,
+                detail=f"Not enough disk space: the import needs about {_human_mb(needed)} "
+                f"(the {_human_mb(declared_bytes)} archive plus room to extract it) but the data "
+                f"volume has {_human_mb(free)} free.",
+            )
+
+    upload_id = uuid4().hex
     zip_path = upload_dir / f"{upload_id}.zip"
-    with zip_path.open("wb") as f:
-        while chunk := await file.read(1024 * 1024):
-            f.write(chunk)
+    received = 0
+    try:
+        with zip_path.open("wb") as f:
+            async for chunk in request.stream():
+                received += len(chunk)
+                if received > limit_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"The upload passed this server's {_human_mb(limit_bytes)} limit "
+                        "(PERSEVERER_MAX_UPLOAD_MB).",
+                    )
+                f.write(chunk)
+    except ClientDisconnect:
+        zip_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"The upload was interrupted after {_human_mb(received)}.",
+        ) from None
+    except OSError as e:
+        zip_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=507,
+            detail=f"Could not save the upload after {_human_mb(received)}: {e.strerror or e}.",
+        ) from e
+    except HTTPException:
+        zip_path.unlink(missing_ok=True)
+        raise
+
+    if declared_bytes is not None and received != declared_bytes:
+        zip_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"The upload is incomplete: received {_human_mb(received)} of "
+            f"{_human_mb(declared_bytes)}.",
+        )
+    if not zipfile.is_zipfile(zip_path):
+        zip_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=422,
+            detail=f"The {_human_mb(received)} received are not a readable zip archive. It may "
+            "be incomplete or damaged: download the export again.",
+        )
 
     extract_root = settings.data_dir / "tmp" / f"{kind}_export_{upload_id}"
 

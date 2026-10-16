@@ -391,7 +391,11 @@ stay correct across daylight saving.
 | `monthly_email_report` | Last day of month 18:00 | Emails the month's totals. |
 
 Long Settings-page operations (sync now, rebuild, bulk import) run as FastAPI background tasks in
-the `api` container and are polled through the `ingest_run` table.
+the `api` container and are polled through the `ingest_run` table. The bulk import's `.zip` is the
+raw request body, streamed to `/data/tmp/uploads` as it arrives: a multipart upload would be
+spooled to the container's RAM-backed `/tmp` first, and a full Garmin export is several GB. The
+frontend's nginx lifts its 1 MB body limit for that one route to `PERSEVERER_MAX_UPLOAD_MB` and
+streams it through unbuffered.
 
 ## Notifications and sharing
 

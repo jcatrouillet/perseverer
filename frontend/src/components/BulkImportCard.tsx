@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { useLatestJob, useUploadBulkExport } from "../api/queries";
+import { bulkImportErrorMessage } from "../bulkImportError";
 import { BulkImportHelp, type BulkImportSource } from "./BulkImportHelp";
 import { JobStatusBanner } from "./JobStatusBanner";
 
@@ -38,8 +39,7 @@ export function BulkImportCard() {
       <h2>Bulk import</h2>
       <p className="chart-note">
         Import a full "export your data" archive from Garmin or Strava. Always safe to re-run —
-        already-imported activities are recognized and skipped, not duplicated. Very large exports
-        may be rejected by a reverse proxy in front of this app before reaching it.
+        already-imported activities are recognized and skipped, not duplicated.
       </p>
       <form className="settings-bulk-import__form" onSubmit={handleSubmit}>
         <label className="field">
@@ -63,12 +63,12 @@ export function BulkImportCard() {
         <button className="button button--primary" type="submit" disabled={running || !file}>
           {running ? "Uploading…" : "Upload and import"}
         </button>
-        {upload.isError && (
-          <span role="alert" className="settings-garmin__error">
-            Could not upload -- make sure it's a .zip export archive.
-          </span>
-        )}
       </form>
+      {upload.isError && upload.variables && (
+        <p role="alert" className="settings-garmin__error">
+          {bulkImportErrorMessage(upload.error, upload.variables.file)}
+        </p>
+      )}
       <JobStatusBanner job={job.data} isPolling={triggeredKind != null} />
     </section>
   );

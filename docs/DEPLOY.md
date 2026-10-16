@@ -140,6 +140,17 @@ The frontend container listens on `PERSEVERER_HOST_FRONTEND_PORT` (8080) and its
 web app needs no API URL. Point your TLS-terminating reverse proxy at the frontend port; the API
 port does not need to be exposed.
 
+The Settings bulk import uploads a whole Garmin or Strava export (often several hundred MB, a full
+Garmin history several GB) in one request. Give your reverse proxy a request body limit of at least
+`PERSEVERER_MAX_UPLOAD_MB` and timeouts long enough for the upload; for nginx:
+
+```nginx
+client_max_body_size 8g;
+proxy_request_buffering off;
+proxy_read_timeout 3600s;
+proxy_send_timeout 3600s;
+```
+
 If the public hostname resolves differently inside your network (split-horizon DNS, no hairpin
 NAT), make the internal record point at the reverse proxy rather than at the production server,
 which only speaks plain HTTP.

@@ -12,6 +12,31 @@ export class ServerUnconfiguredError extends Error {}
 /** A password reset link that is invalid, expired or already used. */
 export class ResetLinkError extends Error {}
 
+/** A non-2xx response. `detail` is the API's own explanation (FastAPI's `{"detail": ...}`)
+ * when the body carries one, so a screen can show why, not just that, it failed. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+    readonly detail: string | null,
+  ) {
+    super(`request failed (${status}): ${body}`);
+  }
+}
+
+function errorDetail(body: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed && typeof parsed === "object" && "detail" in parsed) {
+      const detail = (parsed as { detail: unknown }).detail;
+      return typeof detail === "string" ? detail : JSON.stringify(detail);
+    }
+  } catch {
+    // Not JSON: an HTML error page from a proxy, say.
+  }
+  return null;
+}
+
 // Fired whenever a stored credential is cleared (a 401 on any request, anywhere in the app --
 // not just from the login form). AuthGate listens for this to re-show itself even when the
 // 401 came from a background query, e.g. a JWT that expired mid-session.
@@ -65,8 +90,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   // A FormData body (file uploads, see apiPostForm) must NOT get an explicit Content-Type --
   // the browser sets the correct `multipart/form-data; boundary=...` itself only when it owns
-  // that header; setting "application/json" here would break the multipart parse entirely.
-  if (!(options.body instanceof FormData)) {
+  // that header; setting "application/json" here would break the multipart parse entirely. A
+  // raw file body (apiPostFile) brings its own Content-Type.
+  if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (credential) headers.set(credential.header, credential.value);
@@ -82,7 +108,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`request failed (${response.status}): ${body}`);
+    throw new ApiError(response.status, body, errorDetail(body));
   }
   if (response.status === 204) {
     return undefined as T;
@@ -113,6 +139,16 @@ export function apiDelete<T>(path: string): Promise<T> {
 // For multipart/form-data bodies (file uploads) -- see request()'s own FormData branch above.
 export function apiPostForm<T>(path: string, formData: FormData): Promise<T> {
   return request<T>(path, { method: "POST", body: formData });
+}
+
+/** A file as the raw request body (the bulk-export upload), streamed by the browser without
+ * the multipart wrapping. */
+export function apiPostFile<T>(path: string, file: Blob, contentType: string): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    body: file,
+    headers: { "Content-Type": contentType },
+  });
 }
 
 // Login has no stored credential yet, so it bypasses `request` entirely.

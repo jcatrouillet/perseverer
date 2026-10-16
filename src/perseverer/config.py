@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # ./data on the dev host; the container images set PERSEVERER_DATA_DIR=/data themselves.
     data_dir: Path = Path("data")
+    # Largest bulk-export .zip the Settings upload accepts, in MiB. The frontend's nginx renders
+    # the same value into its client_max_body_size for that one route, so both layers agree.
+    max_upload_mb: int = 8192
 
     # --- garmin_connect rate limiting, rolling window, staleness, scheduler ---
     garmin_rolling_window_days: int = 10

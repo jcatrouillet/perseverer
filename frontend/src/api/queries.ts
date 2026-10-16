@@ -3,7 +3,7 @@
 // can be created from either the calendar page or the activity detail page.
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm, apiPut } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostFile, apiPostForm, apiPut } from "./client";
 import type {
   ActivityComparisonsOut,
   ActivityContextOut,
@@ -1224,10 +1224,12 @@ export function useTriggerRebuild() {
 export function useUploadBulkExport() {
   return useMutation({
     mutationFn: ({ kind, file }: { kind: "garmin" | "strava"; file: File }) => {
-      const formData = new FormData();
-      formData.append("kind", kind);
-      formData.append("file", file);
-      return apiPostForm<JobTriggerOut>("/api/v1/settings/import/bulk-export", formData);
+      const params = new URLSearchParams({ kind, filename: file.name });
+      return apiPostFile<JobTriggerOut>(
+        `/api/v1/settings/import/bulk-export?${params.toString()}`,
+        file,
+        "application/zip",
+      );
     },
   });
 }

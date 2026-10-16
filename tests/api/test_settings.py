@@ -9,6 +9,8 @@ import io
 import json
 import subprocess
 import zipfile
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1127,8 +1129,10 @@ def test_rebuild_trigger_launches_a_tracked_rebuild_subprocess(
     ]
 
 
-# --- POST /settings/import/bulk-export -- a real (minimal) Strava export zip, uploaded via
-# TestClient's own multipart support. -----------------------------------------------------------
+# --- POST /settings/import/bulk-export -- a real (minimal) Strava export zip, sent as the raw
+# request body. ----------------------------------------------------------------------------------
+
+_UPLOAD = "/api/v1/settings/import/bulk-export"
 
 
 def _minimal_strava_export_zip() -> bytes:
@@ -1142,27 +1146,77 @@ def _minimal_strava_export_zip() -> bytes:
     return buf.getvalue()
 
 
-def test_bulk_export_upload_rejects_non_zip(
+def _upload(
+    client: TestClient, headers: dict[str, str], content: bytes, filename: str = "export.zip"
+) -> Any:
+    return client.post(
+        _UPLOAD,
+        params={"kind": "strava", "filename": filename},
+        headers={**headers, "Content-Type": "application/zip"},
+        content=content,
+    )
+
+
+def _uploads_left(test_settings: Settings) -> list[str]:
+    upload_dir = test_settings.data_dir / "tmp" / "uploads"
+    return [p.name for p in upload_dir.iterdir()] if upload_dir.exists() else []
+
+
+def test_bulk_export_upload_rejects_a_non_zip_name(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
-    r = client.post(
-        "/api/v1/settings/import/bulk-export",
-        headers=auth_headers,
-        data={"kind": "strava"},
-        files={"file": ("export.txt", b"not a zip", "text/plain")},
-    )
+    r = _upload(client, auth_headers, b"not a zip", filename="export.txt")
     assert r.status_code == 422
+    assert "'export.txt' is not a .zip file" in r.json()["detail"]
+
+
+def test_bulk_export_upload_rejects_a_damaged_zip_and_deletes_it(
+    client: TestClient, auth_headers: dict[str, str], test_settings: Settings
+) -> None:
+    r = _upload(client, auth_headers, b"PK-not-really-a-zip")
+    assert r.status_code == 422
+    assert "not a readable zip archive" in r.json()["detail"]
+    assert _uploads_left(test_settings) == []
+
+
+def test_bulk_export_upload_over_the_limit_says_how_big_and_what_the_limit_is(
+    client: TestClient, auth_headers: dict[str, str], test_settings: Settings
+) -> None:
+    test_settings.max_upload_mb = 1
+    r = _upload(client, auth_headers, b"x" * (2 * 1024 * 1024))
+    assert r.status_code == 413
+    detail = r.json()["detail"]
+    assert "2 MB" in detail
+    assert "1 MB limit" in detail
+    assert "PERSEVERER_MAX_UPLOAD_MB" in detail
+    assert _uploads_left(test_settings) == []
+
+
+def test_bulk_export_upload_without_enough_disk_space_says_so(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "perseverer.api.routers.settings.shutil.disk_usage",
+        lambda _path: SimpleNamespace(total=10, used=10, free=10),
+    )
+    r = _upload(client, auth_headers, _minimal_strava_export_zip())
+    assert r.status_code == 507
+    assert "Not enough disk space" in r.json()["detail"]
+    assert _uploads_left(test_settings) == []
+
+
+def test_bulk_export_upload_needs_auth_before_reading_the_body(client: TestClient) -> None:
+    r = client.post(_UPLOAD, params={"kind": "strava", "filename": "export.zip"}, content=b"x")
+    assert r.status_code == 401
 
 
 def test_bulk_export_upload_strava_writes_ingest_run(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
-    r = client.post(
-        "/api/v1/settings/import/bulk-export",
-        headers=auth_headers,
-        data={"kind": "strava"},
-        files={"file": ("export.zip", _minimal_strava_export_zip(), "application/zip")},
-    )
+    r = _upload(client, auth_headers, _minimal_strava_export_zip())
     assert r.status_code == 200
     assert r.json() == {"triggered": True}
 

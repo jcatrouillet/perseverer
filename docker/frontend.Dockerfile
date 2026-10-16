@@ -24,7 +24,8 @@ FROM nginx:1.27-alpine AS runtime
 # The nginx image renders /etc/nginx/templates/*.template into conf.d at start, substituting
 # only PERSEVERER_* variables (nginx's own $host etc. are left alone).
 ENV NGINX_ENVSUBST_FILTER=^PERSEVERER_ \
-    PERSEVERER_HOST_API_PORT=8000
+    PERSEVERER_HOST_API_PORT=8000 \
+    PERSEVERER_MAX_UPLOAD_MB=8192
 RUN rm -f /etc/nginx/conf.d/default.conf
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /build/dist /usr/share/nginx/html
