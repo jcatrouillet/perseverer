@@ -39,7 +39,6 @@ from perseverer.db.schema import (
     activity_stream,
     activity_workout,
     activity_workout_step,
-    athlete,
     day_rollup,
     fitness_daily_rollup,
     health_metric_daily_rollup,
@@ -691,6 +690,44 @@ def _swap_parquet_from_shadow(shadow_parquet_dir: Path, parquet_dir: Path) -> No
         shutil.move(str(shadow_file), str(real_file))
 
 
+def _seed_shadow_from_live(live_db_path: Path, shadow_db_path: Path) -> None:
+    """Copies every table a rebuild does *not* re-derive (athletes, settings, raw_object, and
+    above all the athlete's durable corrections: merge/sport/trim/bouldering overrides, shoes,
+    Kaya sessions...) from the live database into the fresh shadow before the replay. The
+    replay's own tail (apply_sport_overrides, apply_activity_merge_overrides...) reads those
+    tables; against an empty shadow it found nothing, so every shadow rebuild silently undid
+    every correction -- a real bug (merged duplicates reappeared, and the next merge attempt
+    then crashed on the override row that was still there). Rows keep their ids, so a
+    rebuildable row that references one (activity.shoe_id) copies across the swap unchanged.
+    Foreign keys are off for the copy: it's a verbatim snapshot of an already-consistent
+    database, copied in one pass regardless of table order."""
+    rebuildable = {t.name for t in _REBUILDABLE_TABLES}
+    raw = sqlite3.connect(shadow_db_path, isolation_level=None, cached_statements=0)
+    try:
+        raw.execute("PRAGMA foreign_keys=OFF")
+        raw.execute(f"ATTACH DATABASE '{live_db_path.as_posix()}' AS live_db")
+        try:
+            live_tables = {
+                r[0]
+                for r in raw.execute("SELECT name FROM live_db.sqlite_master WHERE type = 'table'")
+            }
+            raw.execute("BEGIN")
+            for table in metadata.sorted_tables:
+                # A table the live file lacks (an out-of-date dev database) has nothing to copy.
+                if table.name in rebuildable or table.name not in live_tables:
+                    continue
+                cols = ", ".join(f'"{c.name}"' for c in table.c)
+                raw.execute(
+                    f'INSERT INTO main."{table.name}" ({cols}) '
+                    f'SELECT {cols} FROM live_db."{table.name}"'
+                )
+            raw.execute("COMMIT")
+        finally:
+            raw.execute("DETACH DATABASE live_db")
+    finally:
+        raw.close()
+
+
 def rebuild_database_via_shadow(
     conn: Connection, archive_root: Path, parquet_dir: Path, data_dir: Path, *, athlete_id: str
 ) -> int:
@@ -730,21 +767,9 @@ def rebuild_database_via_shadow(
     shadow_engine = make_engine(shadow_db_path)
     try:
         metadata.create_all(shadow_engine)
+        shadow_engine.dispose()
+        _seed_shadow_from_live(live_db_path, shadow_db_path)
         with shadow_engine.connect() as shadow_conn:
-            # The shadow db needs its own `athlete` row before any FK-constrained insert can
-            # succeed -- metric_definition, by contrast, self-populates as ingestion calls
-            # get_or_register_metric, exactly like a real fresh install does.
-            athlete_row = (
-                conn.execute(select(athlete).where(athlete.c.id == athlete_id)).mappings().one()
-            )
-            # Releases this read's own implicit transaction/snapshot on `conn` immediately,
-            # rather than holding it open for however long the replay below takes -- otherwise
-            # `conn`'s next query after this function returns would still see the pre-swap state
-            # (correct per WAL snapshot isolation, but not what any caller here wants).
-            conn.commit()
-            shadow_conn.execute(athlete.insert().values(dict(athlete_row)))
-            shadow_conn.commit()
-
             replayed = rebuild_database(
                 shadow_conn, archive_root, shadow_parquet_dir, athlete_id=athlete_id
             )

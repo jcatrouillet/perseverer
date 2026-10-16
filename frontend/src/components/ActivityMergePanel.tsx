@@ -64,6 +64,16 @@ function formatFieldValue(field: string, value: number | string | null): string 
   }
 }
 
+type MergeField = ActivityMergePreviewOut["fields"][number];
+
+/** The side a field starts on: this activity's own value, unless only the other side has one
+ * (a Strava copy's elevation gain or calories, say), so a plain "Confirm merge" never drops a
+ * value. Whole collections always start on this side. */
+export function defaultMergeChoice(f: MergeField): "self" | "other" {
+  if (COLLECTION_FIELDS.has(f.field)) return "self";
+  return f.self_value == null && f.other_value != null ? "other" : "self";
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
     year: "numeric",
@@ -92,8 +102,8 @@ export function ActivityMergePanel({
   mergeError: boolean;
 }) {
   // Per-field choice for the currently-expanded candidate only -- "self" (this activity's own
-  // value, the default) or "other" (the candidate's). Reset whenever a different candidate is
-  // opened for review.
+  // value) or "other" (the candidate's); a field the athlete hasn't touched follows
+  // defaultMergeChoice. Reset whenever a different candidate is opened for review.
   const [choices, setChoices] = useState<Record<string, "self" | "other">>({});
 
   if (candidates.length === 0) return null;
@@ -144,7 +154,7 @@ export function ActivityMergePanel({
                               <input
                                 type="radio"
                                 name={`merge-${f.field}`}
-                                checked={(choices[f.field] ?? "self") === "self"}
+                                checked={(choices[f.field] ?? defaultMergeChoice(f)) === "self"}
                                 onChange={() => setChoices((c) => ({ ...c, [f.field]: "self" }))}
                               />
                               {formatFieldValue(f.field, f.self_value)}
@@ -155,7 +165,7 @@ export function ActivityMergePanel({
                               <input
                                 type="radio"
                                 name={`merge-${f.field}`}
-                                checked={choices[f.field] === "other"}
+                                checked={(choices[f.field] ?? defaultMergeChoice(f)) === "other"}
                                 onChange={() => setChoices((c) => ({ ...c, [f.field]: "other" }))}
                               />
                               {formatFieldValue(f.field, f.other_value)}
@@ -177,7 +187,17 @@ export function ActivityMergePanel({
                       type="button"
                       className="button button--primary"
                       disabled={isMerging}
-                      onClick={() => onMerge(candidate.id, choices)}
+                      onClick={() =>
+                        onMerge(
+                          candidate.id,
+                          Object.fromEntries(
+                            preview.fields.map((f) => [
+                              f.field,
+                              choices[f.field] ?? defaultMergeChoice(f),
+                            ]),
+                          ),
+                        )
+                      }
                     >
                       {isMerging ? "Merging…" : "Confirm merge"}
                     </button>

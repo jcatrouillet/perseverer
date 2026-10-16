@@ -23,6 +23,7 @@ from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
     activity,
     activity_metric,
+    activity_sport_override,
     athlete,
     day_rollup,
     health_observation,
@@ -1335,6 +1336,36 @@ def test_shadow_rebuild_matches_plain_in_place_rebuild(tmp_path: Path) -> None:
 
     assert shadow_result == plain_result
     assert plain_result["activity"]  # sanity: the comparison isn't vacuously true on empty data
+
+
+def test_shadow_rebuild_reapplies_the_athletes_durable_corrections(tmp_path: Path) -> None:
+    """The replay's tail re-applies the athlete's corrections from tables a rebuild never wipes
+    (sport/name, merge, trim overrides...). A shadow rebuild once replayed into a shadow that had
+    none of those tables' rows, so every rebuild silently undid every correction."""
+    archive_root, parquet_dir = _build_garmin_export_archive(tmp_path, "src1")
+    engine = make_engine(tmp_path / "live.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+    with engine.connect() as conn:
+        rebuild_database_via_shadow(
+            conn, archive_root, parquet_dir, tmp_path, athlete_id=DEFAULT_ATHLETE_ID
+        )
+        start = conn.execute(select(activity.c.start_time_utc)).scalar_one()
+        conn.execute(
+            activity_sport_override.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                start_time_utc=start,
+                name="Corrected by the athlete",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+
+        rebuild_database_via_shadow(
+            conn, archive_root, parquet_dir, tmp_path, athlete_id=DEFAULT_ATHLETE_ID
+        )
+        assert conn.execute(select(activity.c.name)).scalar_one() == "Corrected by the athlete"
+        assert len(conn.execute(select(activity_sport_override)).fetchall()) == 1
 
 
 def test_shadow_rebuild_is_scoped_to_one_athlete(tmp_path: Path) -> None:

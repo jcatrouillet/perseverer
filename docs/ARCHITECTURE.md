@@ -204,6 +204,12 @@ external ids, Kaya route ids) and re-applied at the end of every rebuild:
 - bouldering route status/grade corrections and manually added routes
 - Kaya sessions and route notes, which live in their own durable tables
 
+The replay runs in a throwaway shadow database and is swapped into the live one only once it has
+succeeded, so a failed or hung rebuild never leaves the app reading half-built data. The shadow is
+first seeded with every table the rebuild does not re-derive (athletes, settings, the raw catalog,
+shoes and all the override tables above), keeping their row ids, so the re-application step sees
+the athlete's corrections exactly as the live database holds them.
+
 ### Kaya and Garmin bouldering
 
 Kaya session times are unreliable (often logged after the session), so Kaya sessions are matched

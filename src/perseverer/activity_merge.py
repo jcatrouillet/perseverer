@@ -31,6 +31,7 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from sqlalchemy import Connection, delete, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from perseverer.db.schema import (
     activity,
@@ -491,16 +492,28 @@ def merge_activities_and_record(
 
     now = datetime.now(UTC).replace(tzinfo=None)
     choices_json = json.dumps({k: v for k, v in field_choices.items() if v == "other"})
+    # An upsert, not a plain insert: the absorbed side can already have an override row (merged
+    # once before, then brought back by a rebuild that didn't re-apply it), and the athlete's
+    # latest choice is the one to keep.
     for link in other_links:
+        stmt = sqlite_insert(activity_merge_override).values(
+            athlete_id=athlete_id,
+            keep_source=self_link.source,
+            keep_external_id=self_link.external_id,
+            absorbed_source=link.source,
+            absorbed_external_id=link.external_id,
+            field_choices=choices_json,
+            created_at=now,
+        )
         conn.execute(
-            activity_merge_override.insert().values(
-                athlete_id=athlete_id,
-                keep_source=self_link.source,
-                keep_external_id=self_link.external_id,
-                absorbed_source=link.source,
-                absorbed_external_id=link.external_id,
-                field_choices=choices_json,
-                created_at=now,
+            stmt.on_conflict_do_update(
+                index_elements=["athlete_id", "absorbed_source", "absorbed_external_id"],
+                set_={
+                    "keep_source": self_link.source,
+                    "keep_external_id": self_link.external_id,
+                    "field_choices": choices_json,
+                    "created_at": now,
+                },
             )
         )
 

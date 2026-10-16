@@ -104,6 +104,33 @@ describe("ActivityMergePanel", () => {
     expect(radios[1]).not.toBeChecked();
   });
 
+  it("starts a field on the other side when only the other side has a value", () => {
+    const onMerge = vi.fn();
+    render(
+      <ActivityMergePanel
+        candidates={[candidate()]}
+        expandedCandidateId="other1"
+        onExpandCandidate={noop}
+        preview={preview()}
+        isPreviewLoading={false}
+        onMerge={onMerge}
+        isMerging={false}
+        mergeError={false}
+      />,
+    );
+    const caloriesRow = screen.getAllByRole("row").find((r) => within(r).queryByText("Calories"));
+    const radios = within(caloriesRow!).getAllByRole("radio");
+    expect(radios[0]).not.toBeChecked();
+    expect(radios[1]).toBeChecked();
+
+    fireEvent.click(screen.getByText("Confirm merge"));
+    expect(onMerge).toHaveBeenCalledWith("other1", {
+      distance_m: "self",
+      calories: "other",
+      route: "self",
+    });
+  });
+
   it("labels and formats a max_altitude_m field comparison in metres", () => {
     render(
       <ActivityMergePanel
@@ -139,12 +166,15 @@ describe("ActivityMergePanel", () => {
       />,
     );
     const rows = screen.getAllByRole("row");
-    const caloriesRow = rows.find((r) => within(r).queryByText("Calories"));
-    const otherRadio = within(caloriesRow!).getAllByRole("radio")[1]!;
-    fireEvent.click(otherRadio);
+    const distanceRow = rows.find((r) => within(r).queryByText("Distance"));
+    fireEvent.click(within(distanceRow!).getAllByRole("radio")[1]!);
 
     fireEvent.click(screen.getByText("Confirm merge"));
-    expect(onMerge).toHaveBeenCalledWith("other1", { calories: "other" });
+    expect(onMerge).toHaveBeenCalledWith("other1", {
+      distance_m: "other",
+      calories: "other",
+      route: "self",
+    });
   });
 
   it("calls onExpandCandidate(null) when Cancel is clicked", () => {

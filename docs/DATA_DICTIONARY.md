@@ -273,7 +273,8 @@ survives: `MERGEABLE_SCALAR_FIELDS` (distance, duration, elevation...), `MERGEAB
 comparison and `POST /activities/{id}/merge` applies it. The override is keyed by the
 `(source, external_id)` pairs of both sides (not the activity id, which changes on rebuild, nor the
 start time, which both sides share) and re-applied by `apply_activity_merge_overrides` after every
-rebuild.
+rebuild. There is one row per absorbed `(source, external_id)`: merging the same pair again replaces
+that row's survivor and field choices.
 
 ## Activities and analytics
 

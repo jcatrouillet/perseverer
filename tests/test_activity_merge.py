@@ -8,6 +8,7 @@ but disagreeing on several fields.
 from __future__ import annotations
 
 import datetime as dt
+import json
 from pathlib import Path
 
 import pytest
@@ -591,6 +592,40 @@ class TestMergeActivitiesAndRecordSurvivesRebuild:
         assert row.calories == pytest.approx(378.0)
         assert other_row is not None
         assert other_row.deleted_at is not None
+
+    def test_merging_again_replaces_the_existing_override(self, tmp_path: Path) -> None:
+        """A pair merged once, then split apart again by a rebuild that didn't re-apply the
+        override, must be mergeable again -- the override row is still there, and the latest
+        choice replaces it rather than hitting its unique key."""
+        engine = _engine(tmp_path)
+        with engine.connect() as conn:
+            _seed_pair(conn)
+            merge_activities_and_record(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                self_id="self1",
+                other_id="other1",
+                field_choices={"calories": "other"},
+            )
+            conn.execute(delete(activity_source_link))
+            conn.execute(delete(activity_metric))
+            conn.execute(delete(route_geom))
+            conn.execute(delete(lap))
+            conn.execute(delete(activity_stream))
+            conn.execute(delete(activity))
+            _seed_pair(conn)
+
+            merge_activities_and_record(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                self_id="self1",
+                other_id="other1",
+                field_choices={"elevation_gain_m": "other"},
+            )
+            conn.commit()
+            overrides = conn.execute(select(activity_merge_override)).fetchall()
+        assert len(overrides) == 1
+        assert json.loads(overrides[0].field_choices) == {"elevation_gain_m": "other"}
 
     def test_skips_a_pair_already_merged_by_natural_matching(self, tmp_path: Path) -> None:
         """If a rebuild's own _find_merge_match already caught the duplicate (e.g. thanks to
