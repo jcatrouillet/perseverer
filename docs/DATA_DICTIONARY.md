@@ -283,9 +283,9 @@ they are never confused with a vendor's own figures. Recomputations are full del
 per athlete, run at every ingest entry point in dependency order (VDOT, pace bands, average GAP,
 running TSS, then the rollups and insights).
 
-### Run pacing (halves, start, finish)
+### Run and ride pacing (halves, start, finish)
 
-How each run was paced, from its per-second stream (`run_pacing.py::refresh_run_pacing`), as
+How each run or ride was paced, from its per-second stream (`run_pacing.py::refresh_run_pacing`), as
 `activity_metric` rows with `source="perseverer"`, in seconds per km of **moving time** (samples
 that don't advance for 5 s or more, such as a traffic light or an auto-pause gap, are left out;
 shorter GPS stalls count as running):
@@ -303,10 +303,12 @@ shorter GPS stalls count as running):
   version, stream file, trim window). Present on every processed run, including those too short
   to pace, so a run is recomputed only when it changes.
 
-Only `sport == "running"` activities of at least 5 km with a `distance_m` stream get paces; an
-active trim is honoured. Computed incrementally at every import, trim, merge and rebuild (only new
-or changed runs are read). Feeds the run insights' fastest/slowest start, fastest/slowest finish
-and most-negative-km-splits records.
+Only `sport == "running"` activities and rides (every sport in the `ride` family: cycling,
+road_biking, indoor_cycling, virtual_ride...) of at least 5 km with a `distance_m` stream get paces;
+an active trim is honoured. A ride's values use the same keys and units (s/km); they are only ever
+compared with other rides. Computed incrementally at every import, trim, merge and rebuild (only
+new or changed activities are read). Feeds the run and ride insights' fastest/slowest start,
+fastest/slowest finish and most-negative-km-splits records.
 
 ### Running performance index (VDOT)
 

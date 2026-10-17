@@ -95,7 +95,8 @@ Structured workouts are compared lap by lap with what was planned. Each run is r
 similar recent efforts, and the run insights flag records for the period ("longest run in the
 last 12 months", "most calories burned", "slowest start in the last 90 days", "fastest finish
 ever", "most negative km splits in the last 30 days", counting the second-half kilometres faster
-than the first half's average pace).
+than the first half's average pace). Rides get the same insights, compared with rides only
+("longest ride", "fastest average speed", a ride streak).
 
 | Intervals vs. plan | Recent efforts, zones, intervals |
 |---|---|

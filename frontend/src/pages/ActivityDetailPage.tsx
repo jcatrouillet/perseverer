@@ -73,6 +73,7 @@ import {
   formatClockDuration,
   formatMinPerKm,
   gapPaceMinPerKm,
+  isCyclingSport,
   isPaceSport,
   isRunningSport,
   localTimeLabel,
@@ -142,6 +143,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
     id,
     activity.data != null &&
       (isRunningSport(activity.data.sport) ||
+        isCyclingSport(activity.data.sport) ||
         isBoulderingActivity(activity.data.sport, activity.data.sub_sport)),
   );
   const comparisons = useActivityComparisons(
@@ -391,7 +393,13 @@ export function ActivityDetailPage({ id }: { id: string }) {
           <div className="activity-detail__insights-col">
             <ActivityInsightsPanel
               insights={activityInsights.data}
-              heading={isBouldering ? "Bouldering insights" : "Run insights"}
+              heading={
+                isBouldering
+                  ? "Bouldering insights"
+                  : isCyclingSport(a.sport)
+                    ? "Ride insights"
+                    : "Run insights"
+              }
             />
           </div>
         )}

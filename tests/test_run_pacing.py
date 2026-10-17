@@ -25,6 +25,7 @@ from perseverer.fit.types import StreamPoint
 from perseverer.run_pacing import (
     FINISH_KEY,
     FIRST_HALF_KEY,
+    NEGATIVE_KM_SPLITS_KEY,
     SECOND_HALF_KEY,
     SIGNATURE_KEY,
     START_KEY,
@@ -207,3 +208,17 @@ def test_refresh_stores_paces_and_only_recomputes_what_changed(tmp_path: Path) -
         conn.execute(activity.update().where(activity.c.id == "long").values(sport="hiking"))
         refresh_run_pacing(conn, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
         assert _metrics(conn, "long") == {}
+
+
+def test_rides_are_paced_too(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    parquet_dir = tmp_path / "parquet"
+    with engine.connect() as conn:
+        _add_run(conn, parquet_dir, "ride", [(4000, 150), (12000, 120), (4000, 100)])
+        conn.execute(activity.update().where(activity.c.id == "ride").values(sport="cycling"))
+        assert refresh_run_pacing(conn, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID) == 1
+        ride = _metrics(conn, "ride")
+        assert ride[START_KEY] == pytest.approx(150, abs=1)
+        assert ride[FINISH_KEY] == pytest.approx(100, abs=1)
+        negative = ride[NEGATIVE_KM_SPLITS_KEY]
+        assert negative is not None and negative > 0

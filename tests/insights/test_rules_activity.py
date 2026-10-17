@@ -215,7 +215,11 @@ def test_avg_and_max_cadence_get_distinct_relabeled_titles() -> None:
     # "Highest cadence" alone would be ambiguous now that both an avg-cadence and a max-cadence
     # dimension exist -- each must relabel to a title that names which one it is.
     target = _activity("solo", "2026-06-15", 5000.0, 1500.0, cadence=170.0, max_cadence=185.0)
-    insights = compute_activity_insights("solo", [target], dt.date(2026, 6, 15))
+    pads = [
+        _activity(f"pad{n}", f"2026-06-0{n}", 5000.0, 1500.0, cadence=160.0, max_cadence=175.0)
+        for n in (1, 2)
+    ]
+    insights = compute_activity_insights("solo", [*pads, target], dt.date(2026, 6, 15))
     avg_cadence = next(i for i in insights if i.subject_key == "cadence:run")
     max_cadence = next(i for i in insights if i.subject_key == "max_cadence:run")
     assert avg_cadence.title == "Highest average cadence ever"
@@ -254,15 +258,27 @@ def test_temperature_insight_needs_at_least_three_comparable_activities() -> Non
     assert not any(i.subject_key == "temperature_high" for i in insights)
 
 
-def test_non_temperature_effort_insight_is_not_pool_checked() -> None:
-    # The trivial-extreme guard (_MIN_COMPARISON_POOL) applies only to temperature, per explicit
-    # user direction -- distance, duration, pace, HR, elevation, and start-time-of-day are
-    # recorded on essentially every activity, so requiring 3 comparisons there would just
-    # suppress ordinary "longest run" claims for a normal-sized history.
+def test_every_record_needs_three_activities_in_its_period() -> None:
+    # The trivial-extreme guard (_MIN_COMPARISON_POOL) covers every record, not only temperature:
+    # "longest of 2 runs" is no more a record than "hottest of 2".
     target = _activity("solo", "2026-06-15", 42000.0, 15000.0)
     pad1 = _activity("pad1", "2026-01-01", 10000.0, 3600.0)
-    insights = compute_activity_insights("solo", [target, pad1], dt.date(2026, 6, 15))
-    assert any(i.subject_key == "distance:run" for i in insights)
+    two = compute_activity_insights("solo", [pad1, target], dt.date(2026, 6, 15))
+    assert not any(i.subject_key == "distance:run" for i in two)
+
+    pad2 = _activity("pad2", "2026-02-01", 12000.0, 4300.0)
+    three = compute_activity_insights("solo", [pad1, pad2, target], dt.date(2026, 6, 15))
+    assert any(i.subject_key == "distance:run" for i in three)
+
+
+def test_a_sparse_month_does_not_hide_a_record_that_holds_over_a_full_year() -> None:
+    # The only run of the last 30 days, but also the longest of the 4 runs this year: the
+    # record is kept with its widest true period, not dropped because the month was sparse.
+    year = [_activity(f"y{m}", f"2026-0{m}-10", 10000.0, 3600.0) for m in (1, 2, 3)]
+    target = _activity("long", "2026-06-15", 30000.0, 11000.0)
+    insights = compute_activity_insights("long", [*year, target], dt.date(2026, 6, 15))
+    distance = next(i for i in insights if i.subject_key == "distance:run")
+    assert distance.title == "Longest run ever"
 
 
 def test_insights_about_other_activities_are_excluded() -> None:
@@ -296,9 +312,11 @@ def test_recent_best_that_is_not_the_all_time_best_gets_a_window_best_insight() 
     # window on, so "recent" is only ever the window's own best at the narrowest (30d) level,
     # matching the real scenario this insight is meant to catch.
     faster_but_older = _activity("faster_but_older", "2026-06-21", 6040.0, 2200.0)
+    # A third ~6km run in the last 30 days, so "fastest of the period" compares 3 runs.
+    third_recent = _activity("third_recent", "2026-08-05", 6010.0, 2500.0)
     insights = compute_activity_insights(
         "recent",
-        [all_time_best, target, other_recent, faster_but_older],
+        [all_time_best, target, other_recent, third_recent, faster_but_older],
         dt.date(2026, 8, 20),
     )
     assert not any(i.kind == "pb" for i in insights)  # not close to the all-time record
@@ -321,7 +339,10 @@ def test_window_best_is_not_shown_when_it_coincides_with_the_all_time_best() -> 
 def test_window_best_dedupes_to_the_widest_window_still_true() -> None:
     all_time_best = _activity("old_pb", "2024-01-01", 5000.0, 1000.0)
     target = _activity("recent", "2026-08-14", 5000.0, 1300.0)
-    insights = compute_activity_insights("recent", [all_time_best, target], dt.date(2026, 8, 14))
+    slower = [_activity(f"slow{d}", f"2026-08-0{d}", 5000.0, 1400.0) for d in (1, 5)]
+    insights = compute_activity_insights(
+        "recent", [all_time_best, *slower, target], dt.date(2026, 8, 14)
+    )
     window_best = [i for i in insights if i.kind == "window_best"]
     # "recent" is the only non-all-time-best candidate across every window here, so only the
     # single widest true claim should survive, not five near-identical repeats.
@@ -388,3 +409,60 @@ def test_pacing_records_need_a_real_comparison_pool() -> None:
     ]
     titles = {i.title for i in compute_activity_insights("y", lone, dt.date(2026, 3, 1))}
     assert not any(t.startswith(("Slowest start", "Fastest finish")) for t in titles)
+
+
+def _ride(
+    id_: str, local_date: str, distance_m: float, duration_s: float, **kw: object
+) -> InsightActivity:
+    return replace(
+        _activity(id_, local_date, distance_m, duration_s, sport_family="ride", **kw),  # type: ignore[arg-type]
+        sport="cycling",
+    )
+
+
+def test_ride_records_use_ride_wording_and_compare_only_with_rides() -> None:
+    # A faster, longer run on the same days must not take a ride's records: rides are ranked
+    # against rides only.
+    run = _activity("run", "2026-06-10", 42000.0, 3 * 3600.0, cadence=180.0)
+    older_ride = _ride("older", "2026-06-01", 30000.0, 3600.0, cadence=80.0, temperature_max_c=20.0)
+    other_ride = _ride("other", "2026-06-05", 25000.0, 3600.0, cadence=85.0, temperature_max_c=18.0)
+    target = _ride("target", "2026-06-15", 40000.0, 4800.0, cadence=92.0, temperature_max_c=31.0)
+
+    insights = compute_activity_insights(
+        "target", [run, older_ride, other_ride, target], dt.date(2026, 6, 15)
+    )
+    titles = {i.title for i in insights}
+
+    assert "Longest ride ever" in titles
+    assert "Longest ride by time ever" in titles
+    assert "Hottest ride ever" in titles
+    assert "Highest average cadence ever" in titles
+    assert not any("run" in t for t in titles)
+    cadence = next(i for i in insights if i.subject_key == "cadence:ride")
+    assert cadence.detail["unit"] == "rpm"
+    assert all(i.sport_family == "ride" for i in insights)
+
+
+def test_fastest_ride_is_said_as_average_speed() -> None:
+    slow = _ride("slow", "2026-06-01", 30000.0, 3600.0)
+    slower = _ride("slower", "2026-06-05", 30000.0, 3900.0)
+    fast = _ride("fast", "2026-06-15", 30000.0, 3000.0)
+    insights = compute_activity_insights("fast", [slow, slower, fast], dt.date(2026, 6, 15))
+    assert "Fastest average speed ever" in {i.title for i in insights}
+
+
+def test_a_ride_gets_a_ride_streak_that_ignores_runs() -> None:
+    rides = [_ride(f"r{d}", f"2026-06-{d:02d}", 20000.0, 3600.0) for d in (12, 13, 14, 15)]
+    run = _activity("run", "2026-06-11", 10000.0, 3000.0)
+    insights = compute_activity_insights("r15", [run, *rides], dt.date(2026, 6, 15))
+    streak = next(i for i in insights if i.kind == "streak")
+    assert streak.title == "4-day ride streak"
+    assert streak.value_num == 4.0
+    assert streak.sport_family == "ride"
+
+
+def test_a_run_streak_ignores_rides() -> None:
+    runs = [_activity(f"run{d}", f"2026-06-{d:02d}", 8000.0, 2400.0) for d in (13, 14, 15)]
+    ride = _ride("ride", "2026-06-12", 20000.0, 3600.0)
+    insights = compute_activity_insights("run15", [ride, *runs], dt.date(2026, 6, 15))
+    assert not any(i.kind == "streak" for i in insights)

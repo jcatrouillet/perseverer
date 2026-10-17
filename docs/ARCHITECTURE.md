@@ -266,9 +266,13 @@ own numbers:
   per distance, streaks, load spikes and resting-HR or
   sleep-score anomalies. The activity page computes the same rules bounded to that activity's own
   date, so an old activity never sees later results. The start, finish and negative-km-split
-  records need paces from the stream, so those are computed once per run at import
-  (`run_pacing.py`, incremental: a run is re-read only when its stream or trim changes) rather
-  than per request.
+  records need paces from the stream, so those are computed once per run or ride at import
+  (`run_pacing.py`, incremental: an activity is re-read only when its stream or trim changes)
+  rather than per request. Runs, rides and bouldering sessions each get their own activity
+  insights: a ride is only ever compared with rides, with its own wording ("Longest ride",
+  "Fastest average speed", a ride streak) and its cadence in rpm. A run or ride record needs at
+  least three activities of the same sport with a value in the period it claims, checked on the
+  widest period it holds over, so a sparse month never yields "the longest of one".
 
 ## Writing back to Garmin
 

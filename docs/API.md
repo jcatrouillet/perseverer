@@ -416,9 +416,14 @@ Point-in-time insights for one activity, computed fresh at request time — unli
 which reads a precomputed table. Running activities can return pace and distance records,
 including fastest/slowest start (first 2 km), fastest/slowest finish (last 2 km) and most
 negative km splits (second-half kilometres faster than the first half's average pace; see
-DATA_DICTIONARY.md's "Run pacing"), which need at least three runs with pacing in the period;
-bouldering activities can return records for route count, highest attempted/completed V-grade,
-active climb time, and high/low average and peak heart rate. Each claim uses the last 30 days,
+DATA_DICTIONARY.md's "Run and ride pacing"). Cycling activities return the same records
+compared with rides only, never with runs, in a ride's own words ("Longest ride", "Fastest
+average speed", "Hottest ride", a ride streak), with cadence in rpm (`detail.unit`). A run or
+ride record for a period needs at least three activities of the same sport with a value in that
+period ("Fastest N km" counts only activities of that whole-km distance), checked on the widest
+period the record holds over; "All-time best N km" is not tied to a period. Bouldering
+activities can return records for route count, highest attempted/completed V-grade, active
+climb time, and high/low average and peak heart rate. Each claim uses the last 30 days,
 last 90 days, calendar year, or all history, and only compares activities that happened no later
 than the displayed activity (including its timestamp when two activities share a date), so an old
 activity never learns about a later performance.

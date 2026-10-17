@@ -70,6 +70,22 @@ export function isRunningSport(sport: string): boolean {
   return RUNNING_SPORTS.has(sport);
 }
 
+// The backend's "ride" sport family (merge/engine.py::_SPORT_FAMILIES): a ride's insights
+// compare it with these only, never with runs.
+const CYCLING_SPORTS = new Set([
+  "cycling",
+  "road_biking",
+  "mountain_biking",
+  "gravel_cycling",
+  "indoor_cycling",
+  "virtual_ride",
+  "e_bike_fitness",
+]);
+
+export function isCyclingSport(sport: string): boolean {
+  return CYCLING_SPORTS.has(sport);
+}
+
 // Below this speed, a sample is "stopped" (a traffic light, tying a shoe, a device auto-pause
 // boundary), not a genuinely slow moving pace -- matches several consumer GPS devices' own
 // auto-pause threshold, and the backend's identical `_STATIONARY_MPS_FLOOR` (pace_bands.py,

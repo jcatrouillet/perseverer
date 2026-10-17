@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ActivitySummary } from "./api/types";
 import {
+  isCyclingSport,
   amPmCounts,
   bestVdot,
   buildPauseCompressor,
@@ -728,5 +729,14 @@ describe("vdotTrendPoints", () => {
   it("rounds vdot to one decimal place", () => {
     const activities = [activity("2025-06-02", 5000, { vdot: 35.449 })];
     expect(vdotTrendPoints(activities)[0]!.vdot).toBe(35.4);
+  });
+});
+
+describe("isCyclingSport", () => {
+  it("covers the ride family only", () => {
+    expect(isCyclingSport("cycling")).toBe(true);
+    expect(isCyclingSport("virtual_ride")).toBe(true);
+    expect(isCyclingSport("running")).toBe(false);
+    expect(isCyclingSport("hiking")).toBe(false);
   });
 });

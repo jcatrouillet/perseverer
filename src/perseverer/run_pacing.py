@@ -1,7 +1,8 @@
-"""How a run was paced: its first and second half, its start and its finish, computed once per run
-from the per-second stream and stored as `activity_metric` rows, so the run insights
-(`insights/rules_activity.py`) can compare a run with every earlier one without reading hundreds
-of Parquet files per request.
+"""How a run or a ride was paced: its first and second half, its start and its finish, computed
+once per activity from the per-second stream and stored as `activity_metric` rows, so the run and
+ride insights (`insights/rules_activity.py`) can compare it with every earlier one of the same
+sport without reading hundreds of Parquet files per request. Rides use the same definitions and
+keys (paces in s/km; the insights rank them the same way and only ever compare a ride with rides).
 
 Definitions (all paces in seconds per km, over *moving* time):
 - **halves**: the first and second half of the run's distance; the second half faster than the
@@ -11,8 +12,9 @@ Definitions (all paces in seconds per km, over *moving* time):
   half's average pace. The second half's kilometres are the full ones that start at or after the
   halfway point (a kilometre straddling the middle belongs to neither half, the final partial one
   is left out); paces are compared rounded to the second, so a tie is not counted.
-- Only `sport == "running"` activities of at least MIN_DISTANCE_M (5 km) get paces, so the start
-  and the finish never overlap and the halves are long enough to mean something.
+- Only `sport == "running"` activities and rides (`PACED_SPORTS`) of at least MIN_DISTANCE_M
+  (5 km) get paces, so the start and the finish never overlap and the halves are long enough to
+  mean something.
 - Moving time leaves out stops: samples that don't advance for MIN_STOP_S (5 s) or more, such as
   a traffic light or a gap in the recording while the watch was auto-paused, so a stop never
   makes a start look slow. This is the same moving-time basis as the "Fastest
@@ -25,8 +27,8 @@ reading every run's stream takes several seconds, too much for every sync. Each 
 a SIGNATURE_KEY row whose `value_text` records the inputs it was computed from (PACING_VERSION,
 stream file and trim window); a run is recomputed only when it has no signature yet or the
 signature no longer matches (a trim, an undo, a merge that swapped the stream), and the rows of
-activities that are no longer runs are removed. Runs shorter than 5 km keep a signature too, so
-they aren't re-read.
+activities that are no longer runs or rides are removed. Runs shorter than 5 km keep a signature
+too, so they aren't re-read.
 """
 
 from __future__ import annotations
@@ -42,9 +44,12 @@ import pyarrow.parquet as pq
 from sqlalchemy import Connection, select
 
 from perseverer.db.schema import activity, activity_metric, activity_stream, activity_trim_override
+from perseverer.merge.engine import sports_in_family
 from perseverer.metrics.registry import get_or_register_metric
 
 START_FINISH_M = 2000.0
+# Running statistics match "running" exactly (AGENTS.md); rides are the whole "ride" family.
+PACED_SPORTS: tuple[str, ...] = ("running", *sports_in_family("ride"))
 MIN_DISTANCE_M = 5000.0
 MIN_MOVING_SPEED_MPS = 0.5
 MIN_STOP_S = 5.0
@@ -201,7 +206,7 @@ def _delete(conn: Connection, athlete_id: str, activity_ids: Iterable[str]) -> N
 
 
 def refresh_run_pacing(conn: Connection, parquet_dir: Path, *, athlete_id: str) -> int:
-    """Brings every run's pacing rows up to date; returns the number of runs (re)computed."""
+    """Brings every run's and ride's pacing rows up to date; returns the number (re)computed."""
 
     runs = conn.execute(
         select(
@@ -214,7 +219,7 @@ def refresh_run_pacing(conn: Connection, parquet_dir: Path, *, athlete_id: str) 
         .join(activity_stream, activity_stream.c.activity_id == activity.c.id)
         .where(
             activity.c.athlete_id == athlete_id,
-            activity.c.sport == "running",
+            activity.c.sport.in_(PACED_SPORTS),
             activity.c.deleted_at.is_(None),
         )
     ).fetchall()

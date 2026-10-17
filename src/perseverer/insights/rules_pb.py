@@ -2,7 +2,7 @@
 actually run, is the window's own fastest activity at that distance still the athlete's
 all-time best? Bands are whole kilometres by floor, not a percentage-tolerance match against a
 fixed list of race distances -- a 5.01km run and a 5.99km run both count as "5 km", but a
-4.99km run does not (see `_floor_km_band`). Bands are derived dynamically from whatever
+4.99km run does not (see `floor_km_band`). Bands are derived dynamically from whatever
 distances are actually present in the activity pool, not a fixed table, so any distance the
 athlete has genuinely run (5K, 10K, a 17km training run, a 50km ultra) gets its own real band.
 
@@ -37,7 +37,7 @@ def _effective_duration_s(a: InsightActivity) -> float | None:
     return a.moving_duration_s if a.moving_duration_s is not None else a.duration_s
 
 
-def _floor_km_band(distance_m: float) -> int | None:
+def floor_km_band(distance_m: float) -> int | None:
     """Whole-km bucket a distance falls into by floor -- 5010m and 5990m both bucket to 5,
     4990m does not. None below 1km: too short for a meaningful "fastest N km" claim."""
     band = int(distance_m // 1000)
@@ -49,7 +49,7 @@ def _band_best(activities: list[InsightActivity], band_km: int) -> InsightActivi
         a
         for a in activities
         if a.distance_m is not None
-        and _floor_km_band(a.distance_m) == band_km
+        and floor_km_band(a.distance_m) == band_km
         and _effective_duration_s(a) is not None
     ]
     if not eligible:
@@ -67,7 +67,7 @@ def _bands_present(activities: list[InsightActivity]) -> list[int]:
     bands = {
         b
         for a in activities
-        if a.distance_m is not None and (b := _floor_km_band(a.distance_m)) is not None
+        if a.distance_m is not None and (b := floor_km_band(a.distance_m)) is not None
     }
     return sorted(bands)
 

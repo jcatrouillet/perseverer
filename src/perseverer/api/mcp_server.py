@@ -253,7 +253,8 @@ async def get_activity_climb_comparisons(activity_id: str) -> dict[str, Any]:
 async def get_activity_insights(activity_id: str) -> list[dict[str, Any]]:
     """Rules-based insights computed specifically about this one activity (e.g. "longest run in
     the last 12 months", an all-time best, a current streak) -- always derived from the
-    athlete's own past, never anything that happened after this activity."""
+    athlete's own past, never anything that happened after this activity. A ride is compared
+    with rides only ("longest ride", "fastest average speed", a ride streak), a run with runs."""
     response = await _call_api("GET", f"/api/v1/activities/{activity_id}/insights")
     return list(response.json())
 

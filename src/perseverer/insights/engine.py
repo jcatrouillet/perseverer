@@ -62,6 +62,9 @@ _MAX_HR_METRIC_KEYS = ("fit.session.max_heart_rate", "strava.session.max_heart_r
 _ELEVATION_LOSS_METRIC_KEYS = ("fit.session.total_descent", "strava.session.total_descent")
 _CADENCE_METRIC_KEY = "fit.session.avg_running_cadence"
 _MAX_CADENCE_METRIC_KEY = "fit.session.max_running_cadence"
+# A ride's pedalling cadence (rpm), stored as-is: no single-foot doubling.
+_RIDE_CADENCE_METRIC_KEY = "fit.session.avg_cadence"
+_RIDE_MAX_CADENCE_METRIC_KEY = "fit.session.max_cadence"
 _WEATHER_MIN_KEY = "weather.open_meteo.temperature_min_c"
 _WEATHER_MAX_KEY = "weather.open_meteo.temperature_max_c"
 
@@ -105,6 +108,8 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
     elevation_loss_subq = _aliased_metric_subquery(_ELEVATION_LOSS_METRIC_KEYS)
     cadence_raw_subq = _scalar_metric_subquery(_CADENCE_METRIC_KEY)
     max_cadence_raw_subq = _scalar_metric_subquery(_MAX_CADENCE_METRIC_KEY)
+    ride_cadence_subq = _scalar_metric_subquery(_RIDE_CADENCE_METRIC_KEY)
+    ride_max_cadence_subq = _scalar_metric_subquery(_RIDE_MAX_CADENCE_METRIC_KEY)
     temp_min_subq = _scalar_metric_subquery(_WEATHER_MIN_KEY)
     temp_max_subq = _scalar_metric_subquery(_WEATHER_MAX_KEY)
     first_half_subq = _scalar_metric_subquery(FIRST_HALF_KEY)
@@ -160,6 +165,8 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
             elevation_loss_subq.label("elevation_loss_m"),
             cadence_raw_subq.label("cadence_raw"),
             max_cadence_raw_subq.label("max_cadence_raw"),
+            ride_cadence_subq.label("ride_cadence"),
+            ride_max_cadence_subq.label("ride_max_cadence"),
             temp_min_subq.label("temperature_min_c"),
             temp_max_subq.label("temperature_max_c"),
             climb_route_count_subq.label("climb_route_count"),
@@ -185,12 +192,17 @@ def load_insight_activities(conn: Connection, athlete_id: str) -> list[InsightAc
     for r in rows:
         family = sport_family(r.sport)
         # avg/max_running_cadence are single-foot rates (see api/routers/activities.py's own
-        # doubling convention) -- only meaningful for foot sports, so left None otherwise
-        # rather than reporting a cyclist's cadence under a running-shaped metric key.
-        cadence = r.cadence_raw * 2 if r.cadence_raw is not None and family == "run" else None
-        max_cadence = (
-            r.max_cadence_raw * 2 if r.max_cadence_raw is not None and family == "run" else None
-        )
+        # doubling convention), so a run's cadence is doubled to steps per minute; a ride's is
+        # its pedalling rpm from the generic session fields. Other sports have none. Cadence is
+        # only ever compared within one family, so the two units never meet.
+        cadence: float | None = None
+        max_cadence: float | None = None
+        if family == "run":
+            cadence = r.cadence_raw * 2 if r.cadence_raw is not None else None
+            max_cadence = r.max_cadence_raw * 2 if r.max_cadence_raw is not None else None
+        elif family == "ride":
+            cadence = r.ride_cadence
+            max_cadence = r.ride_max_cadence
         out.append(
             InsightActivity(
                 id=r.id,

@@ -1,5 +1,6 @@
 """Point-in-time, per-activity insights: how does THIS activity compare to the athlete's own
-past -- never future -- activities. Running activities compose the existing athlete-wide rules
+past -- never future -- activities. Running and cycling activities compose the existing
+athlete-wide rules
 (`compute_effort_insights`, `compute_pb_insights`, `compute_window_best_insights`,
 `rules_streaks.current_streak`) unchanged rather than a new comparison algorithm: calling them
 with a candidate pool already bounded to
@@ -25,21 +26,19 @@ window is promoted to the "all_time" sentinel so `_relabel` below says "ever" in
 insights don't need this: `compute_pb_insights`'s own "all-time best" check is already unbounded
 by window (see rules_pb.py), so its title is already correctly "All-time best {label}".
 
-`_has_real_comparison` drops a *temperature* effort insight whose window has fewer than
-`_MIN_COMPARISON_POOL` activities with a weather value -- confirmed against real data that this
-matters: a run can legitimately be flagged both "Hottest run in the last 6 months" and "Coldest
-run in the last 12 months" simultaneously (max-temperature and min-temperature are different
-fields, so it's not a contradiction in the data), but if only one or two activities in that
-window even have weather data at all, "hottest of 2" reads as an invented-sounding claim, same
-underlying issue as a 1-day "streak." Scoped to temperature only (`_POOL_CHECKED_DIMENSIONS`) --
-weather is the one dimension with genuinely sparse coverage (not every activity has GPS/location
-to fetch it for); distance, pace, heart rate, elevation, altitude, and start time are recorded on
-essentially every activity, so the same population check would just suppress ordinary, real
-"longest run" claims for a normal-sized history.
-
-Start/finish/negative-km-split records are ordinary effort dimensions (rules_efforts.py), each
-tied to a period like every other record, and pool-checked like temperature since only runs of
-5 km or more with a stream have pacing values (run_pacing.py).
+`_has_real_comparison` drops a period record whose period holds fewer than
+`_MIN_COMPARISON_POOL` activities of the same sport with a value for it: "hottest of 2" or "the
+longest of the only ride this month" reads as an invented-sounding claim, same underlying issue
+as a 1-day "streak." It first applied to temperature only (weather is sparse: not every activity
+has a location to fetch it for), and once caught a run flagged both "Hottest run in the last 6
+months" and "Coldest run in the last 12 months" with barely any weather in either window. Rides
+showed the same problem with every record (a ride often is the only one in the last 30 days, so
+it was at once the highest and the lowest average heart rate), so every effort record is now
+checked, as is "fastest N km in the period" (counting only activities in the same km band). The
+check runs on the period each record finally claims, after `_dedupe_widest_window` and
+`_upgrade_to_all_time`: the widest period has the largest pool, so a record that holds over a
+well-populated year or all history is never lost to a sparse last month. "All-time best N km"
+is not tied to a period and is not checked.
 
 Every surviving running Insight's title is then rewritten (`_relabel`) into a period-explicit
 phrase -- "Longest run in the last 12 months" or "Longest run ever" rather than the athlete-wide
@@ -61,7 +60,11 @@ from perseverer.insights.rules_efforts import (
     find_extreme,
     window_start_date,
 )
-from perseverer.insights.rules_pb import compute_pb_insights, compute_window_best_insights
+from perseverer.insights.rules_pb import (
+    compute_pb_insights,
+    compute_window_best_insights,
+    floor_km_band,
+)
 from perseverer.insights.rules_streaks import current_streak
 from perseverer.insights.types import Insight, InsightActivity
 
@@ -75,24 +78,9 @@ _ALL_TIME_WINDOW = "all_time"
 # Below this, a "run streak" is just restating "you ran today" -- not shown at all.
 _MIN_NOTABLE_STREAK_DAYS = 4
 
-# Below this many activities-with-a-value in the window, a temperature extreme isn't a real
-# comparison -- see module docstring for the real example that motivated this (a run flagged
-# both hottest-in-6-months and coldest-in-12-months because almost nothing else in either window
-# had weather data at all). Only applied to _POOL_CHECKED_DIMENSIONS.
+# Below this many same-sport activities with a value in the period, a record isn't a real
+# comparison -- see the module docstring.
 _MIN_COMPARISON_POOL = 3
-# Pacing values exist only for runs of 5 km or more with a stream, so they are as sparse as
-# weather: "fastest start of the 2 runs this month" is not a real record either.
-_POOL_CHECKED_DIMENSIONS = frozenset(
-    {
-        "temperature_high",
-        "temperature_low",
-        "start_fast",
-        "start_slow",
-        "finish_fast",
-        "finish_slow",
-        "negative_km_splits",
-    }
-)
 
 _WINDOW_LABELS: dict[str, str] = {
     "30d": "in the last 30 days",
@@ -106,7 +94,7 @@ _WINDOW_LABELS: dict[str, str] = {
 # Keyed by the effort dimension's own `key` (rules_efforts.py::_Dimension), not its title string
 # -- decoupled from that module's own "{title} ({family})" formatting, which this module discards
 # entirely in favour of a period-explicit phrasing (see module docstring).
-_EFFORT_PHRASES: dict[str, str] = {
+_RUN_EFFORT_PHRASES: dict[str, str] = {
     "distance": "Longest run",
     "duration": "Longest run by time",
     "pace": "Fastest pace",
@@ -130,6 +118,23 @@ _EFFORT_PHRASES: dict[str, str] = {
     "finish_slow": "Slowest finish",
     "negative_km_splits": "Most negative km splits",
 }
+
+# A ride's own wording for the same records. Rides are only ever ranked against rides (every
+# effort dimension is sport-scoped), so "Fastest average speed" is the ride counterpart of a
+# run's "Fastest pace": the same moving-time ranking, said the way a cyclist reads it.
+_RIDE_EFFORT_PHRASES: dict[str, str] = {
+    **_RUN_EFFORT_PHRASES,
+    "distance": "Longest ride",
+    "duration": "Longest ride by time",
+    "pace": "Fastest average speed",
+    "temperature_high": "Hottest ride",
+    "temperature_low": "Coldest ride",
+}
+
+_EFFORT_PHRASES_BY_FAMILY: dict[str, dict[str, str]] = {"ride": _RIDE_EFFORT_PHRASES}
+
+# The families with their own streak: a run counts only runs, a ride only rides.
+_STREAK_NOUNS: dict[str, str] = {"run": "run", "ride": "ride"}
 
 
 @dataclass(frozen=True)
@@ -205,15 +210,21 @@ def _window_activities(
 def _has_real_comparison(
     insight: Insight, bounded_activities: list[InsightActivity], as_of: date
 ) -> bool:
-    dim_key = insight.subject_key.split(":", 1)[0]
-    if dim_key not in _POOL_CHECKED_DIMENSIONS:
-        return True
-    dim = _DIMENSION_BY_KEY.get(dim_key)
+    candidates = _window_activities(bounded_activities, insight.window, as_of)
+    if insight.sport_family is not None:
+        candidates = [a for a in candidates if a.sport_family == insight.sport_family]
+    if insight.kind == "window_best":
+        # subject_key is "window_best:{family}:{N} km": compare within that km band only.
+        band_km = int(insight.subject_key.split(":", 2)[-1].split(" ", 1)[0])
+        count = sum(
+            1
+            for a in candidates
+            if a.distance_m is not None and floor_km_band(a.distance_m) == band_km
+        )
+        return count >= _MIN_COMPARISON_POOL
+    dim = _DIMENSION_BY_KEY.get(insight.subject_key.split(":", 1)[0])
     if dim is None:
         return True
-    candidates = _window_activities(bounded_activities, insight.window, as_of)
-    if dim.sport_scoped and insight.sport_family is not None:
-        candidates = [a for a in candidates if a.sport_family == insight.sport_family]
     count = sum(1 for a in candidates if dim.value_fn(a) is not None)
     return count >= _MIN_COMPARISON_POOL
 
@@ -233,9 +244,14 @@ def _upgrade_to_all_time(
 def _relabel(insight: Insight) -> Insight:
     if insight.kind == "effort":
         dim_key = insight.subject_key.split(":", 1)[0]
-        phrase = _EFFORT_PHRASES.get(dim_key, insight.title)
+        phrases = _EFFORT_PHRASES_BY_FAMILY.get(insight.sport_family or "", _RUN_EFFORT_PHRASES)
+        phrase = phrases.get(dim_key, insight.title)
         period = _WINDOW_LABELS.get(insight.window, "")
-        return replace(insight, title=f"{phrase} {period}".strip())
+        relabelled = replace(insight, title=f"{phrase} {period}".strip())
+        if insight.sport_family == "ride" and dim_key in ("cadence", "max_cadence"):
+            # Pedalling cadence, not steps (rules_efforts.py's shared dimension says spm).
+            relabelled = replace(relabelled, detail={**relabelled.detail, "unit": "rpm"})
+        return relabelled
     if insight.kind == "pb":
         # subject_key is "pb:{family}:{label}" (rules_pb.py) -- label itself never contains a
         # colon (it's always "{N} km"), so splitting into at most 3 parts is exact.
@@ -248,7 +264,8 @@ def _relabel(insight: Insight) -> Insight:
         return replace(insight, title=f"Fastest {label} {period}".strip())
     if insight.kind == "streak":
         days = int(insight.value_num) if insight.value_num is not None else 0
-        return replace(insight, title=f"{days}-day run streak")
+        noun = _STREAK_NOUNS.get(insight.sport_family or "", "run")
+        return replace(insight, title=f"{days}-day {noun} streak")
     return insight
 
 
@@ -329,7 +346,6 @@ def compute_activity_insights(
 
     effort_all = compute_effort_insights(bounded_activities, as_of)
     effort = [i for i in effort_all if i.activity_id == activity_id]
-    effort = [i for i in effort if _has_real_comparison(i, bounded_activities, as_of)]
     pb_all = compute_pb_insights(bounded_activities, as_of)
     pb = [i for i in pb_all if i.activity_id == activity_id]
     window_best_all = compute_window_best_insights(bounded_activities, as_of)
@@ -337,24 +353,36 @@ def compute_activity_insights(
 
     effort_deduped = _dedupe_widest_window(effort, as_of)
     effort_final = [
-        _upgrade_to_all_time(i, activity_id, bounded_activities) for i in effort_deduped
+        upgraded
+        for i in effort_deduped
+        if _has_real_comparison(
+            upgraded := _upgrade_to_all_time(i, activity_id, bounded_activities),
+            bounded_activities,
+            as_of,
+        )
     ]
-    results = (
-        effort_final + _dedupe_widest_window(pb, as_of) + _dedupe_widest_window(window_best, as_of)
-    )
+    window_best_final = [
+        i
+        for i in _dedupe_widest_window(window_best, as_of)
+        if _has_real_comparison(i, bounded_activities, as_of)
+    ]
+    results = effort_final + _dedupe_widest_window(pb, as_of) + window_best_final
 
-    # Restricted to running activities only -- a "run streak" (consecutive days with a run), not
-    # the athlete-wide engine's cross-sport "activity streak". Not filtered by activity_id:
-    # this describes the athlete's state as of `as_of`, not a fact tied to one specific activity.
-    # Below _MIN_NOTABLE_STREAK_DAYS it's not a real insight -- every run is trivially the start
-    # of a "1-day streak," and that's just restating "you ran today."
-    running_activities = [a for a in bounded_activities if a.sport_family == "run"]
-    streak = current_streak(running_activities, as_of)
-    if (
-        streak is not None
-        and streak.value_num is not None
-        and streak.value_num >= _MIN_NOTABLE_STREAK_DAYS
-    ):
-        results.append(streak)
+    # Restricted to this activity's own sport -- a "run streak" (consecutive days with a run) on
+    # a run, a "ride streak" on a ride, never the athlete-wide engine's cross-sport "activity
+    # streak", and none for other sports. Not filtered by activity_id: this describes the
+    # athlete's state as of `as_of`, not a fact tied to one specific activity. Below
+    # _MIN_NOTABLE_STREAK_DAYS it's not a real insight -- every run is trivially the start of a
+    # "1-day streak," and that's just restating "you ran today."
+    family = next((a.sport_family for a in bounded_activities if a.id == activity_id), None)
+    if family in _STREAK_NOUNS:
+        same_sport = [a for a in bounded_activities if a.sport_family == family]
+        streak = current_streak(same_sport, as_of)
+        if (
+            streak is not None
+            and streak.value_num is not None
+            and streak.value_num >= _MIN_NOTABLE_STREAK_DAYS
+        ):
+            results.append(replace(streak, sport_family=family))
 
     return [_relabel(i) for i in results]

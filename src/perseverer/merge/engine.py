@@ -51,6 +51,12 @@ def sport_family(sport: str) -> str:
     return _SPORT_FAMILIES.get(sport.lower(), sport.lower())
 
 
+def sports_in_family(family: str) -> tuple[str, ...]:
+    """Every sport name that belongs to `family` ("ride" -> cycling, road_biking...), for a
+    query that filters on the stored sport."""
+    return tuple(sorted(s for s, f in _SPORT_FAMILIES.items() if f == family))
+
+
 # Family pairs that count as the same activity for *merge-matching* purposes only, without
 # collapsing them into one family for anything else (insights/engine.py's own use of
 # sport_family() groups streaks/PBs by family, and a genuine walk shouldn't start counting
