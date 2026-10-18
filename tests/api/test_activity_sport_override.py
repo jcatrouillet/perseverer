@@ -459,3 +459,79 @@ class TestCommuteOverride:
             "/api/v1/activities/nope/commute", json={"is_commute": True}, headers=auth_headers
         )
         assert r.status_code == 404
+
+
+class TestVirtualOverride:
+    """PATCH /activities/{id}/virtual -- the athlete's own virtual tag, used by the map
+    explorer's "Hide virtual activities" toggle; durable across a rebuild like the commute flag."""
+
+    def test_tags_and_untags_and_exposes_it_on_the_activity_and_the_map(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        from perseverer.db.schema import route_geom
+        from perseverer.db.seed import DEFAULT_ATHLETE_ID
+
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="ride", sport="cycling")
+            conn.execute(
+                route_geom.insert().values(
+                    activity_id="ride",
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    start_lat=1.0,
+                    start_lng=2.0,
+                    end_lat=1.0,
+                    end_lng=2.0,
+                    min_lat=1.0,
+                    min_lng=2.0,
+                    max_lat=1.0,
+                    max_lng=2.0,
+                )
+            )
+            conn.commit()
+
+        assert (
+            client.get("/api/v1/activities/ride", headers=auth_headers).json()["is_virtual"]
+            is False
+        )
+        r = client.patch(
+            "/api/v1/activities/ride/virtual", json={"is_virtual": True}, headers=auth_headers
+        )
+        assert r.status_code == 200
+        assert r.json() == {"is_virtual": True}
+        assert (
+            client.get("/api/v1/activities/ride", headers=auth_headers).json()["is_virtual"] is True
+        )
+        listed = client.get("/api/v1/activities", headers=auth_headers).json()["items"][0]
+        assert listed["is_virtual"] is True
+        points = client.get("/api/v1/activities/map", headers=auth_headers).json()
+        assert [p["is_virtual"] for p in points] == [True]
+
+        client.patch(
+            "/api/v1/activities/ride/virtual", json={"is_virtual": False}, headers=auth_headers
+        )
+        assert (
+            client.get("/api/v1/activities/ride", headers=auth_headers).json()["is_virtual"]
+            is False
+        )
+
+    def test_a_rebuild_reapplies_the_tag(self, engine: Engine) -> None:
+        from perseverer.db.seed import DEFAULT_ATHLETE_ID
+        from perseverer.sport_override import apply_sport_overrides, set_virtual_override
+
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="ride", sport="cycling")
+            set_virtual_override(
+                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="ride", is_virtual=True
+            )
+            conn.execute(activity.update().where(activity.c.id == "ride").values(is_virtual=False))
+            assert apply_sport_overrides(conn, athlete_id=DEFAULT_ATHLETE_ID) == 1
+            tagged = conn.execute(select(activity.c.is_virtual)).scalar_one()
+        assert tagged is True
+
+    def test_404_for_a_missing_activity(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        r = client.patch(
+            "/api/v1/activities/nope/virtual", json={"is_virtual": True}, headers=auth_headers
+        )
+        assert r.status_code == 404

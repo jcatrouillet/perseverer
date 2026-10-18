@@ -73,10 +73,10 @@ Contents: [Conventions](#conventions) · [Tables](#tables) · [Metric registry](
   fills the core fields. Core fields: `sport`/`sub_sport`, `start_time_utc`, `utc_offset_s`,
   `tz_name`, `local_date`, `duration_s`, `moving_duration_s`, `distance_m`, `elevation_gain_m`,
   `max_altitude_m`, `calories`, `is_race`, `is_commute` (the athlete's own commute tag, never a
-  vendor value), `name`, `shoe_id`, `carbohydrates_g`/`sodium_mg`
+  vendor value), `is_virtual` (the athlete's own virtual-activity tag, same rules), `name`, `shoe_id`, `carbohydrates_g`/`sodium_mg`
   (athlete-logged fueling; no vendor source), `deleted_at`.
 - **`activity_sport_override`**: the athlete's corrections, keyed by `(athlete_id,
-  start_time_utc)` so they survive a rebuild: `sport`/`sub_sport`, `is_race`, `is_commute`, `name`,
+  start_time_utc)` so they survive a rebuild: `sport`/`sub_sport`, `is_race`, `is_commute`, `is_virtual`, `name`,
   `carbohydrates_g`/`sodium_mg`, each independent. `apply_sport_overrides` re-applies them after
   every rebuild. `sync backfill-garmin-activity-names` also writes `name` here, using Garmin
   Connect's cloud-side activity name, but only when the current name is still the sport's generic

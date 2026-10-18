@@ -216,6 +216,9 @@ List activity summaries, most recent first, paginated.
 | `min_distance_m` | query | optional | number | — | Only activities at least this long, metres. |
 | `max_distance_m` | query | optional | number | — | Only activities at most this long, metres. |
 | `ids` | query | optional | string (repeatable) | — | Only these activity ids (up to 50), e.g. `ids=a&ids=b` — the run comparison fetches its selected runs this way. |
+| `is_race` | query | optional | boolean | — | `true`: only races; `false`: no races (an unflagged activity is not a race); omitted: both. |
+| `is_virtual` | query | optional | boolean | — | `true`: only activities tagged virtual; `false`: none; omitted: both. |
+| `is_commute` | query | optional | boolean | — | `true`: only activities tagged as a commute; `false`: none; omitted: both. |
 
 Every filter applies to `total` too.
 
@@ -522,6 +525,17 @@ time, like the race flag.
 **Request body** (`ActivityCommuteOverrideIn`): `is_commute` (boolean, required).
 
 **Responses:** `200` → `ActivityCommuteOverrideOut`. `404`.
+
+### `PATCH /activities/{activity_id}/virtual`
+
+Tags or untags an activity as virtual (a Zwift-style ride, a virtual run). The map explorer's
+"Hide virtual activities" toggle then leaves
+tagged activities off the map; `GET /activities/map` returns `is_virtual` for that. Durable,
+rebuild-safe override keyed by start time, like the commute tag.
+
+**Request body** (`ActivityVirtualOverrideIn`): `is_virtual` (boolean, required).
+
+**Responses:** `200` → `ActivityVirtualOverrideOut`. `404`.
 
 ### `PATCH /activities/{activity_id}/name`
 
@@ -2343,7 +2357,7 @@ The pagination envelope: `items` (array\<T\>), `total` (integer), `limit` (integ
 
 `id`, `local_date` (nullable), `sport`, `name` (nullable), `distance_m` (nullable), `start_lat`,
 `start_lng` — the last two are always present since this schema only populates for activities
-with a GPS start point.
+with a GPS start point — and `is_virtual` (boolean, the athlete's own virtual tag).
 
 ### ActivityRouteOut
 

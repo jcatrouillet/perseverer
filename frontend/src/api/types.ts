@@ -90,6 +90,8 @@ export interface ActivitySummary {
   is_race: boolean | null;
   /** The athlete's own commute tag (PATCH /activities/{id}/commute). */
   is_commute?: boolean;
+  /** The athlete's own virtual tag (PATCH /activities/{id}/virtual). */
+  is_virtual?: boolean;
   duration_s: number | null;
   moving_duration_s: number | null;
   distance_m: number | null;
@@ -265,6 +267,8 @@ export interface ActivityMapPointOut {
   distance_m: number | null;
   start_lat: number;
   start_lng: number;
+  /** The athlete's own virtual tag, so the map can hide virtual activities. */
+  is_virtual?: boolean;
 }
 
 export interface ActivityRouteOut {
@@ -354,6 +358,10 @@ export interface ActivitySportOverrideOut {
 
 export interface ActivityCommuteOverrideOut {
   is_commute: boolean;
+}
+
+export interface ActivityVirtualOverrideOut {
+  is_virtual: boolean;
 }
 
 export interface ActivityRaceOverrideOut {

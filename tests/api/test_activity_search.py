@@ -49,3 +49,30 @@ def test_distance_range_and_ids(
     )
     assert _ids(client, auth_headers, "ids=long&ids=odd") == ({"long", "odd"}, 2)
     assert _ids(client, auth_headers, "ids=long&q=tempo") == (set(), 0)
+
+
+def test_race_virtual_and_commute_filters(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        for activity_id in ("plain", "race", "zwift", "commute", "unflagged"):
+            seed_activity(conn, activity_id=activity_id)
+        conn.execute(activity.update().where(activity.c.id == "plain").values(is_race=False))
+        conn.execute(activity.update().where(activity.c.id == "race").values(is_race=True))
+        conn.execute(activity.update().where(activity.c.id == "zwift").values(is_virtual=True))
+        conn.execute(activity.update().where(activity.c.id == "commute").values(is_commute=True))
+        conn.commit()
+
+    assert _ids(client, auth_headers, "is_race=true") == ({"race"}, 1)
+    # NULL (never flagged) counts as "not a race".
+    assert _ids(client, auth_headers, "is_race=false")[0] == {
+        "plain",
+        "zwift",
+        "commute",
+        "unflagged",
+    }
+    assert _ids(client, auth_headers, "is_virtual=true") == ({"zwift"}, 1)
+    assert "zwift" not in _ids(client, auth_headers, "is_virtual=false")[0]
+    assert _ids(client, auth_headers, "is_commute=true") == ({"commute"}, 1)
+    assert _ids(client, auth_headers, "is_commute=true&is_virtual=true") == (set(), 0)
+    assert _ids(client, auth_headers, "")[1] == 5

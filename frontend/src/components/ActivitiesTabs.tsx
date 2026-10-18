@@ -5,7 +5,7 @@ import { Link, useLocation } from "wouter";
 
 const TABS = [
   { href: "/activities", label: "All activities" },
-  { href: "/activities/compare", label: "Compare runs" },
+  { href: "/activities/compare", label: "Compare" },
 ];
 
 export function ActivitiesTabs() {

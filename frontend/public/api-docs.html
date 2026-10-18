@@ -743,6 +743,7 @@ const SCHEMAS = [
       ["distance_m","number|null",""],
       ["start_lat","number","Always present — this schema is only ever populated for activities that have a GPS start point."],
       ["start_lng","number",""],
+      ["is_virtual","boolean","The athlete's own virtual tag (PATCH /activities/{activity_id}/virtual)."],
     ] },
   { name: "ActivityRouteOut", fields: [
       ["id","string",""],
@@ -1542,6 +1543,9 @@ const GROUPS = [
         ["min_distance_m","query","opt","number","—","Only activities at least this long, metres."],
         ["max_distance_m","query","opt","number","—","Only activities at most this long, metres."],
         ["ids","query","opt","string (repeatable)","—","Only these activity ids (up to 50), e.g. ids=a&ids=b — the run comparison fetches its selected runs this way."],
+        ["is_race","query","opt","boolean","—","true: only races; false: no races (an unflagged activity is not a race); omitted: both."],
+        ["is_virtual","query","opt","boolean","—","true: only activities tagged virtual; false: none; omitted: both."],
+        ["is_commute","query","opt","boolean","—","true: only activities tagged as a commute; false: none; omitted: both."],
       ],
       responses: [ { code: 200, ref: "Page&lt;ActivitySummary&gt;" } ],
       example: { qs: "?start_date=2026-07-01&end_date=2026-07-31&sport=running&limit=20" }
@@ -1723,6 +1727,15 @@ const GROUPS = [
       example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/commute \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"is_commute": true}'` }
+    },
+    { method: "PATCH", path: "/api/v1/activities/{activity_id}/virtual", summary: "Tag or untag an activity as virtual.",
+      description: "The map explorer's \"Hide virtual activities\" toggle leaves tagged activities off the map. Durable, rebuild-safe override keyed by start time, like the commute tag.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { schema: "ActivityVirtualOverrideIn", fields: [ ["is_virtual","boolean","req","",""] ] },
+      responses: [ { code: 200, note: "ActivityVirtualOverrideOut: is_virtual." }, { code: 404, note: "" } ],
+      example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/virtual \
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \
+  -d '{"is_virtual": true}'` }
     },
     { method: "PATCH", path: "/api/v1/activities/{activity_id}/race", summary: "Mark or unmark an activity as a race.",
       description: "Corrects Garmin's own eventTypeId heuristic for the (uncommon) case where a real race was never flagged as one inside the Garmin Connect app. Durable, rebuild-safe override.",

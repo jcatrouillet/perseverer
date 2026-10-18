@@ -11,7 +11,7 @@ from typing import Annotated, Any
 
 import duckdb
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import Connection, Engine, Row, case, func, select
+from sqlalchemy import Connection, Engine, Row, case, func, or_, select
 
 from perseverer.activity_merge import (
     build_merge_preview,
@@ -51,6 +51,8 @@ from perseverer.api.schemas.activities import (
     ActivitySportOverrideOut,
     ActivitySummary,
     ActivityTrimIn,
+    ActivityVirtualOverrideIn,
+    ActivityVirtualOverrideOut,
     ActivityWeatherHourlyPointOut,
     ActivityWeatherOut,
     ActivityWorkoutOut,
@@ -119,6 +121,7 @@ from perseverer.sport_override import (
     set_name_override,
     set_race_override,
     set_sport_override,
+    set_virtual_override,
 )
 from perseverer.stream_query import downsample
 from perseverer.transport_mix import ELIGIBLE_SPORTS, detect_transport_mix
@@ -256,6 +259,15 @@ def list_activities(
     ids: list[str] | None = Query(
         None, max_length=50, description="Only these activities (repeat the parameter)."
     ),
+    is_race: bool | None = Query(
+        None, description="true: only races; false: no races; omitted: both."
+    ),
+    is_virtual: bool | None = Query(
+        None, description="true: only virtual activities; false: none; omitted: both."
+    ),
+    is_commute: bool | None = Query(
+        None, description="true: only commutes; false: none; omitted: both."
+    ),
 ) -> Page[ActivitySummary]:
     # One filter list for both the page query and the count query below, so they can't disagree.
     filters = [activity.c.athlete_id == athlete_id, activity.c.deleted_at.is_(None)]
@@ -275,6 +287,16 @@ def list_activities(
         filters.append(activity.c.distance_m <= max_distance_m)
     if ids:
         filters.append(activity.c.id.in_(ids))
+    for column, wanted in (
+        (activity.c.is_race, is_race),
+        (activity.c.is_virtual, is_virtual),
+        (activity.c.is_commute, is_commute),
+    ):
+        if wanted is True:
+            filters.append(column.is_(True))
+        elif wanted is False:
+            # is_race is nullable (no flag recorded): unflagged counts as "not a race".
+            filters.append(or_(column.is_(None), column.is_(False)))
 
     stream_exists = (
         select(activity_stream.c.activity_id)
@@ -401,6 +423,7 @@ def list_activities(
         activity.c.name,
         activity.c.is_race,
         activity.c.is_commute,
+        activity.c.is_virtual,
         activity.c.duration_s,
         activity.c.moving_duration_s,
         activity.c.distance_m,
@@ -444,6 +467,7 @@ def list_activities(
             name=r.name,
             is_race=r.is_race,
             is_commute=bool(r.is_commute),
+            is_virtual=bool(r.is_virtual),
             duration_s=r.duration_s,
             moving_duration_s=r.moving_duration_s,
             distance_m=r.distance_m,
@@ -528,6 +552,7 @@ def list_activity_map_points(
             activity.c.distance_m,
             route_geom.c.start_lat,
             route_geom.c.start_lng,
+            activity.c.is_virtual,
         )
         .select_from(activity.join(route_geom, route_geom.c.activity_id == activity.c.id))
         .where(
@@ -554,6 +579,7 @@ def list_activity_map_points(
             distance_m=r.distance_m,
             start_lat=r.start_lat,
             start_lng=r.start_lng,
+            is_virtual=bool(r.is_virtual),
         )
         for r in rows
     ]
@@ -950,6 +976,7 @@ def get_activity(
         name=row.name,
         is_race=row.is_race,
         is_commute=bool(row.is_commute),
+        is_virtual=bool(row.is_virtual),
         duration_s=row.duration_s,
         distance_m=row.distance_m,
         elevation_gain_m=row.elevation_gain_m,
@@ -2095,6 +2122,27 @@ def override_activity_commute(
         raise HTTPException(status_code=404, detail=str(e)) from e
     conn.commit()
     return ActivityCommuteOverrideOut(is_commute=body.is_commute)
+
+
+@router.patch("/activities/{activity_id}/virtual")
+def override_activity_virtual(
+    activity_id: str,
+    body: ActivityVirtualOverrideIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityVirtualOverrideOut:
+    """Tag (or untag) an activity as virtual (a Zwift-style ride, a virtual run), so the map
+    explorer can hide virtual activities (the "Hide virtual activities" toggle). A durable,
+    rebuild-safe correction keyed by start time, like the race and commute flags -- see
+    sport_override.py's docstring."""
+    try:
+        set_virtual_override(
+            conn, athlete_id=athlete_id, activity_id=activity_id, is_virtual=body.is_virtual
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    conn.commit()
+    return ActivityVirtualOverrideOut(is_virtual=body.is_virtual)
 
 
 @router.patch("/activities/{activity_id}/name")

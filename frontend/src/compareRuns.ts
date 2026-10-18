@@ -22,6 +22,36 @@ import {
   streamSpeedValue,
 } from "./runningStats";
 
+/** The comparison covers one sport at a time: runs with runs, rides with rides. */
+export type CompareSport = "running" | "cycling";
+
+export interface CompareSportCopy {
+  /** The `sport` filter the activity list API takes. */
+  apiSport: string;
+  /** "run" / "ride" */
+  one: string;
+  /** "runs" / "rides" */
+  many: string;
+  label: string;
+}
+
+export const COMPARE_SPORTS: Record<CompareSport, CompareSportCopy> = {
+  running: { apiSport: "running", one: "run", many: "runs", label: "Running" },
+  cycling: { apiSport: "cycling", one: "ride", many: "rides", label: "Cycling" },
+};
+
+export function parseCompareSport(raw: string | null): CompareSport {
+  return raw === "cycling" ? "cycling" : "running";
+}
+
+/** The comparison page's address: the sport (omitted for running) and the chosen ids. */
+export function compareHref(sport: CompareSport, ids: string = ""): string {
+  const parts: string[] = [];
+  if (sport !== "running") parts.push(`sport=${sport}`);
+  if (ids) parts.push(`ids=${ids}`);
+  return parts.length > 0 ? `/activities/compare?${parts.join("&")}` : "/activities/compare";
+}
+
 export const MAX_COMPARED = 8;
 export const COMPARE_BUCKETS = 300;
 
@@ -72,7 +102,8 @@ export function removeFromSlots(slots: (string | null)[], id: string): (string |
   return trimSlots(slots.map((s) => (s === id ? null : s)));
 }
 
-export type CompareChannel = "pace" | "gap" | "heart_rate" | "cadence" | "altitude" | "power";
+export type CompareChannel =
+  "pace" | "speed" | "gap" | "heart_rate" | "cadence" | "altitude" | "power";
 export type CompareAxis = "distance" | "time";
 
 export interface RunSeries {
@@ -84,9 +115,13 @@ export interface RunSeries {
 }
 
 /** One run's chart channels from its stream, cleaned the same way as the activity page. */
-export function prepareRunSeries(stream: StreamResponse): RunSeries | null {
+export function prepareRunSeries(
+  stream: StreamResponse,
+  compareSport: CompareSport = "running",
+): RunSeries | null {
   if (stream.timestamps.length === 0) return null;
-  const sport = "running";
+  const running = compareSport === "running";
+  const sport = compareSport;
   const startMs = new Date(stream.timestamps[0]!).getTime();
   const rawElapsed = stream.timestamps.map((t) => (new Date(t).getTime() - startMs) / 1000);
   const pauses = detectPauseGaps(rawElapsed);
@@ -104,9 +139,13 @@ export function prepareRunSeries(stream: StreamResponse): RunSeries | null {
   const speed = s.speed_mps
     ? rejectSpeedOutliers(s.speed_mps.map((v, i) => (afterPause.has(i) ? null : v)))
     : empty;
-  const pace = speed.map((v) => streamSpeedValue(sport, v));
+  // A run reads in pace (min/km), a ride in speed (km/h); grade-adjusted pace is a running model.
+  const rate = speed.map((v) => streamSpeedValue(sport, v));
+  const pace = running ? rate : empty;
   const gap =
-    s.distance_m && s.altitude_m ? gapSeriesMinPerKm(s.distance_m, s.altitude_m, pace) : empty;
+    running && s.distance_m && s.altitude_m
+      ? gapSeriesMinPerKm(s.distance_m, s.altitude_m, rate)
+      : empty;
 
   const firstDistance = s.distance_m?.find((v) => v != null) ?? 0;
   return {
@@ -116,10 +155,11 @@ export function prepareRunSeries(stream: StreamResponse): RunSeries | null {
     timeS,
     channels: {
       pace,
+      speed: running ? empty : rate,
       gap,
       heart_rate: s.heart_rate ?? empty,
-      // Stored per foot; steps per minute is twice that.
-      cadence: s.cadence ? s.cadence.map((v) => (v == null ? null : v * 2)) : empty,
+      // A runner's cadence is stored per foot (steps per minute is twice that); a rider's is rpm.
+      cadence: s.cadence ? s.cadence.map((v) => (v == null ? null : running ? v * 2 : v)) : empty,
       altitude: s.altitude_m ?? empty,
       power: s.power ?? empty,
     },
@@ -193,6 +233,29 @@ export function similarDistanceBand(
   };
 }
 
+/** A ride's "similar distance" band: within 10% either way of its length, since rides span far
+ * too wide a range for a whole-kilometre band to find anything. `whole` is the ride's own length
+ * in the display unit, rounded, for the label ("about 64 km"). Null for a ride under one unit. */
+export function similarRideBand(
+  distanceM: number,
+  unit: UnitPreference,
+): { whole: number; lowM: number; highM: number } | null {
+  const whole = Math.round(metersToDisplayDistance(distanceM, unit));
+  if (whole < 1) return null;
+  return { whole, lowM: distanceM * 0.9, highM: distanceM * 1.1 };
+}
+
+/** Average moving speed, km/h; null without a distance or a time. */
+export function averageSpeedKmhOf(run: {
+  distance_m: number | null;
+  moving_duration_s: number | null;
+  duration_s: number | null;
+}): number | null {
+  const seconds = run.moving_duration_s ?? run.duration_s;
+  if (!run.distance_m || run.distance_m <= 0 || !seconds || seconds <= 0) return null;
+  return run.distance_m / 1000 / (seconds / 3600);
+}
+
 /** Average moving pace, seconds per km; null without a distance or a time. */
 export function averagePaceSPerKm(run: {
   distance_m: number | null;
@@ -218,17 +281,27 @@ export function fastestSimilarRun<
   selected: T,
   candidates: T[],
   band: { lowM: number; highM: number },
+  compareSport: CompareSport = "running",
 ): { run: T; selectedIsFastest: boolean } | null {
   const low = band.lowM;
   const high = band.highM;
-  let best: { run: T; pace: number } | null = null;
+  // Lower is better for both: a run's pace, a ride's negative speed.
+  const score = (run: T): number | null => {
+    if (compareSport === "running") return averagePaceSPerKm(run);
+    const speed = averageSpeedKmhOf(run);
+    return speed == null ? null : -speed;
+  };
+  let best: { run: T; score: number } | null = null;
   for (const run of candidates) {
     if (run.id === selected.id || run.distance_m == null) continue;
     if (run.distance_m < low || run.distance_m >= high) continue;
-    const pace = averagePaceSPerKm(run);
-    if (pace != null && (best == null || pace < best.pace)) best = { run, pace };
+    const s = score(run);
+    if (s != null && (best == null || s < best.score)) best = { run, score: s };
   }
   if (best == null) return null;
-  const selectedPace = averagePaceSPerKm(selected);
-  return { run: best.run, selectedIsFastest: selectedPace != null && selectedPace < best.pace };
+  const selectedScore = score(selected);
+  return {
+    run: best.run,
+    selectedIsFastest: selectedScore != null && selectedScore < best.score,
+  };
 }

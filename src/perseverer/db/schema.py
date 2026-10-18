@@ -529,6 +529,10 @@ activity = Table(
     # Insights tab leave commutes out. Re-applied after a rebuild from
     # activity_sport_override.is_commute. Never set by a vendor.
     Column("is_commute", Boolean, nullable=False, default=False, server_default=text("0")),
+    # The athlete's own "this is a virtual activity" tag (PATCH /activities/{id}/virtual):
+    # lets the map leave virtual rides out. Re-applied after a rebuild from
+    # activity_sport_override.is_virtual. Never set by a vendor.
+    Column("is_virtual", Boolean, nullable=False, default=False, server_default=text("0")),
     Column("description", Text, nullable=True),
     # Athlete-entered fueling intake for this activity -- there's no vendor source for this at
     # all (not FIT, not the Garmin Connect API; confirmed by introspecting both before adding
@@ -597,6 +601,7 @@ activity_sport_override = Table(
     Column("sub_sport", String, nullable=True),
     Column("is_race", Boolean, nullable=True),
     Column("is_commute", Boolean, nullable=True),
+    Column("is_virtual", Boolean, nullable=True),
     Column("name", String, nullable=True),
     Column("carbohydrates_g", Float, nullable=True),
     Column("sodium_mg", Float, nullable=True),

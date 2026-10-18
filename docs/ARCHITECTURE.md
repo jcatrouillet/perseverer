@@ -198,7 +198,7 @@ can merge two activities by hand and pick, field by field, which side wins.
 on every rebuild, so athlete corrections are keyed by something stable (start time, source
 external ids, Kaya route ids) and re-applied at the end of every rebuild:
 
-- sport/sub-sport, race flag, commute tag, name, fueling (`activity_sport_override`)
+- sport/sub-sport, race flag, commute tag, virtual tag, name, fueling (`activity_sport_override`)
 - trimmed start/end (`activity_trim_override`)
 - manual cross-source merges (`activity_merge_override`)
 - bouldering route status/grade corrections and manually added routes
@@ -286,6 +286,18 @@ own numbers:
   "Exclude commutes" toggle: activity lists are filtered client-side and the bands, zones,
   curve and FTP endpoints take `exclude_commutes`. The race predictions, race readiness and
   VO2max rollups (running physiology models) are not filtered.
+- **Comparison:** one sport at a time (`/activities/compare?sport=cycling`, running by default;
+  `compareRuns.ts`). Runs read in pace with grade-adjusted pace and per-foot cadence doubled; rides
+  read in speed and rpm, with power, and have no GAP or VDOT. The similar-distance suggestion is the
+  same whole unit for runs and within 10% for rides.
+- **List filters:** the Activities list and the run-comparison search filter on a distance range and
+  on the race, virtual and commute tags (`GET /activities` `min_distance_m`/`max_distance_m`/
+  `is_race`/`is_virtual`/`is_commute`; each tag is any, only, or none). The list keeps its filters and
+  page in the URL query.
+- **Virtual activities:** an activity can be tagged as virtual (the same kind of durable override).
+  The map explorer shows a "Hide virtual activities" toggle (when any point is tagged; the choice is
+  remembered per browser), applied client-side to the `is_virtual` flag that
+  `GET /activities/map` returns.
 - **Period summaries:** the week view adds a Cycling card (`WeekCyclingStats.tsx`) and the month,
   year and all-time views a Cycling section (`CyclingStats.tsx`), beside Running, rendered only
   when the period has rides. The week's "weekly best FTP" is 95% of that week's best 20-minute
@@ -381,7 +393,7 @@ React 19 + TypeScript (strict) built with Vite; `wouter` for routing, TanStack Q
 Recharts for charts, Leaflet with a MapLibre-rendered CARTO vector basemap for maps.
 
 - **Pages:** calendar (day, week, month, year, all time), activities (the list, and a comparison of
-  up to eight runs, resampled onto one distance or moving-time axis in the browser from each
+  up to eight runs or rides, resampled onto one distance or moving-time axis in the browser from each
   run's stream), activity detail, fitness, health, map explorer, insights, gear, exercise library,
   settings.
 - **Runtime configuration:** `config.js` (API base URL, map key) is written when the frontend
@@ -421,10 +433,15 @@ streams it through unbuffered.
 
 ## Notifications and sharing
 
-- **Email reports** (opt-in per athlete, SMTP configured per deployment): totals and per-sport
-  split, daily distance/steps/sleep bars, each run with highlights, the week before for
+- **Email reports** (opt-in per athlete, SMTP configured per deployment): the finished week's
+  totals, each with the previous week's value beside it in smaller type ("42.0 km vs 38.0 km last
+  week"), the Week view's load/fitness/fatigue/form/ramp, planned-workout compliance and
+  Running and Cycling sections (totals against the previous week, fastest pace or speed, all-time
+  PRs set that week, 12-week distance bars; `email_week_stats.py`), the per-sport split, daily distance/steps/sleep bars, each run with highlights, the week before for
   comparison, the coming week day by day with forecast and planned workouts, notes, and upcoming
-  races. HTML is email-client-safe (inline styles, pixel widths) with a plaintext twin.
+  races. The monthly email likewise mirrors the Month view (`email_month_stats.py`): stats against
+  the previous month and the same month last year, activities by type, fitness and form, Running and
+  Cycling sections with records and weekly distance bars, and wellness averages. HTML is email-client-safe (inline styles, pixel widths) with a plaintext twin.
 - **Share links:** a token gives read-only public access to one activity or one period,
   server-rendered to mirror the app's own pages (stats, charts with hover, route map with
   playback, splits), without health data.

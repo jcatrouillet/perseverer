@@ -2,7 +2,10 @@
    both render the same card, just under a different grouping header. */
 
 .activity-filter {
-  max-width: 220px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+  gap: var(--space-3);
+  max-width: 760px;
   margin: var(--space-4) 0;
 }
 

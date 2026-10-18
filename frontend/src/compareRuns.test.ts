@@ -5,12 +5,15 @@ import {
   addToSlots,
   alignRuns,
   compareColor,
+  compareHref,
   fastestSimilarRun,
+  parseCompareSport,
   MAX_COMPARED,
   parseSlots,
   prepareRunSeries,
   removeFromSlots,
   similarDistanceBand,
+  similarRideBand,
   slotsToParam,
   type RunSeries,
 } from "./compareRuns";
@@ -66,6 +69,71 @@ describe("prepareRunSeries", () => {
     expect(series.channels.pace[5]).toBeCloseTo(1000 / 3 / 60, 5); // 5:33 /km
     expect(series.channels.pace[0]).toBeNull(); // standing start
     expect(series.distanceKm[10]).toBeCloseTo(0.03, 5);
+    expect(series.channels.speed[5]).toBeNull();
+  });
+
+  it("reads a ride as speed in km/h, with cadence left in rpm and no pace or grade-adjusted pace", () => {
+    const points = Array.from({ length: 30 }, (_, i) => ({ t: i, d: i * 8, v: 8, cad: 85 }));
+    const series = prepareRunSeries(stream(points), "cycling")!;
+    expect(series.channels.speed[5]).toBeCloseTo(28.8, 5);
+    expect(series.channels.cadence[5]).toBe(85);
+    expect(series.channels.pace.every((v) => v == null)).toBe(true);
+    expect(series.channels.gap.every((v) => v == null)).toBe(true);
+  });
+});
+
+describe("compare sport helpers", () => {
+  it("falls back to running for anything but cycling", () => {
+    expect(parseCompareSport("cycling")).toBe("cycling");
+    expect(parseCompareSport("running")).toBe("running");
+    expect(parseCompareSport("swimming")).toBe("running");
+    expect(parseCompareSport(null)).toBe("running");
+  });
+
+  it("builds the page address with the sport only when it is not running", () => {
+    expect(compareHref("running")).toBe("/activities/compare");
+    expect(compareHref("running", "a,b")).toBe("/activities/compare?ids=a,b");
+    expect(compareHref("cycling")).toBe("/activities/compare?sport=cycling");
+    expect(compareHref("cycling", "a")).toBe("/activities/compare?sport=cycling&ids=a");
+  });
+
+  it("looks for rides within 10% of the selected ride's length", () => {
+    const band = similarRideBand(64_000, "metric")!;
+    expect(band.whole).toBe(64);
+    expect(band.lowM).toBeCloseTo(57_600, 5);
+    expect(band.highM).toBeCloseTo(70_400, 5);
+    expect(similarRideBand(300, "metric")).toBeNull();
+  });
+
+  it("suggests the fastest similar ride by average speed, not by pace", () => {
+    const ride = (id: string, distance_m: number, seconds: number) => ({
+      id,
+      distance_m,
+      moving_duration_s: seconds,
+      duration_s: seconds,
+    });
+    const selected = ride("me", 60_000, 7200); // 30 km/h
+    const band = { lowM: 54_000, highM: 66_000 };
+    const result = fastestSimilarRun(
+      selected,
+      [
+        selected,
+        ride("slow", 60_000, 9000),
+        ride("quick", 60_000, 6300),
+        ride("far", 90_000, 3600),
+      ],
+      band,
+      "cycling",
+    );
+    expect(result?.run.id).toBe("quick");
+    expect(result?.selectedIsFastest).toBe(false);
+    const alone = fastestSimilarRun(
+      selected,
+      [selected, ride("slow", 60_000, 9000)],
+      band,
+      "cycling",
+    );
+    expect(alone?.selectedIsFastest).toBe(true);
   });
 });
 
@@ -76,6 +144,7 @@ function runSeries(xsKm: number[], hr: number[]): RunSeries {
     timeS: xsKm.map((x) => x * 300),
     channels: {
       pace: empty,
+      speed: empty,
       gap: empty,
       heart_rate: hr,
       cadence: empty,

@@ -1199,6 +1199,15 @@ async def set_activity_commute(activity_id: str, is_commute: bool) -> dict[str, 
 
 
 @mcp.tool()
+async def set_activity_virtual(activity_id: str, is_virtual: bool) -> dict[str, Any]:
+    """Tag or untag an activity as virtual (the map can hide virtual activities)."""
+    response = await _call_api(
+        "PATCH", f"/api/v1/activities/{activity_id}/virtual", json={"is_virtual": is_virtual}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
 async def set_activity_name(activity_id: str, name: str) -> dict[str, Any]:
     """Give an activity a custom title."""
     response = await _call_api(

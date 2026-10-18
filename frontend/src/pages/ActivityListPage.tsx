@@ -2,12 +2,15 @@
 // activities grouped by local_date, each day getting a slim wellness strip (sleep, resting HR,
 // steps -- all already available from GET /health/dashboard and GET /sleep, no new endpoint)
 // above that day's ActivityCards.
-import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
+
+import { flagParam, parseFlagChoice, type FlagChoices, type FlagKey } from "../activityFlagFilter";
 
 import { useActivities, useActivityRoutes, useHealthDashboard, useSleep } from "../api/queries";
 import { ActivitiesTabs } from "../components/ActivitiesTabs";
 import { ActivityCard } from "../components/ActivityCard";
+import { ActivityFlagFilters } from "../components/ActivityFlagFilters";
+import { useDistanceFormat } from "../formatDistance";
 import { calendarHomeHref } from "../calendarHome";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricChip } from "../components/StatTile";
@@ -35,11 +38,68 @@ function formatDayHeading(localDate: string): { date: string; weekday: string } 
   return { date, weekday };
 }
 
+interface ListView {
+  sport: string;
+  minDistance: string;
+  maxDistance: string;
+  flags: FlagChoices;
+  offset: number;
+}
+
+function positiveInt(raw: string | null): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
 export function ActivityListPage() {
   const { default_view: defaultView } = usePersonalize();
-  const [sport, setSport] = useState("");
-  const [offset, setOffset] = useState(0);
-  const activities = useActivities({ sport: sport || undefined, limit: PAGE_SIZE, offset });
+  // The filter and page live in the URL, so opening an activity and coming back (or reloading)
+  // keeps them. Changing either replaces the history entry instead of stacking one per click.
+  const search = useSearch();
+  const [location, navigate] = useLocation();
+  const params = new URLSearchParams(search);
+  const { unitLabel, displayToMeters } = useDistanceFormat();
+  const view: ListView = {
+    sport: params.get("sport") ?? "",
+    // Kept as typed (in the athlete's own distance unit); converted to metres for the request.
+    minDistance: params.get("min") ?? "",
+    maxDistance: params.get("max") ?? "",
+    flags: {
+      race: parseFlagChoice(params.get("race")),
+      virtual: parseFlagChoice(params.get("virtual")),
+      commute: parseFlagChoice(params.get("commute")),
+    },
+    offset: positiveInt(params.get("offset")),
+  };
+  const { sport, offset } = view;
+  // Any change goes back to the first page, except paging itself.
+  const setView = (change: Partial<ListView>) => {
+    const merged: ListView = { ...view, offset: 0, ...change };
+    const next = new URLSearchParams();
+    if (merged.sport) next.set("sport", merged.sport);
+    if (merged.minDistance) next.set("min", merged.minDistance);
+    if (merged.maxDistance) next.set("max", merged.maxDistance);
+    for (const key of ["race", "virtual", "commute"] as const) {
+      if (merged.flags[key]) next.set(key, merged.flags[key]);
+    }
+    if (merged.offset > 0) next.set("offset", String(merged.offset));
+    const query = next.toString();
+    navigate(query ? `${location}?${query}` : location, { replace: true });
+  };
+  const toMeters = (value: string) => {
+    const n = Number(value);
+    return value.trim() !== "" && Number.isFinite(n) && n >= 0 ? displayToMeters(n) : undefined;
+  };
+  const activities = useActivities({
+    sport: sport || undefined,
+    limit: PAGE_SIZE,
+    offset,
+    minDistanceM: toMeters(view.minDistance),
+    maxDistanceM: toMeters(view.maxDistance),
+    isRace: flagParam(view.flags.race),
+    isVirtual: flagParam(view.flags.virtual),
+    isCommute: flagParam(view.flags.commute),
+  });
 
   const groups = groupByLocalDate(activities.data?.items ?? []);
   // One batch request for the whole page's routes rather than one per card -- see
@@ -76,10 +136,7 @@ export function ActivityListPage() {
           <select
             className="input"
             value={sport}
-            onChange={(e) => {
-              setSport(e.target.value);
-              setOffset(0);
-            }}
+            onChange={(e) => setView({ sport: e.target.value })}
           >
             <option value="">All sports</option>
             {KNOWN_SPORTS.map((s) => (
@@ -89,6 +146,34 @@ export function ActivityListPage() {
             ))}
           </select>
         </label>
+        <label className="field">
+          Distance from ({unitLabel})
+          <input
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            value={view.minDistance}
+            onChange={(e) => setView({ minDistance: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          Distance to ({unitLabel})
+          <input
+            className="input"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            value={view.maxDistance}
+            onChange={(e) => setView({ maxDistance: e.target.value })}
+          />
+        </label>
+        <ActivityFlagFilters
+          values={view.flags}
+          onChange={(key: FlagKey, value) => setView({ flags: { ...view.flags, [key]: value } })}
+        />
       </form>
 
       {activities.isLoading && <LoadingSpinner />}
@@ -154,7 +239,7 @@ export function ActivityListPage() {
           <button
             type="button"
             className="button"
-            onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+            onClick={() => setView({ offset: Math.max(0, offset - PAGE_SIZE) })}
             disabled={offset === 0}
           >
             Previous
@@ -162,7 +247,7 @@ export function ActivityListPage() {
           <button
             type="button"
             className="button"
-            onClick={() => setOffset((o) => o + PAGE_SIZE)}
+            onClick={() => setView({ offset: offset + PAGE_SIZE })}
             disabled={offset + PAGE_SIZE >= activities.data.total}
           >
             Next

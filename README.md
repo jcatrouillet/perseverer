@@ -145,13 +145,21 @@ coloured by sport family, with a legend naming the sports behind each colour.
 |---|---|
 | ![Activity list](docs/screenshots/activities-list.png) | ![Map explorer](docs/screenshots/map-explorer.png) |
 
-**Compare runs** (Activities → Compare runs, or "Compare" on a run's page) puts up to eight runs
-side by side. Find runs by title, distance or date and add them; each gets its own colour. Every
+The activity list filters by sport, a distance range and the race, virtual and commute tags; the
+filters live in the page address, so Back from an activity keeps them.
+
+**Compare runs** (Activities → Compare, or "Compare" on a run's page) puts up to eight runs
+side by side. Find runs by title, distance, date or the race, virtual and commute tags and add them; each gets its own colour. Every
 run's title, date, distance, moving time, load and VDOT sit above charts of pace, grade-adjusted
 pace, heart rate, cadence, elevation and power, on a shared distance or moving-time axis so one
 tooltip reads every run at the same point. With a single run selected, it suggests your fastest
 run of the same whole distance (any 10.x km run for a 10.02 km one). The selection lives in the
 page address, so a comparison can be bookmarked.
+
+The comparison also covers **rides** (the Running / Cycling switch on the page, or "Compare" on a
+ride's page): a ride shows its average speed and power, the charts are speed, power, heart rate,
+cadence (rpm) and elevation, and the suggestion is your fastest ride within 10% of its length.
+Runs are only ever compared with runs, and rides with rides.
 
 ![Comparing four runs](docs/screenshots/compare-runs.png)
 
@@ -186,7 +194,7 @@ power trends (each ride's best 20 minutes against your FTP, with speed as a fall
 without power), PR progress by average power, time in each power band, heart-rate zones with the speed you
 hold in each, speed and power curves, and a rides Eddington number. Settings -> Personalize picks
 which sport the page opens on, and can add an "Exclude commutes" toggle: tag an activity as a
-commute on its page and the toggle leaves it out of the Insights. For rides with power, an FTP & VO2max tab tracks FTP, FTP/kg,
+commute on its page and the toggle leaves it out of the Insights. The map explorer has its own "Hide virtual activities" toggle for activities you tag as virtual. For rides with power, an FTP & VO2max tab tracks FTP, FTP/kg,
 Critical Power with W′ and a VO2max estimate, all computed from your own power data. Each ride's page shows
 its max speed next to the average, and its best average power over 5 s, 30 s, 1, 5, 20, 30 and
 60 minutes. VO2max, race predictions and race readiness are running models, so

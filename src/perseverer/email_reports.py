@@ -40,7 +40,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from sqlalchemy import Connection, and_, func, select
@@ -60,6 +60,23 @@ from perseverer.db.schema import (
     sleep_session,
 )
 from perseverer.email_delivery import send_email
+from perseverer.email_month_stats import (
+    FitnessMonth,
+    MonthStats,
+    RecordLine,
+    SportMonth,
+    WeekBar,
+    WellnessMonth,
+    build_month_stats,
+)
+from perseverer.email_week_stats import (
+    ComplianceLine,
+    FitnessWeek,
+    SportWeek,
+    WeekPoint,
+    WeekStats,
+    build_week_stats,
+)
 from perseverer.planned_races import predicted_duration_s_for_distance
 from perseverer.planned_workout_stats import estimate_workout
 from perseverer.weather_code import weather_code_info
@@ -212,6 +229,10 @@ class WeeklyReport:
     future_races: list[PlannedRaceLine]  # every race after today, however far out
     # Every individual run in the Mon..Sun before prev_start, so the two weeks sit side by side.
     week_before_runs: list[RunLine] = field(default_factory=list)
+    # The Mon..Sun before prev_start's totals, shown beside each figure; None when not built.
+    week_before_totals: PeriodTotals | None = None
+    # The Week view's own extras (load/fitness, compliance, Running and Cycling sections).
+    week_stats: WeekStats | None = None
 
 
 @dataclass(frozen=True)
@@ -222,6 +243,11 @@ class MonthlyReport:
     month_end: date
     totals: PeriodTotals
     sports: list[SportTotals]
+    # The previous month and the same month a year earlier, shown beside the distance; and the
+    # Month view's own extras (stats, fitness, Running/Cycling sections, wellness).
+    prior_month_totals: PeriodTotals | None = None
+    prior_year_totals: PeriodTotals | None = None
+    month_stats: MonthStats | None = None
 
 
 @dataclass(frozen=True)
@@ -717,6 +743,12 @@ def build_weekly_report(
         week_before_runs=_week_runs(
             conn, athlete_id, week_before_start.isoformat(), week_before_end.isoformat()
         ),
+        week_before_totals=_totals_from_rollup(
+            conn, athlete_id, "week", week_before_start.isoformat()
+        ),
+        week_stats=build_week_stats(
+            conn, athlete_id=athlete_id, week_start=prev_start, today=today
+        ),
     )
 
 
@@ -732,6 +764,13 @@ def build_monthly_report(conn: Connection, *, athlete_id: str, today: date) -> M
         month_end=month_end,
         totals=_totals_from_rollup(conn, athlete_id, "month", month_start.isoformat()),
         sports=_sport_breakdown(conn, athlete_id, month_start.isoformat(), month_end.isoformat()),
+        prior_month_totals=_totals_from_rollup(
+            conn, athlete_id, "month", (month_start - timedelta(days=1)).replace(day=1).isoformat()
+        ),
+        prior_year_totals=_totals_from_rollup(
+            conn, athlete_id, "month", month_start.replace(year=month_start.year - 1).isoformat()
+        ),
+        month_stats=build_month_stats(conn, athlete_id=athlete_id, month_start=month_start),
     )
 
 
@@ -812,39 +851,89 @@ _TEXT = "#1a1d24"
 _MUTED = "#5a6273"
 _ACCENT = "#1a73e8"
 
+_FAINT = "#b8c0cc"
+_TROPHY = "\U0001f3c6"
 _FOOTER = "Data as of the last sync — activities from the send day may not be counted yet."
 
 
-def _stat_cells(totals: PeriodTotals) -> str:
-    stats = [
-        ("Distance", _km(totals.distance_m)),
-        ("Moving time", _hm(totals.moving_duration_s)),
-        ("Activities", _count(totals.activity_count)),
-        ("Active days", _count(totals.active_days)),
-        ("Elevation gain", _meters(totals.elevation_gain_m)),
-        ("Sleep", _hm(totals.sleep_total_s)),
+Stat = tuple[str, str, str | None]  # (label, value, small caption beside the value)
+
+
+def _stat_pairs(totals: PeriodTotals, previous: PeriodTotals | None) -> list[Stat]:
+    """The headline figures of the finished week, each with the previous week's value as its
+    caption ("vs 38.0 km last week") when there is one to compare with."""
+    p = previous
+
+    def pair(
+        label: str, fmt: Callable[[Any], str], value: Any, before: Any, suffix: str = ""
+    ) -> Stat:
+        caption = None if p is None else f"vs {fmt(before)} last week"
+        return (label, fmt(value) + suffix, caption)
+
+    return [
+        pair("Distance", _km, totals.distance_m, p and p.distance_m),
+        pair("Total time", _hm, totals.moving_duration_s, p and p.moving_duration_s),
+        pair("Active days", _count, totals.active_days, p and p.active_days, " of 7"),
+        pair("Activities", _count, totals.activity_count, p and p.activity_count),
+        pair("Elevation gain", _meters, totals.elevation_gain_m, p and p.elevation_gain_m),
+        pair("Sleep", _hm, totals.sleep_total_s, p and p.sleep_total_s),
     ]
+
+
+def _fitness_stats(fitness: FitnessWeek | None) -> list[Stat]:
+    """Week view's Load / Fitness (CTL) / Fatigue (ATL) / Form (TSB) / Ramp tiles."""
+    if fitness is None:
+        return []
+    stats: list[Stat] = []
+    if fitness.load > 0:
+        stats.append(("Load", str(round(fitness.load)), None))
+    if fitness.ctl is not None and fitness.atl is not None and fitness.tsb is not None:
+        stats += [
+            ("Fitness (CTL)", f"{fitness.ctl:.1f}", None),
+            ("Fatigue (ATL)", f"{fitness.atl:.1f}", None),
+            ("Form (TSB)", f"{fitness.tsb:.1f}", None),
+        ]
+    if fitness.ramp is not None:
+        stats.append(("Ramp", f"{fitness.ramp:+.1f}", "CTL change vs last week"))
+    return stats
+
+
+def _cells(stats: list[Stat]) -> str:
     cells = ""
-    for i, (label, value) in enumerate(stats):
+    for i, (label, value, caption) in enumerate(stats):
         if i % 2 == 0:
             cells += "<tr>"
         cells += (
             f'<td style="padding:10px 14px;border:1px solid {_BORDER};width:50%">'
             f'<div style="font-size:12px;color:{_MUTED};text-transform:uppercase;'
             f'letter-spacing:.04em">{html.escape(label)}</div>'
-            f'<div style="font-size:20px;color:{_TEXT};font-weight:600">{html.escape(value)}</div>'
-            f"</td>"
+            f'<div style="font-size:20px;color:{_TEXT};font-weight:600">{html.escape(value)}'
+            + (
+                f' <span style="font-size:12px;color:{_MUTED};font-weight:400">'
+                f"{html.escape(caption)}</span>"
+                if caption is not None
+                else ""
+            )
+            + "</div></td>"
         )
         if i % 2 == 1:
             cells += "</tr>"
+    if len(stats) % 2 == 1:
+        cells += f'<td style="border:1px solid {_BORDER}"></td></tr>'
     return cells
+
+
+def _stat_cells(
+    totals: PeriodTotals, previous: PeriodTotals | None = None, extra: list[Stat] | None = None
+) -> str:
+    return _cells(_stat_pairs(totals, previous) + (extra or []))
 
 
 _BAR_TRACK_PX = 380  # fits the 600px card (minus its 24px*2 padding, the day-label and value
 # columns, and their own padding) with room to spare.
 
 
-def _bar(pct: int) -> str:
+def _bar(pct: int, color: str = _ACCENT) -> str:
     """A single horizontal bar as a nested table with literal PIXEL-width `<td>`s -- the
     bulletproof HTML-email "progress bar" technique. Two things were tried first and confirmed
     live (via an actual rendered preview, not just reading the markup) to collapse to 0 width:
@@ -863,7 +952,7 @@ def _bar(pct: int) -> str:
     if fill_px > 0:
         radius = "3px" if track_px == 0 else "3px 0 0 3px"
         segments.append(
-            f'<td width="{fill_px}" style="background:{_ACCENT};border-radius:{radius};'
+            f'<td width="{fill_px}" style="background:{color};border-radius:{radius};'
             f'height:12px;font-size:0;line-height:0">&nbsp;</td>'
         )
     if track_px > 0:
@@ -1192,6 +1281,76 @@ def _section(title: str, table_inner: str, *, caption: str | None = None) -> str
     )
 
 
+def _week_bar_rows(points: list[WeekPoint], *, highlight_last: bool = True) -> str:
+    """Weekly distance, oldest to newest; the finished week (last) in the accent colour and the
+    earlier ones muted, like the Week view's own bar chart."""
+    max_km = max((p.value for p in points), default=0.0) or 1.0
+    rows = ""
+    for i, p in enumerate(points):
+        d = date.fromisoformat(p.week_start)
+        is_current = not highlight_last or i == len(points) - 1
+        rows += (
+            "<tr>"
+            f'<td style="padding:4px 8px 4px 0;font-size:12px;color:{_MUTED};width:44px">'
+            f"{_MONTH_NAMES[d.month - 1][:3]} {d.day}</td>"
+            f'<td width="{_BAR_TRACK_PX}" style="padding:4px 0">'
+            f"{_bar(round(p.value / max_km * 100), _ACCENT if is_current else _FAINT)}</td>"
+            f'<td style="padding:4px 0 4px 10px;font-size:12px;color:{_TEXT};text-align:right;'
+            f'white-space:nowrap;font-weight:{"700" if is_current else "400"}">'
+            f"{html.escape(f'{p.value:.1f} km' if p.value else chr(8212))}</td>"
+            "</tr>"
+        )
+    return rows
+
+
+def _sport_stats(w: SportWeek) -> list[Stat]:
+    running = w.sport == "running"
+    stats: list[Stat] = [
+        ("Total distance", _km(w.distance_m), f"vs {_km(w.prior_distance_m)} last week"),
+        ("Total duration", _hm(w.duration_s), f"vs {_hm(w.prior_duration_s)} last week"),
+    ]
+    if running and w.mets:
+        stats.append(("Total METs", str(round(w.mets)), None))
+    if running and w.fastest_pace_s_per_km is not None:
+        stats.append(("Fastest pace", _pace(w.fastest_pace_s_per_km), None))
+    if not running and w.fastest_speed_kmh is not None:
+        stats.append(("Fastest speed", f"{w.fastest_speed_kmh:.1f} km/h", None))
+    stats.append(
+        (
+            "Day equivalent",
+            f"{w.day_equivalent_pct:.0f}%",
+            f"of a full day spent {'running' if running else 'riding'}",
+        )
+    )
+    if w.calories:
+        stats.append(("Calories burned", f"{round(w.calories):,} kcal", None))
+    if w.elevation_m:
+        stats.append(("Total elevation", _meters(w.elevation_m), None))
+    return stats
+
+
+def _sport_section(w: SportWeek) -> str:
+    title = "Running" if w.sport == "running" else "Cycling"
+    pr_noun = "PR" if w.sport == "running" else "record"
+    pr_line = (
+        f"{_TROPHY} {len(w.new_prs)} all-time {pr_noun}{'' if len(w.new_prs) == 1 else 's'} "
+        f"set this week: {', '.join(w.new_prs)}"
+        if w.new_prs
+        else None
+    )
+    out = _section(title, _cells(_sport_stats(w)), caption=pr_line)
+    out += _section("Weekly distance", _week_bar_rows(w.weekly_km))
+    return out
+
+
+def _compliance_section(lines: list[ComplianceLine]) -> str:
+    stats: list[Stat] = [
+        (f"{_sport_label(c.sport)} compliance", f"{c.pct}%", f"{c.completed} of {c.scheduled} done")
+        for c in lines
+    ]
+    return _section("Compliance", _cells(stats))
+
+
 def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
     """Weekly report as an email-client-safe HTML body plus a plaintext alternative."""
     t = report.totals
@@ -1258,11 +1417,29 @@ def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
         if report.coming_week_notes
         else ""
     )
-    inner = (
-        _section("Last week", _stat_cells(t))
+    ws = report.week_stats
+    compliance_section = _compliance_section(ws.compliance) if ws and ws.compliance else ""
+    # Everything about running sits together: the stats, the weekly trend, the day-by-day bars,
+    # then the runs themselves.
+    running_group = (
+        (_sport_section(ws.running) if ws and ws.running else "")
         + running_section
         + runs_section
         + week_before_runs_section
+    )
+    cycling_section = _sport_section(ws.cycling) if ws and ws.cycling else ""
+    inner = (
+        _section(
+            f"The week ({_date_range_label(report.prev_start, report.prev_end)})",
+            _stat_cells(
+                t,
+                report.week_before_totals,
+                _fitness_stats(report.week_stats.fitness if report.week_stats else None),
+            ),
+        )
+        + compliance_section
+        + running_group
+        + cycling_section
         + _section("By sport", _sport_rows(report.sports))
         + steps_section
         + sleep_section
@@ -1287,16 +1464,224 @@ def render_weekly_email(report: WeeklyReport) -> RenderedEmail:
     return RenderedEmail(subject=subject, html=html_body, text=_weekly_text(report))
 
 
+def _days(n: int) -> str:
+    return f"{n} day" if n == 1 else f"{n} days"
+
+
+def _month_labels(report: MonthlyReport) -> tuple[str, str]:
+    prev = (report.month_start - timedelta(days=1)).replace(day=1)
+    return _MONTH_NAMES[prev.month - 1][
+        :3
+    ], f"{_MONTH_NAMES[report.month_start.month - 1][:3]} {report.month_start.year - 1}"
+
+
+def _vs(
+    fmt: Callable[[Any], str], prior: PeriodTotals | None, year: PeriodTotals | None,
+    attr: str, labels: tuple[str, str], *, with_year: bool = False,
+) -> str | None:  # fmt: skip
+    """ "vs 190 km Aug" (and, for distance, "· 160 km Sep 2025")."""
+    if prior is None:
+        return None
+    parts = [f"vs {fmt(getattr(prior, attr))} {labels[0]}"]
+    if with_year and year is not None and getattr(year, attr):
+        parts.append(f"{fmt(getattr(year, attr))} {labels[1]}")
+    return " · ".join(parts)
+
+
+def _month_stats_list(report: MonthlyReport) -> list[Stat]:
+    t, labels = report.totals, _month_labels(report)
+    p, y = report.prior_month_totals, report.prior_year_totals
+    days_in_month = (report.month_end - report.month_start).days + 1
+    stats: list[Stat] = [
+        ("Distance", _km(t.distance_m), _vs(_km, p, y, "distance_m", labels, with_year=True)),
+    ]
+    o = report.month_stats.overall if report.month_stats else None
+    if o is not None:
+        stats.append(("Longest streak", _days(o.longest_streak_days), None))
+    stats += [
+        (
+            "Total elevation",
+            _meters(t.elevation_gain_m),
+            _vs(_meters, p, y, "elevation_gain_m", labels),
+        ),
+        ("Activities", _count(t.activity_count), _vs(_count, p, y, "activity_count", labels)),
+        ("Moving time", _hm(t.moving_duration_s), _vs(_hm, p, y, "moving_duration_s", labels)),
+        (
+            "Active days",
+            f"{_count(t.active_days)} of {days_in_month}",
+            _vs(_count, p, y, "active_days", labels),
+        ),
+    ]
+    if o is not None:
+        if o.longest_activity is not None:
+            stats.append(
+                ("Longest activity", _km(o.longest_activity.value), f"on {o.longest_activity.date}")
+            )
+        if o.busiest_week_start is not None:
+            d = date.fromisoformat(o.busiest_week_start)
+            stats.append(("Busiest week", f"{_MONTH_NAMES[d.month - 1][:3]} {d.day}", None))
+        if o.favorite_day:
+            stats.append(("Favorite day", o.favorite_day, None))
+        if o.avg_distance_m is not None:
+            stats.append(("Average distance", _km(o.avg_distance_m), "per activity"))
+        if o.avg_duration_s is not None:
+            stats.append(("Average time", _hm(o.avg_duration_s), "per activity"))
+        if o.avg_speed_kmh is not None:
+            stats.append(("Average speed", f"{o.avg_speed_kmh:.1f} km/h", None))
+        if o.avg_hr_bpm is not None:
+            stats.append(("Average heart rate", f"{round(o.avg_hr_bpm)} bpm", None))
+        if o.max_hr_bpm is not None:
+            stats.append(("Max heart rate", f"{round(o.max_hr_bpm)} bpm", None))
+    return stats
+
+
+def _fitness_month_stats(fitness: FitnessMonth | None) -> list[Stat]:
+    if fitness is None:
+        return []
+    stats: list[Stat] = []
+    if fitness.load > 0:
+        stats.append(("Load", str(round(fitness.load)), None))
+    stats += [
+        ("Fitness (CTL)", f"{fitness.ctl:.1f}", None),
+        ("Fatigue (ATL)", f"{fitness.atl:.1f}", None),
+        ("Form (TSB)", f"{fitness.tsb:.1f}", None),
+    ]
+    if fitness.ctl_change is not None:
+        stats.append(("Ramp", f"{fitness.ctl_change:+.1f}", "CTL change vs last month"))
+    return stats
+
+
+def _wellness_stats(w: WellnessMonth | None) -> list[Stat]:
+    if w is None:
+        return []
+    stats: list[Stat] = []
+    if w.avg_sleep_s:
+        stats.append(("Sleep", _hm(w.avg_sleep_s), "average per night"))
+    if w.avg_steps:
+        stats.append(("Steps", _steps_fmt(w.avg_steps), "average per day"))
+    if w.avg_resting_hr:
+        stats.append(("Resting heart rate", f"{round(w.avg_resting_hr)} bpm", "average"))
+    if w.avg_hrv:
+        stats.append(("HRV", f"{round(w.avg_hrv)} ms", "nightly average"))
+    if w.weight_last is not None:
+        caption = None
+        if w.weight_first is not None and w.weight_first.date != w.weight_last.date:
+            caption = f"{w.weight_last.value - w.weight_first.value:+.1f} kg over the month"
+        stats.append(("Weight", f"{w.weight_last.value:.1f} kg", caption))
+    return stats
+
+
+def _sport_month_stats(m: SportMonth, labels: tuple[str, str]) -> list[Stat]:
+    running = m.sport == "running"
+    verb, noun = ("run", "runs") if running else ("ridden", "rides")
+    vs = f"vs {_km(m.prior_month_distance_m)} {labels[0]}"
+    if m.prior_year_distance_m:
+        vs += f" · {_km(m.prior_year_distance_m)} {labels[1]}"
+    stats: list[Stat] = [
+        ("Kilometers run" if running else "Kilometers ridden", _km(m.distance_m), vs),
+        ("Number of runs" if running else "Number of rides", str(m.count), None),
+        (
+            "Average pace" if running else "Average speed",
+            _pace(m.avg_pace_s_per_km)
+            if running
+            else (f"{m.avg_speed_kmh:.1f} km/h" if m.avg_speed_kmh else "—"),
+            None,
+        ),
+    ]
+    if m.longest is not None:
+        stats.append(
+            (
+                "Longest run" if running else "Longest ride",
+                _km(m.longest.value),
+                f"on {m.longest.date}",
+            )
+        )
+    if running and m.best_vdot is not None:
+        stats.append(("Best VDOT", f"{m.best_vdot.value:.1f}", m.best_vdot.date))
+    if m.max_hr is not None:
+        stats.append(("Max heart rate", f"{round(m.max_hr.value)} bpm", m.max_hr.date))
+    stats += [
+        ("Average run length" if running else "Average ride length", _km(m.avg_length_m), None),
+        (f"Average days {verb}/week", f"{m.days_per_week:.1f}", None),
+        (f"Most often {verb} on", m.most_often, None),
+        (f"Least often {verb} on", m.least_often, None),
+        ("Longest streak", _days(m.longest_streak_days), None),
+        ("Longest break", _days(m.longest_break_days), None),
+    ]
+    del noun
+    return stats
+
+
+def _records_rows(records: list[RecordLine], running: bool) -> str:
+    head = "".join(
+        f'<td style="padding:6px 8px;font-size:11px;color:{_MUTED};text-transform:uppercase;'
+        f'letter-spacing:.04em;border-bottom:1px solid {_BORDER}">{h}</td>'
+        for h in ("Distance", "Date", "Pace" if running else "Speed", "Time")
+    )
+    rows = f"<tr>{head}</tr>"
+    for rec in records:
+        km = rec.distance_m / 1000
+        rate = _pace(rec.duration_s / km) if running else f"{km / (rec.duration_s / 3600):.1f} km/h"
+        trophy = f" {_TROPHY}" if rec.is_new_pr else ""
+        cells = (rec.label + trophy, rec.date, rate, _hm(rec.duration_s))
+        rows += (
+            "<tr>"
+            + "".join(
+                f'<td style="padding:6px 8px;font-size:13px;color:{_TEXT};'
+                f'border-bottom:1px solid {_BORDER}">{html.escape(c)}</td>'
+                for c in cells
+            )
+            + "</tr>"
+        )
+    return rows
+
+
+def _sport_month_section(m: SportMonth, labels: tuple[str, str]) -> str:
+    running = m.sport == "running"
+    title = "Running" if running else "Cycling"
+    new = [r.label for r in m.records if r.is_new_pr]
+    noun = "PR" if running else "record"
+    pr_line = (
+        f"{_TROPHY} {len(new)} all-time {noun}{'' if len(new) == 1 else 's'} set this month: "
+        f"{', '.join(new)}"
+        if new
+        else None
+    )
+    out = _section(title, _cells(_sport_month_stats(m, labels)), caption=pr_line)
+    out += _section(
+        "Weekly distance", _week_bar_rows(_month_week_points(m.weekly), highlight_last=False)
+    )
+    if m.records:
+        out += _section(
+            "Personal records" if running else "Records", _records_rows(m.records, running)
+        )
+    return out
+
+
+def _month_week_points(weekly: list[WeekBar]) -> list[WeekPoint]:
+    return [WeekPoint(w.week_start, w.km) for w in weekly]
+
+
 def render_monthly_email(report: MonthlyReport) -> RenderedEmail:
-    """Monthly report (totals and per-sport split) as HTML plus plaintext."""
+    """Monthly report -- mirrors the app's Month view: stats against the previous month and the
+    same month last year, activities by type, fitness and form, Running and Cycling sections
+    (records, weekly distance) and wellness -- as HTML plus plaintext."""
     t = report.totals
     subject = (
         f"Perseverer — {report.month_label}: {_km(t.distance_m)} across "
         f"{t.activity_count} activit{'y' if t.activity_count == 1 else 'ies'}"
     )
-    inner = _section(report.month_label, _stat_cells(t)) + _section(
-        "By sport", _sport_rows(report.sports)
-    )
+    ms, labels = report.month_stats, _month_labels(report)
+    inner = _section(f"{report.month_label} stats", _cells(_month_stats_list(report)))
+    inner += _section("Activities by type", _sport_rows(report.sports))
+    if ms is not None:
+        for section in (ms.running, ms.cycling):
+            if section is not None:
+                inner += _sport_month_section(section, labels)
+        if ms.fitness is not None:
+            inner += _section("Fitness & Form", _cells(_fitness_month_stats(ms.fitness)))
+        if wellness := _wellness_stats(ms.wellness):
+            inner += _section("Wellness", _cells(wellness))
     html_body = _shell(
         f"Your training month — {report.month_label}",
         f"for {report.athlete_name}",
@@ -1305,15 +1690,64 @@ def render_monthly_email(report: MonthlyReport) -> RenderedEmail:
     return RenderedEmail(subject=subject, html=html_body, text=_monthly_text(report))
 
 
-def _totals_text(t: PeriodTotals) -> str:
-    return (
-        f"  Distance:       {_km(t.distance_m)}\n"
-        f"  Moving time:    {_hm(t.moving_duration_s)}\n"
-        f"  Activities:     {_count(t.activity_count)}\n"
-        f"  Active days:    {_count(t.active_days)}\n"
-        f"  Elevation gain: {_meters(t.elevation_gain_m)}\n"
-        f"  Sleep:          {_hm(t.sleep_total_s)}\n"
+def _stats_text(stats: list[Stat]) -> str:
+    return "".join(
+        f"  {label + ':':<27}{value}" + (f" ({caption})" if caption is not None else "") + "\n"
+        for label, value, caption in stats
     )
+
+
+def _totals_text(
+    t: PeriodTotals, previous: PeriodTotals | None = None, extra: list[Stat] | None = None
+) -> str:
+    return _stats_text(_stat_pairs(t, previous) + (extra or []))
+
+
+def _week_stats_text(ws: WeekStats | None, running_extra: list[str]) -> list[str]:
+    """Compliance plus the Running/Cycling sections, in the same order as the HTML. The
+    running-only sections (daily bars, the week's runs) are `running_extra`, grouped under the
+    Running stats."""
+    if ws is None:
+        return list(running_extra)
+    lines: list[str] = []
+    if ws.compliance:
+        lines.append("Compliance")
+        lines.append(
+            _stats_text(
+                [
+                    (
+                        f"{_sport_label(c.sport)}",
+                        f"{c.pct}%",
+                        f"{c.completed} of {c.scheduled} done",
+                    )
+                    for c in ws.compliance
+                ]
+            )
+        )
+    if ws.running is None:
+        lines += running_extra
+    for w in (ws.running, ws.cycling):
+        if w is None:
+            continue
+        lines.append("Running" if w.sport == "running" else "Cycling")
+        if w.new_prs:
+            noun = "PR" if w.sport == "running" else "record"
+            lines.append(
+                f"  {len(w.new_prs)} all-time {noun}{'' if len(w.new_prs) == 1 else 's'} set this "
+                f"week: {', '.join(w.new_prs)}"
+            )
+        lines.append(_stats_text(_sport_stats(w)))
+        lines.append("Weekly distance")
+        lines.append(
+            "".join(
+                f"  {_MONTH_NAMES[date.fromisoformat(p.week_start).month - 1][:3]} "
+                f"{date.fromisoformat(p.week_start).day:<3} {p.value:>7.1f} km\n"
+                for p in w.weekly_km
+            )
+        )
+        if w.sport == "running":
+            lines += running_extra
+    return lines
 
 
 def _sports_text(sports: list[SportTotals]) -> str:
@@ -1340,9 +1774,14 @@ def _weekly_text(report: WeeklyReport) -> str:
         "PERSEVERER - your training week",
         f"{_date_range_label(report.prev_start, report.prev_end)} - for {report.athlete_name}",
         "",
-        "Last week",
-        _totals_text(report.totals),
+        f"The week ({_date_range_label(report.prev_start, report.prev_end)})",
+        _totals_text(
+            report.totals,
+            report.week_before_totals,
+            _fitness_stats(report.week_stats.fitness if report.week_stats else None),
+        ),
     ]
+    running_extra: list[str] = []
     if report.avg_running_pace_s_per_km is not None:
         this_week_running_m = sum(p.value or 0.0 for p in report.running_distance_by_day)
         vs_week_before = (
@@ -1351,18 +1790,19 @@ def _weekly_text(report: WeeklyReport) -> str:
             if report.running_distance_week_before_m is not None
             else ""
         )
-        lines.append(
+        running_extra.append(
             f"Running this week (avg pace {_pace(report.avg_running_pace_s_per_km)})"
             f"{vs_week_before}"
         )
-        lines.append(_daily_points_text(report.running_distance_by_day, _km))
-        lines.append("Runs this week")
-        lines.append(_run_rows_text(report.week_runs))
+        running_extra.append(_daily_points_text(report.running_distance_by_day, _km))
+        running_extra.append("Runs this week")
+        running_extra.append(_run_rows_text(report.week_runs))
     if report.week_before_runs:
-        lines.append(
+        running_extra.append(
             f"Runs the week before ({_week_range_label(report.prev_start - timedelta(days=7))})"
         )
-        lines.append(_run_rows_text(report.week_before_runs))
+        running_extra.append(_run_rows_text(report.week_before_runs))
+    lines += _week_stats_text(report.week_stats, running_extra)
     lines.append("By sport")
     lines.append(_sports_text(report.sports))
     if any(p.value for p in report.steps_by_day):
@@ -1426,19 +1866,57 @@ def _weekly_text(report: WeeklyReport) -> str:
 
 
 def _monthly_text(report: MonthlyReport) -> str:
-    return "\n".join(
-        [
-            f"PERSEVERER - your training month - {report.month_label}",
-            f"for {report.athlete_name}",
-            "",
-            report.month_label,
-            _totals_text(report.totals),
-            "By sport",
-            _sports_text(report.sports),
-            "",
-            _FOOTER,
-        ]
-    )
+    ms, labels = report.month_stats, _month_labels(report)
+    lines = [
+        f"PERSEVERER - your training month - {report.month_label}",
+        f"for {report.athlete_name}",
+        "",
+        f"{report.month_label} stats",
+        _stats_text(_month_stats_list(report)),
+        "Activities by type",
+        _sports_text(report.sports),
+    ]
+    if ms is not None:
+        for m in (ms.running, ms.cycling):
+            if m is None:
+                continue
+            running = m.sport == "running"
+            lines.append("Running" if running else "Cycling")
+            new = [r.label for r in m.records if r.is_new_pr]
+            if new:
+                lines.append(
+                    f"  {len(new)} all-time {'PR' if running else 'record'}"
+                    f"{'' if len(new) == 1 else 's'} set this month: {', '.join(new)}"
+                )
+            lines.append(_stats_text(_sport_month_stats(m, labels)))
+            lines.append("Weekly distance")
+            lines.append(
+                "".join(
+                    f"  {_MONTH_NAMES[date.fromisoformat(w.week_start).month - 1][:3]} "
+                    f"{date.fromisoformat(w.week_start).day:<3} {w.km:>7.1f} km\n"
+                    for w in m.weekly
+                )
+            )
+            if m.records:
+                lines.append("Personal records" if running else "Records")
+                for rec in m.records:
+                    km = rec.distance_m / 1000
+                    rate = (
+                        _pace(rec.duration_s / km)
+                        if running
+                        else f"{km / (rec.duration_s / 3600):.1f} km/h"
+                    )
+                    star = " (all-time)" if rec.is_new_pr else ""
+                    lines.append(
+                        f"  {rec.label:<14} {rec.date}  {rate:>10}  {_hm(rec.duration_s)}{star}"
+                    )
+                lines.append("")
+        if ms.fitness is not None:
+            lines += ["Fitness & Form", _stats_text(_fitness_month_stats(ms.fitness))]
+        if wellness := _wellness_stats(ms.wellness):
+            lines += ["Wellness", _stats_text(wellness)]
+    lines += ["", _FOOTER]
+    return "\n".join(lines)
 
 
 # --- send ---------------------------------------------------------------------------------

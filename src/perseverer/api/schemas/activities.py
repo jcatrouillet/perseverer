@@ -151,6 +151,8 @@ class ActivitySummary(BaseModel):
     is_race: bool | None
     # The athlete's own commute tag (PATCH /activities/{id}/commute).
     is_commute: bool = False
+    # The athlete's own virtual-activity tag (PATCH /activities/{id}/virtual).
+    is_virtual: bool = False
     duration_s: float | None
     moving_duration_s: float | None
     distance_m: float | None
@@ -447,6 +449,8 @@ class ActivityMapPointOut(BaseModel):
     distance_m: float | None
     start_lat: float
     start_lng: float
+    # The athlete's own virtual tag, so the map can hide virtual activities.
+    is_virtual: bool = False
 
 
 class ActivityRouteOut(BaseModel):
@@ -519,6 +523,14 @@ class ActivityCommuteOverrideIn(BaseModel):
 
 class ActivityCommuteOverrideOut(BaseModel):
     is_commute: bool
+
+
+class ActivityVirtualOverrideIn(BaseModel):
+    is_virtual: bool
+
+
+class ActivityVirtualOverrideOut(BaseModel):
+    is_virtual: bool
 
 
 class ActivityNameOverrideIn(BaseModel):

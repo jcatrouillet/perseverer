@@ -160,6 +160,35 @@ def set_commute_override(
     )
 
 
+def set_virtual_override(
+    conn: Connection, *, athlete_id: str, activity_id: str, is_virtual: bool
+) -> None:
+    """Same shape as `set_commute_override`, for the athlete's own "this is a virtual activity"
+    tag (a Zwift-style ride, a virtual run) -- upserts on the athlete/start_time_utc identity
+    without touching any other correction on that row, and applies immediately. Durable:
+    `apply_sport_overrides` re-applies it after a rebuild."""
+    start_time_utc = _start_time_for(conn, athlete_id=athlete_id, activity_id=activity_id)
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    stmt = sqlite_insert(activity_sport_override).values(
+        athlete_id=athlete_id,
+        start_time_utc=start_time_utc,
+        is_virtual=is_virtual,
+        created_at=now,
+    )
+    conn.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["athlete_id", "start_time_utc"],
+            set_={"is_virtual": is_virtual, "created_at": now},
+        )
+    )
+    conn.execute(
+        activity.update()
+        .where(activity.c.id == activity_id)
+        .values(is_virtual=is_virtual, updated_at=now)
+    )
+
+
 def set_name_override(conn: Connection, *, athlete_id: str, activity_id: str, name: str) -> None:
     """Same shape as `set_sport_override`/`set_race_override`, for the athlete's own "this
     title is wrong" correction -- upserts on the athlete/start_time_utc identity without
@@ -240,6 +269,7 @@ def apply_sport_overrides(conn: Connection, *, athlete_id: str) -> int:
             activity_sport_override.c.sub_sport,
             activity_sport_override.c.is_race,
             activity_sport_override.c.is_commute,
+            activity_sport_override.c.is_virtual,
             activity_sport_override.c.name,
             activity_sport_override.c.carbohydrates_g,
             activity_sport_override.c.sodium_mg,
@@ -259,6 +289,8 @@ def apply_sport_overrides(conn: Connection, *, athlete_id: str) -> int:
             values["is_race"] = o.is_race
         if o.is_commute is not None:
             values["is_commute"] = o.is_commute
+        if o.is_virtual is not None:
+            values["is_virtual"] = o.is_virtual
         if o.name is not None:
             values["name"] = o.name
         if o.carbohydrates_g is not None:

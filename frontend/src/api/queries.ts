@@ -19,6 +19,7 @@ import type {
   ActivityShoeOut,
   ActivitySplitOut,
   ActivityCommuteOverrideOut,
+  ActivityVirtualOverrideOut,
   ActivityRaceOverrideOut,
   ActivitySportOverrideOut,
   ActivitySummary,
@@ -112,6 +113,17 @@ interface ActivityFilters {
   sport?: string;
   limit?: number;
   offset?: number;
+  /** Distance range in metres. */
+  minDistanceM?: number;
+  maxDistanceM?: number;
+  /** true: only tagged; false: only untagged; undefined: either. */
+  isRace?: boolean;
+  isVirtual?: boolean;
+  isCommute?: boolean;
+}
+
+function boolParam(value: boolean | undefined): string | undefined {
+  return value === undefined ? undefined : String(value);
 }
 
 function buildQuery(params: Record<string, string | number | undefined>): string {
@@ -305,6 +317,11 @@ export function useActivities(filters: ActivityFilters) {
           sport: filters.sport,
           limit: filters.limit,
           offset: filters.offset,
+          min_distance_m: filters.minDistanceM,
+          max_distance_m: filters.maxDistanceM,
+          is_race: boolParam(filters.isRace),
+          is_virtual: boolParam(filters.isVirtual),
+          is_commute: boolParam(filters.isCommute),
         })}`,
       ),
   });
@@ -730,6 +747,9 @@ export interface ActivitySearch {
   maxDistanceM?: number;
   startDate?: string;
   endDate?: string;
+  isRace?: boolean;
+  isVirtual?: boolean;
+  isCommute?: boolean;
 }
 
 export function useActivitySearch(search: ActivitySearch, sport: string, limit = 20) {
@@ -740,6 +760,9 @@ export function useActivitySearch(search: ActivitySearch, sport: string, limit =
     max_distance_m: search.maxDistanceM,
     start_date: search.startDate || undefined,
     end_date: search.endDate || undefined,
+    is_race: boolParam(search.isRace),
+    is_virtual: boolParam(search.isVirtual),
+    is_commute: boolParam(search.isCommute),
     limit,
   });
   return useQuery({
@@ -833,6 +856,22 @@ export function useSetRaceOverride(activityId: string) {
       void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
       void queryClient.invalidateQueries({ queryKey: ["activities"] });
       void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+/** Tags (or untags) an activity as virtual, so the map explorer's "Hide virtual activities" toggle
+ * can leave it out (PATCH /activities/{id}/virtual). */
+export function useSetVirtualOverride(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { is_virtual: boolean }) =>
+      apiPatch<ActivityVirtualOverrideOut>(`/api/v1/activities/${activityId}/virtual`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["all-activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-map-points"] });
     },
   });
 }

@@ -37,11 +37,31 @@ const WORLD_BOUNDS: LatLngBoundsExpression = [
   [70, 170],
 ];
 
+const HIDE_VIRTUAL_KEY = "perseverer_map_hide_virtual";
+
+// A per-viewer convenience (like the theme), not an account setting: stays on across visits.
+function readHideVirtual(): boolean {
+  try {
+    return localStorage.getItem(HIDE_VIRTUAL_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function MapExplorerPage() {
   const points = useActivityMapPoints({});
   const [sport, setSport] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [hideVirtual, setHideVirtual] = useState(readHideVirtual);
+  function chooseHideVirtual(next: boolean) {
+    setHideVirtual(next);
+    try {
+      localStorage.setItem(HIDE_VIRTUAL_KEY, next ? "1" : "0");
+    } catch {
+      // Private window or blocked storage: the choice just lasts this visit.
+    }
+  }
 
   // The same real-device-clock-glitch filter every other all-history view already applies
   // (dateUtils.ts::EARLIEST_PLAUSIBLE_DATE) -- a handful of activities carry pre-GPS dates like
@@ -50,6 +70,10 @@ export function MapExplorerPage() {
     (p) => p.local_date == null || p.local_date >= EARLIEST_PLAUSIBLE_DATE,
   );
 
+  // The toggle only appears once at least one activity is tagged as virtual (activity page).
+  const hasVirtual = allPoints.some((p) => p.is_virtual);
+  const hidingVirtual = hasVirtual && hideVirtual;
+
   const sportOptions = useMemo(
     () => Array.from(new Set(allPoints.map((p) => p.sport))).sort(),
     [allPoints],
@@ -57,6 +81,7 @@ export function MapExplorerPage() {
 
   const filtered = allPoints.filter((p) => {
     if (sport && p.sport !== sport) return false;
+    if (hidingVirtual && p.is_virtual) return false;
     if (startDate && (p.local_date == null || p.local_date < startDate)) return false;
     if (endDate && (p.local_date == null || p.local_date > endDate)) return false;
     return true;
@@ -106,6 +131,16 @@ export function MapExplorerPage() {
             onChange={(e) => setEndDate(e.target.value)}
           />
         </label>
+        {hasVirtual && (
+          <label className="settings-form__checkbox">
+            <input
+              type="checkbox"
+              checked={hideVirtual}
+              onChange={(e) => chooseHideVirtual(e.target.checked)}
+            />
+            Hide virtual activities
+          </label>
+        )}
       </form>
 
       <div className="map-explorer__map">

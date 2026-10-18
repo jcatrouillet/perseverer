@@ -27,6 +27,7 @@ import {
   useSetFuelingOverride,
   useSetNameOverride,
   useSetCommuteOverride,
+  useSetVirtualOverride,
   useSetRaceOverride,
   useSetSportOverride,
   useSplitActivitySource,
@@ -65,6 +66,7 @@ import {
   gradeBreakdownFromRoutes,
   isBoulderingActivity,
 } from "../boulderingRoutes";
+import { compareHref } from "../compareRuns";
 import { useDistanceFormat } from "../formatDistance";
 import { useTimeFormat } from "../formatTime";
 import { sportStyle } from "../metricStyle";
@@ -160,6 +162,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const sportOverride = useSetSportOverride(id);
   const raceOverride = useSetRaceOverride(id);
   const commuteOverride = useSetCommuteOverride(id);
+  const virtualOverride = useSetVirtualOverride(id);
   const nameOverride = useSetNameOverride(id);
   const fuelingOverride = useSetFuelingOverride(id);
   const setClimbRouteStatus = useSetClimbRouteStatus(id);
@@ -266,6 +269,14 @@ export function ActivityDetailPage({ id }: { id: string }) {
                 <Icon name="route" /> Commute
               </span>
             )}
+            {a.is_virtual && (
+              <span
+                className="activity-detail__race-badge"
+                title="Tagged as virtual: the map explorer can hide it when the virtual filter is on"
+              >
+                <Icon name="gauge" /> Virtual
+              </span>
+            )}
           </h1>
           <div className="activity-detail__correction-row">
             <ActivitySportCorrection
@@ -297,6 +308,21 @@ export function ActivityDetailPage({ id }: { id: string }) {
             >
               {a.is_commute ? "Not a commute?" : "Mark as a commute"}
             </button>
+            {/* Same idea: the map explorer can hide virtual activities (Settings -> Personalize
+                turns that toggle on). */}
+            <button
+              type="button"
+              className="activity-detail__sport-fix-btn"
+              disabled={virtualOverride.isPending}
+              onClick={() => virtualOverride.mutate({ is_virtual: !a.is_virtual })}
+            >
+              {a.is_virtual ? "Not virtual?" : "Mark as virtual"}
+            </button>
+            {virtualOverride.isError && (
+              <span role="alert" className="activity-detail__sport-fix-error">
+                Couldn&apos;t save the virtual tag.
+              </span>
+            )}
             {commuteOverride.isError && (
               <span role="alert" className="activity-detail__sport-fix-error">
                 Couldn&apos;t save the commute tag.
@@ -316,8 +342,11 @@ export function ActivityDetailPage({ id }: { id: string }) {
           </div>
         </div>
         <div className="activity-detail__header-actions">
-          {a.sport === "running" && (
-            <Link href={`/activities/compare?ids=${id}`} className="button">
+          {(a.sport === "running" || a.sport === "cycling") && (
+            <Link
+              href={compareHref(a.sport === "cycling" ? "cycling" : "running", id)}
+              className="button"
+            >
               Compare
             </Link>
           )}

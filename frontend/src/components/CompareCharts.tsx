@@ -19,7 +19,9 @@ import {
   channelHasData,
   compareColor,
   type CompareAxis,
+  COMPARE_SPORTS,
   type CompareChannel,
+  type CompareSport,
   type RunSeries,
 } from "../compareRuns";
 import type { Tone } from "../metricStyle";
@@ -47,58 +49,73 @@ function paceText(minPerKm: number): string {
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
 
-const PANELS: PanelDef[] = [
-  {
-    channel: "pace",
-    title: "Pace",
-    icon: "gauge",
-    tone: "pace",
-    reversed: true,
-    format: (v) => `${paceText(v)} /km`,
-    tick: paceText,
-  },
-  {
-    channel: "gap",
-    title: "Grade Adjusted Pace",
-    icon: "trend",
-    tone: "load",
-    reversed: true,
-    format: (v) => `${paceText(v)} /km`,
-    tick: paceText,
-  },
-  {
-    channel: "heart_rate",
-    title: "Heart rate",
-    icon: "heart",
-    tone: "hr",
-    format: (v) => `${v.toFixed(0)} bpm`,
-    tick: (v) => v.toFixed(0),
-  },
-  {
-    channel: "cadence",
-    title: "Cadence",
-    icon: "steps",
-    tone: "cadence",
-    format: (v) => `${v.toFixed(0)} spm`,
-    tick: (v) => v.toFixed(0),
-  },
-  {
-    channel: "altitude",
-    title: "Elevation",
-    icon: "mountain",
-    tone: "elevation",
-    format: (v) => `${v.toFixed(0)} m`,
-    tick: (v) => v.toFixed(0),
-  },
-  {
-    channel: "power",
-    title: "Power",
-    icon: "bolt",
-    tone: "power",
-    format: (v) => `${v.toFixed(0)} W`,
-    tick: (v) => v.toFixed(0),
-  },
-];
+const hr: PanelDef = {
+  channel: "heart_rate",
+  title: "Heart rate",
+  icon: "heart",
+  tone: "hr",
+  format: (v) => `${v.toFixed(0)} bpm`,
+  tick: (v) => v.toFixed(0),
+};
+const elevation: PanelDef = {
+  channel: "altitude",
+  title: "Elevation",
+  icon: "mountain",
+  tone: "elevation",
+  format: (v) => `${v.toFixed(0)} m`,
+  tick: (v) => v.toFixed(0),
+};
+const power: PanelDef = {
+  channel: "power",
+  title: "Power",
+  icon: "bolt",
+  tone: "power",
+  format: (v) => `${v.toFixed(0)} W`,
+  tick: (v) => v.toFixed(0),
+};
+
+const cadenceFor = (sport: CompareSport): PanelDef => ({
+  channel: "cadence",
+  title: "Cadence",
+  icon: "steps",
+  tone: "cadence",
+  // A runner's cadence is steps per minute; a rider's is pedal revolutions.
+  format: (v) => `${v.toFixed(0)} ${sport === "running" ? "spm" : "rpm"}`,
+  tick: (v) => v.toFixed(0),
+});
+
+const PACE: PanelDef = {
+  channel: "pace",
+  title: "Pace",
+  icon: "gauge",
+  tone: "pace",
+  reversed: true,
+  format: (v) => `${paceText(v)} /km`,
+  tick: paceText,
+};
+const GAP: PanelDef = {
+  channel: "gap",
+  title: "Grade Adjusted Pace",
+  icon: "trend",
+  tone: "load",
+  reversed: true,
+  format: (v) => `${paceText(v)} /km`,
+  tick: paceText,
+};
+const SPEED: PanelDef = {
+  channel: "speed",
+  title: "Speed",
+  icon: "gauge",
+  tone: "ride",
+  format: (v) => `${v.toFixed(1)} km/h`,
+  tick: (v) => v.toFixed(0),
+};
+
+// Each sport's panels in the order it reads best: a run leads with pace, a ride with speed and power.
+const PANELS: Record<CompareSport, PanelDef[]> = {
+  running: [PACE, GAP, hr, cadenceFor("running"), elevation, power],
+  cycling: [SPEED, power, hr, cadenceFor("cycling"), elevation],
+};
 
 export interface ComparedRun {
   slot: number;
@@ -160,9 +177,17 @@ function tooltipFor(panel: PanelDef, runs: ComparedRun[], axis: CompareAxis) {
   };
 }
 
-export function CompareCharts({ runs, axis }: { runs: ComparedRun[]; axis: CompareAxis }) {
-  const panels = PANELS.filter((panel) => channelHasData(runs, panel.channel));
-  if (panels.length === 0) return <p>None of these runs has chart data.</p>;
+export function CompareCharts({
+  runs,
+  axis,
+  sport = "running",
+}: {
+  runs: ComparedRun[];
+  axis: CompareAxis;
+  sport?: CompareSport;
+}) {
+  const panels = PANELS[sport].filter((panel) => channelHasData(runs, panel.channel));
+  if (panels.length === 0) return <p>None of these {COMPARE_SPORTS[sport].many} has chart data.</p>;
 
   return (
     <div className="compare-charts">

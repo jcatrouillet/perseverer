@@ -19,6 +19,7 @@ from perseverer.db.schema import (
     athlete,
     athlete_email_report_config,
     athlete_running_load_config,
+    fitness_daily_rollup,
     health_metric_daily_rollup,
     metadata,
     metric_definition,
@@ -1101,3 +1102,158 @@ def test_send_report_email_raises_without_a_recipient(conn: Connection, engine: 
             kind="weekly",
             today=SUNDAY,
         )
+
+
+def test_weekly_email_shows_each_figure_against_the_week_before(conn: Connection) -> None:
+    _seed_week_rollup(conn)
+    conn.execute(
+        period_rollup.insert().values(
+            athlete_id=DEFAULT_ATHLETE_ID,
+            period_type="week",
+            period_start=WEEK_BEFORE_START,
+            period_end=WEEK_BEFORE_END,
+            activity_count=2,
+            activity_moving_duration_s=7200.0,
+            activity_distance_m=38000.0,
+            activity_elevation_gain_m=120.0,
+            activity_days_count=2,
+            refreshed_at=dt.datetime(2026, 9, 6, 4, 15),
+        )
+    )
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert report.week_before_totals is not None
+    assert report.week_before_totals.distance_m == 38000.0
+
+    rendered = render_weekly_email(report)
+    assert "42.0 km" in rendered.html and "vs 38.0 km last week" in rendered.html
+    assert "vs 2h 00m last week" in rendered.html
+    # No sleep figure the week before: shown as a dash, never a fabricated zero.
+    assert "vs — last week" in rendered.html
+    assert "Distance:                  42.0 km (vs 38.0 km last week)" in rendered.text
+    assert "Last week" not in rendered.html
+
+
+def test_weekly_email_after_an_empty_week_compares_against_nothing_not_a_fake_figure(
+    conn: Connection,
+) -> None:
+    _seed_week_rollup(conn)
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    rendered = render_weekly_email(report)
+    # Nothing recorded the week before: distance is a dash, the activity count is a true 0.
+    assert "vs — last week" in rendered.html
+    assert "vs 0 last week" in rendered.html
+
+
+def test_weekly_email_mirrors_the_week_view(conn: Connection) -> None:
+    _seed_week_rollup(conn)
+    for i in range(14):
+        d = dt.date(2026, 8, 31) + dt.timedelta(days=i)
+        conn.execute(
+            fitness_daily_rollup.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                local_date=d.isoformat(),
+                training_load=50.0,
+                ctl=40.0 + i,
+                atl=50.0 + i,
+                tsb=-10.0,
+                refreshed_at=dt.datetime(2026, 9, 13),
+            )
+        )
+    # An all-time 10 km best this week; a long ride; one planned run done, one yoga missed.
+    _activity(
+        conn, activity_id="ride", local_date="2026-09-12", sport="cycling",
+        distance_m=64000.0, duration_s=7800.0,
+    )  # fmt: skip
+    _plan(conn, local_date="2026-09-08", sport="running", name="Easy")
+    _plan(conn, local_date="2026-09-11", sport="yoga", name="Flow")
+    conn.commit()
+
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    ws = report.week_stats
+    assert ws is not None and ws.running is not None and ws.cycling is not None
+    assert ws.fitness is not None and ws.fitness.load == 350.0 and ws.fitness.ramp == 7.0
+    assert [(c.sport, c.pct) for c in ws.compliance] == [("running", 100), ("yoga", 0)]
+    assert ws.running.distance_m == 30000.0 and ws.cycling.distance_m == 64000.0
+    assert len(ws.running.weekly_km) == 12 and ws.running.weekly_km[-1].value == 30.0
+    assert "10 km" in ws.running.new_prs
+
+    rendered = render_weekly_email(report)
+    for needle in (
+        "Load",
+        "Fitness (CTL)",
+        "Form (TSB)",
+        "Ramp",
+        "Compliance",
+        "Running",
+        "Cycling",
+    ):
+        assert needle in rendered.html
+        assert needle in rendered.text or needle.split(" ")[0] in rendered.text
+    assert "Weekly distance" in rendered.html and "30.0 km" in rendered.html
+    assert "Running compliance" in rendered.html and "2 of 2" not in rendered.html
+
+
+def test_weekly_email_has_no_sport_sections_for_a_week_without_that_sport(
+    conn: Connection,
+) -> None:
+    _activity(conn, activity_id="y1", local_date="2026-09-09", sport="training", sub_sport="yoga")
+    conn.commit()
+    report = build_weekly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=SUNDAY)
+    assert report.week_stats is not None
+    assert report.week_stats.running is None and report.week_stats.cycling is None
+    assert "Weekly distance" not in render_weekly_email(report).html
+
+
+def test_monthly_email_mirrors_the_month_view(conn: Connection) -> None:
+    for start, end, dist in (
+        ("2026-09-01", "2026-09-30", 100000.0),
+        ("2026-08-01", "2026-08-31", 80000.0),
+        ("2025-09-01", "2025-09-30", 60000.0),
+    ):
+        conn.execute(
+            period_rollup.insert().values(
+                athlete_id=DEFAULT_ATHLETE_ID,
+                period_type="month",
+                period_start=start,
+                period_end=end,
+                activity_count=4,
+                activity_distance_m=dist,
+                activity_days_count=4,
+                refreshed_at=dt.datetime(2026, 9, 30),
+            )
+        )
+    for i, day in enumerate(("2026-09-02", "2026-09-03", "2026-09-09")):
+        _activity(
+            conn, activity_id=f"r{i}", local_date=day, sport="running",
+            distance_m=10000.0, duration_s=3000.0 + i * 100,
+        )  # fmt: skip
+    _activity(
+        conn, activity_id="old", local_date="2026-07-01", sport="running",
+        distance_m=10000.0, duration_s=3600.0,
+    )  # fmt: skip
+    _activity(
+        conn, activity_id="ride", local_date="2026-09-12", sport="cycling",
+        distance_m=40000.0, duration_s=5400.0,
+    )  # fmt: skip
+    conn.commit()
+
+    report = build_monthly_report(conn, athlete_id=DEFAULT_ATHLETE_ID, today=dt.date(2026, 9, 30))
+    ms = report.month_stats
+    assert ms is not None and ms.running is not None and ms.cycling is not None
+    run = ms.running
+    assert run.count == 3 and run.distance_m == 30000.0 and run.longest_streak_days == 2
+    assert run.longest_break_days == 5 and run.most_often == "Wed"
+    assert "10 km" in [r.label for r in run.records if r.is_new_pr]  # beats July's 1h00
+    assert sum(w.km for w in run.weekly) == 30.0
+    assert ms.cycling.distance_m == 40000.0 and ms.overall is not None
+
+    rendered = render_monthly_email(report)
+    for needle in ("September 2026 stats", "Running", "Cycling", "Weekly distance"):
+        assert needle in rendered.html and needle in rendered.text
+    assert "vs 80.0 km Aug" in rendered.html and "60.0 km Sep 2025" in rendered.html
+    assert (
+        "Personal records" in rendered.html
+        and "all-time" in rendered.text
+        and "set this month:" in rendered.text
+    )
