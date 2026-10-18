@@ -711,10 +711,12 @@ none.
 
 **`goal`**: a target distance for a year, month or week (`period_type`; `period_start` is `YYYY`,
 `YYYY-MM` or the ISO date a week starts on, any weekday), optionally for one sport (`null` = all
-sports). One goal per `(athlete_id, period_type, period_start)` (`uq_goal_identity`); setting a
-different sport replaces it. `PUT /goals` upserts; `POST /goals/repeat` repeats a weekly goal over
-several weeks (replacing existing ones, at most 104 weeks); `GET /goals` returns
-`{available: false}` when none is set.
+sports). A period holds any number of goals, one per sport (and one all-sports goal): the API
+enforces that, since a `NULL` sport can't carry a SQL unique constraint (indexed on `(athlete_id,
+period_type, period_start)`, `ix_goal_athlete_period`). `POST /goals` creates (409 on a duplicate),
+`PUT /goals` upserts per sport, `POST /goals/repeat` repeats a weekly goal over several weeks
+(replacing the same sport's goal in those weeks, at most 104 weeks); `GET /goals` returns every goal
+of the period with its progress, `[]` when none is set.
 
 Progress (`goals.py::compute_progress`, computed per request): `daily` cumulative distance (one
 point per day, gap-filled), `target_distance_as_of_today_m = target / total_days × days_elapsed`,

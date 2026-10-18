@@ -12,17 +12,14 @@ from perseverer.db.schema import goal as goal_table
 from tests.api.conftest import seed_activity
 
 
-def test_get_unavailable_when_no_goal_set(client: TestClient, auth_headers: dict[str, str]) -> None:
+def test_get_is_empty_when_no_goal_set(client: TestClient, auth_headers: dict[str, str]) -> None:
     r = client.get(
         "/api/v1/goals",
         params={"period_type": "year", "period_start": "2026"},
         headers=auth_headers,
     )
     assert r.status_code == 200
-    body = r.json()
-    assert body["available"] is False
-    assert body["goal"] is None
-    assert body["daily"] == []
+    assert r.json() == []
 
 
 def test_put_creates_a_goal_and_get_returns_progress(
@@ -51,7 +48,8 @@ def test_put_creates_a_goal_and_get_returns_progress(
         headers=auth_headers,
     )
     assert get.status_code == 200
-    body = get.json()
+    assert len(get.json()) == 1
+    body = get.json()[0]
     assert body["available"] is True
     assert body["goal"]["id"] == goal_id
     assert body["goal"]["target_distance_m"] == 1_000_000.0
@@ -59,35 +57,137 @@ def test_put_creates_a_goal_and_get_returns_progress(
     assert len(body["daily"]) > 0
 
 
-def test_put_upserts_rather_than_duplicating(
+def test_put_upserts_per_sport_rather_than_duplicating(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
-    client.put(
+    def put(sport: str | None, target: float) -> None:
+        client.put(
+            "/api/v1/goals",
+            json={
+                "period_type": "year",
+                "period_start": "2026",
+                "sport": sport,
+                "target_distance_m": target,
+            },
+            headers=auth_headers,
+        )
+
+    put("running", 1_000_000.0)
+    put("running", 1_200_000.0)  # same sport: replaced
+    put("cycling", 2_000_000.0)  # another sport: a second goal in the same period
+    put(None, 3_000_000.0)  # every sport combined: a third
+
+    with engine.connect() as conn:
+        rows = conn.execute(select(goal_table).order_by(goal_table.c.id)).fetchall()
+    assert [(r.sport, r.target_distance_m) for r in rows] == [
+        ("running", 1_200_000.0),
+        ("cycling", 2_000_000.0),
+        (None, 3_000_000.0),
+    ]
+
+
+def test_a_period_lists_every_goal_with_its_own_progress(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(
+            conn, activity_id="r", sport="running", local_date="2026-03-02", distance_m=10_000.0
+        )
+        seed_activity(
+            conn, activity_id="c", sport="cycling", local_date="2026-03-03", distance_m=40_000.0
+        )
+    for sport, target in (("running", 100_000.0), ("cycling", 400_000.0), (None, 600_000.0)):
+        r = client.post(
+            "/api/v1/goals",
+            json={
+                "period_type": "month",
+                "period_start": "2026-03",
+                "sport": sport,
+                "target_distance_m": target,
+            },
+            headers=auth_headers,
+        )
+        assert r.status_code == 201
+    got = client.get(
         "/api/v1/goals",
+        params={"period_type": "month", "period_start": "2026-03"},
+        headers=auth_headers,
+    ).json()
+    # Sports alphabetically, the every-sport goal last.
+    assert [(g["goal"]["sport"], g["current_distance_m"]) for g in got] == [
+        ("cycling", 40_000.0),
+        ("running", 10_000.0),
+        (None, 50_000.0),
+    ]
+
+
+def test_post_refuses_a_second_goal_for_the_same_sport(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    body = {
+        "period_type": "year",
+        "period_start": "2026",
+        "sport": "running",
+        "target_distance_m": 1_000_000.0,
+    }
+    assert client.post("/api/v1/goals", json=body, headers=auth_headers).status_code == 201
+    assert client.post("/api/v1/goals", json=body, headers=auth_headers).status_code == 409
+    other = {**body, "sport": "cycling"}
+    assert client.post("/api/v1/goals", json=other, headers=auth_headers).status_code == 201
+    every = {**body, "sport": None}
+    assert client.post("/api/v1/goals", json=every, headers=auth_headers).status_code == 201
+    assert client.post("/api/v1/goals", json=every, headers=auth_headers).status_code == 409
+
+
+def test_put_by_id_edits_a_goal_and_refuses_a_duplicate(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    def create(sport: str, target: float) -> int:
+        r = client.post(
+            "/api/v1/goals",
+            json={
+                "period_type": "year",
+                "period_start": "2026",
+                "sport": sport,
+                "target_distance_m": target,
+            },
+            headers=auth_headers,
+        )
+        return int(r.json()["id"])
+
+    running = create("running", 1_000_000.0)
+    create("cycling", 2_000_000.0)
+
+    edited = client.put(
+        f"/api/v1/goals/{running}",
         json={
             "period_type": "year",
             "period_start": "2026",
             "sport": "running",
-            "target_distance_m": 1_000_000.0,
+            "target_distance_m": 1_500_000.0,
         },
         headers=auth_headers,
     )
-    client.put(
-        "/api/v1/goals",
+    assert edited.status_code == 200
+    assert edited.json()["target_distance_m"] == 1_500_000.0
+    # Turning it into a cycling goal would duplicate the other one.
+    clash = client.put(
+        f"/api/v1/goals/{running}",
         json={
             "period_type": "year",
             "period_start": "2026",
             "sport": "cycling",
-            "target_distance_m": 2_000_000.0,
+            "target_distance_m": 1.0,
         },
         headers=auth_headers,
     )
-
-    with engine.connect() as conn:
-        rows = conn.execute(select(goal_table)).fetchall()
-    assert len(rows) == 1
-    assert rows[0].sport == "cycling"
-    assert rows[0].target_distance_m == 2_000_000.0
+    assert clash.status_code == 409
+    missing = client.put(
+        "/api/v1/goals/999999",
+        json={"period_type": "year", "period_start": "2026", "target_distance_m": 1.0},
+        headers=auth_headers,
+    )
+    assert missing.status_code == 404
 
 
 def test_put_rejects_invalid_period_type(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -123,7 +223,7 @@ def test_a_week_running_goal_can_be_created_read_and_deleted(
         "/api/v1/goals",
         params={"period_type": "week", "period_start": "2026-09-14"},
         headers=auth_headers,
-    ).json()
+    ).json()[0]
     assert got["available"] is True
     assert got["period_end"] == "2026-09-20"
     assert got["current_distance_m"] == 12_000.0
@@ -133,7 +233,7 @@ def test_a_week_running_goal_can_be_created_read_and_deleted(
         params={"period_type": "week", "period_start": "2026-09-21"},
         headers=auth_headers,
     ).json()
-    assert other["available"] is False
+    assert other == []
 
     bad = client.put(
         "/api/v1/goals",
@@ -183,7 +283,7 @@ def test_delete_removes_the_goal(client: TestClient, auth_headers: dict[str, str
         params={"period_type": "year", "period_start": "2026"},
         headers=auth_headers,
     )
-    assert get.json()["available"] is False
+    assert get.json() == []
 
 
 def test_delete_404s_for_unknown_goal(client: TestClient, auth_headers: dict[str, str]) -> None:
@@ -227,13 +327,13 @@ def test_repeat_creates_the_same_weekly_goal_for_consecutive_weeks(
             params={"period_type": "week", "period_start": start},
             headers=auth_headers,
         ).json()
-        assert got["available"] is True
+        assert got[0]["available"] is True
     after = client.get(
         "/api/v1/goals",
         params={"period_type": "week", "period_start": "2026-10-26"},
         headers=auth_headers,
     ).json()
-    assert after["available"] is False
+    assert after == []
 
 
 def test_repeat_replaces_an_existing_goal_in_a_covered_week(

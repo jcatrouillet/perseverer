@@ -230,8 +230,8 @@ they only appear for running. Rides also have their own colour, on the map and e
   - Several workouts per day, recurring workouts, and a GPX route that is sent to the watch as a
     private course.
 - **Races** with goal times, compared with the predicted finish.
-- **Goals** per week, month or year: distance, time spent in any sport, and bouldering sends by
-  grade, each with a pace-to-target chart.
+- **Goals** per week, month or year: as many distance goals and time goals as you like, one per
+  sport (or all sports together), and bouldering sends by grade, each with a pace-to-target chart.
 - **Compliance** per sport in the week view, matched automatically against recorded activities.
 - **Notes** on any activity, day or week, written by you or by an AI agent through the API; the
   coming week's notes also appear in the weekly email.

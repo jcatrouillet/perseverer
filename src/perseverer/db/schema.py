@@ -211,10 +211,11 @@ athlete_default_shoe = Table(
     Index("ix_default_shoe_athlete_shoe", "athlete_id", "shoe_id"),
 )
 
-# A distance goal for a whole calendar year or month, one per (athlete, period_type,
-# period_start) -- not a growing history of past goals, just "what's the target for this
-# period", upserted like athlete_hr_zone_config above. `sport=NULL` means every sport combined;
-# a specific sport (e.g. "running") scopes progress to just that sport's own activities.
+# A distance goal for a week, month or year. A period may hold several, one per sport (or one for
+# every sport combined): identity is (athlete, period_type, period_start, sport), enforced by the
+# API because a NULL sport can't carry a SQL unique constraint -- the duration goals' own rule.
+# `sport=NULL` means every sport combined; a specific sport (e.g. "cycling") scopes progress to
+# just that sport's own activities.
 # `period_start` is "YYYY" for a year goal, "YYYY-MM" for a month goal -- deliberately not a
 # real DATE column, since a year has no single calendar date of its own. Progress itself is
 # computed on read (goals.py), not stored here or in a rollup: a goal is looked up once per
@@ -231,7 +232,7 @@ goal = Table(
     Column("target_distance_m", Float, nullable=False),
     Column("created_at", DateTime(), nullable=False),
     Column("updated_at", DateTime(), nullable=False),
-    UniqueConstraint("athlete_id", "period_type", "period_start", name="uq_goal_identity"),
+    Index("ix_goal_athlete_period", "athlete_id", "period_type", "period_start"),
 )
 
 # A duration goal: an amount of TIME on one sport (`sport` NULL = every sport combined) over a

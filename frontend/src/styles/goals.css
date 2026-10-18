@@ -120,7 +120,7 @@
   width: auto;
 }
 
-/* Section headings inside the single Goals popup (Running & distance / Bouldering). */
+/* Section headings inside the single Goals popup (Distance / Time / Bouldering). */
 .bouldering-goals__heading {
   font-size: var(--font-size-lg);
   margin: 0 0 var(--space-3);

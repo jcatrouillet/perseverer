@@ -479,9 +479,8 @@ async def test_list_blood_tests_empty_range(client: TestClient) -> None:
     assert await list_blood_tests(start_date="2020-01-01", end_date="2020-01-02") == []
 
 
-async def test_get_goal_progress_unavailable_when_none_set(client: TestClient) -> None:
-    result = await get_goal_progress(period_type="year", period_start="2025")
-    assert result["available"] is False
+async def test_get_goal_progress_is_empty_when_none_set(client: TestClient) -> None:
+    assert await get_goal_progress(period_type="year", period_start="2025") == []
 
 
 async def test_list_planned_workouts_and_by_date_empty(client: TestClient) -> None:
@@ -590,9 +589,13 @@ async def test_planned_race_crud(client: TestClient) -> None:
 async def test_set_and_delete_goal(client: TestClient) -> None:
     goal = await set_goal("year", "2026", 2_000_000, sport="running")
     assert goal["target_distance_m"] == 2_000_000
-    assert (await get_goal_progress("year", "2026"))["available"] is True
+    assert len(await get_goal_progress("year", "2026")) == 1
+    cycling = await set_goal("year", "2026", 5_000_000, sport="cycling")
+    assert len(await get_goal_progress("year", "2026")) == 2
     await delete_goal(goal["id"])
-    assert (await get_goal_progress("year", "2026"))["available"] is False
+    assert [g["goal"]["id"] for g in await get_goal_progress("year", "2026")] == [cycling["id"]]
+    await delete_goal(cycling["id"])
+    assert await get_goal_progress("year", "2026") == []
 
 
 async def test_bouldering_goal_tools(client: TestClient) -> None:

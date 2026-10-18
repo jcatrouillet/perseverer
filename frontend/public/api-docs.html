@@ -546,7 +546,7 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
       <p>Every other list-returning endpoint (routes, map points, sleep sessions, insights, notes, fitness rollups…) returns a plain unbounded JSON array — these are all backed by precomputed rollups or otherwise-bounded queries, so pagination would add complexity without a real need.</p>
 
       <h3>"available: false" instead of a fabricated value</h3>
-      <p>A handful of endpoints (activity weather, activity location, goal progress) describe data that may genuinely not exist yet — no GPS fix to geocode, no goal configured for a period. These return <code>200</code> with <code>"available": false</code> and every other field <code>null</code>, rather than a <code>404</code> or a guessed value. Always check <code>available</code> before reading the rest of the object.</p>
+      <p>A handful of endpoints (activity weather, activity location) describe data that may genuinely not exist yet — no GPS fix to geocode. These return <code>200</code> with <code>"available": false</code> and every other field <code>null</code>, rather than a <code>404</code> or a guessed value. Always check <code>available</code> before reading the rest of the object.</p>
 
       <h3>Multi-value query parameters</h3>
       <p>Array-typed query parameters (<code>metric_key</code>, <code>channels</code>, <code>metric_keys</code>) are repeated, not comma-joined: <code>?metric_key=a&amp;metric_key=b</code>. (The one exception is <code>ids</code> on <code>GET /activities/routes</code>, which is a single comma-separated string — noted on that endpoint.)</p>
@@ -1153,9 +1153,9 @@ const SCHEMAS = [
       ["created_at","string(date-time)",""],
       ["updated_at","string(date-time)",""],
     ] },
-  { name: "GoalProgressOut", note: "Returned by GET /goals. See “available: false” in Conventions.", fields: [
-      ["available","boolean","required — false when no goal is configured for this period/sport."],
-      ["goal","GoalOut|null","optional — omitted when available is false","opt"],
+  { name: "GoalProgressOut", note: "One element of the GET /goals list.", fields: [
+      ["available","boolean","required — always true in the list (kept for older clients)."],
+      ["goal","GoalOut|null","optional","opt"],
       ["period_end","string(date)|null","optional","opt"],
       ["daily","array<GoalProgressPoint>","optional — defaults to [] when available is false","opt"],
       ["target_per_day_m","number|null","optional — the flat daily pace needed to hit the goal exactly","opt"],
@@ -2138,17 +2138,36 @@ const GROUPS = [
   ]},
 
   { id: "goals", title: "Goals", endpoints: [
-    { method: "GET", path: "/api/v1/goals", summary: "Progress toward a distance goal for one period.",
-      description: "Cumulative distance so far this period vs. the flat pace-to-target line, plus a day-by-day series for a progress chart. available: false when no goal is configured for this exact period_type/period_start/sport combination.",
+    { method: "GET", path: "/api/v1/goals", summary: "List the distance goals for one period, with progress.",
+      description: "Every distance goal set for exactly this period (one per sport, plus optionally one for every sport combined), each with its cumulative distance so far vs. the flat pace-to-target line and a day-by-day series for a progress chart. Empty list when none is set. Ordered by sport name, the all-sports goal last.",
       params: [
         ["period_type","query","req","string","—","week, month or year."],
         ["period_start","query","req","string","—","\"YYYY\" for year, \"YYYY-MM\" for month, the ISO date a 7-day week starts on for week (any weekday)."],
       ],
-      responses: [ { code: 200, ref: "GoalProgressOut" } ],
+      responses: [ { code: 200, ref: "array&lt;GoalProgressOut&gt;" } ],
       example: { qs: "?period_type=month&period_start=2026-08" }
     },
-    { method: "PUT", path: "/api/v1/goals", summary: "Create or replace the distance goal for one period.",
-      description: "Upsert keyed on (period_type, period_start, sport) — calling this again for the same period and sport replaces the existing goal rather than creating a second one.",
+    { method: "POST", path: "/api/v1/goals", summary: "Create a distance goal.",
+      description: "A period can hold one distance goal per sport (plus one for every sport combined).",
+      body: { schema: "GoalIn", fields: [
+        ["period_type","string","req","","week, month or year."],
+        ["period_start","string","req","","\"YYYY\", \"YYYY-MM\" or the ISO start date of a 7-day week, matching period_type."],
+        ["sport","string|null","opt","","Omit (or null) for a goal covering every sport combined."],
+        ["target_distance_m","number","req","",""],
+      ]},
+      responses: [
+        { code: 201, ref: "GoalOut" },
+        { code: 409, note: "The period already has a goal for that sport." },
+        { code: 422, note: "Invalid period or target." },
+      ]
+    },
+    { method: "PUT", path: "/api/v1/goals/{goal_id}", summary: "Change one distance goal.",
+      description: "Send every GoalIn field.",
+      params: [ ["goal_id","path","req","integer","—","From GoalOut.id."] ],
+      responses: [ { code: 200, ref: "GoalOut" }, { code: 404, note: 'detail: "goal not found"' }, { code: 409, note: "Would duplicate another goal of that period and sport." }, { code: 422, note: "" } ]
+    },
+    { method: "PUT", path: "/api/v1/goals", summary: "Set the distance goal for one period and sport.",
+      description: "Upsert keyed on (period_type, period_start, sport) — calling this again for the same period and sport replaces that goal's target rather than creating a second one; goals for other sports in the period are untouched.",
       body: { schema: "GoalIn", fields: [
         ["period_type","string","req","","week, month or year."],
         ["period_start","string","req","","\"YYYY\", \"YYYY-MM\" or the ISO start date of a 7-day week, matching period_type."],

@@ -1343,14 +1343,15 @@ export function useLatestJob(source: JobSource, enabled: boolean) {
   });
 }
 
-/** A distance goal for a whole calendar year or month, plus its progress line -- `periodStart`
- * is "YYYY" for period_type "year", "YYYY-MM" for "month" (see goals.py::period_bounds).
- * `available: false` in the response means no goal is set for this period yet, not an error. */
+/** Every distance goal (one per sport, or for every sport combined) set for one week/month/year,
+ * each with its progress line -- `periodStart` is "YYYY" for period_type "year", "YYYY-MM" for
+ * "month" and the ISO start date for "week" (see goals.py::period_bounds). An empty list means no
+ * goal is set for this period yet, not an error. */
 export function useGoalProgress(periodType: "week" | "month" | "year", periodStart: string) {
   return useQuery({
     queryKey: ["goal-progress", periodType, periodStart],
     queryFn: () =>
-      apiGet<GoalProgressOut>(
+      apiGet<GoalProgressOut[]>(
         `/api/v1/goals${buildQuery({ period_type: periodType, period_start: periodStart })}`,
       ),
   });
@@ -1363,20 +1364,34 @@ export interface SetGoalInput {
   target_distance_m: number;
 }
 
-export function useSetGoal() {
+function invalidateGoals(
+  queryClient: ReturnType<typeof useQueryClient>,
+  periodType: string,
+  periodStart: string,
+) {
+  void queryClient.invalidateQueries({ queryKey: ["goal-progress", periodType, periodStart] });
+}
+
+/** A new distance goal; refused (409) when the period already has one for that sport. */
+export function useCreateGoal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: SetGoalInput) => apiPut<GoalOut>("/api/v1/goals", body),
-    onSuccess: (_goal, variables) => {
-      void queryClient.invalidateQueries({
-        queryKey: ["goal-progress", variables.period_type, variables.period_start],
-      });
-    },
+    mutationFn: (body: SetGoalInput) => apiPost<GoalOut>("/api/v1/goals", body),
+    onSuccess: (_goal, v) => invalidateGoals(queryClient, v.period_type, v.period_start),
+  });
+}
+
+export function useUpdateGoal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: SetGoalInput & { id: number }) =>
+      apiPut<GoalOut>(`/api/v1/goals/${id}`, body),
+    onSuccess: (_goal, v) => invalidateGoals(queryClient, v.period_type, v.period_start),
   });
 }
 
 /** The same weekly distance goal for `weeks` consecutive weeks from `period_start` (a week's
- * ISO start date); a week that already has a goal has it replaced. */
+ * ISO start date); a week that already has a goal for that sport has it replaced. */
 export function useRepeatGoal() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -1392,11 +1407,7 @@ export function useDeleteGoal() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (goal: GoalOut) => apiDelete<void>(`/api/v1/goals/${goal.id}`),
-    onSuccess: (_void, goal) => {
-      void queryClient.invalidateQueries({
-        queryKey: ["goal-progress", goal.period_type, goal.period_start],
-      });
-    },
+    onSuccess: (_void, goal) => invalidateGoals(queryClient, goal.period_type, goal.period_start),
   });
 }
 

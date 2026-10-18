@@ -286,6 +286,9 @@ own numbers:
   "Exclude commutes" toggle: activity lists are filtered client-side and the bands, zones,
   curve and FTP endpoints take `exclude_commutes`. The race predictions, race readiness and
   VO2max rollups (running physiology models) are not filtered.
+- **Goals:** a week, month or year holds any number of distance goals and time goals, one per sport
+  (plus one for every sport combined), and bouldering goals by grade; the Goals popup lists each
+  with its own pace-to-target chart.
 - **Comparison:** one sport at a time (`/activities/compare?sport=cycling`, running by default;
   `compareRuns.ts`). Runs read in pace with grade-adjusted pace and per-foot cadence doubled; rides
   read in speed and rpm, with power, and have no GAP or VDOT. The similar-distance suggestion is the

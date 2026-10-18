@@ -113,8 +113,8 @@ unit-conversion query parameter — convert at display time client-side.
 Every other list-returning endpoint returns a plain unbounded JSON array — all backed by
 precomputed rollups or otherwise-bounded queries.
 
-**`"available": false` instead of a fabricated value.** Activity weather, activity location,
-and goal progress describe data that may genuinely not exist yet. They return `200` with
+**`"available": false` instead of a fabricated value.** Activity weather and activity location
+describe data that may genuinely not exist yet. They return `200` with
 `"available": false` and every other field `null`/omitted, never a `404` or a guessed value.
 Always check `available` before reading the rest of the object.
 
@@ -1202,24 +1202,38 @@ Deletes one note.
 
 ## Goals
 
+A period can hold **any number of distance goals, one per sport** (plus one for every sport
+combined), like the duration goals below.
+
 ### `GET /goals`
 
-Progress toward a distance goal for one period: cumulative distance so far vs. the flat
-pace-to-target line, plus a day-by-day series for a progress chart. `available: false` when no
-goal is configured for this exact `period_type`/`period_start`/sport combination.
+Every distance goal set for exactly this period, each with its own progress: cumulative distance so
+far vs. the flat pace-to-target line, plus a day-by-day series for a progress chart. An empty list
+when none is set. Ordered by sport name, the all-sports goal last.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
 | `period_type` | query | **required** | string | `week`, `month` or `year`. |
 | `period_start` | query | **required** | string | `"YYYY"` for `year`, `"YYYY-MM"` for `month`, the ISO date the 7-day week starts on for `week` (any weekday). |
 
-**Response `200`:** `GoalProgressOut`.
+**Response `200`:** `GoalProgressOut[]` (each element has `available: true`).
+
+### `POST /goals`
+
+Creates a distance goal. **Request body:** `GoalIn` (below). `201` → `GoalOut`; `409` → the period
+already has a goal for that sport (or an all-sports one); `422` → invalid period or target.
+
+### `PUT /goals/{goal_id}`
+
+Changes one goal (send every `GoalIn` field). `200` → `GoalOut`; `404` → `goal not found`; `409` →
+the change would duplicate another goal of that period and sport; `422`.
 
 ### `PUT /goals`
 
-Creates or replaces the distance goal for one period. Upsert keyed on `(period_type,
-period_start, sport)` — calling this again for the same period and sport replaces the existing
-goal rather than creating a second one.
+Sets the distance goal for one period **and sport**: an upsert keyed on `(period_type,
+period_start, sport)` — calling this again for the same period and sport replaces the target of the
+existing goal rather than creating a second one, while the period's goals for other sports are
+untouched.
 
 **Request body** (`GoalIn`):
 
@@ -1238,7 +1252,8 @@ doesn't parse for the given `period_type`. `detail` is a plain string.
 The same **weekly** distance goal for several consecutive weeks. Body: `GoalIn` fields with
 `period_type: "week"`, `period_start` = the first week's ISO start date, plus `weeks` (integer
 1–104; the first week counts). Each week is upserted exactly like `PUT /goals`, so a week that
-already has a goal has it **replaced**; every week is written in one transaction.
+already has a goal for that sport has it **replaced**; every week is written in one
+transaction.
 
 **Responses:** `200` → `{"goals": [GoalOut, …]}`, one per week in order. `422` → not a `week`
 goal, `weeks` out of range, or an unparseable `period_start`.

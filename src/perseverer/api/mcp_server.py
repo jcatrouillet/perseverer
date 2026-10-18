@@ -452,16 +452,17 @@ async def list_blood_tests(start_date: str, end_date: str) -> list[dict[str, Any
 
 
 @mcp.tool()
-async def get_goal_progress(period_type: str, period_start: str) -> dict[str, Any]:
-    """Progress toward a distance goal for one week, month or year. `period_type` is "week"
-    (`period_start` = the ISO date the 7-day week starts on), "month" ("YYYY-MM") or "year"
-    ("YYYY"). `available: false` (never fabricated) when no goal is set for that exact period."""
+async def get_goal_progress(period_type: str, period_start: str) -> list[dict[str, Any]]:
+    """Progress toward every distance goal set for one week, month or year -- one per sport, plus
+    optionally one for every sport combined. `period_type` is "week" (`period_start` = the ISO date
+    the 7-day week starts on), "month" ("YYYY-MM") or "year" ("YYYY"). An empty list (never a
+    fabricated goal) when none is set for that exact period."""
     response = await _call_api(
         "GET",
         "/api/v1/goals",
         params={"period_type": period_type, "period_start": period_start},
     )
-    return dict(response.json())
+    return list(response.json())
 
 
 @mcp.tool()
@@ -834,7 +835,8 @@ async def set_goal(
 ) -> dict[str, Any]:
     """Set (or replace) the distance goal for one week ("week", period_start = the ISO start date
     of the 7 days), month ("YYYY-MM") or year ("YYYY"), in metres; sport=None means every sport
-    combined. One goal per period -- setting again replaces it. For a weekly goal,
+    combined. A period can hold one goal per sport (plus one for every sport combined): setting a
+    sport's goal again replaces that sport's, other sports' goals are untouched. For a weekly goal,
     `repeat_weeks` > 1 sets the same goal for that many consecutive weeks starting at
     `period_start` (a week that already has a goal has it replaced) and returns
     {"goals": [...]}, one per week."""

@@ -1,41 +1,48 @@
-// The small set/edit form shown inside the Goals popup -- either in place of the chart (no
-// goal set yet) or revealed above it (editing an existing one). Target is entered in the
-// athlete's own Personalize distance unit (km or miles) and converted to metres at submit time,
-// matching AGENTS.md's SI-in-storage rule.
+// Set or edit one distance goal inside the goals popup: how far, on which sport that covers a
+// distance, or on every sport combined. Target is entered in the athlete's own Personalize
+// distance unit (km or miles) and converted to metres at submit time, matching AGENTS.md's
+// SI-in-storage rule. A brand-new weekly goal can also be repeated over several consecutive weeks.
 import { useState } from "react";
 
 import type { GoalOut } from "../api/types";
-import { useRepeatGoal, useSetGoal } from "../api/queries";
+import { useCreateGoal, useRepeatGoal, useUpdateGoal } from "../api/queries";
 import { useDistanceFormat } from "../formatDistance";
 import { DISTANCE_SPORTS } from "../metricStyle";
+
+const ALL = "";
 
 export function GoalForm({
   periodType,
   periodStart,
   existing,
   onSaved,
+  onCancel,
 }: {
   periodType: "week" | "month" | "year";
   periodStart: string;
   existing: GoalOut | null;
   onSaved: () => void;
+  onCancel: () => void;
 }) {
   const { unitLabel, metersToDisplay, displayToMeters } = useDistanceFormat();
   const [targetDisplay, setTargetDisplay] = useState(
     existing ? String(Math.round(metersToDisplay(existing.target_distance_m))) : "",
   );
-  const [sport, setSport] = useState(existing?.sport ?? "running");
-  // A goal saved before this list was narrowed may be scoped to a sport that is no longer offered;
-  // keep it selectable so opening the edit form doesn't silently change it.
+  const [sport, setSport] = useState(existing ? (existing.sport ?? ALL) : "running");
+  // A goal saved for a sport that is not offered any more stays selectable when edited, so
+  // opening the form doesn't silently change it.
   const sportOptions =
     existing?.sport && !DISTANCE_SPORTS.includes(existing.sport)
       ? [...DISTANCE_SPORTS, existing.sport]
       : DISTANCE_SPORTS;
-  const setGoal = useSetGoal();
-  const repeatGoal = useRepeatGoal();
-  // Only a NEW weekly goal can be repeated across several weeks; editing changes just this week.
+  const create = useCreateGoal();
+  const update = useUpdateGoal();
+  const repeat = useRepeatGoal();
+  // Only a NEW weekly goal can be repeated across several weeks; editing changes just this one.
   const canRepeat = periodType === "week" && !existing;
   const [weeks, setWeeks] = useState("1");
+  const pending = create.isPending || update.isPending || repeat.isPending;
+  const error = create.error ?? update.error ?? repeat.error;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,15 +51,14 @@ export function GoalForm({
     const body = {
       period_type: periodType,
       period_start: periodStart,
-      sport: sport === "" ? null : sport,
+      sport: sport === ALL ? null : sport,
       target_distance_m: displayToMeters(target),
     };
     const repeatCount = Number(weeks);
-    if (canRepeat && Number.isInteger(repeatCount) && repeatCount > 1) {
-      repeatGoal.mutate({ ...body, weeks: repeatCount }, { onSuccess: onSaved });
-    } else {
-      setGoal.mutate(body, { onSuccess: onSaved });
-    }
+    if (existing) update.mutate({ id: existing.id, ...body }, { onSuccess: onSaved });
+    else if (canRepeat && Number.isInteger(repeatCount) && repeatCount > 1)
+      repeat.mutate({ ...body, weeks: repeatCount }, { onSuccess: onSaved });
+    else create.mutate(body, { onSuccess: onSaved });
   };
 
   return (
@@ -60,7 +66,7 @@ export function GoalForm({
       <label className="field">
         Sport
         <select className="input" value={sport} onChange={(e) => setSport(e.target.value)}>
-          <option value="">All sports</option>
+          <option value={ALL}>All sports</option>
           {sportOptions.map((s) => (
             <option key={s} value={s}>
               {s.replace(/_/g, " ")}
@@ -89,21 +95,24 @@ export function GoalForm({
             min="1"
             max="104"
             step="1"
-            title="Sets this goal for that many consecutive weeks, replacing any goal already set in those weeks"
+            title="Sets this goal for that many consecutive weeks, replacing a goal for the same sport already set in those weeks"
             value={weeks}
             onChange={(e) => setWeeks(e.target.value)}
           />
         </label>
       )}
-      <button
-        type="submit"
-        className="button button--primary"
-        disabled={setGoal.isPending || repeatGoal.isPending}
-      >
-        {existing ? "Save" : "Set goal"}
+      <button type="submit" className="button button--primary" disabled={pending}>
+        {existing ? "Save" : "Add goal"}
       </button>
-      {(setGoal.isError || repeatGoal.isError) && (
-        <span role="alert">Couldn't save that goal.</span>
+      <button type="button" className="button" onClick={onCancel}>
+        Cancel
+      </button>
+      {error && (
+        <span role="alert">
+          {/409/.test(error.message)
+            ? "You already have a distance goal for this period and sport — edit it instead."
+            : "Couldn't save that goal."}
+        </span>
       )}
     </form>
   );

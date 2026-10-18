@@ -122,9 +122,10 @@ vi.mock("../../api/queries", () => ({
   useCreateNote: () => mockUseCreateNote(),
   useWeatherForecast: () => mockUseWeatherForecast(),
   // The week header exposes Goals and Share, neither action is triggered by these tests.
-  useGoalProgress: () => ({ data: undefined, isLoading: false, isError: false }),
+  useGoalProgress: () => ({ data: [], isLoading: false, isError: false }),
   useCreatePeriodShare: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
-  useSetGoal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useCreateGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+  useUpdateGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
   useDeleteGoal: () => ({ mutate: vi.fn() }),
   useRepeatGoal: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useRepeatBoulderingGoal: () => ({ mutate: vi.fn(), isPending: false, error: null }),
