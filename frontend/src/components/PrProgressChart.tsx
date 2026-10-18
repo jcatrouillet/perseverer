@@ -41,7 +41,7 @@ function RunDot({
   const name = displayActivityName(payload.activity) ?? (payload.vdot == null ? "Ride" : "Run");
   const effort =
     payload.vdot == null
-      ? `${payload.speedKmh.toFixed(1)} km/h`
+      ? `${Math.round(payload.powerW ?? 0)} W`
       : `VDOT ${payload.vdot.toFixed(1)}`;
   return (
     <a
@@ -88,7 +88,7 @@ export function PrProgressChart({
       <h2>PR progress</h2>
       <p className="chart-note">
         {cycling
-          ? "Every ride, plotted at its actual distance and average speed. Red steps trace your older speed records; blue steps show recent improvements. Each step uses the fastest ride covering at least that exact distance. Faster is higher."
+          ? "Every ride with a power reading, plotted at its actual distance and average power (not speed, which wind, hills and drafting move). Red steps trace your older power records; blue steps show recent improvements. Each step uses the highest average power of any ride covering at least that exact distance. More power is higher."
           : "One best-VDOT run per week (Monday–Sunday), plotted at its actual distance. Red steps trace your older pace records; blue steps show recent improvements. Each step uses the fastest run covering at least that exact distance. Faster pace is higher."}
       </p>
       <ChartLegend
@@ -100,7 +100,7 @@ export function PrProgressChart({
       {!data.older.length && !data.recent.length ? (
         <p>
           {cycling
-            ? "No rides with a distance and duration are available yet."
+            ? "No rides with a distance and power are available yet (power needs a power meter or a smart trainer)."
             : "No running activities with a VDOT, distance and duration are available yet."}
         </p>
       ) : (
@@ -115,7 +115,7 @@ export function PrProgressChart({
                 <span>
                   {selected.activity.local_date} · {selected.distanceKm.toFixed(2)} km ·{" "}
                   {selected.vdot == null
-                    ? `${selected.speedKmh.toFixed(1)} km/h`
+                    ? `${Math.round(selected.powerW ?? 0)} W average`
                     : `${formatMinPerKm(selected.pace / 60)} /km · VDOT ${selected.vdot.toFixed(1)}`}
                   {duration != null ? ` · ${formatClockDuration(duration)}` : ""}
                   {selected.activity.is_race ? " · Race" : ""}
@@ -164,7 +164,7 @@ const PrPlot = memo(function PrPlot({
 }) {
   // Rides plot speed (higher is faster), runs pace on a reversed axis (lower is faster, drawn
   // higher): either way a faster effort sits higher.
-  const valueKey = cycling ? "speedKmh" : "pace";
+  const valueKey = cycling ? "powerW" : "pace";
   return (
     <div className="pr-progress__chart">
       <ResponsiveContainer width="100%" height={640}>
@@ -187,7 +187,7 @@ const PrPlot = memo(function PrPlot({
           <YAxis
             type="number"
             dataKey={valueKey}
-            name={cycling ? "Speed" : "Pace"}
+            name={cycling ? "Power" : "Pace"}
             tickCount={9}
             domain={["auto", "auto"]}
             reversed={!cycling}
@@ -196,7 +196,7 @@ const PrPlot = memo(function PrPlot({
             }
             tick={{ fill: "var(--color-text-muted)", fontSize: 12 }}
             label={{
-              value: cycling ? "Speed (km/h)" : "Pace /km",
+              value: cycling ? "Average power (W)" : "Pace /km",
               angle: -90,
               position: "insideLeft",
               fill: "var(--color-text-muted)",

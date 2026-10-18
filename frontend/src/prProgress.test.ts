@@ -141,23 +141,28 @@ describe("PR progress", () => {
     expect(prProgress([a, b], "2026-09-20").recent[0].pace).toBe(280);
   });
 
-  it("for rides, uses every ride with no VDOT, never runs, and gives each its speed", () => {
-    const ride = (id: string, date: string, distance: number, pace: number) =>
-      run(id, date, distance, pace, 0, { sport: "cycling", vdot: null });
+  it("for rides, ranks by average power, uses every ride with power and never runs", () => {
+    const ride = (id: string, date: string, distance: number, pace: number, watts: number | null) =>
+      run(id, date, distance, pace, 0, { sport: "cycling", vdot: null, avg_power_w: watts });
     const result = prProgress(
       [
-        ride("old", "2025-01-10", 30000, 120),
-        ride("same_week_a", "2026-09-14", 20000, 110),
-        ride("same_week_b", "2026-09-15", 25000, 115),
-        run("a_run", "2026-09-16", 10000, 300),
+        ride("old", "2025-01-10", 30000, 120, 200),
+        ride("same_week_a", "2026-09-14", 20000, 110, 150),
+        ride("same_week_b", "2026-09-15", 35000, 115, 230),
+        ride("no_power", "2026-09-16", 40000, 100, null),
+        run("a_run", "2026-09-17", 10000, 300),
       ],
       "2026-09-20",
       "cycling",
     );
-    // Both rides of the same week stay (no weekly thinning); the run is ignored.
+    // Both rides of the same week stay (no weekly thinning); the ride without power and the run
+    // are ignored.
     expect(result.recent.map((p) => p.activity.id).sort()).toEqual(["same_week_a", "same_week_b"]);
     expect(result.older.map((p) => p.activity.id)).toEqual(["old"]);
-    expect(result.older[0]!.speedKmh).toBeCloseTo(30);
+    expect(result.older[0]!.powerW).toBe(200);
     expect(result.older[0]!.vdot).toBeNull();
+    // The 35 km / 230 W ride beats the older 30 km / 200 W one: a recent improvement step.
+    expect(result.improvements.length).toBeGreaterThan(0);
+    expect(result.improvements[0]![0]!.powerW).toBe(230);
   });
 });

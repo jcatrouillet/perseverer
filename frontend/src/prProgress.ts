@@ -1,8 +1,9 @@
 // PR progress (PrProgressChart.tsx): the fastest-at-each-distance frontier, older records
 // against the last year's. Runs: one best-VDOT run per week. Rides (the Insights sport switch):
-// every ride, since rides have no VDOT and are few enough not to need thinning. Runs and rides
-// are never mixed. `pace` (seconds/km) ranks both; `speedKmh` is the same value as a ride's
-// speed, for a chart that plots speed.
+// every ride with a power reading, plotted by its average power (not speed: wind, hills and
+// drafting move speed), since rides have no VDOT and are few enough not to need thinning. Runs and
+// rides are never mixed. `rank` (lower is better) orders both: a run's pace, a ride's negative
+// power, so the same "no equally long or longer effort beats it" frontier serves either.
 import type { ActivitySummary, InsightsSport } from "./api/types";
 import { EARLIEST_PLAUSIBLE_DATE, isoDate, mondayOf, parseIsoDate } from "./dateUtils";
 import { effectiveDurationS, isCyclingSport } from "./runningStats";
@@ -12,6 +13,10 @@ export interface PrPoint {
   distanceKm: number;
   pace: number;
   speedKmh: number;
+  /** A ride's average power in watts; null for a run. */
+  powerW: number | null;
+  /** Lower is better: pace for a run, minus the average power for a ride. */
+  rank: number;
   /** null for a ride. */
   vdot: number | null;
   older: boolean;
@@ -38,7 +43,7 @@ export function prProgress(
   const eligible = activities
     .filter(
       (a) =>
-        (cycling ? isCyclingSport(a.sport) : a.sport === "running") &&
+        (cycling ? isCyclingSport(a.sport) && (a.avg_power_w ?? 0) > 0 : a.sport === "running") &&
         a.local_date != null &&
         a.local_date >= EARLIEST_PLAUSIBLE_DATE &&
         a.local_date <= today &&
@@ -65,6 +70,8 @@ export function prProgress(
         distanceKm: activity.distance_m! / 1000,
         pace,
         speedKmh: 3600 / pace,
+        powerW: cycling ? activity.avg_power_w! : null,
+        rank: cycling ? -activity.avg_power_w! : pace,
         vdot: activity.vdot ?? null,
         older: activity.local_date! <= cutoff,
       };
@@ -79,15 +86,25 @@ export function prProgress(
   const boundaries = [
     ...new Set([0, ...baseline.map((p) => p.distanceKm), ...combined.map((p) => p.distanceKm)]),
   ].sort((a, b) => a - b);
-  const improvements: { distanceKm: number; pace: number; speedKmh: number }[][] = [];
+  const improvements: {
+    distanceKm: number;
+    pace: number;
+    speedKmh: number;
+    powerW: number | null;
+  }[][] = [];
   for (let i = 1; i < boundaries.length; i++) {
     const left = boundaries[i - 1];
     const right = boundaries[i];
     const old = baseline.find((p) => p.distanceKm >= right);
     const best = combined.find((p) => p.distanceKm >= right);
-    if (!old || !best || best.older || best.pace >= old.pace - 1e-9) continue;
+    if (!old || !best || best.older || best.rank >= old.rank - 1e-9) continue;
     const last = improvements.at(-1);
-    const at = (distanceKm: number) => ({ distanceKm, pace: best.pace, speedKmh: best.speedKmh });
+    const at = (distanceKm: number) => ({
+      distanceKm,
+      pace: best.pace,
+      speedKmh: best.speedKmh,
+      powerW: best.powerW,
+    });
     if (last?.at(-1)?.distanceKm === left) {
       last.push(at(left), at(right));
     } else {
@@ -103,16 +120,16 @@ function recordFrontier(points: PrPoint[]): PrPoint[] {
   const sorted = [...points].sort(
     (a, b) =>
       b.distanceKm - a.distanceKm ||
-      a.pace - b.pace ||
+      a.rank - b.rank ||
       Number(b.older) - Number(a.older) ||
       a.activity.id.localeCompare(b.activity.id),
   );
   const frontier: PrPoint[] = [];
   let fastest = Infinity;
   for (const point of sorted) {
-    if (point.pace < fastest - 1e-9 && frontier.at(-1)?.distanceKm !== point.distanceKm) {
+    if (point.rank < fastest - 1e-9 && frontier.at(-1)?.distanceKm !== point.distanceKm) {
       frontier.push(point);
-      fastest = point.pace;
+      fastest = point.rank;
     }
   }
   return frontier.reverse();

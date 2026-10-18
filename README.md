@@ -183,7 +183,7 @@ Running and cycling analytics computed from your own history:
 
 A Running/Cycling switch at the top shows the same insights for rides, compared with rides only:
 power trends (each ride's best 20 minutes against your FTP, with speed as a fallback for rides
-without power), PR progress by speed, time in each power band, heart-rate zones with the speed you
+without power), PR progress by average power, time in each power band, heart-rate zones with the speed you
 hold in each, speed and power curves, and a rides Eddington number. Settings -> Personalize picks
 which sport the page opens on, and can add an "Exclude commutes" toggle: tag an activity as a
 commute on its page and the toggle leaves it out of the Insights. For rides with power, an FTP & VO2max tab tracks FTP, FTP/kg,

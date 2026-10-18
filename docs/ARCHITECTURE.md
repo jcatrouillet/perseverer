@@ -276,7 +276,7 @@ own numbers:
 - **Insights page:** a Running/Cycling switch (default from Settings -> Personalize) picks the
   sport every tab describes; runs are only compared with runs and rides with rides. Rides get
   power trends (each ride's best 20 minutes and the 90-day FTP, speed as the fallback for rides
-  without power), PR progress by speed, power training bands (`pace_bands.py`, precomputed like
+  without power), PR progress by average power, power training bands (`pace_bands.py`, precomputed like
   the pace bands, from the power stream), HR zones with the speed held in each (`pace_hr_zones.py::compute_ride_hr_zones`),
   speed and power curves (`performance_curve.py`), a rides Eddington number, and FTP, FTP/kg,
   Critical Power and VO2max (`ride_power.py`: each ride's best 3-20 minute power stored at
