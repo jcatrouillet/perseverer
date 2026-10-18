@@ -10,7 +10,8 @@ import {
 } from "recharts";
 import { Link } from "wouter";
 
-import type { ActivitySummary } from "../api/types";
+import type { ActivitySummary, InsightsSport } from "../api/types";
+import { INSIGHTS_SPORTS } from "../insightsSport";
 import { prProgress, type PrPoint } from "../prProgress";
 import { effectiveDurationS, formatClockDuration, formatMinPerKm } from "../runningStats";
 import { displayActivityName } from "../yearStats";
@@ -37,13 +38,17 @@ function RunDot({
   onSelect: (id: string) => void;
 }) {
   if (cx == null || cy == null || !payload?.activity) return <g />;
-  const name = displayActivityName(payload.activity) ?? "Run";
+  const name = displayActivityName(payload.activity) ?? (payload.vdot == null ? "Ride" : "Run");
+  const effort =
+    payload.vdot == null
+      ? `${payload.speedKmh.toFixed(1)} km/h`
+      : `VDOT ${payload.vdot.toFixed(1)}`;
   return (
     <a
       href={`/activities/${payload.activity.id}`}
       className="pr-progress__dot"
       tabIndex={0}
-      aria-label={`${name}, ${payload.activity.local_date}, ${payload.distanceKm.toFixed(2)} km, VDOT ${payload.vdot.toFixed(1)}`}
+      aria-label={`${name}, ${payload.activity.local_date}, ${payload.distanceKm.toFixed(2)} km, ${effort}`}
       onMouseEnter={() => onSelect(payload.activity.id)}
       onFocus={() => onSelect(payload.activity.id)}
       onTouchStart={() => onSelect(payload.activity.id)}
@@ -65,11 +70,15 @@ function RunDot({
 export function PrProgressChart({
   activities,
   today = localToday(),
+  sport = "running",
 }: {
   activities: ActivitySummary[];
   today?: string;
+  sport?: InsightsSport;
 }) {
-  const data = useMemo(() => prProgress(activities, today), [activities, today]);
+  const data = useMemo(() => prProgress(activities, today, sport), [activities, today, sport]);
+  const copy = INSIGHTS_SPORTS[sport];
+  const cycling = sport === "cycling";
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = [...data.older, ...data.recent].find((p) => p.activity.id === selectedId);
   const duration = selected ? effectiveDurationS(selected.activity) : null;
@@ -78,9 +87,9 @@ export function PrProgressChart({
     <section className="card pr-progress" aria-label="PR progress">
       <h2>PR progress</h2>
       <p className="chart-note">
-        One best-VDOT run per week (Monday–Sunday), plotted at its actual distance. Red steps trace
-        your older pace records; blue steps show recent improvements. Each step uses the fastest run
-        covering at least that exact distance. Faster pace is higher.
+        {cycling
+          ? "Every ride, plotted at its actual distance and average speed. Red steps trace your older speed records; blue steps show recent improvements. Each step uses the fastest ride covering at least that exact distance. Faster is higher."
+          : "One best-VDOT run per week (Monday–Sunday), plotted at its actual distance. Red steps trace your older pace records; blue steps show recent improvements. Each step uses the fastest run covering at least that exact distance. Faster pace is higher."}
       </p>
       <ChartLegend
         items={[
@@ -89,37 +98,53 @@ export function PrProgressChart({
         ]}
       />
       {!data.older.length && !data.recent.length ? (
-        <p>No running activities with a VDOT, distance and duration are available yet.</p>
+        <p>
+          {cycling
+            ? "No rides with a distance and duration are available yet."
+            : "No running activities with a VDOT, distance and duration are available yet."}
+        </p>
       ) : (
         <>
-          <PrPlot data={data} onSelect={setSelectedId} />
+          <PrPlot data={data} onSelect={setSelectedId} cycling={cycling} />
           <div className="pr-progress__details" aria-live="polite">
             {selected ? (
               <>
-                <strong>{displayActivityName(selected.activity) ?? "Run"}</strong>
+                <strong>
+                  {displayActivityName(selected.activity) ?? (cycling ? "Ride" : "Run")}
+                </strong>
                 <span>
                   {selected.activity.local_date} · {selected.distanceKm.toFixed(2)} km ·{" "}
-                  {formatMinPerKm(selected.pace / 60)} /km · VDOT {selected.vdot.toFixed(1)}
+                  {selected.vdot == null
+                    ? `${selected.speedKmh.toFixed(1)} km/h`
+                    : `${formatMinPerKm(selected.pace / 60)} /km · VDOT ${selected.vdot.toFixed(1)}`}
                   {duration != null ? ` · ${formatClockDuration(duration)}` : ""}
                   {selected.activity.is_race ? " · Race" : ""}
                 </span>
-                <Link href={`/activities/${selected.activity.id}`}>View run →</Link>
+                <Link href={`/activities/${selected.activity.id}`}>View {copy.one} →</Link>
               </>
             ) : (
-              <span>Hover or focus a dot for run details. Select a dot to open the run.</span>
+              <span>
+                Hover or focus a dot for {copy.one} details. Select a dot to open the {copy.one}.
+              </span>
             )}
           </div>
           {!data.older.length && (
             <p className="chart-note">
-              No runs from a year ago or earlier are available for comparison yet.
+              No {copy.many} from a year ago or earlier are available for comparison yet.
             </p>
           )}
           {!!data.older.length && !data.recent.length && (
-            <p className="chart-note">No weekly-best runs from the last year yet.</p>
+            <p className="chart-note">
+              {cycling
+                ? "No rides from the last year yet."
+                : "No weekly-best runs from the last year yet."}
+            </p>
           )}
           {!!data.older.length && !!data.recent.length && !data.improvements.length && (
             <p className="chart-note">
-              No recent weekly best beats an older best at a comparable distance yet.
+              {cycling
+                ? "No recent ride beats an older best at a comparable distance yet."
+                : "No recent weekly best beats an older best at a comparable distance yet."}
             </p>
           )}
         </>
@@ -131,10 +156,15 @@ export function PrProgressChart({
 const PrPlot = memo(function PrPlot({
   data,
   onSelect,
+  cycling,
 }: {
   data: ReturnType<typeof prProgress>;
   onSelect: (id: string) => void;
+  cycling: boolean;
 }) {
+  // Rides plot speed (higher is faster), runs pace on a reversed axis (lower is faster, drawn
+  // higher): either way a faster effort sits higher.
+  const valueKey = cycling ? "speedKmh" : "pace";
   return (
     <div className="pr-progress__chart">
       <ResponsiveContainer width="100%" height={640}>
@@ -156,15 +186,17 @@ const PrPlot = memo(function PrPlot({
           />
           <YAxis
             type="number"
-            dataKey="pace"
-            name="Pace"
+            dataKey={valueKey}
+            name={cycling ? "Speed" : "Pace"}
             tickCount={9}
             domain={["auto", "auto"]}
-            reversed
-            tickFormatter={(value: number) => formatMinPerKm(value / 60)}
+            reversed={!cycling}
+            tickFormatter={(value: number) =>
+              cycling ? value.toFixed(0) : formatMinPerKm(value / 60)
+            }
             tick={{ fill: "var(--color-text-muted)", fontSize: 12 }}
             label={{
-              value: "Pace /km",
+              value: cycling ? "Speed (km/h)" : "Pace /km",
               angle: -90,
               position: "insideLeft",
               fill: "var(--color-text-muted)",
@@ -175,7 +207,7 @@ const PrPlot = memo(function PrPlot({
               data.baseline.length ? [{ ...data.baseline[0], distanceKm: 0 }, ...data.baseline] : []
             }
             type="stepBefore"
-            dataKey="pace"
+            dataKey={valueKey}
             stroke={RED}
             strokeWidth={3}
             dot={false}
@@ -188,7 +220,7 @@ const PrPlot = memo(function PrPlot({
               key={index}
               data={segment}
               type="linear"
-              dataKey="pace"
+              dataKey={valueKey}
               stroke={BLUE}
               strokeWidth={3}
               dot={false}

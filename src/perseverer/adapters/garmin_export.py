@@ -40,6 +40,7 @@ from perseverer.insights.engine import refresh_insights
 from perseverer.pace_bands import refresh_pace_bands
 from perseverer.performance import refresh_vdot
 from perseverer.performance_rollup import refresh_performance_rollup
+from perseverer.ride_power import refresh_ride_power
 from perseverer.rollups import refresh_daily_and_period_rollups
 from perseverer.run_pacing import refresh_run_pacing
 from perseverer.running_load import refresh_running_tss
@@ -265,6 +266,8 @@ def import_garmin_export(
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
         conn.commit()
         refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
+        conn.commit()
+        refresh_ride_power(conn, parquet_dir, athlete_id=athlete_id)
         conn.commit()
         refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()

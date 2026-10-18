@@ -56,13 +56,14 @@ once for the dark theme and overridden for the light one.
 
 ### Data colours (tones)
 
-Seven tones identify what a number is. `metricStyle.ts` maps every sport and health metric to
+Eight tones identify what a number is. `metricStyle.ts` maps every sport and health metric to
 one of them; the `.tone-*` classes in `layout.css` bind `--tone` so a component only says which
 tone it is.
 
 | Tone | Token | Dark | Light | Metrics | Sport family |
 |---|---|---|---|---|---|
-| `pace` | `--color-pace` | `#4da3ff` | `#1a73e8` | pace, speed, distance, steps | road: running, cycling, rowing |
+| `pace` | `--color-pace` | `#4da3ff` | `#1a73e8` | pace, speed, distance, steps | road: running, rowing |
+| `ride` | `--color-ride` | `#ec6fb4` | `#c03d8a` | a ride's speed curve | cycling |
 | `hr` | `--color-heart-rate` | `#ef5a6f` | `#d43a52` | heart rate, blood pressure | |
 | `elevation` | `--color-elevation` | `#4caf7d` | `#2f9160` | elevation, SpO₂, water % | terrain: walking, hiking, snowshoeing, skiing |
 | `power` | `--color-power` | `#b57bee` | `#8c4fd6` | power, weight | strength: strength training, HIIT, gym equipment |
@@ -70,7 +71,9 @@ tone it is.
 | `load` | `--color-load` | `#e8a33d` | `#c47f1a` | training load, calories, stress | skill: climbing, racket sports |
 | `neutral` | `--color-text-muted` | | | anything without a tone | an unmapped sport |
 
-Fourteen sports share five hues on purpose: a year's "activities by type" then reads as four or
+Cycling has its own hue so a map, a calendar or the Insights sport switch tells rides and runs
+apart at a glance (rides also have their own insights). Fourteen sports share six hues on
+purpose: a year's "activities by type" then reads as four or
 five signals, not fourteen. A sport Garmin adds tomorrow renders in `neutral` with a generic icon
 until someone gives it a family; nothing breaks.
 
@@ -167,6 +170,7 @@ Use these before writing new markup. All live in `frontend/src/components/`.
 | `.stat-grid` | The responsive grid that holds stat tiles. |
 | `MetricChip` / `.chip` | A compact value with its icon in its tone (activity cards, day strips). |
 | `.badge` | A small neutral pill for a status or count ("Done", "Draft"). |
+| `SportSectionTitle` / `.section-title` | The heading of a sport's section in the period summaries (Running, Cycling, Hikes, Climbing): the sport's icon chip in its tone, then the title, on one line. Use it for any new sport section. |
 | `.button`, `.button--primary`, `.button--full` | Buttons. One primary action per form. |
 | `.field` + `.input` | A labelled form field; focus shows the accent border and a soft ring. |
 | `MetricExplorer` | The list-plus-detail shell of the Fitness, Health and Insights pages: a grouped, collapsible metric list on the left and the selected chart on the right; a vertical accordion on a phone. |

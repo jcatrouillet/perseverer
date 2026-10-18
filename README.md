@@ -61,11 +61,20 @@ Form and health summaries.
 |---|---|
 | ![Month view](docs/screenshots/calendar-month.png) | ![Year view](docs/screenshots/calendar-year.png) |
 
-Runs, hikes and bouldering each get their own section in every period summary (week, month,
-year and all time):
+Runs, rides, hikes and bouldering each get their own section in the period summaries (week,
+month, year and all time):
 
 - **Running:** distance per day, trailing totals, pace versus distance, time of day, a calendar
   heatmap and personal records for the period.
+- **Cycling** (week, month, year and all time, only when the period has rides). The week adds an
+  all-time record distance set that week, total distance and duration, fastest speed, share of a
+  day, calories and elevation, and three charts over the last year (weekly distance, weekly best
+  FTP, power against distance). Month, year and all time have: distance, number of
+  rides, average speed, longest ride, max heart rate, average ride length, days ridden per
+  week, most and least ridden weekdays, longest streak and break, distance per day, month or
+  year, trailing distance (7 days
+  for a month, 30 for a year, 365 for all time), average power against distance, and records at
+  5, 10, 20, 40 and 100 km.
 - **Hiking:** number of hikes, distance, time, average and maximum elevation gain, and featured
   hikes (longest, longest by time, most climbing, highest point reached) with their place names.
 - **Bouldering:** sessions, climb time, routes, hardest grade sent, and routes attempted and
@@ -159,7 +168,7 @@ reference ranges, all at week, month, year or all-time resolution.
 
 ### Insights
 
-Running analytics computed from your own history:
+Running and cycling analytics computed from your own history:
 
 - **Pace trends** and **training bands**: every run's VDOT over time, and how much you run at each
   intensity.
@@ -171,6 +180,17 @@ Running analytics computed from your own history:
 - **Performance curve**: your best sustained pace or heart rate for every duration from 1 s to
   2 h.
 - **Eddington number**: the largest *E* with *E* runs of at least *E* km, per year.
+
+A Running/Cycling switch at the top shows the same insights for rides, compared with rides only:
+power trends (each ride's best 20 minutes against your FTP, with speed as a fallback for rides
+without power), PR progress by speed, time in each power band, heart-rate zones with the speed you
+hold in each, speed and power curves, and a rides Eddington number. Settings -> Personalize picks
+which sport the page opens on, and can add an "Exclude commutes" toggle: tag an activity as a
+commute on its page and the toggle leaves it out of the Insights. For rides with power, an FTP & VO2max tab tracks FTP, FTP/kg,
+Critical Power with W′ and a VO2max estimate, all computed from your own power data. Each ride's page shows
+its max speed next to the average, and its best average power over 5 s, 30 s, 1, 5, 20, 30 and
+60 minutes. VO2max, race predictions and race readiness are running models, so
+they only appear for running. Rides also have their own colour, on the map and everywhere else.
 
 | Race readiness | Pace & heart-rate zones |
 |---|---|

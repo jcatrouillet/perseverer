@@ -180,6 +180,10 @@ class PersonalizeSettingsIn(BaseModel):
     time_format: Literal["24h", "12h"] = "24h"
     default_view: Literal["week", "month", "day", "activities", "last_activity"] = "week"
     unit_preference: Literal["metric", "imperial"] = "metric"
+    # The sport the Insights page opens on; optional so an older client keeps working.
+    insights_sport: Literal["running", "cycling"] = "running"
+    # Whether the Insights page offers an "Exclude commutes" toggle.
+    commute_filter: bool = False
 
 
 class PersonalizeSettingsOut(BaseModel):
@@ -187,6 +191,8 @@ class PersonalizeSettingsOut(BaseModel):
     time_format: Literal["24h", "12h"]
     default_view: Literal["week", "month", "day", "activities", "last_activity"]
     unit_preference: Literal["metric", "imperial"]
+    insights_sport: Literal["running", "cycling"]
+    commute_filter: bool
 
 
 # PUT /settings/password -- self-service password change, see api/routers/settings.py for the

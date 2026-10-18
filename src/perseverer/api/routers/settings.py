@@ -520,6 +520,8 @@ def get_personalize_settings(
             athlete.c.time_format,
             athlete.c.default_view,
             athlete.c.unit_preference,
+            athlete.c.insights_sport,
+            athlete.c.commute_filter,
         ).where(athlete.c.id == athlete_id)
     ).fetchone()
     if row is None:
@@ -528,12 +530,16 @@ def get_personalize_settings(
             time_format="24h",
             default_view="week",
             unit_preference="metric",
+            insights_sport="running",
+            commute_filter=False,
         )
     return PersonalizeSettingsOut(
         week_start_day=row.week_start_day,
         time_format=row.time_format,
         default_view=row.default_view,
         unit_preference=row.unit_preference,
+        insights_sport=row.insights_sport,
+        commute_filter=row.commute_filter,
     )
 
 
@@ -551,6 +557,8 @@ def put_personalize_settings(
             time_format=payload.time_format,
             default_view=payload.default_view,
             unit_preference=payload.unit_preference,
+            insights_sport=payload.insights_sport,
+            commute_filter=payload.commute_filter,
         )
     )
     conn.commit()
@@ -559,6 +567,8 @@ def put_personalize_settings(
         time_format=payload.time_format,
         default_view=payload.default_view,
         unit_preference=payload.unit_preference,
+        insights_sport=payload.insights_sport,
+        commute_filter=payload.commute_filter,
     )
 
 

@@ -69,10 +69,21 @@ def _seed_activity_with_stream(
 def test_requires_a_valid_metric(client: TestClient, auth_headers: dict[str, str]) -> None:
     r = client.get(
         "/api/v1/performance/curve",
-        params={"metric": "power", "start_date": "2026-06-01", "end_date": "2026-06-30"},
+        params={"metric": "watts", "start_date": "2026-06-01", "end_date": "2026-06-30"},
         headers=auth_headers,
     )
     assert r.status_code == 422
+
+
+def test_accepts_the_ride_metrics(client: TestClient, auth_headers: dict[str, str]) -> None:
+    for metric in ("speed", "power"):
+        r = client.get(
+            "/api/v1/performance/curve",
+            params={"metric": metric, "start_date": "2026-06-01", "end_date": "2026-06-30"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        assert r.json()["available"] is False
 
 
 def test_available_false_when_nothing_qualifies(

@@ -72,10 +72,11 @@ Contents: [Conventions](#conventions) · [Tables](#tables) · [Metric registry](
   no row-count leak), regenerated on every rebuild. `primary_source` is the adapter whose data
   fills the core fields. Core fields: `sport`/`sub_sport`, `start_time_utc`, `utc_offset_s`,
   `tz_name`, `local_date`, `duration_s`, `moving_duration_s`, `distance_m`, `elevation_gain_m`,
-  `max_altitude_m`, `calories`, `is_race`, `name`, `shoe_id`, `carbohydrates_g`/`sodium_mg`
+  `max_altitude_m`, `calories`, `is_race`, `is_commute` (the athlete's own commute tag, never a
+  vendor value), `name`, `shoe_id`, `carbohydrates_g`/`sodium_mg`
   (athlete-logged fueling; no vendor source), `deleted_at`.
 - **`activity_sport_override`**: the athlete's corrections, keyed by `(athlete_id,
-  start_time_utc)` so they survive a rebuild: `sport`/`sub_sport`, `is_race`, `name`,
+  start_time_utc)` so they survive a rebuild: `sport`/`sub_sport`, `is_race`, `is_commute`, `name`,
   `carbohydrates_g`/`sodium_mg`, each independent. `apply_sport_overrides` re-applies them after
   every rebuild. `sync backfill-garmin-activity-names` also writes `name` here, using Garmin
   Connect's cloud-side activity name, but only when the current name is still the sport's generic
@@ -310,6 +311,22 @@ compared with other rides. Computed incrementally at every import, trim, merge a
 new or changed activities are read). Feeds the run and ride insights' fastest/slowest start,
 fastest/slowest finish and most-negative-km-splits records.
 
+### Training bands (pace and speed)
+
+Time spent in each band, per activity, from its own speed stream (`pace_bands.py::refresh_pace_bands`,
+full recompute at every ingest), as `activity_metric` rows in seconds with `source="perseverer"`:
+
+- **`perseverer.performance.pace_band.*`**: runs (`sport == "running"`), 30 s/km bands from
+  `lt_3_30` (< 3:30 /km) to `8_00_8_30`, then `walk` (slower than 8:30 /km).
+- **`perseverer.performance.power_band.*`**: rides (the whole `ride` family) with a power channel,
+  50 W bands from `ge_300` (300+ W) through `250_300` ... `50_100` to `lt_50` (< 50 W). Power, not
+  speed: a ride's speed swings with wind, gradient and drafting.
+
+Each sample's value holds until the next sample (gaps capped at 10 s); a run's samples under
+0.3 m/s count as stopped and a ride's 0 W samples as coasting, both left out. A run only ever has
+pace bands and a ride only power bands. Read by
+`GET /insights/pace-bands` (`sport=running|cycling`).
+
 ### Running performance index (VDOT)
 
 - **`perseverer.performance.vdot`**: Daniels–Gilbert VDOT for every `sport == "running"` activity,
@@ -390,11 +407,41 @@ range and the runs behind each range.
 - Each zone's HR range is the 25th–75th percentile of the average HR of real runs whose GAP falls
   in that pace band (365 days, at least `MIN_ZONE_HR_SAMPLES`), else a formula band around the
   fraction of max HR.
+- Rides (`compute_ride_hr_zones`, `sport=cycling`): the HR ranges are the zone fractions of max
+  HR, and each zone's speed range is the 25th–75th percentile of the average speed of the rides
+  in 365 days whose average HR falls in it (at least `MIN_ZONE_HR_SAMPLES`). No VDOT.
+
+### Ride power (FTP, Critical Power, VO2max)
+
+Each ride's best average power from its power stream (`ride_power.py::refresh_ride_power`,
+incremental: a ride is read again only when its stream, its trim or the algorithm version
+changes), as `activity_metric` rows in watts with `source="perseverer"`:
+
+- **`perseverer.power.best_<seconds>s_w`** for 5, 30, 60, 180, 300, 720, 1200, 1800 and 3600 s: the
+  best average power over 5 s, 30 s, 1, 3, 5, 12, 20, 30 and 60 minutes (the performance curve's
+  sliding window, mean mode, the same gap rules). The ride page lists 5 s to 60 min; 3-20 minutes
+  feed FTP and Critical Power. Missing when the ride has no power channel or no continuous window
+  that long.
+- **`perseverer.speed.max_5s_mps`** (m/s): the fastest 5-second average speed from the distance
+  stream, the ride page's max speed when the file records none of its own
+  (`fit.session.enhanced_max_speed`/`max_speed` are preferred when present). Five seconds keep a
+  one-sample GPS spike from posing as a top speed.
+- **`perseverer.power.signature`** (`value_text`): the inputs (version, stream file, trim window).
+  Present on every processed ride, with or without power.
+
+`GET /performance/cycling-power` derives, over the trailing 90 days: FTP = 95% of the best 20
+minutes; FTP/kg with the day's weight (scale readings more than 15% from the median of all of them
+are ignored as another person's; else `fit.user_profile.weight`); Critical Power and W′ from the
+least-squares fit of work = W′ + CP × t to the 3-20 minute bests (three durations including 12 or
+20 minutes); VO2max = 10.8 × best-5-minute W/kg + 7 (ACSM). Not derived from heart rate: on real
+rides heart rate correlated too poorly with power to extrapolate. Garmin's own cycling VO2max
+(`garmin.export.ActivityVo2Max.*`) stays archived and unused. `avg_power_w` on `GET /activities`
+is `fit.session.avg_power`.
 
 ### Performance curve
 
 `GET /performance/curve` (`performance_curve.py`, computed per request): for a metric (`pace`,
-`gap` or `heart_rate`) and a date range, the best sustained value for each duration in
+`gap`, `heart_rate`, or for rides `speed` (m/s) and `power` (watts)) and a date range, the best sustained value for each duration in
 `DURATION_BUCKETS_S` (1, 5, 10, 15, 30, 60, 120, 180, 300, 600, 900, 1200, 1800, 2700, 3600, 5400,
 7200 s), across every qualifying activity.
 
@@ -795,6 +842,8 @@ backend computations.
 | `athlete.time_format` | `24h`, `12h` | `24h` |
 | `athlete.default_view` | `week`, `month`, `day`, `activities`, `last_activity` (most recently imported activity) | `week` |
 | `athlete.unit_preference` | `metric`, `imperial` | `metric` |
+| `athlete.insights_sport` | `running`, `cycling`: the sport the Insights page opens on | `running` |
+| `athlete.commute_filter` | `true`, `false`: whether the Insights page offers an "Exclude commutes" toggle | `false` |
 
 All backend weekly data (rollups, week notes, race readiness, email reports, share pages) stays
 Monday-based; the week start only changes the frontend's calendar grids and client-side weekly

@@ -22,14 +22,44 @@ import {
 import type { TooltipContentProps } from "recharts";
 
 import { useAllActivities, usePerformanceCurve } from "../api/queries";
-import type { PerformanceCurvePointOut } from "../api/types";
-import { toneColor } from "../metricStyle";
-import { formatMinPerKm } from "../runningStats";
+import type { InsightsSport, PerformanceCurveMetric, PerformanceCurvePointOut } from "../api/types";
+import { kmhToDisplaySpeed, speedUnitLabel } from "../formatDistance";
+import { toneColor, type Tone } from "../metricStyle";
+import { usePersonalize } from "../PersonalizeContext";
+import { formatMinPerKm, isCyclingSport } from "../runningStats";
 import { ChartFullscreen } from "./ChartFullscreen";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { StatTile } from "./StatTile";
 
-type Metric = "pace" | "gap" | "heart_rate";
+type Metric = PerformanceCurveMetric;
+
+// Runs: pace, GAP and heart rate. Rides: speed, power and heart rate -- a ride's curve never
+// includes a run, and the other way round (the Insights sport switch).
+const METRICS: Record<InsightsSport, { key: Metric; label: string }[]> = {
+  running: [
+    { key: "pace", label: "Pace" },
+    { key: "gap", label: "GAP" },
+    { key: "heart_rate", label: "Heart rate" },
+  ],
+  cycling: [
+    { key: "speed", label: "Speed" },
+    { key: "power", label: "Power" },
+    { key: "heart_rate", label: "Heart rate" },
+  ],
+};
+
+const METRIC_TONES: Record<Metric, Tone> = {
+  pace: "pace",
+  gap: "cadence",
+  heart_rate: "hr",
+  speed: "ride",
+  power: "power",
+};
+
+/** Pace and GAP are lower-is-better (seconds/km); everything else higher-is-better. */
+function lowerIsBetter(metric: Metric): boolean {
+  return metric === "pace" || metric === "gap";
+}
 
 const RANGE_PRESETS = [
   { key: "3m", label: "Last 3 months", months: 3 },
@@ -64,12 +94,22 @@ function formatDuration(seconds: number): string {
   return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`;
 }
 
-function formatValue(metric: Metric, value: number): string {
+function formatValue(metric: Metric, value: number, imperial = false): string {
   if (metric === "heart_rate") return `${Math.round(value)} bpm`;
+  if (metric === "power") return `${Math.round(value)} W`;
+  if (metric === "speed") {
+    const unit = imperial ? "imperial" : "metric";
+    return `${kmhToDisplaySpeed(value * 3.6, unit).toFixed(1)} ${speedUnitLabel(unit)}`;
+  }
   return `${formatMinPerKm(value / 60)} /km`;
 }
 
-function CurveTooltip({ active, payload, metric }: TooltipContentProps & { metric: Metric }) {
+function CurveTooltip({
+  active,
+  payload,
+  metric,
+  imperial,
+}: TooltipContentProps & { metric: Metric; imperial: boolean }) {
   if (!active || !payload?.length) return null;
   const point = payload[0]!.payload as PerformanceCurvePointOut;
   return (
@@ -82,7 +122,7 @@ function CurveTooltip({ active, payload, metric }: TooltipContentProps & { metri
       }}
     >
       <p style={{ margin: 0, fontWeight: 600 }}>{formatDuration(point.duration_s)}</p>
-      <p style={{ margin: 0 }}>{formatValue(metric, point.value)}</p>
+      <p style={{ margin: 0 }}>{formatValue(metric, point.value, imperial)}</p>
       <p style={{ margin: 0, color: "var(--color-text-muted)" }}>{point.local_date}</p>
     </div>
   );
@@ -95,8 +135,19 @@ function pointAt(
   return points.find((p) => p.duration_s === durationS);
 }
 
-export function PerformanceCurveChart() {
-  const [metric, setMetric] = useState<Metric>("pace");
+export function PerformanceCurveChart({
+  sport = "running",
+  excludeCommutes = false,
+}: {
+  sport?: InsightsSport;
+  excludeCommutes?: boolean;
+}) {
+  const imperial = usePersonalize().unit_preference === "imperial";
+  const metrics = METRICS[sport];
+  const [chosenMetric, setMetric] = useState<Metric>(metrics[0]!.key);
+  // Switching sport keeps the metric when both sports have it (heart rate), else the first one.
+  const metric = metrics.some((m) => m.key === chosenMetric) ? chosenMetric : metrics[0]!.key;
+  const fmt = (m: Metric, v: number) => formatValue(m, v, imperial);
   const [rangeKey, setRangeKey] = useState<RangeKey>("3m");
   const [selectedSports, setSelectedSports] = useState<Set<string> | null>(null);
 
@@ -118,11 +169,20 @@ export function PerformanceCurveChart() {
   }, [allActivities.data]);
 
   const { start, end } = rangeFor(rangeKey, earliestDate);
+  // A ride's heart-rate curve counts rides only; a run's keeps the sport checklist below.
+  const rideSports = knownSports.filter(isCyclingSport);
   const curve = usePerformanceCurve(
     metric,
     start,
     end,
-    metric === "heart_rate" ? Array.from(effectiveSports) : undefined,
+    metric !== "heart_rate"
+      ? undefined
+      : sport === "cycling"
+        ? rideSports.length > 0
+          ? rideSports
+          : ["cycling"]
+        : Array.from(effectiveSports),
+    excludeCommutes,
   );
 
   function toggleSport(sport: string) {
@@ -132,7 +192,8 @@ export function PerformanceCurveChart() {
     setSelectedSports(next);
   }
 
-  const color = toneColor(metric === "heart_rate" ? "hr" : metric === "gap" ? "cadence" : "pace");
+  const color = toneColor(METRIC_TONES[metric]);
+  const metricLabel = metrics.find((m) => m.key === metric)!.label;
 
   return (
     <section className="card">
@@ -141,37 +202,22 @@ export function PerformanceCurveChart() {
         The best sustained value for each duration, across every activity in range -- not one
         activity's own average, the single best window anywhere. Dashed lines (when shown) are your
         own already-computed threshold pace/HR, for comparison -- never blended into the curve
-        itself.
+        itself.{sport === "cycling" && " Rides only: no run is part of these curves."}
       </p>
 
       <div className="insights-tabs" role="tablist" style={{ marginBottom: "var(--space-3)" }}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={metric === "pace"}
-          className={metric === "pace" ? "is-active" : undefined}
-          onClick={() => setMetric("pace")}
-        >
-          Pace
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={metric === "gap"}
-          className={metric === "gap" ? "is-active" : undefined}
-          onClick={() => setMetric("gap")}
-        >
-          GAP
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={metric === "heart_rate"}
-          className={metric === "heart_rate" ? "is-active" : undefined}
-          onClick={() => setMetric("heart_rate")}
-        >
-          Heart rate
-        </button>
+        {metrics.map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            role="tab"
+            aria-selected={metric === m.key}
+            className={metric === m.key ? "is-active" : undefined}
+            onClick={() => setMetric(m.key)}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
 
       <label className="field" style={{ maxWidth: "16rem" }}>
@@ -189,7 +235,7 @@ export function PerformanceCurveChart() {
         </select>
       </label>
 
-      {metric === "heart_rate" && knownSports.length > 0 && (
+      {metric === "heart_rate" && sport === "running" && knownSports.length > 0 && (
         <fieldset className="field" style={{ border: "none", padding: 0 }}>
           <legend>Sports included</legend>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
@@ -220,9 +266,9 @@ export function PerformanceCurveChart() {
               return p20 ? (
                 <StatTile
                   label="20-min best"
-                  value={formatValue(metric, p20.value)}
-                  icon={metric === "heart_rate" ? "heart" : "gauge"}
-                  tone={metric === "heart_rate" ? "hr" : "pace"}
+                  value={fmt(metric, p20.value)}
+                  icon={metric === "heart_rate" ? "heart" : metric === "power" ? "bolt" : "gauge"}
+                  tone={METRIC_TONES[metric]}
                   hero
                 />
               ) : null;
@@ -232,9 +278,9 @@ export function PerformanceCurveChart() {
               return p60 ? (
                 <StatTile
                   label="60-min best"
-                  value={formatValue(metric, p60.value)}
-                  icon={metric === "heart_rate" ? "heart" : "gauge"}
-                  tone={metric === "heart_rate" ? "hr" : "pace"}
+                  value={fmt(metric, p60.value)}
+                  icon={metric === "heart_rate" ? "heart" : metric === "power" ? "bolt" : "gauge"}
+                  tone={METRIC_TONES[metric]}
                   hero
                 />
               ) : null;
@@ -245,15 +291,17 @@ export function PerformanceCurveChart() {
             const threshold =
               metric === "heart_rate"
                 ? curve.data.threshold_hr_bpm
-                : curve.data.threshold_pace_s_per_km;
+                : lowerIsBetter(metric)
+                  ? curve.data.threshold_pace_s_per_km
+                  : null;
             if (!p60 || threshold == null) return null;
             if (metric === "heart_rate") {
               const diff = p60.value - threshold;
               const verb = diff > 0 ? "higher than" : diff < 0 ? "lower than" : "equal to";
               return (
                 <p className="chart-note">
-                  Your 60-min best is {formatValue(metric, Math.abs(diff))} {verb} your computed
-                  threshold heart rate ({formatValue(metric, threshold)}).
+                  Your 60-min best is {fmt(metric, Math.abs(diff))} {verb} your computed threshold
+                  heart rate ({fmt(metric, threshold)}).
                 </p>
               );
             }
@@ -261,16 +309,13 @@ export function PerformanceCurveChart() {
             const verb = diffS > 0 ? "faster than" : diffS < 0 ? "slower than" : "equal to";
             return (
               <p className="chart-note">
-                Your 60-min best is {formatValue(metric, Math.abs(diffS))} {verb} your computed
-                threshold pace ({formatValue(metric, threshold)}).
+                Your 60-min best is {fmt(metric, Math.abs(diffS))} {verb} your computed threshold
+                pace ({fmt(metric, threshold)}).
               </p>
             );
           })()}
 
-          <ChartFullscreen
-            as="h3"
-            title={`${metric === "heart_rate" ? "Heart rate" : metric === "gap" ? "GAP" : "Pace"} curve`}
-          >
+          <ChartFullscreen as="h3" title={`${metricLabel} curve`}>
             <ResponsiveContainer width="100%" height={320}>
               <ComposedChart
                 data={curve.data.points}
@@ -290,13 +335,17 @@ export function PerformanceCurveChart() {
                   dataKey="value"
                   type="number"
                   domain={["auto", "auto"]}
-                  reversed={metric !== "heart_rate"}
-                  tickFormatter={(v: number) => formatValue(metric, v)}
+                  reversed={lowerIsBetter(metric)}
+                  tickFormatter={(v: number) => fmt(metric, v)}
                   stroke="var(--color-text-muted)"
                   fontSize={11}
                   width={70}
                 />
-                <Tooltip content={(props) => <CurveTooltip {...props} metric={metric} />} />
+                <Tooltip
+                  content={(props) => (
+                    <CurveTooltip {...props} metric={metric} imperial={imperial} />
+                  )}
+                />
                 {metric === "heart_rate" ? (
                   <>
                     {curve.data.max_hr_bpm != null && (
@@ -324,7 +373,7 @@ export function PerformanceCurveChart() {
                       />
                     )}
                   </>
-                ) : (
+                ) : lowerIsBetter(metric) ? (
                   <>
                     {curve.data.threshold_pace_s_per_km != null && (
                       <ReferenceLine
@@ -343,7 +392,7 @@ export function PerformanceCurveChart() {
                       />
                     )}
                   </>
-                )}
+                ) : null}
                 <Line
                   isAnimationActive={false}
                   type="monotone"

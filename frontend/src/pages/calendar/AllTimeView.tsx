@@ -17,6 +17,7 @@ import { FitnessChart } from "../../components/FitnessChart";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
+import { CyclingStats } from "../../components/CyclingStats";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
@@ -26,6 +27,7 @@ import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { EARLIEST_PLAUSIBLE_DATE, localIsoDate } from "../../dateUtils";
 import { anyMetricHasData, monthlyAverageSleepHours } from "../../healthStats";
 import { CORE_METRICS, HRV_METRIC, WEIGHT_METRIC } from "../../healthMetricGroups";
+import { isCyclingSport } from "../../runningStats";
 import { busiestYear } from "../../yearStats";
 import "../../styles/calendar.css";
 
@@ -87,6 +89,7 @@ export function AllTimeView() {
       : [];
   const runs = all.filter((a) => a.sport === "running");
   const hikes = all.filter((a) => a.sport === "hiking");
+  const rides = all.filter((a) => isCyclingSport(a.sport));
   const busiest = busiestYear(all);
 
   return (
@@ -113,6 +116,15 @@ export function AllTimeView() {
           trailingWindowDays={365}
         />
       )}
+
+      <CyclingStats
+        rides={rides}
+        allRides={rides}
+        startDate={start}
+        endDate={end}
+        periodLabel="all time"
+        trailingWindowDays={365}
+      />
 
       <HikeStatsCard activities={hikes} />
       <ClimbingStatsCard summary={climbing.data} />

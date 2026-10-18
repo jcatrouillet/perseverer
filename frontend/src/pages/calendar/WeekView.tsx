@@ -29,6 +29,7 @@ import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { NotesPanel } from "../../components/NotesPanel";
 import { PeriodShareButton } from "../../components/ShareButton";
 import { MetricChip, StatTile } from "../../components/StatTile";
+import { WeekCyclingStats } from "../../components/WeekCyclingStats";
 import { WeekRunningStats } from "../../components/WeekRunningStats";
 import { WeekWellnessCharts } from "../../components/WeekWellnessCharts";
 import { WorkoutLoadBar } from "../../components/WorkoutLoadBar";
@@ -259,6 +260,9 @@ export function WeekView({ date }: { date: string }) {
   // callout can tell a genuine all-time PR apart from merely a strong trailing-year effort --
   // see docs/ARCHITECTURE.md and RunningStats.tsx's allTimeRecords prop docstring.
   const allTimeRunning = useAllActivities({ sport: "running" });
+  // Every ride ever: the cycling card takes this week, the last year's charts and the all-time
+  // records from this one list.
+  const allRides = useAllActivities({ sport: "cycling" });
   // Also spans the prior week, for the ramp (week-over-week CTL change) comparison below.
   const fitness = useFitness(priorWeekStart, end);
   const health = useHealthDashboard(start, end);
@@ -476,6 +480,15 @@ export function WeekView({ date }: { date: string }) {
           priorWeekStart={priorWeekStart}
           priorWeekEnd={priorWeekEnd}
           allTimeRecords={personalRecords(allTimeRunning.data ?? [])}
+        />
+      )}
+
+      {allRides.data && (
+        <WeekCyclingStats
+          allRides={allRides.data}
+          rangeStart={runningRangeStart}
+          weekStart={start}
+          weekEnd={end}
         />
       )}
 

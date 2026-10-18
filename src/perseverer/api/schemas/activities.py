@@ -149,6 +149,8 @@ class ActivitySummary(BaseModel):
     # garmin_export summarizedActivities entry, meaning genuinely unknown rather than
     # "confirmed not a race".
     is_race: bool | None
+    # The athlete's own commute tag (PATCH /activities/{id}/commute).
+    is_commute: bool = False
     duration_s: float | None
     moving_duration_s: float | None
     distance_m: float | None
@@ -179,6 +181,10 @@ class ActivitySummary(BaseModel):
     # available -- see performance.py's own docstring. Null for non-running activities, or a
     # running activity too short/anomalous for the underlying aerobic model (see vdot.py).
     vdot: float | None
+    # Average power in watts (fit.session.avg_power); null without a power meter.
+    avg_power_w: float | None = None
+    # Best 20-minute average power in watts (ride_power.py); null without 20 minutes of power.
+    best_20min_power_w: float | None = None
     # Garmin Connect's own structured "Workout Builder" name (e.g. "W11 Tue - 4x2km Threshold"),
     # from activity_workout.name -- the FIT file's own activity.name is usually just the generic
     # device default ("Running") when a pre-planned workout was followed, so the frontend falls
@@ -313,7 +319,11 @@ class ClimbGradeBreakdownOut(BaseModel):
 
 class ClimbingSummaryOut(BaseModel):
     session_count: int
-    total_climb_time_s: float
+    # Null when no session in the period was timed: a session logged only in Kaya (no watch
+    # recording matched) has routes but no time, and that is unknown, not zero.
+    total_climb_time_s: float | None
+    # How many of session_count have a climb time; total_climb_time_s covers only these.
+    timed_session_count: int
     total_routes: int
     max_completed_grade: int | None
     grade_breakdown: list[ClimbGradeBreakdownOut]
@@ -501,6 +511,14 @@ class ActivityRaceOverrideIn(BaseModel):
 
 class ActivityRaceOverrideOut(BaseModel):
     is_race: bool
+
+
+class ActivityCommuteOverrideIn(BaseModel):
+    is_commute: bool
+
+
+class ActivityCommuteOverrideOut(BaseModel):
+    is_commute: bool
 
 
 class ActivityNameOverrideIn(BaseModel):

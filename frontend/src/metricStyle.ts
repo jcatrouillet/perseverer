@@ -10,19 +10,20 @@
 // codebase here, and both themes keep working with no extra work.
 import type { IconName } from "./components/Icon";
 
-export type Tone = "pace" | "hr" | "elevation" | "power" | "cadence" | "load" | "neutral";
+export type Tone = "pace" | "ride" | "hr" | "elevation" | "power" | "cadence" | "load" | "neutral";
 
 export interface MetricStyle {
   tone: Tone;
   icon: IconName;
 }
 
-/** The same seven tones the `.tone-*` classes bind in layout.css, as values a chart library can
+/** The same eight tones the `.tone-*` classes bind in layout.css, as values a chart library can
  * be handed directly. Charts previously picked colours by array index, which meant a metric
  * could be red in a chart and teal on the tile right above it -- routing both through here is
  * what actually enforces "a hue identifies a metric". */
 const TONE_COLORS: Record<Tone, string> = {
   pace: "var(--color-pace)",
+  ride: "var(--color-ride)",
   hr: "var(--color-heart-rate)",
   elevation: "var(--color-elevation)",
   power: "var(--color-power)",
@@ -35,11 +36,13 @@ export function toneColor(tone: Tone): string {
   return TONE_COLORS[tone];
 }
 
-/** Ten-plus sports, five hues. Giving every sport its own colour is exactly the "too colourful"
+/** Ten-plus sports, six hues. Giving every sport its own colour is exactly the "too colourful"
  * failure mode -- grouping them by what the activity *is* means the year-view type list reads as
  * four or five signals instead of fourteen. Families:
  *
- *   pace      road/pace     running, cycling, rowing
+ *   pace      road/pace     running, rowing
+ *   ride      cycling       cycling (its own hue, so a map or a calendar tells rides and runs
+ *                           apart at a glance; rides also have their own insights)
  *   elevation trail/terrain walking, hiking, snowshoeing, alpine skiing
  *   power     strength      strength training, hiit, fitness equipment
  *   cadence   mobility      yoga, breathing
@@ -50,7 +53,7 @@ export function toneColor(tone: Tone): string {
  * full archive -- rather than from a guess at Garmin's enum. */
 const SPORT_STYLES: Record<string, MetricStyle> = {
   running: { tone: "pace", icon: "run" },
-  cycling: { tone: "pace", icon: "bike" },
+  cycling: { tone: "ride", icon: "bike" },
   rowing: { tone: "pace", icon: "waves" },
 
   walking: { tone: "elevation", icon: "walk" },

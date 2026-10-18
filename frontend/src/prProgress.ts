@@ -1,12 +1,19 @@
-import type { ActivitySummary } from "./api/types";
+// PR progress (PrProgressChart.tsx): the fastest-at-each-distance frontier, older records
+// against the last year's. Runs: one best-VDOT run per week. Rides (the Insights sport switch):
+// every ride, since rides have no VDOT and are few enough not to need thinning. Runs and rides
+// are never mixed. `pace` (seconds/km) ranks both; `speedKmh` is the same value as a ride's
+// speed, for a chart that plots speed.
+import type { ActivitySummary, InsightsSport } from "./api/types";
 import { EARLIEST_PLAUSIBLE_DATE, isoDate, mondayOf, parseIsoDate } from "./dateUtils";
-import { effectiveDurationS } from "./runningStats";
+import { effectiveDurationS, isCyclingSport } from "./runningStats";
 
 export interface PrPoint {
   activity: ActivitySummary;
   distanceKm: number;
   pace: number;
-  vdot: number;
+  speedKmh: number;
+  /** null for a ride. */
+  vdot: number | null;
   older: boolean;
 }
 
@@ -19,20 +26,23 @@ export function yearAgo(today: string): string {
   return isoDate(date);
 }
 
-export function prProgress(activities: ActivitySummary[], today: string) {
+export function prProgress(
+  activities: ActivitySummary[],
+  today: string,
+  sport: InsightsSport = "running",
+) {
   const cutoff = yearAgo(today);
   const weekly = new Map<string, ActivitySummary>();
+  const cycling = sport === "cycling";
   // Stable ties: earliest run, then id. Preserve full VDOT precision when selecting winners.
   const eligible = activities
     .filter(
       (a) =>
-        a.sport === "running" &&
+        (cycling ? isCyclingSport(a.sport) : a.sport === "running") &&
         a.local_date != null &&
         a.local_date >= EARLIEST_PLAUSIBLE_DATE &&
         a.local_date <= today &&
-        a.vdot != null &&
-        Number.isFinite(a.vdot) &&
-        a.vdot > 0 &&
+        (cycling || (a.vdot != null && Number.isFinite(a.vdot) && a.vdot > 0)) &&
         a.distance_m != null &&
         Number.isFinite(a.distance_m) &&
         a.distance_m > 0 &&
@@ -40,18 +50,25 @@ export function prProgress(activities: ActivitySummary[], today: string) {
         (effectiveDurationS(a) ?? 0) > 0,
     )
     .sort((a, b) => a.local_date!.localeCompare(b.local_date!) || a.id.localeCompare(b.id));
-  for (const activity of eligible) {
-    const week = isoDate(mondayOf(parseIsoDate(activity.local_date!)));
-    if (activity.vdot! > (weekly.get(week)?.vdot ?? -Infinity)) weekly.set(week, activity);
+  if (!cycling) {
+    for (const activity of eligible) {
+      const week = isoDate(mondayOf(parseIsoDate(activity.local_date!)));
+      if (activity.vdot! > (weekly.get(week)?.vdot ?? -Infinity)) weekly.set(week, activity);
+    }
   }
-  const points: PrPoint[] = [...weekly.values()]
-    .map((activity) => ({
-      activity,
-      distanceKm: activity.distance_m! / 1000,
-      pace: effectiveDurationS(activity)! / (activity.distance_m! / 1000),
-      vdot: activity.vdot!,
-      older: activity.local_date! <= cutoff,
-    }))
+  const selected = cycling ? eligible : [...weekly.values()];
+  const points: PrPoint[] = selected
+    .map((activity) => {
+      const pace = effectiveDurationS(activity)! / (activity.distance_m! / 1000);
+      return {
+        activity,
+        distanceKm: activity.distance_m! / 1000,
+        pace,
+        speedKmh: 3600 / pace,
+        vdot: activity.vdot ?? null,
+        older: activity.local_date! <= cutoff,
+      };
+    })
     .sort((a, b) => a.distanceKm - b.distanceKm);
   const older = points.filter((p) => p.older);
   const recent = points.filter((p) => !p.older);
@@ -62,7 +79,7 @@ export function prProgress(activities: ActivitySummary[], today: string) {
   const boundaries = [
     ...new Set([0, ...baseline.map((p) => p.distanceKm), ...combined.map((p) => p.distanceKm)]),
   ].sort((a, b) => a - b);
-  const improvements: { distanceKm: number; pace: number }[][] = [];
+  const improvements: { distanceKm: number; pace: number; speedKmh: number }[][] = [];
   for (let i = 1; i < boundaries.length; i++) {
     const left = boundaries[i - 1];
     const right = boundaries[i];
@@ -70,13 +87,11 @@ export function prProgress(activities: ActivitySummary[], today: string) {
     const best = combined.find((p) => p.distanceKm >= right);
     if (!old || !best || best.older || best.pace >= old.pace - 1e-9) continue;
     const last = improvements.at(-1);
+    const at = (distanceKm: number) => ({ distanceKm, pace: best.pace, speedKmh: best.speedKmh });
     if (last?.at(-1)?.distanceKm === left) {
-      last.push({ distanceKm: left, pace: best.pace }, { distanceKm: right, pace: best.pace });
+      last.push(at(left), at(right));
     } else {
-      improvements.push([
-        { distanceKm: left, pace: best.pace },
-        { distanceKm: right, pace: best.pace },
-      ]);
+      improvements.push([at(left), at(right)]);
     }
   }
   return { cutoff, older, recent, baseline, improvements, combined };

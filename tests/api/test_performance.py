@@ -369,3 +369,46 @@ def test_race_readiness_can_target_a_specific_race_id(
 
 def test_race_readiness_endpoint_requires_auth(client: TestClient) -> None:
     assert client.get("/api/v1/performance/race-readiness").status_code in (401, 403)
+
+
+def test_pace_hr_zones_for_cycling_have_no_vdot_and_carry_speed_fields(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get(
+        "/api/v1/performance/pace-hr-zones?as_of=2025-06-10&sport=cycling", headers=auth_headers
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["profile_vdot"] is None
+    assert len(body["zones"]) == 5
+    assert all("speed_low_mps" in z and "speed_high_mps" in z for z in body["zones"])
+    assert any("No ride with distance" in m for m in body["missing"])
+
+    bad = client.get("/api/v1/performance/pace-hr-zones?sport=swimming", headers=auth_headers)
+    assert bad.status_code == 422
+
+
+def test_cycling_power_reports_unavailable_without_power_rides(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.get("/api/v1/performance/cycling-power?as_of=2026-06-30", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert body["current"] is None
+    assert body["history"] == []
+    assert body["window_days"] == 90
+    assert any("No ride with power" in m for m in body["missing"])
+
+
+def test_exclude_commutes_is_accepted_by_the_insights_endpoints(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    for url in (
+        "/api/v1/performance/pace-hr-zones?exclude_commutes=true",
+        "/api/v1/performance/pace-hr-zones?sport=cycling&exclude_commutes=true",
+        "/api/v1/performance/cycling-power?exclude_commutes=true",
+        "/api/v1/performance/curve?metric=power&start_date=2026-01-01&end_date=2026-06-30"
+        "&exclude_commutes=true",
+    ):
+        assert client.get(url, headers=auth_headers).status_code == 200, url

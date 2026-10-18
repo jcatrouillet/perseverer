@@ -25,7 +25,8 @@ import type { TooltipContentProps } from "recharts";
 import { useLocation } from "wouter";
 
 import { usePaceBands, usePaceBandsByActivity } from "../api/queries";
-import type { ActivityPaceBandsOut, PaceBandOut } from "../api/types";
+import { INSIGHTS_SPORTS } from "../insightsSport";
+import type { ActivityPaceBandsOut, InsightsSport, PaceBandOut } from "../api/types";
 import { ChartFullscreen } from "./ChartFullscreen";
 import { LoadingSpinner } from "./LoadingSpinner";
 import { parseIsoDate } from "../dateUtils";
@@ -44,7 +45,7 @@ import "../styles/training-bands.css";
 // canonical band order for both charts, via Object.keys -- insertion order is guaranteed for
 // string keys.
 const WALK_LABEL = "Walk";
-const BAND_LABEL_ORDER_FAST_TO_SLOW = [
+const RUN_BAND_LABELS_FAST_TO_SLOW = [
   "< 3:30",
   "3:30-4:00",
   "4:00-4:30",
@@ -58,14 +59,37 @@ const BAND_LABEL_ORDER_FAST_TO_SLOW = [
   "8:00-8:30",
   WALK_LABEL,
 ];
-const BAND_COLORS: Record<string, string> = Object.fromEntries(
-  BAND_LABEL_ORDER_FAST_TO_SLOW.map((label, i) => {
-    const hue = (i / (BAND_LABEL_ORDER_FAST_TO_SLOW.length - 1)) * 120;
+// Rides' power bands (pace_bands.py::POWER_BANDS), hard to easy, on the same red-to-green
+// gradient. Power, not speed: it is the ride's own effort, where speed swings with wind and hills.
+const RIDE_BAND_LABELS_FAST_TO_SLOW = [
+  "300+ W",
+  "250-300 W",
+  "200-250 W",
+  "150-200 W",
+  "100-150 W",
+  "50-100 W",
+  "< 50 W",
+];
+
+function gradient(labels: string[]): [string, string][] {
+  return labels.map((label, i) => {
+    const hue = (i / (labels.length - 1)) * 120;
     return [label, `hsl(${Math.round(hue)}, 80%, 50%)`];
-  }),
-);
+  });
+}
+
+const BAND_COLORS: Record<string, string> = Object.fromEntries([
+  ...gradient(RUN_BAND_LABELS_FAST_TO_SLOW),
+  ...gradient(RIDE_BAND_LABELS_FAST_TO_SLOW),
+]);
 const FALLBACK_COLOR = "var(--color-load)";
-const BAND_LABELS_FAST_TO_SLOW = Object.keys(BAND_COLORS);
+
+/** A band as a reader names it: a run's pace band per km (or "Walk pace"); a ride's power band
+ * already says W. */
+function bandName(label: string): string {
+  if (label === WALK_LABEL) return "Walk pace";
+  return label.endsWith(" W") ? label : `${label} /km`;
+}
 const MS_PER_DAY = 86_400_000;
 
 function formatYearTick(ts: number): string {
@@ -113,7 +137,7 @@ function AggregateTooltip({ active, payload }: TooltipContentProps) {
   if (!row) return null;
   return (
     <div className="training-bands__tooltip">
-      <div>{row.label === WALK_LABEL ? "Walk pace" : `${row.label} /km`}</div>
+      <div>{bandName(row.label)}</div>
       <div>{formatDurationHM(row.seconds)}</div>
     </div>
   );
@@ -200,17 +224,16 @@ function estimateBarWidthPx(rows: CompositionRow[]): number {
   );
 }
 
-// Bottom (0%) to top (100%) of the stack, same slow-to-fast order the real stacked <Bar/>
-// elements below render in.
-const BAND_LABELS_SLOW_TO_FAST = [...BAND_LABELS_FAST_TO_SLOW].reverse();
-
 function CompositionBars({
   rows,
   barWidthPx,
   selectedLabel,
+  labelsSlowToFast,
 }: {
   rows: CompositionRow[];
   barWidthPx: number;
+  /** Bottom (0%) to top (100%) of the stack, the same order the stacked <Bar/>s render in. */
+  labelsSlowToFast: string[];
   /** When set (a click on that band's bar in the middle chart), each run shows only *this*
    * band's own share -- a plain bar from 0 to that share, not the full stack -- rather than
    * every band. Runs that spent no time at this pace simply don't get a bar. */
@@ -247,7 +270,7 @@ function CompositionBars({
         let cumulative = 0;
         return (
           <g key={row.activityId}>
-            {BAND_LABELS_SLOW_TO_FAST.map((label) => {
+            {labelsSlowToFast.map((label) => {
               const pct = row.pctByLabel[label] ?? 0;
               if (pct <= 0) return null;
               const y1 = yScale(cumulative);
@@ -299,18 +322,32 @@ function CompositionTooltip({ active, payload }: TooltipContentProps) {
       <div>{row.localDate}</div>
       {topBands.map(([label, pct]) => (
         <div key={label}>
-          {label === WALK_LABEL ? "Walk" : `${label} /km`} · {Math.round(pct)}%
+          {label === WALK_LABEL ? "Walk" : bandName(label)} · {Math.round(pct)}%
         </div>
       ))}
     </div>
   );
 }
 
-export function TrainingBandsChart() {
+export function TrainingBandsChart({
+  sport = "running",
+  excludeCommutes = false,
+}: {
+  sport?: InsightsSport;
+  excludeCommutes?: boolean;
+}) {
   const [, setLocation] = useLocation();
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
-  const aggregate = usePaceBands();
-  const byActivity = usePaceBandsByActivity();
+  const aggregate = usePaceBands(sport, excludeCommutes);
+  const byActivity = usePaceBandsByActivity(sport, excludeCommutes);
+  const copy = INSIGHTS_SPORTS[sport];
+  // "pace" for runs, "power" for rides, in every sentence below.
+  const measure = sport === "cycling" ? "power level" : "pace";
+  // The API lists the bands fast to slow for either sport.
+  const labelsSlowToFast = useMemo(
+    () => (aggregate.data ?? []).map((b) => b.label).reverse(),
+    [aggregate.data],
+  );
 
   const aggregateRows = useMemo(() => toAggregateRows(aggregate.data ?? []), [aggregate.data]);
   const compositionRows = useMemo(
@@ -362,20 +399,23 @@ export function TrainingBandsChart() {
             <p className="chart-note">
               {selectedLabel == null ? (
                 <>
-                  Every run as its own bar -- the share of that one run spent at each pace, second
-                  by second across its own speed stream. Slow paces sit at the bottom, fast at the
-                  top. Click a pace in the chart below to isolate it here.
+                  Every {copy.one} as its own bar -- the share of that one {copy.one} spent at each{" "}
+                  {measure}, second by second across its own{" "}
+                  {sport === "cycling" ? "power" : "speed"} stream. Easy sits at the bottom, hard at
+                  the top. Click a {measure} in the chart below to isolate it here.
+                  {sport === "cycling" &&
+                    " Only rides with a power meter or smart trainer appear; coasting is left out."}
                 </>
               ) : (
                 <>
-                  Showing only {selectedLabel === WALK_LABEL ? "walk pace" : `${selectedLabel} /km`}
-                  , as a share of each run.{" "}
+                  Showing only {bandName(selectedLabel).toLowerCase()}, as a share of each{" "}
+                  {copy.one}.{" "}
                   <button
                     type="button"
                     className="training-bands__reset"
                     onClick={() => setSelectedLabel(null)}
                   >
-                    Show every pace
+                    Show every {measure}
                   </button>
                 </>
               )}
@@ -411,8 +451,9 @@ export function TrainingBandsChart() {
                   rows={compositionRows}
                   barWidthPx={barWidthPx}
                   selectedLabel={selectedLabel}
+                  labelsSlowToFast={labelsSlowToFast}
                 />
-                {BAND_LABELS_SLOW_TO_FAST.map((label) => (
+                {labelsSlowToFast.map((label) => (
                   <Bar
                     key={label}
                     dataKey={(row: CompositionRow) => row.pctByLabel[label] ?? 0}
@@ -437,8 +478,8 @@ export function TrainingBandsChart() {
         {hasAggregateData && (
           <>
             <p className="chart-note">
-              Total time spent at each pace, summed across the whole running history. Click a pace
-              to isolate it in the chart above.
+              Total time spent at each {measure}, summed across every {copy.one} you've recorded.
+              Click a {measure} to isolate it in the chart above.
             </p>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={aggregateRows} margin={{ top: 8, right: 16, bottom: 48, left: 0 }}>
@@ -494,7 +535,7 @@ export function TrainingBandsChart() {
 
         {hasCompositionData && (
           <>
-            <p className="chart-note">Duration of each run -- always the full history.</p>
+            <p className="chart-note">Duration of each {copy.one} -- always the full history.</p>
             <ResponsiveContainer width="100%" height={204}>
               <BarChart data={compositionRows} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
                 <XAxis

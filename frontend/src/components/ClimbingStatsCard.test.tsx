@@ -8,6 +8,7 @@ function summary(overrides: Partial<ClimbingSummaryOut> = {}): ClimbingSummaryOu
   return {
     session_count: 3,
     total_climb_time_s: 5400,
+    timed_session_count: 3,
     total_routes: 24,
     max_completed_grade: 4,
     grade_breakdown: [
@@ -51,5 +52,24 @@ describe("ClimbingStatsCard", () => {
     render(<ClimbingStatsCard summary={summary()} />);
     expect(screen.getByText("Attempted")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
+  });
+
+  it("shows an unknown climb time as a dash, never 0m, when no session was timed", () => {
+    render(
+      <ClimbingStatsCard
+        summary={summary({ session_count: 1, total_climb_time_s: null, timed_session_count: 0 })}
+      />,
+    );
+    const tile = screen.getByText("Climb time").closest(".stat-tile") as HTMLElement;
+    expect(tile).toHaveTextContent("—");
+    expect(tile).toHaveTextContent("not recorded (Kaya only)");
+    expect(tile).not.toHaveTextContent("0m");
+  });
+
+  it("says how many sessions the climb time covers when only some were timed", () => {
+    render(<ClimbingStatsCard summary={summary({ timed_session_count: 2 })} />);
+    expect(screen.getByText("Climb time").closest(".stat-tile")).toHaveTextContent(
+      "2 of 3 sessions timed",
+    );
   });
 });

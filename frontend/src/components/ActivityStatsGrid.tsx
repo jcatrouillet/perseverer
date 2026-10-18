@@ -16,6 +16,18 @@ import { useDistanceFormat } from "../formatDistance";
 import { effectiveDurationS, formatDurationHM, formatMinPerKm, isPaceSport } from "../runningStats";
 import { StatTile } from "./StatTile";
 
+/** The best-power durations a ride shows (ride_power.py stores these per ride, plus 3 and 12
+ * minutes, which only feed Critical Power). */
+const BEST_POWER_DURATIONS: { seconds: number; label: string }[] = [
+  { seconds: 5, label: "5 s" },
+  { seconds: 30, label: "30 s" },
+  { seconds: 60, label: "1 min" },
+  { seconds: 300, label: "5 min" },
+  { seconds: 1200, label: "20 min" },
+  { seconds: 1800, label: "30 min" },
+  { seconds: 3600, label: "60 min" },
+];
+
 /** Distance & time, Heart rate, and the `afterHeartRate` slot (the route map) -- the part of the
  * stats grid ActivityDetailPage renders full-width, above the narrower two-column row that holds
  * the remaining sections. Split out from the rest so the route map's width doesn't get squeezed
@@ -41,6 +53,15 @@ export function ActivityStatsGridPrimary({
     "strava.session.total_descent",
   ]);
   const hasHeartRate = activity.avg_hr_bpm != null || activity.max_hr_bpm != null;
+  // A ride's max speed: the device's own session value when the file has one, else Perseverer's
+  // fastest 5-second average from the distance stream (ride_power.py) -- most GPX/TCX rides
+  // record none. Speed sports only; a run shows its pace instead.
+  const deviceMaxSpeed = metricValueAliased(activity.metrics, [
+    "fit.session.enhanced_max_speed",
+    "fit.session.max_speed",
+  ]);
+  const computedMaxSpeed = metricValue(activity.metrics, "perseverer.speed.max_5s_mps");
+  const maxSpeedMps = deviceMaxSpeed ?? computedMaxSpeed;
   // Determines whether the Elevation column needs the wider `--wide` modifier (see
   // activity-detail.css's own comment on .activity-stats__row--compact) -- its default 320px
   // basis only fits 2 tiles side by side; a 3rd (gain + loss + max elevation, common for any
@@ -107,6 +128,16 @@ export function ActivityStatsGridPrimary({
                   tone="pace"
                 />
               )}
+            {!paceSport && maxSpeedMps != null && (
+              <StatTile
+                label="Max speed"
+                value={kmhToDisplay(maxSpeedMps * 3.6).toFixed(1)}
+                unit={speedUnitLabel}
+                meta={deviceMaxSpeed == null ? "fastest 5 s" : null}
+                icon="gauge"
+                tone="pace"
+              />
+            )}
             {activity.calories != null && (
               <StatTile
                 label="Calories"
@@ -269,7 +300,12 @@ export function ActivityStatsGridSecondary({
     avgStanceTime != null ||
     avgStepLengthMm != null;
   const hasTemperature = avgTemp != null;
-  const hasPower = avgPower != null || maxPower != null || normalizedPower != null;
+  const bestPowers = BEST_POWER_DURATIONS.map((d) => ({
+    ...d,
+    watts: metricValue(metrics, `perseverer.power.best_${d.seconds}s_w`),
+  })).filter((d): d is { seconds: number; label: string; watts: number } => d.watts != null);
+  const hasPower =
+    avgPower != null || maxPower != null || normalizedPower != null || bestPowers.length > 0;
   const hasRespiration = avgRespiration != null || maxRespiration != null;
   const hasHydration = activity.estimated_sweat_loss_ml != null;
 
@@ -386,6 +422,31 @@ export function ActivityStatsGridSecondary({
               />
             )}
           </div>
+          {bestPowers.length > 0 && (
+            <div className="table-scroll">
+              <table className="activity-best-power">
+                <caption>Best average power</caption>
+                <thead>
+                  <tr>
+                    <th>Duration</th>
+                    <th>Power</th>
+                    {activity.weight_kg != null && <th>W/kg</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bestPowers.map((b) => (
+                    <tr key={b.seconds}>
+                      <td>{b.label}</td>
+                      <td>{Math.round(b.watts)} W</td>
+                      {activity.weight_kg != null && (
+                        <td>{(b.watts / activity.weight_kg).toFixed(2)}</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
 

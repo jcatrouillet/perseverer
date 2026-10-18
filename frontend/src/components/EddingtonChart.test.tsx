@@ -99,12 +99,16 @@ describe("EddingtonChart", () => {
     expect(screen.getByText(new RegExp(`${currentYear}: bar height`))).toBeInTheDocument();
   });
 
-  it("omits the current year's bar chart when this year has no qualifying runs", () => {
+  it("charts the latest year with data when the current year has none yet", () => {
+    const lastYear = new Date().getFullYear() - 2;
     mockUseAllActivities.mockReturnValue({
       ...EMPTY,
-      data: [run("2019-01-01", 5), run("2019-01-02", 3)],
+      data: [run(`${lastYear}-05-01`, 5), run(`${lastYear}-06-01`, 3), run("2019-04-01", 9)],
     });
-    render(<EddingtonChart />);
-    expect(screen.queryByText(/bar height/)).not.toBeInTheDocument();
+    render(<EddingtonChart sport="cycling" />);
+    const note = screen.getByText(/how many rides that year/);
+    expect(note).toHaveTextContent(
+      `${lastYear} (no rides yet in ${new Date().getFullYear()}, so your latest year)`,
+    );
   });
 });

@@ -151,6 +151,7 @@ from sqlalchemy import Connection, select
 from perseverer.athlete_age import age_years_as_of
 from perseverer.db.schema import activity, activity_metric, athlete
 from perseverer.gap import AVG_GAP_METRIC_KEY
+from perseverer.merge.engine import sports_in_family
 from perseverer.performance import VDOT_METRIC_KEY
 from perseverer.performance_rollup import (
     AVG_HR_METRIC_KEYS,
@@ -233,8 +234,28 @@ ZONE_DESCRIPTIONS: tuple[str, ...] = (
     "VO2max itself; not sustainable continuously.",
 )
 
+# The same five zones described for a ride (compute_ride_hr_zones): the physiology is the same,
+# the sessions that train it are a cyclist's.
+RIDE_ZONE_DESCRIPTIONS: tuple[str, ...] = (
+    "Very easy spinning for warm-ups, cool-downs and recovery rides -- light pressure on the "
+    "pedals, fully conversational. Use it the day after a hard session, or for the first and "
+    "last minutes of any ride.",
+    "Where most endurance and long rides should sit -- builds aerobic capacity with little "
+    "fatigue, sustainable for hours, still fully conversational. This should be the bulk of a "
+    "week's riding time.",
+    'Steady "tempo" effort around your aerobic threshold -- comfortably hard, breathing deeper '
+    "but controlled. Good for sustained tempo blocks (30-90 min) and long steady climbs.",
+    "Sustained effort around your lactate threshold -- sweet-spot and threshold intervals "
+    "(2 x 20 min, 3 x 12 min), or a time-trial effort of 20-60 minutes. Raises the power and "
+    "speed you can hold before fatigue builds quickly.",
+    "Hard interval effort that drives VO2max -- short, very hard reps (2-6 minutes, often "
+    "uphill) with close-to-full recovery between. Not sustainable continuously.",
+)
+
 MIN_ZONE_HR_SAMPLES = MIN_THRESHOLD_HR_SAMPLES
 MAX_SAMPLE_RUNS_PER_ZONE = 12
+# The ride zones (`compute_ride_hr_zones`) cover the whole "ride" family, never runs.
+RIDE_SPORTS: tuple[str, ...] = sports_in_family("ride")
 # A bare fallback formula point isn't a "range" on its own; +/- this many bpm gives the table a
 # usable band without overclaiming precision the fallback path doesn't actually have.
 FALLBACK_HR_HALF_WIDTH_BPM = 4.0
@@ -262,6 +283,8 @@ class ActivityRef:
 class ZoneRunSample(ActivityRef):
     pace_s_per_km: float
     avg_hr_bpm: float
+    # A ride's average moving speed (m/s), for the ride zones; None for a run.
+    speed_mps: float | None = None
 
 
 @dataclass
@@ -279,6 +302,10 @@ class PaceHrZone:
     hr_source: str | None  # "empirical" | "formula_fallback" | None
     qualifying_run_count: int
     sample_runs: list[ZoneRunSample] = field(default_factory=list)
+    # Ride zones only: the speed range (m/s, Q1-Q3 of the zone's rides' average speeds);
+    # None for running zones, which state a pace range instead.
+    speed_low_mps: float | None = None
+    speed_high_mps: float | None = None
 
 
 @dataclass
@@ -294,7 +321,13 @@ class PaceHrZonesResult:
 
 
 def _best_vdot_in_window(
-    conn: Connection, *, athlete_id: str, as_of: date, window_days: int, races_only: bool
+    conn: Connection,
+    *,
+    athlete_id: str,
+    as_of: date,
+    window_days: int,
+    races_only: bool,
+    exclude_commutes: bool = False,
 ) -> tuple[float | None, ActivityRef | None]:
     window_start = as_of - timedelta(days=window_days)
     where = [
@@ -306,6 +339,8 @@ def _best_vdot_in_window(
     ]
     if races_only:
         where.append(activity.c.is_race.is_(True))
+    if exclude_commutes:
+        where.append(activity.c.is_commute.is_(False))
     row = conn.execute(
         select(
             activity.c.id,
@@ -367,7 +402,12 @@ def _max_hr_in_window(
 
 
 def _qualifying_runs_in_window(
-    conn: Connection, *, athlete_id: str, as_of: date, window_days: int
+    conn: Connection,
+    *,
+    athlete_id: str,
+    as_of: date,
+    window_days: int,
+    exclude_commutes: bool = False,
 ) -> list[tuple[str, str, str | None, str, float | None, float | None, float, float]]:
     """Every VDOT-eligible running activity in the trailing `window_days`, with a usable GAP pace
     and avg HR -- the same per-row shape `performance_rollup.py::refresh_performance_rollup`
@@ -376,7 +416,7 @@ def _qualifying_runs_in_window(
     (activity_id, local_date, name, sport, distance_m, duration_s, pace_s_per_km, avg_hr_bpm).
     """
     window_start = as_of - timedelta(days=window_days)
-    vdot_rows = conn.execute(
+    vdot_query = (
         select(
             activity.c.id,
             activity.c.local_date,
@@ -393,7 +433,10 @@ def _qualifying_runs_in_window(
             activity.c.local_date <= as_of.isoformat(),
             activity.c.local_date >= window_start.isoformat(),
         )
-    ).fetchall()
+    )
+    if exclude_commutes:
+        vdot_query = vdot_query.where(activity.c.is_commute.is_(False))
+    vdot_rows = conn.execute(vdot_query).fetchall()
     if not vdot_rows:
         return []
     activity_ids = [r.id for r in vdot_rows]
@@ -455,12 +498,21 @@ def _sample_evenly(runs: list[ZoneRunSample], cap: int) -> list[ZoneRunSample]:
     return [runs[i] for i in sorted(indices)]
 
 
-def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> PaceHrZonesResult:
+def compute_pace_hr_zones(
+    conn: Connection, *, athlete_id: str, as_of: date, exclude_commutes: bool = False
+) -> PaceHrZonesResult:
     """The five pace/HR zones from the athlete's best VDOT (races preferred) and max HR in their
-    lookback windows, with the qualifying runs behind each zone's HR range.
+    lookback windows, with the qualifying runs behind each zone's HR range. `exclude_commutes`
+    leaves activities tagged as commutes out of the VDOT profile and the runs behind each zone
+    (max HR stays: a commute's peak heart rate is as real as any other).
     """
     profile_vdot, vdot_activity = _best_vdot_in_window(
-        conn, athlete_id=athlete_id, as_of=as_of, window_days=RACE_WINDOW_DAYS, races_only=True
+        conn,
+        athlete_id=athlete_id,
+        as_of=as_of,
+        window_days=RACE_WINDOW_DAYS,
+        races_only=True,
+        exclude_commutes=exclude_commutes,
     )
     profile_vdot_source: str | None = "race" if profile_vdot is not None else None
     if profile_vdot is None:
@@ -470,6 +522,7 @@ def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> 
             as_of=as_of,
             window_days=TRAINING_RUN_WINDOW_DAYS,
             races_only=False,
+            exclude_commutes=exclude_commutes,
         )
         if profile_vdot is not None:
             profile_vdot_source = "training_run"
@@ -502,7 +555,11 @@ def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> 
         )
 
     qualifying = _qualifying_runs_in_window(
-        conn, athlete_id=athlete_id, as_of=as_of, window_days=TRAINING_RUN_WINDOW_DAYS
+        conn,
+        athlete_id=athlete_id,
+        as_of=as_of,
+        window_days=TRAINING_RUN_WINDOW_DAYS,
+        exclude_commutes=exclude_commutes,
     )
 
     zones: list[PaceHrZone] = []
@@ -590,6 +647,161 @@ def compute_pace_hr_zones(conn: Connection, *, athlete_id: str, as_of: date) -> 
         profile_vdot=profile_vdot,
         profile_vdot_activity=vdot_activity,
         profile_vdot_source=profile_vdot_source,
+        profile_max_hr_bpm=profile_max_hr_bpm,
+        profile_max_hr_source=max_hr_source,
+        zones=zones,
+        missing=missing,
+    )
+
+
+def _qualifying_rides_in_window(
+    conn: Connection,
+    *,
+    athlete_id: str,
+    as_of: date,
+    window_days: int,
+    exclude_commutes: bool = False,
+) -> list[ZoneRunSample]:
+    """Every ride in the trailing window with a distance, a moving time and an average HR."""
+    window_start = as_of - timedelta(days=window_days)
+    ride_query = select(
+        activity.c.id,
+        activity.c.local_date,
+        activity.c.name,
+        activity.c.sport,
+        activity.c.distance_m,
+        activity.c.moving_duration_s,
+        activity.c.duration_s,
+    ).where(
+        activity.c.athlete_id == athlete_id,
+        activity.c.sport.in_(RIDE_SPORTS),
+        activity.c.deleted_at.is_(None),
+        activity.c.local_date <= as_of.isoformat(),
+        activity.c.local_date >= window_start.isoformat(),
+    )
+    if exclude_commutes:
+        ride_query = ride_query.where(activity.c.is_commute.is_(False))
+    rides = conn.execute(ride_query).fetchall()
+    if not rides:
+        return []
+    avg_hr_raw = conn.execute(
+        select(
+            activity_metric.c.activity_id, activity_metric.c.metric_key, activity_metric.c.value_num
+        ).where(
+            activity_metric.c.athlete_id == athlete_id,
+            activity_metric.c.metric_key.in_(AVG_HR_METRIC_KEYS),
+            activity_metric.c.activity_id.in_([r.id for r in rides]),
+        )
+    ).fetchall()
+    avg_hr_by_activity = priority_merge(
+        [(r.activity_id, r.metric_key, r.value_num) for r in avg_hr_raw], AVG_HR_METRIC_KEYS
+    )
+    out: list[ZoneRunSample] = []
+    for r in rides:
+        seconds = r.moving_duration_s if r.moving_duration_s is not None else r.duration_s
+        avg_hr = avg_hr_by_activity.get(r.id)
+        if not r.distance_m or not seconds or avg_hr is None:
+            continue
+        speed = r.distance_m / seconds
+        out.append(
+            ZoneRunSample(
+                activity_id=r.id,
+                local_date=r.local_date,
+                name=r.name,
+                sport=r.sport,
+                distance_m=r.distance_m,
+                duration_s=seconds,
+                pace_s_per_km=1000.0 / speed,
+                avg_hr_bpm=avg_hr,
+                speed_mps=speed,
+            )
+        )
+    return out
+
+
+def compute_ride_hr_zones(
+    conn: Connection, *, athlete_id: str, as_of: date, exclude_commutes: bool = False
+) -> PaceHrZonesResult:
+    """The same five zones for rides, compared with rides only. Heart-rate zones come from max HR
+    (the same `_ZONE_HR_FRACTION_BOUNDS` and max-HR window as the running table: they describe the
+    heart, not the sport), and each zone's speed range is what the athlete actually rides at that
+    effort: Q1-Q3 of the average speed of the rides in the last `TRAINING_RUN_WINDOW_DAYS` whose
+    average HR falls in the zone (at least `MIN_ZONE_HR_SAMPLES` of them, else no speed range).
+    No VDOT: that is a running model, so the profile_vdot fields stay None."""
+    profile_max_hr_bpm, max_hr_source = _max_hr_in_window(
+        conn, athlete_id=athlete_id, as_of=as_of, window_days=MAX_HR_WINDOW_DAYS
+    )
+    rides = _qualifying_rides_in_window(
+        conn,
+        athlete_id=athlete_id,
+        as_of=as_of,
+        window_days=TRAINING_RUN_WINDOW_DAYS,
+        exclude_commutes=exclude_commutes,
+    )
+    missing: list[str] = []
+    if profile_max_hr_bpm is None:
+        missing.append(
+            f"No heart rate data recorded in the last {MAX_HR_WINDOW_DAYS // 365} years, and no "
+            "birthdate set in Settings to fall back to an age-based estimate -- HR zones can't be "
+            "computed without one or the other."
+        )
+    if not rides:
+        missing.append(
+            f"No ride with distance, time and heart rate in the last "
+            f"{TRAINING_RUN_WINDOW_DAYS // 30} months -- the speed ranges come from your own "
+            "rides at each heart rate."
+        )
+
+    zones: list[PaceHrZone] = []
+    for i in range(5):
+        fraction_lo, fraction_hi = _ZONE_HR_FRACTION_BOUNDS[i]
+        hr_low = (
+            fraction_lo * profile_max_hr_bpm
+            if fraction_lo is not None and profile_max_hr_bpm is not None
+            else None
+        )
+        hr_high = (
+            fraction_hi * profile_max_hr_bpm
+            if fraction_hi is not None and profile_max_hr_bpm is not None
+            else None
+        )
+        zone_rides: list[ZoneRunSample] = []
+        if profile_max_hr_bpm is not None:
+            zone_rides = sorted(
+                (
+                    r
+                    for r in rides
+                    if (hr_low is None or r.avg_hr_bpm >= hr_low)
+                    and (hr_high is None or r.avg_hr_bpm < hr_high)
+                ),
+                key=lambda r: r.avg_hr_bpm,
+            )
+        speed_low: float | None = None
+        speed_high: float | None = None
+        if len(zone_rides) >= MIN_ZONE_HR_SAMPLES:
+            speeds = [r.speed_mps for r in zone_rides if r.speed_mps is not None]
+            speed_low, _, speed_high = statistics.quantiles(speeds, n=4, method="inclusive")
+        zones.append(
+            PaceHrZone(
+                number=i + 1,
+                label=ZONE_LABELS[i],
+                description=RIDE_ZONE_DESCRIPTIONS[i],
+                pace_fast_s_per_km=None,
+                pace_slow_s_per_km=None,
+                hr_low_bpm=round(hr_low) if hr_low is not None else None,
+                hr_high_bpm=round(hr_high) if hr_high is not None else None,
+                hr_source="formula_fallback" if profile_max_hr_bpm is not None else None,
+                qualifying_run_count=len(zone_rides),
+                sample_runs=_sample_evenly(zone_rides, MAX_SAMPLE_RUNS_PER_ZONE),
+                speed_low_mps=speed_low,
+                speed_high_mps=speed_high,
+            )
+        )
+    return PaceHrZonesResult(
+        as_of=as_of.isoformat(),
+        profile_vdot=None,
+        profile_vdot_activity=None,
+        profile_vdot_source=None,
         profile_max_hr_bpm=profile_max_hr_bpm,
         profile_max_hr_source=max_hr_source,
         zones=zones,

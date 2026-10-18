@@ -59,6 +59,8 @@ class ActivityRefOut(BaseModel):
 class ZoneRunSampleOut(ActivityRefOut):
     pace_s_per_km: float
     avg_hr_bpm: float
+    # A ride's average moving speed (m/s), in the cycling zones; null for a run.
+    speed_mps: float | None = None
 
 
 class PaceHrZoneOut(BaseModel):
@@ -72,6 +74,10 @@ class PaceHrZoneOut(BaseModel):
     hr_source: str | None  # "empirical" | "formula_fallback" | None
     qualifying_run_count: int
     sample_runs: list[ZoneRunSampleOut]
+    # Cycling zones only (sport=cycling): the speed range in m/s, Q1-Q3 of the zone's
+    # rides' average speeds; null for running zones, which carry the pace range instead.
+    speed_low_mps: float | None = None
+    speed_high_mps: float | None = None
 
 
 class PaceHrZonesOut(BaseModel):
@@ -146,7 +152,7 @@ class PerformanceCurveOut(BaseModel):
     # False -- never a fabricated curve -- when no activity in the requested range/sport
     # selection has the stream channel(s) this metric needs at all.
     available: bool
-    metric: str  # "pace" | "gap" | "heart_rate"
+    metric: str  # "pace" | "gap" | "heart_rate" | "speed" (m/s) | "power" (watts)
     points: list[PerformanceCurvePointOut] = []
     # The athlete's own already-computed threshold pace/HR (performance_daily_rollup, the same
     # VDOT-based model pace_hr_zones.py also builds on) -- shown alongside the curve as
@@ -157,3 +163,36 @@ class PerformanceCurveOut(BaseModel):
     threshold_hr_bpm: float | None = None
     aerobic_threshold_hr_bpm: float | None = None
     max_hr_bpm: float | None = None
+
+
+# GET /performance/cycling-power -- ride_power.py's FTP / FTP/kg / Critical Power / VO2max.
+class BestPowerOut(BaseModel):
+    duration_s: int
+    watts: float
+    # The ride that set this best in the window.
+    activity_id: str
+    local_date: str
+    name: str | None
+
+
+class CyclingPowerPointOut(BaseModel):
+    as_of: str
+    ftp_w: float | None
+    ftp_w_per_kg: float | None
+    cp_w: float | None
+    w_prime_j: float | None
+    vo2max: float | None
+    weight_kg: float | None
+    best_powers: list[BestPowerOut]
+
+
+class CyclingPowerOut(BaseModel):
+    # False -- never fabricated -- when no ride has ever recorded power.
+    available: bool
+    window_days: int
+    # As of the requested date (trailing window_days); null when no power ride falls in it.
+    current: CyclingPowerPointOut | None
+    # The same figures as of each date a power ride happened, oldest first.
+    history: list[CyclingPowerPointOut]
+    last_power_ride_date: str | None
+    missing: list[str]

@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 import duckdb
+import pytest
 from sqlalchemy import Connection, Engine
 
 from perseverer.db.engine import make_engine
@@ -427,3 +428,75 @@ class TestComputePerformanceCurve:
 
         point = next(p for p in curve.points if p.duration_s == 5)
         assert point.value == 120.0  # never the trimmed-out 200.0 stretch
+
+
+class TestRideCurves:
+    def _curve(self, engine: Engine, parquet_dir: Path, metric: str) -> object:
+        with engine.connect() as conn:
+            return compute_performance_curve(
+                conn,
+                duckdb.connect(":memory:"),
+                parquet_dir,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                metric=metric,  # type: ignore[arg-type]
+                start_date=dt.date(2026, 6, 1),
+                end_date=dt.date(2026, 6, 3),
+                sports=None,
+                as_of=dt.date(2026, 6, 3),
+            )
+
+    def test_speed_is_rides_only_in_metres_per_second_higher_is_better(
+        self, tmp_path: Path
+    ) -> None:
+        engine = _engine(tmp_path)
+        parquet_dir = tmp_path / "parquet"
+        start = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
+        with engine.connect() as conn:
+            # 8 m/s ride, 10 m/s ride (must win), and a 12 m/s "run" that must be ignored.
+            for activity_id, sport, mps, day in (
+                ("slow_ride", "cycling", 8.0, 0),
+                ("fast_ride", "cycling", 10.0, 1),
+                ("run", "running", 12.0, 2),
+            ):
+                _seed_activity_with_stream(
+                    conn,
+                    parquet_dir,
+                    activity_id=activity_id,
+                    local_date=f"2026-06-0{day + 1}",
+                    sport=sport,
+                    start=start + dt.timedelta(days=day),
+                    values={"distance_m": [i * mps for i in range(60)]},
+                )
+        curve = self._curve(engine, parquet_dir, "speed")
+        point = next(p for p in curve.points if p.duration_s == 30)  # type: ignore[attr-defined]
+        assert point.activity_id == "fast_ride"
+        assert point.value == pytest.approx(10.0)
+        assert curve.threshold_pace_s_per_km is None  # type: ignore[attr-defined]
+
+    def test_power_takes_the_highest_mean_watts_from_rides(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        parquet_dir = tmp_path / "parquet"
+        start = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
+        with engine.connect() as conn:
+            _seed_activity_with_stream(
+                conn,
+                parquet_dir,
+                activity_id="steady",
+                local_date="2026-06-01",
+                sport="cycling",
+                start=start,
+                values={"power": [200.0] * 60},
+            )
+            _seed_activity_with_stream(
+                conn,
+                parquet_dir,
+                activity_id="hard",
+                local_date="2026-06-02",
+                sport="cycling",
+                start=start + dt.timedelta(days=1),
+                values={"power": [150.0] * 30 + [300.0] * 30},
+            )
+        curve = self._curve(engine, parquet_dir, "power")
+        by_duration = {p.duration_s: p for p in curve.points}  # type: ignore[attr-defined]
+        assert by_duration[15].activity_id == "hard"
+        assert by_duration[15].value == pytest.approx(300.0)

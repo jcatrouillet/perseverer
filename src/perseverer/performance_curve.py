@@ -84,8 +84,23 @@ from perseverer.db.schema import (
     performance_daily_rollup,
 )
 from perseverer.gap import compute_gap_adjusted_distances
+from perseverer.merge.engine import sports_in_family
 
-Metric = Literal["pace", "gap", "heart_rate"]
+Metric = Literal["pace", "gap", "heart_rate", "speed", "power"]
+
+# Rides only, never runs: `speed` is the ride counterpart of `pace` (best sustained average speed,
+# higher is better) and `power` the classic cycling power curve. Both cover the whole "ride"
+# family (merge/engine.py), the same rides the ride insights compare.
+RIDE_SPORTS: tuple[str, ...] = sports_in_family("ride")
+# Metrics whose best window is the highest mean of the samples (not a distance rate).
+_MEAN_METRICS: frozenset[str] = frozenset({"heart_rate", "power"})
+_STREAM_COLUMNS: dict[str, list[str]] = {
+    "heart_rate": ["heart_rate"],
+    "power": ["power"],
+    "speed": ["distance_m"],
+    "pace": ["distance_m", "altitude_m"],
+    "gap": ["distance_m", "altitude_m"],
+}
 
 # 1 second through 2 hours -- a superset of the reference product's own shown labels. A bucket
 # longer than a given activity's own duration is simply skipped for it, never extrapolated; a
@@ -250,16 +265,19 @@ def _qualifying_activities(
     start_date: date,
     end_date: date,
     sports: list[str] | None,
+    exclude_commutes: bool = False,
 ) -> list[tuple[str, str, str, datetime]]:
     """`(activity_id, local_date, parquet_path, start_time_utc)` for every activity in range with
     the stream channel(s) this `metric` needs. `pace`/`gap` hardcode `sport == "running"`
     regardless of `sports` -- see module docstring."""
-    required_channels = (
-        frozenset({"heart_rate"})
-        if metric == "heart_rate"
-        else frozenset({"distance_m", "altitude_m"})
-    )
-    sport_filter = ["running"] if metric != "heart_rate" else sports
+    required_channels = frozenset(_STREAM_COLUMNS[metric])
+    sport_filter: list[str] | None
+    if metric == "heart_rate":
+        sport_filter = sports
+    elif metric in ("speed", "power"):
+        sport_filter = list(RIDE_SPORTS)
+    else:
+        sport_filter = ["running"]
 
     query = (
         select(
@@ -281,6 +299,8 @@ def _qualifying_activities(
         if not sport_filter:
             return []
         query = query.where(activity.c.sport.in_(sport_filter))
+    if exclude_commutes:
+        query = query.where(activity.c.is_commute.is_(False))
 
     out: list[tuple[str, str, str, datetime]] = []
     for row in conn.execute(query):
@@ -330,6 +350,9 @@ def _reference_values(
             "aerobic_threshold_hr_bpm": row.aerobic_threshold_hr_bpm,
             "max_hr_bpm": row.max_hr_bpm,
         }
+    if metric in ("speed", "power"):
+        # The rollup's thresholds come from running (VDOT); they say nothing about a ride.
+        return {}
     return {
         "threshold_pace_s_per_km": row.threshold_pace_s_per_km,
         "aerobic_threshold_pace_s_per_km": row.aerobic_threshold_pace_s_per_km,
@@ -347,6 +370,7 @@ def compute_performance_curve(
     end_date: date,
     sports: list[str] | None,
     as_of: date,
+    exclude_commutes: bool = False,
 ) -> PerformanceCurve:
     """Orchestration: resolve qualifying activities (SQLite/SQLAlchemy), pull every one of their
     raw streams in one combined DuckDB query, run `best_window_over_stream` per activity per
@@ -360,6 +384,7 @@ def compute_performance_curve(
         start_date=start_date,
         end_date=end_date,
         sports=sports,
+        exclude_commutes=exclude_commutes,
     )
     reference = _reference_values(conn, athlete_id=athlete_id, metric=metric, as_of=as_of)
     if not activities:
@@ -371,7 +396,7 @@ def compute_performance_curve(
     activity_id_by_path = {str(parquet_dir / a[2]): a[0] for a in activities}
     trim_by_path = {str(parquet_dir / a[2]): trims[a[3]] for a in activities if a[3] in trims}
 
-    columns = ["heart_rate"] if metric == "heart_rate" else ["distance_m", "altitude_m"]
+    columns = _STREAM_COLUMNS[metric]
     col_list = ", ".join(columns)
     rows: list[tuple[Any, ...]] = duckdb_conn.execute(
         f"""
@@ -397,9 +422,11 @@ def compute_performance_curve(
 
         timestamps_s = [r[1] for r in path_rows]
         search_mode: Literal["mean", "rate"]
-        if metric == "heart_rate":
-            hr = [r[2] for r in path_rows]
-            valid_pairs = [(t, v) for t, v in zip(timestamps_s, hr, strict=True) if v is not None]
+        if metric in _MEAN_METRICS:
+            samples = [r[2] for r in path_rows]
+            valid_pairs = [
+                (t, v) for t, v in zip(timestamps_s, samples, strict=True) if v is not None
+            ]
             if len(valid_pairs) < 2:
                 continue
             valid_timestamps = [t for t, _ in valid_pairs]
@@ -407,7 +434,7 @@ def compute_performance_curve(
             search_mode = "mean"
         else:
             distances = [r[2] for r in path_rows]
-            altitudes = [r[3] for r in path_rows]
+            altitudes = [r[3] if len(r) > 3 else None for r in path_rows]
             # Same null-tolerant filtering as the heart-rate branch above -- a dropped
             # distance/altitude reading simply drops that sample from the search, rather than
             # carrying a stale value forward (which could understate a genuine gap) or crashing.
@@ -433,7 +460,7 @@ def compute_performance_curve(
                 cumulative = [0.0]
                 for d in per_interval:
                     cumulative.append(cumulative[-1] + d)
-            else:  # pace
+            else:  # pace, speed
                 base = filtered_distances[0]
                 cumulative = [d - base for d in filtered_distances]
 
@@ -449,8 +476,10 @@ def compute_performance_curve(
             )
             if raw_value is None:
                 continue
-            if metric == "heart_rate":
-                value = raw_value
+            if metric in _MEAN_METRICS or metric == "speed":
+                if metric == "speed" and raw_value <= 0:
+                    continue
+                value = raw_value  # bpm, watts, or m/s: higher is better
             else:
                 if raw_value <= 0:
                     continue
@@ -458,9 +487,8 @@ def compute_performance_curve(
 
             existing = best_per_bucket.get(duration_s)
             if existing is not None:
-                is_better = (
-                    value > existing.value if metric == "heart_rate" else value < existing.value
-                )
+                higher_is_better = metric != "pace" and metric != "gap"
+                is_better = value > existing.value if higher_is_better else value < existing.value
                 if not is_better:
                     continue
             best_per_bucket[duration_s] = CurvePoint(

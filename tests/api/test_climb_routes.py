@@ -418,3 +418,50 @@ class TestClimbingSummary:
             headers=auth_headers,
         )
         assert r.json()["session_count"] == 0
+
+
+class TestClimbingSummaryClimbTime:
+    def _session(self, engine: Engine, activity_id: str, local_date: str) -> None:
+        with engine.connect() as conn:
+            seed_activity(
+                conn,
+                activity_id=activity_id,
+                local_date=local_date,
+                sport="rock_climbing",
+                sub_sport="bouldering",
+                distance_m=None,
+            )
+
+    def test_a_kaya_only_session_has_no_climb_time_not_zero(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        self._session(engine, "kaya", "2025-09-13")
+        _add_split(engine, activity_id="kaya", split_index=0, duration_s=None)
+        _add_split(engine, activity_id="kaya", split_index=1, duration_s=None)
+
+        body = client.get(
+            "/api/v1/activities/climbing-summary",
+            params={"start_date": "2025-09-01", "end_date": "2025-09-30"},
+            headers=auth_headers,
+        ).json()
+        assert body["session_count"] == 1
+        assert body["total_routes"] == 2
+        assert body["total_climb_time_s"] is None
+        assert body["timed_session_count"] == 0
+
+    def test_counts_only_timed_sessions_in_the_total(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        self._session(engine, "watch", "2025-09-02")
+        self._session(engine, "kaya", "2025-09-13")
+        _add_split(engine, activity_id="watch", split_index=0, duration_s=90.0)
+        _add_split(engine, activity_id="kaya", split_index=0, duration_s=None)
+
+        body = client.get(
+            "/api/v1/activities/climbing-summary",
+            params={"start_date": "2025-09-01", "end_date": "2025-09-30"},
+            headers=auth_headers,
+        ).json()
+        assert body["total_climb_time_s"] == 90.0
+        assert body["timed_session_count"] == 1
+        assert body["session_count"] == 2

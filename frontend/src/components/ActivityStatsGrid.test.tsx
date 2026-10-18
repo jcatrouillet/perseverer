@@ -279,4 +279,56 @@ describe("ActivityStatsGrid", () => {
     render(<ActivityStatsGrid activity={activity()} />);
     expect(screen.queryByText("Climb")).not.toBeInTheDocument();
   });
+
+  it("shows a ride's max speed next to its average, preferring the device's own value", () => {
+    const { rerender } = render(
+      <ActivityStatsGrid
+        activity={activity({
+          sport: "cycling",
+          distance_m: 30000,
+          moving_duration_s: 3600,
+          metrics: [
+            metric("fit.session.enhanced_max_speed", 15),
+            metric("perseverer.speed.max_5s_mps", 14),
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByText("Max speed").closest(".stat-tile")).toHaveTextContent("54.0");
+    expect(screen.queryByText("fastest 5 s")).not.toBeInTheDocument();
+
+    rerender(
+      <ActivityStatsGrid
+        activity={activity({
+          sport: "cycling",
+          distance_m: 30000,
+          moving_duration_s: 3600,
+          metrics: [metric("perseverer.speed.max_5s_mps", 14)],
+        })}
+      />,
+    );
+    expect(screen.getByText("Max speed").closest(".stat-tile")).toHaveTextContent("50.4");
+    expect(screen.getByText("fastest 5 s")).toBeInTheDocument();
+  });
+
+  it("lists a ride's best average power per duration, with W/kg when the weight is known", () => {
+    render(
+      <ActivityStatsGrid
+        activity={activity({
+          sport: "cycling",
+          weight_kg: 80,
+          metrics: [
+            metric("perseverer.power.best_5s_w", 600),
+            metric("perseverer.power.best_1200s_w", 240),
+            metric("perseverer.power.best_180s_w", 300),
+          ],
+        })}
+      />,
+    );
+    const rows = screen.getAllByRole("row").map((r) => r.textContent);
+    expect(rows).toContain("5 s600 W7.50");
+    expect(rows).toContain("20 min240 W3.00");
+    // 3 minutes only feeds Critical Power; it is not one of the listed durations.
+    expect(rows.some((r) => r?.startsWith("3 min"))).toBe(false);
+  });
 });

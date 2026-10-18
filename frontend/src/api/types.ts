@@ -88,6 +88,8 @@ export interface ActivitySummary {
   sub_sport: string | null;
   name: string | null;
   is_race: boolean | null;
+  /** The athlete's own commute tag (PATCH /activities/{id}/commute). */
+  is_commute?: boolean;
   duration_s: number | null;
   moving_duration_s: number | null;
   distance_m: number | null;
@@ -104,6 +106,10 @@ export interface ActivitySummary {
    * stream is available -- see performance.py. Null for non-running activities or a running
    * activity too short/anomalous for the underlying aerobic model. */
   vdot: number | null;
+  /** Average power in watts (fit.session.avg_power); null without a power meter. */
+  avg_power_w?: number | null;
+  /** Best 20-minute average power in watts; null without 20 minutes of power. */
+  best_20min_power_w?: number | null;
   /** Garmin Connect's own structured "Workout Builder" name (e.g. "W11 Tue - 4x2km Threshold"),
    * when this activity followed a pre-planned workout -- see yearStats.ts::displayActivityName
    * for why the frontend falls back to this. Null for the (large majority of) activities with
@@ -242,7 +248,10 @@ export interface ClimbGradeBreakdownOut {
 
 export interface ClimbingSummaryOut {
   session_count: number;
-  total_climb_time_s: number;
+  /** Null when no session in the period was timed (a Kaya-only session has routes, no time). */
+  total_climb_time_s: number | null;
+  /** How many sessions have a climb time; total_climb_time_s covers only these. */
+  timed_session_count: number;
   total_routes: number;
   max_completed_grade: number | null;
   grade_breakdown: ClimbGradeBreakdownOut[];
@@ -343,6 +352,10 @@ export interface ActivitySportOverrideOut {
   sub_sport: string | null;
 }
 
+export interface ActivityCommuteOverrideOut {
+  is_commute: boolean;
+}
+
 export interface ActivityRaceOverrideOut {
   is_race: boolean;
 }
@@ -431,11 +444,17 @@ export type UnitPreference = "metric" | "imperial";
 // GET/PUT /settings/personalize -- pure display preferences (never read by any backend
 // computation, unlike Profile's own fields above). A full-replacement PUT, same contract as
 // AthleteProfileIn/Out.
+/** The sport the Insights page shows: its tabs compare runs with runs, rides with rides. */
+export type InsightsSport = "running" | "cycling";
+
 export interface PersonalizeSettingsOut {
   week_start_day: WeekStartDay;
   time_format: TimeFormat;
   default_view: DefaultView;
   unit_preference: UnitPreference;
+  insights_sport: InsightsSport;
+  /** Whether the Insights page offers an "Exclude commutes" toggle. */
+  commute_filter: boolean;
 }
 
 export interface PersonalizeSettingsIn {
@@ -443,6 +462,8 @@ export interface PersonalizeSettingsIn {
   time_format: TimeFormat;
   default_view: DefaultView;
   unit_preference: UnitPreference;
+  insights_sport: InsightsSport;
+  commute_filter: boolean;
 }
 
 // GET /weather/forecast -- the athlete's own home-location forecast, up to Open-Meteo's own
@@ -1048,6 +1069,8 @@ export interface ActivityRefOut {
 export interface ZoneRunSampleOut extends ActivityRefOut {
   pace_s_per_km: number;
   avg_hr_bpm: number;
+  // A ride's average moving speed (m/s), in the cycling zones; null for a run.
+  speed_mps?: number | null;
 }
 
 export interface PaceHrZoneOut {
@@ -1067,6 +1090,10 @@ export interface PaceHrZoneOut {
   // sorted ascending by avg_hr_bpm -- the "why these numbers" evidence, same instinct
   // Vo2maxFactorAnalysisOut's own contributor lists already establish for a single point.
   sample_runs: ZoneRunSampleOut[];
+  // Cycling zones only: the speed range (m/s) the athlete's own rides hold in this zone; null
+  // for running zones, which carry the pace range instead.
+  speed_low_mps?: number | null;
+  speed_high_mps?: number | null;
 }
 
 export interface PaceHrZonesOut {
@@ -1134,9 +1161,12 @@ export interface PerformanceCurvePointOut {
   local_date: string;
 }
 
+/** "pace"/"gap" are runs only, "speed" (m/s)/"power" (watts) rides only; "heart_rate" any sport. */
+export type PerformanceCurveMetric = "pace" | "gap" | "heart_rate" | "speed" | "power";
+
 export interface PerformanceCurveOut {
   available: boolean;
-  metric: "pace" | "gap" | "heart_rate";
+  metric: PerformanceCurveMetric;
   points: PerformanceCurvePointOut[];
   // The athlete's own already-computed threshold pace/HR, shown alongside the curve as
   // reference lines -- never blended into it. Only the pair relevant to `metric` is ever
@@ -1361,4 +1391,34 @@ export interface ActivityShoeOut {
   // True when shoe_id came from the athlete's dated sport default, not an explicit per-activity
   // choice -- see gear.py::resolve_activity_shoe.
   is_default: boolean;
+}
+
+// GET /performance/cycling-power -- FTP, FTP/kg, Critical Power and a VO2max estimate for rides,
+// from the athlete's own power data (ride_power.py).
+export interface BestPowerOut {
+  duration_s: number;
+  watts: number;
+  activity_id: string;
+  local_date: string;
+  name: string | null;
+}
+
+export interface CyclingPowerPointOut {
+  as_of: string;
+  ftp_w: number | null;
+  ftp_w_per_kg: number | null;
+  cp_w: number | null;
+  w_prime_j: number | null;
+  vo2max: number | null;
+  weight_kg: number | null;
+  best_powers: BestPowerOut[];
+}
+
+export interface CyclingPowerOut {
+  available: boolean;
+  window_days: number;
+  current: CyclingPowerPointOut | null;
+  history: CyclingPowerPointOut[];
+  last_power_ride_date: string | null;
+  missing: string[];
 }

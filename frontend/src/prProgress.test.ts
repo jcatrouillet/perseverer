@@ -21,6 +21,11 @@ function run(
   } as ActivitySummary;
 }
 
+/** Improvement segments as distance/pace only (speedKmh is the same value, for the chart). */
+function steps(segments: { distanceKm: number; pace: number }[][]) {
+  return segments.map((segment) => segment.map(({ distanceKm, pace }) => ({ distanceKm, pace })));
+}
+
 describe("PR progress", () => {
   it("selects one best VDOT per Monday–Sunday week overall, without rounding VDOT", () => {
     const result = prProgress(
@@ -68,7 +73,7 @@ describe("PR progress", () => {
       ],
       "2026-09-20",
     );
-    expect(result.improvements).toEqual([
+    expect(steps(result.improvements)).toEqual([
       [
         { distanceKm: 5, pace: expect.closeTo(280, 8) },
         { distanceKm: 8.123, pace: expect.closeTo(280, 8) },
@@ -99,7 +104,7 @@ describe("PR progress", () => {
       ],
       "2026-09-20",
     );
-    expect(result.improvements).toEqual([
+    expect(steps(result.improvements)).toEqual([
       [
         { distanceKm: 0, pace: 240 },
         { distanceKm: 3, pace: 240 },
@@ -134,5 +139,25 @@ describe("PR progress", () => {
     const b = run("b", "2026-01-06", 10000, 300);
     expect(prProgress([b, a], "2026-09-20").recent[0].activity.id).toBe("a");
     expect(prProgress([a, b], "2026-09-20").recent[0].pace).toBe(280);
+  });
+
+  it("for rides, uses every ride with no VDOT, never runs, and gives each its speed", () => {
+    const ride = (id: string, date: string, distance: number, pace: number) =>
+      run(id, date, distance, pace, 0, { sport: "cycling", vdot: null });
+    const result = prProgress(
+      [
+        ride("old", "2025-01-10", 30000, 120),
+        ride("same_week_a", "2026-09-14", 20000, 110),
+        ride("same_week_b", "2026-09-15", 25000, 115),
+        run("a_run", "2026-09-16", 10000, 300),
+      ],
+      "2026-09-20",
+      "cycling",
+    );
+    // Both rides of the same week stay (no weekly thinning); the run is ignored.
+    expect(result.recent.map((p) => p.activity.id).sort()).toEqual(["same_week_a", "same_week_b"]);
+    expect(result.older.map((p) => p.activity.id)).toEqual(["old"]);
+    expect(result.older[0]!.speedKmh).toBeCloseTo(30);
+    expect(result.older[0]!.vdot).toBeNull();
   });
 });

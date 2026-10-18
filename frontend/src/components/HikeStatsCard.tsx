@@ -14,6 +14,7 @@ import { useDistanceFormat } from "../formatDistance";
 import { effectiveDurationS, formatDurationHM } from "../runningStats";
 import { displayActivityName } from "../yearStats";
 import { Icon } from "./Icon";
+import { SportSectionTitle } from "./SportSectionTitle";
 import { StatTile } from "./StatTile";
 import "../styles/hike-stats.css";
 
@@ -155,7 +156,7 @@ export function HikeStatsCard({ activities }: { activities: ActivitySummary[] })
 
   return (
     <section className="card">
-      <h2>Hikes</h2>
+      <SportSectionTitle sport="hiking">Hikes</SportSectionTitle>
       <div className="stat-grid">
         <StatTile label="Hikes" value={activities.length} icon="hike" tone="elevation" hero />
         <StatTile

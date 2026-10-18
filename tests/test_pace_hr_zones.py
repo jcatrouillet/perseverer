@@ -20,6 +20,7 @@ from perseverer.pace_hr_zones import (
     TRAINING_RUN_WINDOW_DAYS,
     ZONE_LABELS,
     compute_pace_hr_zones,
+    compute_ride_hr_zones,
 )
 from perseverer.performance import VDOT_METRIC_KEY
 from perseverer.vdot import compute_threshold_pace_s_per_km
@@ -354,3 +355,128 @@ def test_sample_runs_capped_and_span_the_full_hr_range(tmp_path: Path) -> None:
     assert sample_hrs == sorted(sample_hrs)
     assert sample_hrs[0] == 100.0
     assert sample_hrs[-1] == 100.0 + n - 1
+
+
+def _add_ride(
+    conn: Connection,
+    *,
+    activity_id: str,
+    local_date: str,
+    distance_m: float,
+    moving_s: float,
+    avg_hr: float,
+    max_hr: float | None = None,
+    sport: str = "cycling",
+) -> None:
+    now = dt.datetime.now(dt.UTC)
+    conn.execute(
+        activity.insert().values(
+            id=activity_id,
+            athlete_id=DEFAULT_ATHLETE_ID,
+            start_time_utc=now,
+            utc_offset_s=0,
+            local_date=local_date,
+            name="Ride",
+            sport=sport,
+            duration_s=moving_s + 60,
+            moving_duration_s=moving_s,
+            distance_m=distance_m,
+            primary_source="fit_folder",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    for key, value in ((_AVG_HR_KEY, avg_hr), (_MAX_HR_KEY, max_hr)):
+        if value is not None:
+            conn.execute(
+                activity_metric.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id=activity_id,
+                    metric_key=key,
+                    value_num=value,
+                    source="perseverer",
+                    created_at=now,
+                )
+            )
+
+
+def test_ride_zones_give_the_speed_rides_are_ridden_at_each_heart_rate(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        # Max HR 200: zone 2 runs from the zone 1/2 boundary up to the aerobic threshold.
+        _add_ride(
+            conn,
+            activity_id="max",
+            local_date=_RECENT,
+            distance_m=20000,
+            moving_s=3600,
+            avg_hr=190,
+            max_hr=200,
+        )
+        for n in range(MIN_ZONE_HR_SAMPLES):
+            # ~144-148 bpm (zone 2 for a 200 max), at 24 to 24+n km/h.
+            _add_ride(
+                conn,
+                activity_id=f"z2_{n}",
+                local_date=_RECENT,
+                distance_m=24000 + n * 1000,
+                moving_s=3600,
+                avg_hr=144 + n,
+            )
+        # A run at the same heart rate never feeds the ride zones.
+        _add_run(
+            conn, activity_id="run", local_date=_RECENT, vdot=50.0, gap_speed_mps=3.0, avg_hr=146
+        )
+        conn.commit()
+        result = compute_ride_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
+
+    assert result.profile_vdot is None  # no running model for rides
+    assert result.profile_max_hr_bpm == 200
+    zone2 = result.zones[1]
+    assert zone2.qualifying_run_count == MIN_ZONE_HR_SAMPLES
+    assert all(r.sport == "cycling" for r in zone2.sample_runs)
+    assert zone2.pace_fast_s_per_km is None and zone2.pace_slow_s_per_km is None
+    assert zone2.speed_low_mps is not None and zone2.speed_high_mps is not None
+    assert (
+        24 / 3.6 <= zone2.speed_low_mps <= zone2.speed_high_mps <= (24 + MIN_ZONE_HR_SAMPLES) / 3.6
+    )
+    assert zone2.hr_low_bpm is not None and zone2.hr_high_bpm is not None
+
+
+def test_ride_zones_report_what_is_missing_without_rides(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        result = compute_ride_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
+    assert any("No ride with distance" in m for m in result.missing)
+    assert all(z.speed_low_mps is None for z in result.zones)
+
+
+def test_exclude_commutes_leaves_commute_rides_out_of_the_ride_zones(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        _add_ride(
+            conn,
+            activity_id="max",
+            local_date=_RECENT,
+            distance_m=20000,
+            moving_s=3600,
+            avg_hr=190,
+            max_hr=200,
+        )
+        for n in range(MIN_ZONE_HR_SAMPLES):
+            _add_ride(
+                conn,
+                activity_id=f"z2_{n}",
+                local_date=_RECENT,
+                distance_m=24000 + n * 1000,
+                moving_s=3600,
+                avg_hr=144 + n,
+            )
+        conn.execute(activity.update().where(activity.c.id == "z2_0").values(is_commute=True))
+        conn.commit()
+        everything = compute_ride_hr_zones(conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF)
+        filtered = compute_ride_hr_zones(
+            conn, athlete_id=DEFAULT_ATHLETE_ID, as_of=_AS_OF, exclude_commutes=True
+        )
+    assert everything.zones[1].qualifying_run_count == MIN_ZONE_HR_SAMPLES
+    assert filtered.zones[1].qualifying_run_count == MIN_ZONE_HR_SAMPLES - 1

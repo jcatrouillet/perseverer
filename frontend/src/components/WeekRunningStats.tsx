@@ -35,6 +35,7 @@ import {
   weeklyBestVdotSeries,
   weeklyDistanceSeries,
 } from "../runningStats";
+import { SportSectionTitle } from "./SportSectionTitle";
 import { MetricChip, StatTile } from "./StatTile";
 import "../styles/running-stats.css";
 
@@ -147,7 +148,7 @@ export function WeekRunningStats({
 
   return (
     <section className="card running-stats">
-      <h2>Running</h2>
+      <SportSectionTitle sport="running">Running</SportSectionTitle>
       {newPrsThisWeek.length > 0 && (
         <p className="running-records__new-prs">
           <Icon name="trophy" /> {newPrsThisWeek.length} all-time PR

@@ -608,6 +608,8 @@ const F = {
     ["workout_rpe","number|null","Rate of perceived exertion, when logged."],
     ["weight_kg","number|null","Athlete body weight at time of activity, if recorded on-device."],
     ["vdot","number|null","This project's own VDOT estimate for the activity, when computable (running only)."],
+    ["avg_power_w","number|null","Average power in watts (fit.session.avg_power); null without a power meter."],
+    ["best_20min_power_w","number|null","Best 20-minute average power in watts (perseverer.power.best_1200s_w); null without 20 minutes of power."],
     ["workout_name","string|null","Name of the pre-planned workout structure, if one was attached."],
     ["primary_source","string","Which adapter this activity's canonical record came from: fit_folder, garmin_export, garmin_connect, strava_export."],
     ["stream_available","boolean","Whether a per-second sensor stream exists for GET .../stream."],
@@ -1057,6 +1059,8 @@ const SCHEMAS = [
       ["hr_source","string|null","empirical (the real 25th-75th percentile among the athlete's own qualifying runs) or formula_fallback."],
       ["qualifying_run_count","integer","Every one of the athlete's own runs (ever) whose pace falls in this zone's band — not just sample_runs below."],
       ["sample_runs","array<ZoneRunSampleOut>","The literal \"why these numbers\" evidence — evenly sampled down to a cap when qualifying_run_count is large."],
+      ["speed_low_mps","number|null","sport=cycling only: the 25th percentile of the average speed (m/s) of the rides in this zone (at least 3, else null). Null for running zones."],
+      ["speed_high_mps","number|null","sport=cycling only: the 75th percentile, as above."],
     ] },
   { name: "ZoneRunSampleOut", note: "Extends ActivityRefOut's own fields.", fields: [
       ["activity_id","string",""],
@@ -1067,6 +1071,7 @@ const SCHEMAS = [
       ["duration_s","number|null","Moving time."],
       ["pace_s_per_km","number",""],
       ["avg_hr_bpm","number",""],
+      ["speed_mps","number|null","A ride's average moving speed (m/s), in the cycling zones; null for a run."],
     ] },
   { name: "ActivityRefOut", fields: [
       ["activity_id","string",""],
@@ -1222,11 +1227,13 @@ const SCHEMAS = [
       ["home_lon","number|null","Degrees, -180..180."],
       ["timezone","string","A real IANA name, e.g. \"America/Los_Angeles\". Never null -- defaults to \"UTC\"."],
     ] },
-  { name: "PersonalizeSettingsOut", note: "Returned by GET and PUT /settings/personalize. Pure display preferences -- unlike AthleteProfileOut's fields, none of these four are ever read by any backend computation, only by the frontend's own rendering. unit_preference reuses the athlete.unit_preference column sync athlete create has always set, previously never read anywhere in the app.", fields: [
+  { name: "PersonalizeSettingsOut", note: "Returned by GET and PUT /settings/personalize. Pure display preferences -- unlike AthleteProfileOut's fields, none of these are ever read by any backend computation, only by the frontend's own rendering. unit_preference reuses the athlete.unit_preference column sync athlete create has always set, previously never read anywhere in the app.", fields: [
       ["week_start_day","string","\"monday\" or \"sunday\". Default \"monday\"."],
       ["time_format","string","\"24h\" or \"12h\". Default \"24h\"."],
       ["default_view","string","\"week\", \"month\", \"day\", \"activities\", or \"last_activity\" (the most recently imported activity) -- which page the app lands on by default. Default \"week\"."],
       ["unit_preference","string","\"metric\" or \"imperial\" -- km vs. miles for every distance/pace/speed display. Default \"metric\"."],
+      ["insights_sport","string","\"running\" or \"cycling\" -- the sport the Insights page opens on (it has a switch for the other). Default \"running\"."],
+      ["commute_filter","boolean","Whether the Insights page offers an \"Exclude commutes\" toggle. Default false."],
     ] },
   { name: "WeatherForecastOut", note: "Returned by GET /weather/forecast. See “available: false” in Conventions -- false when the athlete hasn't set a home location (home_lat/home_lon on PUT /settings/profile) or the coarse-forecast Open-Meteo fetch failed. Deliberately not archived or cached, unlike every other Open-Meteo response in this API -- see docs/DATA_DICTIONARY.md's own Weather forecast section.", fields: [
       ["available","boolean","required"],
@@ -1708,6 +1715,15 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"sport": "hiking", "sub_sport": null}'` }
     },
+    { method: "PATCH", path: "/api/v1/activities/{activity_id}/commute", summary: "Tag or untag an activity as a commute.",
+      description: "The Insights page's \"Exclude commutes\" toggle (offered when commute_filter is on in Personalize) and every exclude_commutes parameter leave tagged activities out. Durable, rebuild-safe override keyed by start time, like the race flag.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { schema: "ActivityCommuteOverrideIn", fields: [ ["is_commute","boolean","req","",""] ] },
+      responses: [ { code: 200, note: "ActivityCommuteOverrideOut: is_commute." }, { code: 404, note: "" } ],
+      example: { curl: `curl -X PATCH https://your-perseverer-host/api/v1/activities/${EX.ACT}/commute \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"is_commute": true}'` }
+    },
     { method: "PATCH", path: "/api/v1/activities/{activity_id}/race", summary: "Mark or unmark an activity as a race.",
       description: "Corrects Garmin's own eventTypeId heuristic for the (uncommon) case where a real race was never flagged as one inside the Garmin Connect app. Durable, rebuild-safe override.",
       params: [ ["activity_id","path","req","string","—",""] ],
@@ -1968,7 +1984,11 @@ const GROUPS = [
     },
     { method: "GET", path: "/api/v1/performance/pace-hr-zones", summary: "The complete 5-zone pace + heart-rate training table (Recovery/Basic Endurance/Aerobic Threshold/Lactate Threshold/VO2 Max).",
       description: "Built from the athlete's recent running history, not their entire history and not GET /performance's own rolling \"current fitness\" snapshot either — profile_vdot/profile_max_hr_bpm are the single best values within their own trailing lookback window (2 years for a race/max HR, 1 year for a training-run fallback; see pace_hr_zones.py's own \"How far back\" docstring section), each with the one activity that set them. profile_vdot prefers an activity marked as a race within the last 2 years over any training run (a short, all-out training segment can post an inflated VDOT — VDOT is calibrated against genuine race performances); profile_vdot_source records which one fired, falling back to the best training run in the last year (with a missing caveat) only when no race qualifies. Every zone's own HR range is empirical-first (the real 25th-75th percentile among the athlete's own qualifying runs in the last year at that pace, once there are enough of them) and formula-fallback-second (a fraction of max HR, from the same VT1/VT2 literature GET /performance's own threshold fields cite). sample_runs per zone are the literal answer to \"why these numbers.\" Deliberately request-time, not rollup-backed — same exception as GET /performance/vo2max-analysis above. Replaces the old GET /performance/threshold-analysis (a factor-analysis breakdown of two point-in-time numbers, no ranges) — GET /performance's own threshold_pace_s_per_km/aerobic_threshold_pace_s_per_km/HR fields are unaffected.",
-      params: [ ["as_of","query","opt","string(date)","today",""] ],
+      params: [
+        ["as_of","query","opt","string(date)","today",""],
+        ["exclude_commutes","query","opt","boolean","false","Leave activities tagged as commutes out (the maximum heart rate is not filtered)."],
+        ["sport","query","opt","string","running","running or cycling. cycling: the same five zones for rides -- HR ranges from max HR, each zone with speed_low_mps/speed_high_mps (the middle half of the average speeds of the rides at that heart rate in the last 12 months) and its rides as sample_runs; no VDOT, no pace."],
+      ],
       responses: [ { code: 200, ref: "PaceHrZonesOut" } ],
       example: {}
     },
@@ -1982,13 +2002,20 @@ const GROUPS = [
       example: { curl: `curl https://your-perseverer-host/api/v1/performance/race-readiness \\
   -H "X-API-Key: YOUR_API_KEY"` }
     },
+    { method: "GET", path: "/api/v1/performance/cycling-power", summary: "FTP, FTP/kg, Critical Power and a VO2max estimate for rides.",
+      description: "Computed from the athlete's own ride power data (never Garmin's figures), over the rides of the trailing 90 days. ftp_w: 95% of the best 20-minute power; ftp_w_per_kg: FTP over body weight that day (scale readings more than 15% from the median of all of them are ignored as someone else's; else the ride's FIT profile weight). cp_w/w_prime_j: the two-parameter critical power model (work = W' + CP x time) fitted to the best 3-20 minute powers, needing three durations including 12 or 20 minutes. vo2max: ACSM cycling equation 10.8 x (best 5-minute power / kg) + 7, true only for a near all-out 5 minutes. Per-ride bests are stored at import (ride_power.py); this is a bounded lookup over them.",
+      params: [ ["as_of","query","opt","string(date)","today",""], ["exclude_commutes","query","opt","boolean","false","Leave activities tagged as commutes out."] ],
+      responses: [ { code: 200, note: "CyclingPowerOut: available, window_days, current (CyclingPowerPointOut|null), history (CyclingPowerPointOut[], one per power-ride date), last_power_ride_date, missing. A point has as_of, ftp_w, ftp_w_per_kg, cp_w, w_prime_j, vo2max, weight_kg and best_powers (duration_s, watts, activity_id, local_date, name)." } ],
+      example: {}
+    },
     { method: "GET", path: "/api/v1/performance/curve", summary: "Best sustained pace/GAP/heart rate for each duration, across every activity in a date range.",
       description: "The single best D-second window anywhere across every qualifying activity for each of a fixed set of durations (1s through 2h) — not one activity's own average — the same idea as cycling's \"Critical Power Curve\"/Runalyze's \"Heart Rate Curve\". pace/gap are always running-only regardless of sports; heart_rate honors sports since a hard bike ride or hiit session is a real sustained HR effort too. Deliberately request-time, not rollup-backed — same exception GET /performance/vo2max-analysis above already establishes. See performance_curve.py's own module docstring for the sliding-window algorithm and its gap-disqualification rule.",
       params: [
-        ["metric","query","req","string","—","One of pace, gap, heart_rate."],
+        ["metric","query","req","string","—","One of pace, gap, heart_rate, speed, power. speed (m/s, higher is better) and power (watts) are rides only -- the cycling counterparts of pace -- and carry no threshold reference values."],
         ["start_date","query","req","string(date)","—",""],
         ["end_date","query","req","string(date)","—",""],
-        ["sports","query","opt","string","all sports","Comma-separated sport values. Only applies to heart_rate — ignored for pace/gap."],
+        ["exclude_commutes","query","opt","boolean","false","Leave activities tagged as commutes out."],
+        ["sports","query","opt","string","all sports","Comma-separated sport values. Only applies to heart_rate — ignored for pace/gap (running) and speed/power (rides)."],
       ],
       responses: [ { code: 200, ref: "PerformanceCurveOut" } ],
       example: { qs: "?metric=heart_rate&start_date=2026-06-01&end_date=2026-08-19&sports=running,cycling" }
@@ -2035,12 +2062,14 @@ const GROUPS = [
       example: { qs: "?kind=pb&window=all_time" }
     },
     { method: "GET", path: "/api/v1/insights/pace-bands", summary: "Total time spent at each pace, across the athlete's whole running history.",
-      description: "One row per fixed 30-second/km pace band (fast to slow), summed from every running activity's own per-second (well, per-sample — real device cadence) speed stream, not each run's whole-activity average. Precomputed at ingest time and stored per-activity (see pace_bands.py); this endpoint is a plain bounded SUM/GROUP BY over those already-stored rows, never a live stream scan. Always returns every band, even ones with seconds: 0.",
+      description: "One row per fixed 30-second/km pace band (fast to slow), summed from every running activity's own per-second (well, per-sample — real device cadence) speed stream, not each run's whole-activity average. Precomputed at ingest time and stored per-activity (see pace_bands.py); this endpoint is a plain bounded SUM/GROUP BY over those already-stored rows, never a live stream scan. Always returns every band, even ones with seconds: 0. sport=cycling returns the rides' time in each 50 W power band instead (300+ W down to < 50 W), from the power stream (rides without power have none; coasting at 0 W is left out); a ride is never in the running bands.",
+      params: [ ["sport","query","opt","string","running","running or cycling."], ["exclude_commutes","query","opt","boolean","false","Leave activities tagged as commutes out."] ],
       responses: [ { code: 200, ref: "array&lt;PaceBandOut&gt;" } ],
       example: {}
     },
     { method: "GET", path: "/api/v1/insights/pace-bands/by-activity", summary: "Per-run time-in-band breakdown, for a composition-over-time view.",
-      description: "The same precomputed per-activity time-in-band rows GET /insights/pace-bands sums athlete-wide, here grouped by activity instead — one row per running activity that has at least one non-zero band, each listing its own full bands breakdown (what share of *this one run* was spent at each pace). Still a plain bounded query over already-stored rows, never a live stream scan.",
+      description: "The same precomputed per-activity time-in-band rows GET /insights/pace-bands sums athlete-wide, here grouped by activity instead — one row per running activity that has at least one non-zero band, each listing its own full bands breakdown (what share of *this one run* was spent at each pace). Still a plain bounded query over already-stored rows, never a live stream scan. sport=cycling gives one row per ride with power, in power bands.",
+      params: [ ["sport","query","opt","string","running","running or cycling."], ["exclude_commutes","query","opt","boolean","false","Leave activities tagged as commutes out."] ],
       responses: [ { code: 200, ref: "array&lt;ActivityPaceBandsOut&gt;" } ],
       example: {}
     },

@@ -26,6 +26,7 @@ import {
   useSetClimbRouteStatus,
   useSetFuelingOverride,
   useSetNameOverride,
+  useSetCommuteOverride,
   useSetRaceOverride,
   useSetSportOverride,
   useSplitActivitySource,
@@ -158,6 +159,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
   const split = useSplitActivitySource(id);
   const sportOverride = useSetSportOverride(id);
   const raceOverride = useSetRaceOverride(id);
+  const commuteOverride = useSetCommuteOverride(id);
   const nameOverride = useSetNameOverride(id);
   const fuelingOverride = useSetFuelingOverride(id);
   const setClimbRouteStatus = useSetClimbRouteStatus(id);
@@ -256,6 +258,14 @@ export function ActivityDetailPage({ id }: { id: string }) {
                 <Icon name="trophy" /> Race
               </span>
             )}
+            {a.is_commute && (
+              <span
+                className="activity-detail__race-badge"
+                title="Tagged as a commute: left out of Insights when the commute filter is on"
+              >
+                <Icon name="route" /> Commute
+              </span>
+            )}
           </h1>
           <div className="activity-detail__correction-row">
             <ActivitySportCorrection
@@ -277,6 +287,21 @@ export function ActivityDetailPage({ id }: { id: string }) {
             >
               {a.is_race ? "Not a race?" : "Mark as a race"}
             </button>
+            {/* The athlete's own tag, kept across rebuilds; the Insights page can leave commutes
+                out (Settings -> Personalize turns that filter on). */}
+            <button
+              type="button"
+              className="activity-detail__sport-fix-btn"
+              disabled={commuteOverride.isPending}
+              onClick={() => commuteOverride.mutate({ is_commute: !a.is_commute })}
+            >
+              {a.is_commute ? "Not a commute?" : "Mark as a commute"}
+            </button>
+            {commuteOverride.isError && (
+              <span role="alert" className="activity-detail__sport-fix-error">
+                Couldn&apos;t save the commute tag.
+              </span>
+            )}
             {raceOverride.isError && (
               <span role="alert" className="activity-detail__sport-fix-error">
                 Couldn't save that correction.

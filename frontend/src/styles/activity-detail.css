@@ -960,3 +960,35 @@
   gap: var(--space-2);
   flex-wrap: wrap;
 }
+
+/* A ride's best average power per duration (ActivityStatsGrid.tsx, Power section). */
+.activity-best-power {
+  margin-top: var(--space-3);
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-best-power caption {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding-bottom: var(--space-1);
+}
+
+.activity-best-power th,
+.activity-best-power td {
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+  text-align: right;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.activity-best-power th:first-child,
+.activity-best-power td:first-child {
+  text-align: left;
+}
+
+.activity-best-power th {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}

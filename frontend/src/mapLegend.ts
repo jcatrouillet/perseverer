@@ -1,5 +1,6 @@
 // The map explorer's legend (pages/MapExplorerPage.tsx). Points are coloured by sport family
-// (metricStyle.ts: one tone per family, so running and cycling share blue), so the legend has one
+// (metricStyle.ts: one tone per family, so hiking and walking share green while rides have
+// their own colour, apart from runs), so the legend has one
 // entry per colour actually on the map, naming the sports shown in that colour and how many
 // points it covers. Built from the filtered points, so it always matches what is visible.
 import type { Tone } from "./metricStyle";

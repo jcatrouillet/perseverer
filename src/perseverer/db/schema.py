@@ -35,6 +35,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    text,
 )
 
 metadata = MetaData()
@@ -98,6 +99,12 @@ athlete = Table(
     Column("week_start_day", String, nullable=False, default="monday"),
     Column("time_format", String, nullable=False, default="24h"),
     Column("default_view", String, nullable=False, default="week"),
+    # Whether the Insights page offers an "Exclude commutes" toggle (activities tagged
+    # is_commute). Display only, like the columns above.
+    Column("commute_filter", Boolean, nullable=False, default=False, server_default=text("0")),
+    # Which sport the Insights page opens on ("running" | "cycling"); the page has a
+    # switch for the other one. Display only, like the three columns above.
+    Column("insights_sport", String, nullable=False, default="running", server_default="running"),
 )
 
 # An athlete's own configured HR training zones -- independent of the per-activity, device-
@@ -518,6 +525,10 @@ activity = Table(
     # garmin_export archive, or nothing at this timestamp), meaning genuinely unknown rather
     # than "confirmed not a race".
     Column("is_race", Boolean, nullable=True),
+    # The athlete's own "this is a commute" tag (PATCH /activities/{id}/commute): lets the
+    # Insights tab leave commutes out. Re-applied after a rebuild from
+    # activity_sport_override.is_commute. Never set by a vendor.
+    Column("is_commute", Boolean, nullable=False, default=False, server_default=text("0")),
     Column("description", Text, nullable=True),
     # Athlete-entered fueling intake for this activity -- there's no vendor source for this at
     # all (not FIT, not the Garmin Connect API; confirmed by introspecting both before adding
@@ -585,6 +596,7 @@ activity_sport_override = Table(
     Column("sport", String, nullable=True),
     Column("sub_sport", String, nullable=True),
     Column("is_race", Boolean, nullable=True),
+    Column("is_commute", Boolean, nullable=True),
     Column("name", String, nullable=True),
     Column("carbohydrates_g", Float, nullable=True),
     Column("sodium_mg", Float, nullable=True),

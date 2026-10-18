@@ -18,6 +18,7 @@ import type {
   ActivitySourcesOut,
   ActivityShoeOut,
   ActivitySplitOut,
+  ActivityCommuteOverrideOut,
   ActivityRaceOverrideOut,
   ActivitySportOverrideOut,
   ActivitySummary,
@@ -64,7 +65,9 @@ import type {
   LastImportedActivityOut,
   HrZoneConfigIn,
   HrZoneConfigOut,
+  CyclingPowerOut,
   InsightOut,
+  InsightsSport,
   JobSource,
   JobStatusOut,
   KayaLoginIn,
@@ -78,6 +81,7 @@ import type {
   PaceHrZonesOut,
   Page,
   PeriodCalendarResponse,
+  PerformanceCurveMetric,
   PerformanceCurveOut,
   PerformanceDailyRollupOut,
   PersonalizeSettingsIn,
@@ -174,14 +178,31 @@ export function useVo2maxFactorAnalysis(asOf?: string) {
   });
 }
 
+/** FTP, FTP/kg, Critical Power and a VO2max estimate for rides (GET /performance/cycling-power). */
+export function useCyclingPower(excludeCommutes = false) {
+  return useQuery({
+    queryKey: ["cycling-power", excludeCommutes],
+    queryFn: () =>
+      apiGet<CyclingPowerOut>(
+        `/api/v1/performance/cycling-power${buildQuery({ exclude_commutes: excludeCommutes ? "true" : undefined })}`,
+      ),
+  });
+}
+
 /** The Insights "Pace/HR Zones" tab (GET /performance/pace-hr-zones) -- the complete 5-zone
  * pace + heart-rate table built from the athlete's entire running history, plus the qualifying
  * runs behind each zone's own HR range. `asOf` defaults server-side to today when omitted. */
-export function usePaceHrZones(asOf?: string) {
+export function usePaceHrZones(
+  asOf?: string,
+  sport: InsightsSport = "running",
+  excludeCommutes = false,
+) {
   return useQuery({
-    queryKey: ["pace-hr-zones", asOf ?? "today"],
+    queryKey: ["pace-hr-zones", asOf ?? "today", sport, excludeCommutes],
     queryFn: () =>
-      apiGet<PaceHrZonesOut>(`/api/v1/performance/pace-hr-zones${buildQuery({ as_of: asOf })}`),
+      apiGet<PaceHrZonesOut>(
+        `/api/v1/performance/pace-hr-zones${buildQuery({ as_of: asOf, sport, exclude_commutes: excludeCommutes ? "true" : undefined })}`,
+      ),
   });
 }
 
@@ -205,14 +226,22 @@ export function useRaceReadiness(raceId?: number, asOf?: string) {
  * `sports` (comma-joined) scopes which sports feed a "heart_rate" curve; ignored server-side for
  * "pace"/"gap", which always mean running. See performance_curve.py's own module docstring. */
 export function usePerformanceCurve(
-  metric: "pace" | "gap" | "heart_rate",
+  metric: PerformanceCurveMetric,
   startDate: string,
   endDate: string,
   sports?: string[],
+  excludeCommutes = false,
 ) {
   const sportsParam = sports && sports.length > 0 ? sports.join(",") : undefined;
   return useQuery({
-    queryKey: ["performance-curve", metric, startDate, endDate, sportsParam ?? "all"],
+    queryKey: [
+      "performance-curve",
+      metric,
+      startDate,
+      endDate,
+      sportsParam ?? "all",
+      excludeCommutes,
+    ],
     queryFn: () =>
       apiGet<PerformanceCurveOut>(
         `/api/v1/performance/curve${buildQuery({
@@ -220,6 +249,7 @@ export function usePerformanceCurve(
           start_date: startDate,
           end_date: endDate,
           sports: sportsParam,
+          exclude_commutes: excludeCommutes ? "true" : undefined,
         })}`,
       ),
   });
@@ -807,6 +837,26 @@ export function useSetRaceOverride(activityId: string) {
   });
 }
 
+/** Tags (or untags) an activity as a commute, so the Insights "Exclude commutes" toggle can leave
+ * it out (PATCH /activities/{id}/commute). */
+export function useSetCommuteOverride(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { is_commute: boolean }) =>
+      apiPatch<ActivityCommuteOverrideOut>(`/api/v1/activities/${activityId}/commute`, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activities"] });
+      void queryClient.invalidateQueries({ queryKey: ["all-activities"] });
+      // Every Insights figure that could include or leave out this activity.
+      void queryClient.invalidateQueries({ queryKey: ["insights"] });
+      void queryClient.invalidateQueries({ queryKey: ["pace-hr-zones"] });
+      void queryClient.invalidateQueries({ queryKey: ["performance-curve"] });
+      void queryClient.invalidateQueries({ queryKey: ["cycling-power"] });
+    },
+  });
+}
+
 /** A manual "this title is wrong" correction (see routers/activities.py's own docstring) --
  * Garmin Connect's own name isn't reliably a real athlete-given title (it can be just as
  * generic a template as the FIT-derived default), so there's no automatic fix for this. */
@@ -840,19 +890,26 @@ export function useSetFuelingOverride(activityId: string) {
 /** Total time-in-pace-band across the athlete's whole running history -- a precomputed,
  * per-second-accurate aggregate (see pace_bands.py), not something derived client-side from
  * each run's own average pace. */
-export function usePaceBands() {
+/** Running pace bands, or with sport="cycling" the rides' power bands (50 W wide). */
+export function usePaceBands(sport: InsightsSport = "running", excludeCommutes = false) {
   return useQuery({
-    queryKey: ["insights", "pace-bands"],
-    queryFn: () => apiGet<PaceBandOut[]>("/api/v1/insights/pace-bands"),
+    queryKey: ["insights", "pace-bands", sport, excludeCommutes],
+    queryFn: () =>
+      apiGet<PaceBandOut[]>(
+        `/api/v1/insights/pace-bands${buildQuery({ sport, exclude_commutes: excludeCommutes ? "true" : undefined })}`,
+      ),
   });
 }
 
 /** Per-activity time-in-band breakdown -- the composition-over-time strip above the aggregate
  * bar chart usePaceBands() feeds. */
-export function usePaceBandsByActivity() {
+export function usePaceBandsByActivity(sport: InsightsSport = "running", excludeCommutes = false) {
   return useQuery({
-    queryKey: ["insights", "pace-bands", "by-activity"],
-    queryFn: () => apiGet<ActivityPaceBandsOut[]>("/api/v1/insights/pace-bands/by-activity"),
+    queryKey: ["insights", "pace-bands", "by-activity", sport, excludeCommutes],
+    queryFn: () =>
+      apiGet<ActivityPaceBandsOut[]>(
+        `/api/v1/insights/pace-bands/by-activity${buildQuery({ sport, exclude_commutes: excludeCommutes ? "true" : undefined })}`,
+      ),
   });
 }
 

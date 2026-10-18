@@ -152,3 +152,83 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+/* Title row with the Running/Cycling switch (InsightsPage.tsx). The switch reuses the "Show by"
+   toggle look (.type-breakdown__toggle); the active sport takes its own sport-family tone, so
+   the choice reads in the same colour as that sport everywhere else (map, calendar). */
+.insights-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.insights-header h1 {
+  margin: 0;
+}
+
+.insights-sport {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.insights-sport button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.insights-sport button + button {
+  border-left: 1px solid var(--color-border);
+}
+
+.insights-sport button.is-active {
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  font-weight: 600;
+}
+
+.insights-sport button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* Power trends (PowerTrendsChart.tsx): the W / W/kg / Speed toggle beside the title, or above the
+   speed chart when that view is shown. */
+.power-trends__header,
+.power-trends__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.power-trends__controls {
+  justify-content: flex-end;
+  margin-bottom: var(--space-2);
+}
+
+.power-trends__header h2 {
+  margin: 0;
+}
+
+/* The "Exclude commutes" toggle (InsightsPage.tsx), offered when Settings -> Personalize turns the
+   commute filter on. Sits at the end of the title row. */
+.insights-commutes {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}

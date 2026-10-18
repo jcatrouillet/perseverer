@@ -350,6 +350,9 @@ select {
 .tone-pace {
   --tone: var(--color-pace);
 }
+.tone-ride {
+  --tone: var(--color-ride);
+}
 .tone-hr {
   --tone: var(--color-heart-rate);
 }
@@ -1000,4 +1003,12 @@ tbody tr:last-child td {
 .date-nav__week-row a.is-outside {
   color: var(--color-text-faint);
   font-weight: 400;
+}
+
+/* A section heading led by its sport's icon chip (CyclingStats.tsx): the chip is a grid box, so
+   without this it takes its own line above the text. */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }

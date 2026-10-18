@@ -1,3 +1,5 @@
+// A Running/Cycling switch (default: Settings -> Personalize -> Insights open on) picks the sport
+// every tab describes; runs are only compared with runs and rides with rides (insightsSport.ts).
 // PR progress reuses the running-history query: one highest-VDOT run per ISO week,
 // exact-distance pace frontiers comparing the past year with older records.
 // Insights sub-tabs, each owning its own data fetch and rendered only while active (so switching
@@ -20,7 +22,10 @@
 import { useState } from "react";
 
 import { useAllActivities } from "../api/queries";
+import type { InsightsSport } from "../api/types";
+import { CyclingPowerPanel } from "../components/CyclingPowerPanel";
 import { EddingtonChart } from "../components/EddingtonChart";
+import { Icon } from "../components/Icon";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { PaceHrZonesTable } from "../components/PaceHrZonesTable";
 import { PrProgressChart } from "../components/PrProgressChart";
@@ -28,139 +33,149 @@ import { PaceTrendsChart } from "../components/PaceTrendsChart";
 import { PerformanceCurveChart } from "../components/PerformanceCurveChart";
 import { RacePredictionsChart } from "../components/RacePredictionsChart";
 import { RaceReadinessChart } from "../components/RaceReadinessChart";
+import { PowerTrendsChart } from "../components/PowerTrendsChart";
 import { TrainingBandsChart } from "../components/TrainingBandsChart";
 import { Vo2maxChart } from "../components/Vo2maxChart";
 import { Vo2maxFactorAnalysis } from "../components/Vo2maxFactorAnalysis";
+import { INSIGHTS_SPORTS, type InsightsTab, tabAvailable, tabLabel } from "../insightsSport";
+import { sportStyle } from "../metricStyle";
+import { usePersonalize } from "../PersonalizeContext";
 import "../styles/insights.css";
 
-type Tab =
-  | "pr-progress"
-  | "pace-trends"
-  | "training-bands"
-  | "race-predictions"
-  | "race-readiness"
-  | "pace-hr-zones"
-  | "vo2max"
-  | "performance-curve"
-  | "eddington";
+const TABS: readonly InsightsTab[] = [
+  "pace-trends",
+  "training-bands",
+  "pr-progress",
+  "race-predictions",
+  "race-readiness",
+  "pace-hr-zones",
+  "vo2max",
+  "performance-curve",
+  "eddington",
+];
+
+const EXCLUDE_COMMUTES_KEY = "perseverer_exclude_commutes";
+
+// A per-viewer convenience (like the theme), not an account setting: stays on across visits.
+function readExcludeCommutes(): boolean {
+  try {
+    return localStorage.getItem(EXCLUDE_COMMUTES_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export function InsightsPage() {
-  const [tab, setTab] = useState<Tab>("pace-trends");
-  const runs = useAllActivities({ sport: "running" });
+  const { insights_sport: defaultSport, commute_filter: commuteFilter } = usePersonalize();
+  const [excludeCommutesChoice, setExcludeCommutesChoice] = useState(readExcludeCommutes);
+  // The toggle only exists when Settings -> Personalize offers it; off means nothing is left out.
+  const excludeCommutes = commuteFilter && excludeCommutesChoice;
+  function chooseExcludeCommutes(next: boolean) {
+    setExcludeCommutesChoice(next);
+    try {
+      localStorage.setItem(EXCLUDE_COMMUTES_KEY, next ? "1" : "0");
+    } catch {
+      // Private window or blocked storage: the choice just lasts this visit.
+    }
+  }
+  // null until the switch is used, so the page follows the saved default (Settings ->
+  // Personalize) even when that setting arrives after the first render.
+  const [chosenSport, setChosenSport] = useState<InsightsSport | null>(null);
+  const sport = chosenSport ?? defaultSport;
+  const [chosenTab, setTab] = useState<InsightsTab>("pace-trends");
+  // A running-only tab (VO2max, race predictions/readiness) falls back to the first tab when
+  // the switch moves to cycling.
+  const tab = tabAvailable(chosenTab, sport) ? chosenTab : "pace-trends";
+  const copy = INSIGHTS_SPORTS[sport];
+  const activities = useAllActivities({ sport: copy.apiSport });
+
+  const activityList = (render: (data: NonNullable<typeof activities.data>) => React.ReactNode) => (
+    <>
+      {activities.isLoading && <LoadingSpinner />}
+      {activities.isError && <p role="alert">Could not load your {copy.many}.</p>}
+      {activities.data &&
+        render(excludeCommutes ? activities.data.filter((a) => !a.is_commute) : activities.data)}
+    </>
+  );
 
   return (
     <main>
-      <h1>Insights</h1>
+      <div className="insights-header">
+        <h1>Insights</h1>
+        <div className="insights-sport" role="group" aria-label="Sport">
+          {(Object.keys(INSIGHTS_SPORTS) as InsightsSport[]).map((s) => {
+            const style = sportStyle(INSIGHTS_SPORTS[s].apiSport);
+            return (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={sport === s}
+                className={`tone-${style.tone}${sport === s ? " is-active" : ""}`}
+                onClick={() => setChosenSport(s)}
+              >
+                <Icon name={style.icon} size={16} />
+                {INSIGHTS_SPORTS[s].label}
+              </button>
+            );
+          })}
+        </div>
+        {commuteFilter && (
+          <label className="insights-commutes">
+            <input
+              type="checkbox"
+              checked={excludeCommutesChoice}
+              onChange={(e) => chooseExcludeCommutes(e.target.checked)}
+            />
+            Exclude commutes
+          </label>
+        )}
+      </div>
       <div className="insights-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "pace-trends"}
-          className={tab === "pace-trends" ? "is-active" : undefined}
-          onClick={() => setTab("pace-trends")}
-        >
-          Pace trends
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "training-bands"}
-          className={tab === "training-bands" ? "is-active" : undefined}
-          onClick={() => setTab("training-bands")}
-        >
-          Training bands
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "pr-progress"}
-          className={tab === "pr-progress" ? "is-active" : undefined}
-          onClick={() => setTab("pr-progress")}
-        >
-          PR progress
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "race-predictions"}
-          className={tab === "race-predictions" ? "is-active" : undefined}
-          onClick={() => setTab("race-predictions")}
-        >
-          Race predictions
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "race-readiness"}
-          className={tab === "race-readiness" ? "is-active" : undefined}
-          onClick={() => setTab("race-readiness")}
-        >
-          Race Readiness
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "pace-hr-zones"}
-          className={tab === "pace-hr-zones" ? "is-active" : undefined}
-          onClick={() => setTab("pace-hr-zones")}
-        >
-          Pace/HR Zones
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "vo2max"}
-          className={tab === "vo2max" ? "is-active" : undefined}
-          onClick={() => setTab("vo2max")}
-        >
-          VO2max
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "performance-curve"}
-          className={tab === "performance-curve" ? "is-active" : undefined}
-          onClick={() => setTab("performance-curve")}
-        >
-          Performance Curve
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "eddington"}
-          className={tab === "eddington" ? "is-active" : undefined}
-          onClick={() => setTab("eddington")}
-        >
-          Eddington Number
-        </button>
+        {TABS.filter((t) => tabAvailable(t, sport)).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            className={tab === t ? "is-active" : undefined}
+            onClick={() => setTab(t)}
+          >
+            {tabLabel(t, sport)}
+          </button>
+        ))}
       </div>
 
-      {tab === "pace-trends" && (
-        <>
-          {runs.isLoading && <LoadingSpinner />}
-          {runs.isError && <p role="alert">Could not load running activities.</p>}
-          {runs.data && <PaceTrendsChart activities={runs.data} />}
-        </>
+      {tab === "pace-trends" &&
+        activityList((data) =>
+          sport === "cycling" ? (
+            <PowerTrendsChart activities={data} excludeCommutes={excludeCommutes} />
+          ) : (
+            <PaceTrendsChart activities={data} />
+          ),
+        )}
+      {tab === "pr-progress" &&
+        activityList((data) => <PrProgressChart activities={data} sport={sport} />)}
+      {tab === "training-bands" && (
+        <TrainingBandsChart sport={sport} excludeCommutes={excludeCommutes} />
       )}
-      {tab === "pr-progress" && (
-        <>
-          {runs.isLoading && <LoadingSpinner />}
-          {runs.isError && <p role="alert">Could not load running activities.</p>}
-          {runs.data && <PrProgressChart activities={runs.data} />}
-        </>
-      )}
-      {tab === "training-bands" && <TrainingBandsChart />}
       {tab === "race-predictions" && <RacePredictionsChart />}
       {tab === "race-readiness" && <RaceReadinessChart />}
-      {tab === "pace-hr-zones" && <PaceHrZonesTable />}
-      {tab === "vo2max" && (
-        <>
-          <Vo2maxChart />
-          <Vo2maxFactorAnalysis />
-        </>
+      {tab === "pace-hr-zones" && (
+        <PaceHrZonesTable sport={sport} excludeCommutes={excludeCommutes} />
       )}
-      {tab === "performance-curve" && <PerformanceCurveChart />}
-      {tab === "eddington" && <EddingtonChart />}
+      {tab === "vo2max" &&
+        (sport === "cycling" ? (
+          <CyclingPowerPanel excludeCommutes={excludeCommutes} />
+        ) : (
+          <>
+            <Vo2maxChart />
+            <Vo2maxFactorAnalysis />
+          </>
+        ))}
+      {tab === "performance-curve" && (
+        <PerformanceCurveChart sport={sport} excludeCommutes={excludeCommutes} />
+      )}
+      {tab === "eddington" && <EddingtonChart sport={sport} excludeCommutes={excludeCommutes} />}
     </main>
   );
 }

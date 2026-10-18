@@ -383,3 +383,79 @@ class TestFuelingOverride:
             headers=auth_headers,
         )
         assert r.status_code == 422
+
+
+class TestCommuteOverride:
+    """PATCH /activities/{id}/commute -- the athlete's own commute tag, used by the Insights
+    "Exclude commutes" toggle; durable across a rebuild like the race flag."""
+
+    def test_tags_and_untags_a_commute_and_exposes_it_on_the_activity(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="ride", sport="cycling")
+
+        assert (
+            client.get("/api/v1/activities/ride", headers=auth_headers).json()["is_commute"]
+            is False
+        )
+        r = client.patch(
+            "/api/v1/activities/ride/commute", json={"is_commute": True}, headers=auth_headers
+        )
+        assert r.status_code == 200
+        assert r.json() == {"is_commute": True}
+        assert (
+            client.get("/api/v1/activities/ride", headers=auth_headers).json()["is_commute"] is True
+        )
+        listed = client.get("/api/v1/activities", headers=auth_headers).json()["items"][0]
+        assert listed["is_commute"] is True
+
+        client.patch(
+            "/api/v1/activities/ride/commute", json={"is_commute": False}, headers=auth_headers
+        )
+        assert (
+            client.get("/api/v1/activities/ride", headers=auth_headers).json()["is_commute"]
+            is False
+        )
+
+    def test_the_tag_is_recorded_durably_without_disturbing_other_corrections(
+        self, client: TestClient, auth_headers: dict[str, str], engine: Engine
+    ) -> None:
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="ride", sport="cycling")
+        client.patch(
+            "/api/v1/activities/ride/sport",
+            json={"sport": "cycling", "sub_sport": None},
+            headers=auth_headers,
+        )
+        client.patch(
+            "/api/v1/activities/ride/commute", json={"is_commute": True}, headers=auth_headers
+        )
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(activity_sport_override.c.sport, activity_sport_override.c.is_commute)
+            ).one()
+        assert (row.sport, row.is_commute) == ("cycling", True)
+
+    def test_a_rebuild_reapplies_the_tag(self, engine: Engine) -> None:
+        from perseverer.db.seed import DEFAULT_ATHLETE_ID
+        from perseverer.sport_override import apply_sport_overrides, set_commute_override
+
+        with engine.connect() as conn:
+            seed_activity(conn, activity_id="ride", sport="cycling")
+            set_commute_override(
+                conn, athlete_id=DEFAULT_ATHLETE_ID, activity_id="ride", is_commute=True
+            )
+            # "Rebuild": the derived row comes back without the tag.
+            conn.execute(activity.update().where(activity.c.id == "ride").values(is_commute=False))
+            assert apply_sport_overrides(conn, athlete_id=DEFAULT_ATHLETE_ID) == 1
+            tagged = conn.execute(select(activity.c.is_commute)).scalar_one()
+        assert tagged is True
+
+    def test_404_for_a_missing_activity(
+        self, client: TestClient, auth_headers: dict[str, str]
+    ) -> None:
+        r = client.patch(
+            "/api/v1/activities/nope/commute", json={"is_commute": True}, headers=auth_headers
+        )
+        assert r.status_code == 404

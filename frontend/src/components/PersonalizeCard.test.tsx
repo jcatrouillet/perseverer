@@ -28,6 +28,8 @@ function settings(overrides: Partial<PersonalizeSettingsOut> = {}): PersonalizeS
     time_format: "24h",
     default_view: "week",
     unit_preference: "metric",
+    insights_sport: "running",
+    commute_filter: false,
     ...overrides,
   };
 }
@@ -58,6 +60,8 @@ describe("PersonalizeCard", () => {
     fireEvent.click(screen.getByLabelText("Sunday"));
     fireEvent.click(screen.getByLabelText("12-hour (AM/PM)"));
     fireEvent.click(screen.getByLabelText("Miles"));
+    fireEvent.click(screen.getByLabelText("Cycling"));
+    fireEvent.click(screen.getByLabelText(/Offer an "Exclude commutes" filter/));
     fireEvent.change(screen.getByLabelText("Starting page"), { target: { value: "month" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(mockSetMutate).toHaveBeenCalledWith({
@@ -65,6 +69,8 @@ describe("PersonalizeCard", () => {
       time_format: "12h",
       default_view: "month",
       unit_preference: "imperial",
+      insights_sport: "cycling",
+      commute_filter: true,
     });
   });
 

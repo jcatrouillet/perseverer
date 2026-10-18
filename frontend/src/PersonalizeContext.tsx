@@ -14,6 +14,8 @@ const DEFAULT_PERSONALIZE_SETTINGS: PersonalizeSettingsOut = {
   time_format: "24h",
   default_view: "week",
   unit_preference: "metric",
+  insights_sport: "running",
+  commute_filter: false,
 };
 
 // Exported (not just the Provider/hook below) so a test can wrap a component in

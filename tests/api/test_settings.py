@@ -597,6 +597,8 @@ def test_personalize_get_returns_the_seeded_defaults(
         "time_format": "24h",
         "default_view": "week",
         "unit_preference": "metric",
+        "insights_sport": "running",
+        "commute_filter": False,
     }
 
 
@@ -610,6 +612,8 @@ def test_personalize_put_stores_and_returns_the_values(
             "time_format": "12h",
             "default_view": "activities",
             "unit_preference": "imperial",
+            "insights_sport": "cycling",
+            "commute_filter": True,
         },
         headers=auth_headers,
     )
@@ -619,6 +623,8 @@ def test_personalize_put_stores_and_returns_the_values(
         "time_format": "12h",
         "default_view": "activities",
         "unit_preference": "imperial",
+        "insights_sport": "cycling",
+        "commute_filter": True,
     }
 
     with engine.connect() as conn:
@@ -628,15 +634,17 @@ def test_personalize_put_stores_and_returns_the_values(
                 athlete.c.time_format,
                 athlete.c.default_view,
                 athlete.c.unit_preference,
+                athlete.c.insights_sport,
             )
         ).fetchone()
     assert row is not None
-    assert (row.week_start_day, row.time_format, row.default_view, row.unit_preference) == (
-        "sunday",
-        "12h",
-        "activities",
-        "imperial",
-    )
+    assert (
+        row.week_start_day,
+        row.time_format,
+        row.default_view,
+        row.unit_preference,
+        row.insights_sport,
+    ) == ("sunday", "12h", "activities", "imperial", "cycling")
 
 
 def test_personalize_accepts_last_activity_as_starting_page(
@@ -647,6 +655,8 @@ def test_personalize_accepts_last_activity_as_starting_page(
         "time_format": "24h",
         "default_view": "last_activity",
         "unit_preference": "metric",
+        "insights_sport": "running",
+        "commute_filter": False,
     }
     r = client.put("/api/v1/settings/personalize", json=body, headers=auth_headers)
     assert r.status_code == 200
@@ -676,6 +686,8 @@ def test_personalize_put_defaults_every_field_when_omitted(
         "time_format": "24h",
         "default_view": "week",
         "unit_preference": "metric",
+        "insights_sport": "running",
+        "commute_filter": False,
     }
 
 
@@ -683,6 +695,7 @@ def test_personalize_put_defaults_every_field_when_omitted(
     "field,value",
     [
         ("week_start_day", "tuesday"),
+        ("insights_sport", "swimming"),
         ("time_format", "military"),
         ("default_view", "year"),
         ("unit_preference", "furlongs"),

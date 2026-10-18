@@ -726,3 +726,25 @@ def test_activity_routes_empty_ids_returns_empty_list(
     r = client.get("/api/v1/activities/routes?ids=", headers=auth_headers)
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_list_activities_surfaces_a_rides_average_power(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="ride", sport="cycling", distance_m=30000.0)
+    _add_metric(engine, activity_id="ride", metric_key="fit.session.avg_power", value=185.0)
+
+    item = client.get("/api/v1/activities", headers=auth_headers).json()["items"][0]
+    assert item["avg_power_w"] == 185.0
+
+
+def test_list_activities_surfaces_a_rides_best_20_minute_power(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="ride", sport="cycling", distance_m=30000.0)
+    _add_metric(engine, activity_id="ride", metric_key="perseverer.power.best_1200s_w", value=210.0)
+
+    item = client.get("/api/v1/activities", headers=auth_headers).json()["items"][0]
+    assert item["best_20min_power_w"] == 210.0

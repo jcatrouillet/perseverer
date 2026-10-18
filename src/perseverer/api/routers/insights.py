@@ -6,7 +6,7 @@ codebase's rollup mandate). Refreshed by insights/engine.py on ingest and once d
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Connection, func, select
@@ -15,7 +15,16 @@ from perseverer.api.dependencies import get_conn, require_api_key
 from perseverer.api.schemas.common import to_utc
 from perseverer.api.schemas.insights import ActivityPaceBandsOut, InsightOut, PaceBandOut
 from perseverer.db.schema import activity, activity_metric, insight
-from perseverer.pace_bands import PACE_BANDS
+from perseverer.pace_bands import PACE_BANDS, POWER_BANDS
+
+
+def _bands(sport: str) -> list[tuple[str, str]]:
+    """`(label, metric_key)` per band, fast to slow: running pace bands, or ride power bands."""
+    bands = POWER_BANDS if sport == "cycling" else PACE_BANDS
+    return [(band.label, band.metric_key) for band in bands]
+
+
+BandSport = Annotated[Literal["running", "cycling"], Query()]
 
 router = APIRouter()
 
@@ -54,24 +63,32 @@ def list_insights(
 def list_pace_bands(
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
+    sport: BandSport = "running",
+    exclude_commutes: bool = Query(False),
 ) -> list[PaceBandOut]:
     """Total time-in-band across the athlete's whole running history, one row per
-    `pace_bands.PACE_BANDS` entry (fast to slow). A plain bounded SUM/GROUP BY over
+    `pace_bands.PACE_BANDS` entry (fast to slow); `sport=cycling` gives the rides' time in each
+    `POWER_BANDS` power band instead (50 W wide, hard to easy). A plain bounded SUM/GROUP BY over
     already-precomputed `activity_metric` rows (see pace_bands.py::refresh_pace_bands) -- never a
     live stream scan, matching this codebase's rollup mandate."""
-    band_metric_keys = [band.metric_key for band in PACE_BANDS]
-    rows = conn.execute(
+    bands = _bands(sport)
+    band_metric_keys = [metric_key for _, metric_key in bands]
+    query = (
         select(activity_metric.c.metric_key, func.sum(activity_metric.c.value_num))
+        .select_from(activity_metric.join(activity, activity.c.id == activity_metric.c.activity_id))
         .where(
             activity_metric.c.athlete_id == athlete_id,
             activity_metric.c.metric_key.in_(band_metric_keys),
+            activity.c.deleted_at.is_(None),
         )
         .group_by(activity_metric.c.metric_key)
-    ).fetchall()
+    )
+    if exclude_commutes:
+        query = query.where(activity.c.is_commute.is_(False))
+    rows = conn.execute(query).fetchall()
     totals = {metric_key: total for metric_key, total in rows}
     return [
-        PaceBandOut(label=band.label, seconds=totals.get(band.metric_key, 0.0))
-        for band in PACE_BANDS
+        PaceBandOut(label=label, seconds=totals.get(metric_key, 0.0)) for label, metric_key in bands
     ]
 
 
@@ -79,6 +96,8 @@ def list_pace_bands(
 def list_pace_bands_by_activity(
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
+    sport: BandSport = "running",
+    exclude_commutes: bool = Query(False),
 ) -> list[ActivityPaceBandsOut]:
     """Per-activity time-in-band breakdown -- the same precomputed `activity_metric` rows
     `/insights/pace-bands` sums athlete-wide, here grouped by activity instead of collapsed
@@ -86,8 +105,9 @@ def list_pace_bands_by_activity(
     of *this* run was spent at each pace), one row per running activity that has at least one
     non-zero band. Still a plain bounded query over already-stored rows, never a live stream
     scan."""
-    band_metric_keys = [band.metric_key for band in PACE_BANDS]
-    rows = conn.execute(
+    bands = _bands(sport)
+    band_metric_keys = [metric_key for _, metric_key in bands]
+    query = (
         select(
             activity_metric.c.activity_id,
             activity.c.local_date,
@@ -101,7 +121,10 @@ def list_pace_bands_by_activity(
             activity.c.deleted_at.is_(None),
         )
         .order_by(activity.c.local_date)
-    ).fetchall()
+    )
+    if exclude_commutes:
+        query = query.where(activity.c.is_commute.is_(False))
+    rows = conn.execute(query).fetchall()
 
     seconds_by_activity: dict[str, dict[str, float]] = {}
     local_date_by_activity: dict[str, str | None] = {}
@@ -114,8 +137,8 @@ def list_pace_bands_by_activity(
             activity_id=activity_id,
             local_date=local_date_by_activity[activity_id],
             bands=[
-                PaceBandOut(label=band.label, seconds=metrics.get(band.metric_key, 0.0))
-                for band in PACE_BANDS
+                PaceBandOut(label=label, seconds=metrics.get(metric_key, 0.0))
+                for label, metric_key in bands
             ],
         )
         for activity_id, metrics in seconds_by_activity.items()

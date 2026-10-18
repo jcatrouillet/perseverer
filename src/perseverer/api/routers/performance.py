@@ -12,7 +12,7 @@ lookup" exception /activities/needs-trim and /activities/possible-duplicates
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import Annotated, cast
+from typing import Annotated, Literal, cast
 
 import duckdb
 from fastapi import APIRouter, Depends, Query
@@ -21,6 +21,9 @@ from sqlalchemy import Connection, select
 from perseverer.api.dependencies import get_conn, get_duckdb, require_api_key
 from perseverer.api.schemas.performance import (
     ActivityRefOut,
+    BestPowerOut,
+    CyclingPowerOut,
+    CyclingPowerPointOut,
     PaceHrZoneOut,
     PaceHrZonesOut,
     PerformanceCurveOut,
@@ -35,9 +38,15 @@ from perseverer.api.schemas.performance import (
 )
 from perseverer.config import Settings, get_settings
 from perseverer.db.schema import performance_daily_rollup
-from perseverer.pace_hr_zones import ActivityRef, PaceHrZone, compute_pace_hr_zones
+from perseverer.pace_hr_zones import (
+    ActivityRef,
+    PaceHrZone,
+    compute_pace_hr_zones,
+    compute_ride_hr_zones,
+)
 from perseverer.performance_curve import CurvePoint, Metric, compute_performance_curve
 from perseverer.race_readiness import ReadinessPoint, WeekValue, compute_race_readiness
+from perseverer.ride_power import WINDOW_DAYS, CyclingPowerPoint, compute_cycling_power
 from perseverer.vo2max_analysis import (
     Vo2maxContributor,
     Vo2maxFactorAnalysis,
@@ -122,9 +131,12 @@ def _zone_out(z: PaceHrZone) -> PaceHrZoneOut:
                 duration_s=r.duration_s,
                 pace_s_per_km=r.pace_s_per_km,
                 avg_hr_bpm=r.avg_hr_bpm,
+                speed_mps=r.speed_mps,
             )
             for r in z.sample_runs
         ],
+        speed_low_mps=z.speed_low_mps,
+        speed_high_mps=z.speed_high_mps,
     )
 
 
@@ -180,14 +192,22 @@ def get_vo2max_factor_analysis(
 def get_pace_hr_zones(
     athlete_id: Annotated[str, Depends(require_api_key)],
     as_of: date | None = Query(None),
+    sport: Literal["running", "cycling"] = Query("running"),
+    exclude_commutes: bool = Query(False),
     conn: Connection = Depends(get_conn),
 ) -> PaceHrZonesOut:
     """The complete 5-zone pace + heart-rate table (Recovery/Basic Endurance/Aerobic Threshold/
     Lactate Threshold/VO2 Max), built from the athlete's recent running history (see
     pace_hr_zones.py's own "How far back" docstring section for the exact windows) -- see that
-    same module docstring for the model and its literature sources."""
+    same module docstring for the model and its literature sources. `sport=cycling` gives the
+    rides' table instead (`compute_ride_hr_zones`): the same HR zones, each with the speed
+    range (`speed_low_mps`/`speed_high_mps`) of the athlete's own rides at that effort, no
+    pace and no VDOT."""
     resolved_as_of = as_of if as_of is not None else datetime.now(UTC).date()
-    result = compute_pace_hr_zones(conn, athlete_id=athlete_id, as_of=resolved_as_of)
+    compute = compute_ride_hr_zones if sport == "cycling" else compute_pace_hr_zones
+    result = compute(
+        conn, athlete_id=athlete_id, as_of=resolved_as_of, exclude_commutes=exclude_commutes
+    )
     return PaceHrZonesOut(
         as_of=result.as_of,
         profile_vdot=result.profile_vdot,
@@ -246,10 +266,11 @@ def _curve_point_out(p: CurvePoint) -> PerformanceCurvePointOut:
 @router.get("/performance/curve")
 def get_performance_curve(
     athlete_id: Annotated[str, Depends(require_api_key)],
-    metric: Annotated[str, Query(pattern="^(pace|gap|heart_rate)$")],
+    metric: Annotated[str, Query(pattern="^(pace|gap|heart_rate|speed|power)$")],
     start_date: date = Query(...),
     end_date: date = Query(...),
     sports: str | None = Query(None),
+    exclude_commutes: bool = Query(False),
     conn: Connection = Depends(get_conn),
     duckdb_conn: duckdb.DuckDBPyConnection = Depends(get_duckdb),
     settings: Settings = Depends(get_settings),
@@ -259,7 +280,8 @@ def get_performance_curve(
     module docstring for the full model (the sliding-window search, gap disqualification, and why
     the athlete's own already-computed threshold pace/HR are returned alongside as reference
     values, never blended into the curve itself). `sports` (comma-separated) scopes which sports
-    feed a `heart_rate` curve -- ignored entirely for `pace`/`gap`, which always mean running.
+    feed a `heart_rate` curve -- ignored entirely for `pace`/`gap`, which always mean running,
+    and for `speed` (m/s, higher is better)/`power` (watts), which always mean rides.
     `available=False` (never a fabricated curve) when nothing in range has the stream channel(s)
     this metric needs at all."""
     sport_list = sports.split(",") if sports else None
@@ -273,6 +295,7 @@ def get_performance_curve(
         end_date=end_date,
         sports=sport_list,
         as_of=datetime.now(UTC).date(),
+        exclude_commutes=exclude_commutes,
     )
     return PerformanceCurveOut(
         available=bool(curve.points),
@@ -283,4 +306,50 @@ def get_performance_curve(
         threshold_hr_bpm=curve.threshold_hr_bpm,
         aerobic_threshold_hr_bpm=curve.aerobic_threshold_hr_bpm,
         max_hr_bpm=curve.max_hr_bpm,
+    )
+
+
+def _cycling_point_out(p: CyclingPowerPoint) -> CyclingPowerPointOut:
+    return CyclingPowerPointOut(
+        as_of=p.as_of,
+        ftp_w=p.ftp_w,
+        ftp_w_per_kg=p.ftp_w_per_kg,
+        cp_w=p.cp_w,
+        w_prime_j=p.w_prime_j,
+        vo2max=p.vo2max,
+        weight_kg=p.weight_kg,
+        best_powers=[
+            BestPowerOut(
+                duration_s=duration_s,
+                watts=watts,
+                activity_id=p.best_power_ride[duration_s].activity_id,
+                local_date=p.best_power_ride[duration_s].local_date,
+                name=p.best_power_ride[duration_s].name,
+            )
+            for duration_s, watts in sorted(p.best_power_w.items())
+        ],
+    )
+
+
+@router.get("/performance/cycling-power")
+def get_cycling_power(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    as_of: date | None = Query(None),
+    exclude_commutes: bool = Query(False),
+    conn: Connection = Depends(get_conn),
+) -> CyclingPowerOut:
+    """FTP, FTP/kg, Critical Power with W', and a VO2max estimate for rides, from the athlete's own
+    power data (never Garmin's figures): current values over the trailing window and their history.
+    See ride_power.py's module docstring for every formula."""
+    resolved_as_of = as_of if as_of is not None else datetime.now(UTC).date()
+    result = compute_cycling_power(
+        conn, athlete_id=athlete_id, as_of=resolved_as_of, exclude_commutes=exclude_commutes
+    )
+    return CyclingPowerOut(
+        available=result.last_power_ride_date is not None,
+        window_days=WINDOW_DAYS,
+        current=_cycling_point_out(result.current) if result.current else None,
+        history=[_cycling_point_out(p) for p in result.history],
+        last_power_ride_date=result.last_power_ride_date,
+        missing=result.missing,
     )

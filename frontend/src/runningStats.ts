@@ -602,6 +602,15 @@ const STANDARD_DISTANCES: StandardDistance[] = [
   { label: "Marathon", meters: 42195 },
 ];
 
+/** The cycling period summary's record distances (CyclingStats.tsx), matched the same way. */
+export const CYCLING_PR_DISTANCES: StandardDistance[] = [
+  { label: "5 km", meters: 5000 },
+  { label: "10 km", meters: 10000 },
+  { label: "20 km", meters: 20000 },
+  { label: "40 km", meters: 40000 },
+  { label: "100 km", meters: 100000 },
+];
+
 export interface PersonalRecord {
   label: string;
   date: string;
@@ -619,9 +628,12 @@ export interface PersonalRecord {
  * yet, and a much bigger feature than a stats page needs). Instead, for each standard
  * distance, this picks the fastest *whole recorded activity* within a tolerance band of that
  * distance -- real data, just a coarser match than a true best-effort. */
-export function personalRecords(activities: ActivitySummary[]): PersonalRecord[] {
+export function personalRecords(
+  activities: ActivitySummary[],
+  distances: StandardDistance[] = STANDARD_DISTANCES,
+): PersonalRecord[] {
   const records: PersonalRecord[] = [];
-  for (const std of STANDARD_DISTANCES) {
+  for (const std of distances) {
     const minM = std.meters * 0.9;
     const maxM = std.meters * 1.3;
     const eligible = activities.filter(

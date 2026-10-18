@@ -1190,6 +1190,15 @@ async def set_activity_race(activity_id: str, is_race: bool) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def set_activity_commute(activity_id: str, is_commute: bool) -> dict[str, Any]:
+    """Tag or untag an activity as a commute (the Insights page can leave commutes out)."""
+    response = await _call_api(
+        "PATCH", f"/api/v1/activities/{activity_id}/commute", json={"is_commute": is_commute}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
 async def set_activity_name(activity_id: str, name: str) -> dict[str, Any]:
     """Give an activity a custom title."""
     response = await _call_api(

@@ -568,6 +568,8 @@ describe("WeekView week stats", () => {
           time_format: "24h",
           default_view: "week",
           unit_preference: "metric",
+          insights_sport: "running",
+          commute_filter: false,
         }}
       >
         <WeekView date="2026-09-01" />

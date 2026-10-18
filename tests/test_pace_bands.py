@@ -101,12 +101,17 @@ def _add_activity(conn: Connection, *, activity_id: str, sport: str = "running")
 
 
 def _add_speed_stream(
-    parquet_dir: Path, conn: Connection, *, activity_id: str, speeds_mps: list[float]
+    parquet_dir: Path,
+    conn: Connection,
+    *,
+    activity_id: str,
+    speeds_mps: list[float],
+    channel: str = "speed_mps",
 ) -> None:
     points = [
         StreamPoint(
             timestamp_utc=dt.datetime(2026, 1, 1, tzinfo=dt.UTC) + dt.timedelta(seconds=i * 10),
-            values={"speed_mps": speed},
+            values={channel: speed},
         )
         for i, speed in enumerate(speeds_mps)
     ]
@@ -125,7 +130,7 @@ def _add_speed_stream(
 
 
 class TestRefreshPaceBands:
-    def test_writes_band_rows_only_for_running_activities_with_a_speed_stream(
+    def test_runs_get_pace_bands_and_rides_get_power_bands_never_mixed(
         self, tmp_path: Path
     ) -> None:
         engine = _engine(tmp_path)
@@ -135,8 +140,17 @@ class TestRefreshPaceBands:
             _add_activity(conn, activity_id="run_with_stream", sport="running")
             _add_speed_stream(parquet_dir, conn, activity_id="run_with_stream", speeds_mps=speeds)
             _add_activity(conn, activity_id="run_no_stream", sport="running")
-            _add_activity(conn, activity_id="ride_with_stream", sport="cycling")
-            _add_speed_stream(parquet_dir, conn, activity_id="ride_with_stream", speeds_mps=speeds)
+            _add_activity(conn, activity_id="ride_with_power", sport="cycling")
+            _add_speed_stream(
+                parquet_dir,
+                conn,
+                activity_id="ride_with_power",
+                speeds_mps=[180.0] * 6 + [0.0] * 5,  # 50 s at 180 W, then coasting
+                channel="power",
+            )
+            # A ride with speed but no power has no power bands, and never pace bands.
+            _add_activity(conn, activity_id="ride_speed_only", sport="cycling")
+            _add_speed_stream(parquet_dir, conn, activity_id="ride_speed_only", speeds_mps=speeds)
             conn.commit()
 
             refresh_pace_bands(conn, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
@@ -149,9 +163,14 @@ class TestRefreshPaceBands:
                     activity_metric.c.value_num,
                 )
             ).fetchall()
-            assert [r.activity_id for r in rows] == ["run_with_stream"]
-            assert rows[0].metric_key == _band_key("5_00_5_30")
-            assert rows[0].value_num == 100.0
+            by_activity = {r.activity_id: r for r in rows}
+            assert sorted(by_activity) == ["ride_with_power", "run_with_stream"]
+            assert by_activity["run_with_stream"].metric_key == _band_key("5_00_5_30")
+            assert by_activity["run_with_stream"].value_num == 100.0
+            # A ride's time lands in a power band, never a pace band; coasting is left out.
+            ride = by_activity["ride_with_power"]
+            assert ride.metric_key == "perseverer.performance.power_band.150_200"
+            assert ride.value_num == 60.0
 
     def test_skips_a_stream_with_no_speed_channel(self, tmp_path: Path) -> None:
         engine = _engine(tmp_path)
@@ -180,7 +199,7 @@ class TestRefreshPaceBands:
 
             assert written == 0
 
-    def test_full_recompute_clears_stale_rows_for_an_activity_no_longer_running(
+    def test_full_recompute_clears_stale_rows_for_an_activity_no_longer_running_or_cycling(
         self, tmp_path: Path
     ) -> None:
         engine = _engine(tmp_path)
@@ -192,7 +211,7 @@ class TestRefreshPaceBands:
             refresh_pace_bands(conn, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)
             conn.commit()
 
-            conn.execute(activity.update().where(activity.c.id == "run1").values(sport="cycling"))
+            conn.execute(activity.update().where(activity.c.id == "run1").values(sport="hiking"))
             conn.commit()
 
             refresh_pace_bands(conn, parquet_dir, athlete_id=DEFAULT_ATHLETE_ID)

@@ -3143,7 +3143,9 @@ def render_period_share_html(
             .select_from(split_table.join(activity, activity.c.id == split_table.c.activity_id))
             .where(*climb_where, split_table.c.climb_grade.is_not(None))
         ).fetchall()
-        total_climb_time_s = sum(s.duration_s for s in climb_splits if s.duration_s is not None)
+        timed = [s.duration_s for s in climb_splits if s.duration_s is not None]
+        # None, not 0, when no session was timed (a Kaya-only session has no time).
+        total_climb_time_s = sum(timed) if timed else None
         completed_grades = [s.climb_grade for s in climb_splits if s.climb_result == "completed"]
         breakdown: dict[int, list[int]] = {}
         for s in climb_splits:
@@ -3153,17 +3155,18 @@ def render_period_share_html(
             else:
                 bucket[0] += 1
         # Tone/icon per ClimbingStatsCard.tsx (the real Week/Month/Year/All-time card for
-        # bouldering) -- deliberately all "elevation", not the different per-stat mapping the
-        # activity share page uses for a single climb's own "Time & calories" section
-        # (ActivityStatsGrid.tsx), since that's a different real component with its own mapping.
-        climbing_stats = [
-            st("Sessions", str(session_count), "climb", "elevation", True),
-            st("Climb time", _format_duration(total_climb_time_s), "clock", "elevation"),
-            st("Routes", str(len(climb_splits)), "route", "elevation"),
-        ]
+        # bouldering) -- all "load", climbing's own sport tone (metricStyle.ts), not the different
+        # per-stat mapping the activity share page uses for a single climb's own "Time & calories"
+        # section (ActivityStatsGrid.tsx), since that's a different real component.
+        climbing_stats = [st("Sessions", str(session_count), "climb", "load", True)]
+        if total_climb_time_s is not None:
+            climbing_stats.append(
+                st("Climb time", _format_duration(total_climb_time_s), "clock", "load")
+            )
+        climbing_stats.append(st("Routes", str(len(climb_splits)), "route", "load"))
         if completed_grades:
             climbing_stats.append(
-                st("Max grade completed", f"V{max(completed_grades)}", "mountain", "elevation")
+                st("Max grade completed", f"V{max(completed_grades)}", "mountain", "load")
             )
         grade_chart = _svg_grade_chart([(g, a, c) for g, (a, c) in sorted(breakdown.items())])
         climbing_body = f"<h2>Climbing</h2>\n{_stats_grid_iconed(*climbing_stats)}\n{grade_chart}\n"

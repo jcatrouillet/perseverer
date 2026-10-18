@@ -78,6 +78,7 @@ from perseverer.api.mcp_server import (
     list_sleep,
     push_planned_workout,
     retire_shoe,
+    set_activity_commute,
     set_activity_fueling,
     set_activity_name,
     set_activity_race,
@@ -667,6 +668,7 @@ async def test_activity_correction_tools(client: TestClient, engine: Engine) -> 
         seed_activity(conn, activity_id="a1")
     assert (await set_activity_sport("a1", "hiking"))["sport"] == "hiking"
     assert (await set_activity_race("a1", True))["is_race"] is True
+    assert (await set_activity_commute("a1", True))["is_commute"] is True
     assert (await set_activity_name("a1", "Big day"))["name"] == "Big day"
     fueling = await set_activity_fueling("a1", carbohydrates_g=60, sodium_mg=500)
     assert fueling["carbohydrates_g"] == 60

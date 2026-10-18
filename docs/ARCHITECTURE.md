@@ -198,7 +198,7 @@ can merge two activities by hand and pick, field by field, which side wins.
 on every rebuild, so athlete corrections are keyed by something stable (start time, source
 external ids, Kaya route ids) and re-applied at the end of every rebuild:
 
-- sport/sub-sport, race flag, name, fueling (`activity_sport_override`)
+- sport/sub-sport, race flag, commute tag, name, fueling (`activity_sport_override`)
 - trimmed start/end (`activity_trim_override`)
 - manual cross-source merges (`activity_merge_override`)
 - bouldering route status/grade corrections and manually added routes
@@ -273,6 +273,24 @@ own numbers:
   "Fastest average speed", a ride streak) and its cadence in rpm. A run or ride record needs at
   least three activities of the same sport with a value in the period it claims, checked on the
   widest period it holds over, so a sparse month never yields "the longest of one".
+- **Insights page:** a Running/Cycling switch (default from Settings -> Personalize) picks the
+  sport every tab describes; runs are only compared with runs and rides with rides. Rides get
+  power trends (each ride's best 20 minutes and the 90-day FTP, speed as the fallback for rides
+  without power), PR progress by speed, power training bands (`pace_bands.py`, precomputed like
+  the pace bands, from the power stream), HR zones with the speed held in each (`pace_hr_zones.py::compute_ride_hr_zones`),
+  speed and power curves (`performance_curve.py`), a rides Eddington number, and FTP, FTP/kg,
+  Critical Power and VO2max (`ride_power.py`: each ride's best 3-20 minute power stored at
+  import, incrementally like run pacing, the figures derived per request over 90 days).
+- **Commutes:** an activity can be tagged as a commute (a durable override like the race flag).
+  When Settings -> Personalize turns the commute filter on, the Insights page offers an
+  "Exclude commutes" toggle: activity lists are filtered client-side and the bands, zones,
+  curve and FTP endpoints take `exclude_commutes`. The race predictions, race readiness and
+  VO2max rollups (running physiology models) are not filtered.
+- **Period summaries:** the week view adds a Cycling card (`WeekCyclingStats.tsx`) and the month,
+  year and all-time views a Cycling section (`CyclingStats.tsx`), beside Running, rendered only
+  when the period has rides. The week's "weekly best FTP" is 95% of that week's best 20-minute
+  power (`best_20min_power_w` on the activity list). VO2max, race
+  predictions and race readiness are running models (VDOT) and only exist for running.
 
 ## Writing back to Garmin
 

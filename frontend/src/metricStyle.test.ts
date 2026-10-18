@@ -29,9 +29,14 @@ describe("sportStyle", () => {
     }
   });
 
-  it("collapses fourteen sports onto at most five hues, which is the whole point", () => {
+  it("collapses fourteen sports onto at most six hues, which is the whole point", () => {
     const tones = new Set(REAL_SPORTS.map((s) => sportStyle(s).tone));
-    expect(tones.size).toBeLessThanOrEqual(5);
+    expect(tones.size).toBeLessThanOrEqual(6);
+  });
+
+  it("gives rides their own hue, apart from runs", () => {
+    expect(sportStyle("cycling").tone).toBe("ride");
+    expect(sportStyle("cycling").tone).not.toBe(sportStyle("running").tone);
   });
 
   it("groups by what the activity is, not by name", () => {

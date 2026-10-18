@@ -4,7 +4,13 @@
 import { useEffect, useState } from "react";
 
 import { usePersonalizeSettings, useSetPersonalizeSettings } from "../api/queries";
-import type { DefaultView, TimeFormat, UnitPreference, WeekStartDay } from "../api/types";
+import type {
+  DefaultView,
+  InsightsSport,
+  TimeFormat,
+  UnitPreference,
+  WeekStartDay,
+} from "../api/types";
 import { getEffectiveTheme, setStoredTheme, type Theme } from "../theme";
 import { getSignInPage, setSignInPage, type SignInPage } from "../signInPage";
 import "../styles/settings.css";
@@ -17,6 +23,8 @@ export function PersonalizeCard() {
   const [timeFormat, setTimeFormat] = useState<TimeFormat>("24h");
   const [defaultView, setDefaultView] = useState<DefaultView>("week");
   const [unitPreference, setUnitPreference] = useState<UnitPreference>("metric");
+  const [insightsSport, setInsightsSport] = useState<InsightsSport>("running");
+  const [commuteFilter, setCommuteFilter] = useState(false);
   // Unlike every field below, the color theme is a per-device browser setting (localStorage, see
   // theme.ts) rather than an account setting, so it applies the moment it is picked and is not
   // part of the Save button's payload.
@@ -39,6 +47,8 @@ export function PersonalizeCard() {
     setTimeFormat(settings.data.time_format);
     setDefaultView(settings.data.default_view);
     setUnitPreference(settings.data.unit_preference);
+    setInsightsSport(settings.data.insights_sport);
+    setCommuteFilter(settings.data.commute_filter);
   }, [settings.isSuccess, settings.data]);
 
   return (
@@ -58,6 +68,8 @@ export function PersonalizeCard() {
             time_format: timeFormat,
             default_view: defaultView,
             unit_preference: unitPreference,
+            insights_sport: insightsSport,
+            commute_filter: commuteFilter,
           });
         }}
       >
@@ -172,6 +184,38 @@ export function PersonalizeCard() {
             Miles
           </label>
         </fieldset>
+
+        <fieldset className="settings-form__row">
+          <legend>Insights open on</legend>
+          <label>
+            <input
+              type="radio"
+              name="insights_sport"
+              checked={insightsSport === "running"}
+              onChange={() => setInsightsSport("running")}
+            />
+            Running
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="insights_sport"
+              checked={insightsSport === "cycling"}
+              onChange={() => setInsightsSport("cycling")}
+            />
+            Cycling
+          </label>
+        </fieldset>
+
+        <label className="settings-form__checkbox">
+          <input
+            type="checkbox"
+            checked={commuteFilter}
+            onChange={(e) => setCommuteFilter(e.target.checked)}
+          />
+          Offer an &quot;Exclude commutes&quot; filter in Insights (tag an activity as a commute on
+          its page)
+        </label>
 
         <label className="field settings-form__inline">
           <span>Starting page</span>

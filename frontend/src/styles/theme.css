@@ -22,6 +22,8 @@
      sports and health metrics onto them. */
   --color-heart-rate: #ef5a6f;
   --color-pace: #4da3ff;
+  /* Rides: their own sport-family hue (metricStyle.ts), kept clear of every metric tone. */
+  --color-ride: #ec6fb4;
   --color-elevation: #4caf7d;
   --color-power: #b57bee;
   --color-cadence: #3fb6c9;
@@ -99,6 +101,7 @@
 
   --color-heart-rate: #d43a52;
   --color-pace: #1a73e8;
+  --color-ride: #c03d8a;
   --color-elevation: #2f9160;
   --color-power: #8c4fd6;
   --color-cadence: #1f92a3;
@@ -135,6 +138,7 @@
     --color-accent-strong: #0f5bc4;
     --color-heart-rate: #d43a52;
     --color-pace: #1a73e8;
+    --color-ride: #c03d8a;
     --color-elevation: #2f9160;
     --color-power: #8c4fd6;
     --color-cadence: #1f92a3;

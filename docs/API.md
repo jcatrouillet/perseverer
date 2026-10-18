@@ -512,6 +512,17 @@ case a real race was never flagged inside the Garmin Connect app. Durable, rebui
 
 **Responses:** `200` → `ActivityRaceOverrideOut`. `404`.
 
+### `PATCH /activities/{activity_id}/commute`
+
+Tags or untags an activity as a commute. The Insights page's "Exclude commutes" toggle (offered
+when `commute_filter` is on in Personalize) then leaves tagged activities out; every
+`exclude_commutes` parameter below does the same. Durable, rebuild-safe override keyed by start
+time, like the race flag.
+
+**Request body** (`ActivityCommuteOverrideIn`): `is_commute` (boolean, required).
+
+**Responses:** `200` → `ActivityCommuteOverrideOut`. `404`.
+
 ### `PATCH /activities/{activity_id}/name`
 
 Renames an activity — Garmin Connect's own name isn't reliably a real athlete-given title, so
@@ -870,6 +881,16 @@ this API follows, the same exception `GET /activities/needs-trim` already establ
 
 ### `GET /performance/pace-hr-zones`
 
+`exclude_commutes` (query, optional boolean, default false): leaves activities tagged as commutes (`PATCH /activities/{id}/commute`) out of the result. The maximum heart rate is not filtered (a commute's peak is as real as any other).
+
+`sport` (query, optional, `running` (default) | `cycling`): `cycling` returns the same five
+zones for rides. The heart-rate ranges are the zone fractions of the athlete's max HR (the same
+boundaries as the running table, from the same 2-year max-HR window); each zone carries
+`speed_low_mps`/`speed_high_mps`, the 25th–75th percentile of the average speed of the rides in
+the last 12 months whose average HR falls in the zone (at least 3 rides, else null), and its
+rides as `sample_runs` (each with `speed_mps`). No VDOT and no pace: `profile_vdot*` and
+`pace_*` are null, and the zone descriptions speak of rides.
+
 The complete 5-zone pace + heart-rate training table (Recovery / Basic Endurance / Aerobic
 Threshold / Lactate Threshold / VO2 Max), each a real pace range and HR range plus a
 plain-language "when/how to use it," built from the athlete's *recent* running history — not their
@@ -935,7 +956,39 @@ above, `0.0` never omitted for a week with nothing recorded).
 `RaceReadinessWeekOut`: `week_start` (string, date, the Monday that week starts), `distance_m`
 (number).
 
+### `GET /performance/cycling-power`
+
+`exclude_commutes` (query, optional boolean, default false): leaves activities tagged as commutes (`PATCH /activities/{id}/commute`) out of the result.
+
+FTP, FTP/kg, Critical Power with W′, and a VO2max estimate for rides, computed from the athlete's
+own power data (a power meter or a smart trainer) — never Garmin's own figures. Each ride's best 3,
+5, 12 and 20-minute power is stored at import (`ride_power.py`); this endpoint is a bounded lookup
+over those rows and the weight readings. The figures use the rides of the trailing 90 days:
+
+- `ftp_w`: 95% of the best 20-minute power; `ftp_w_per_kg`: FTP over body weight that day (the
+  scale's latest reading, ignoring readings more than 15% from the median of all of them, which a
+  shared scale records for someone else; else the ride's own FIT profile weight).
+- `cp_w`, `w_prime_j`: the two-parameter critical power model, work = W′ + CP × time, fitted to
+  the best 3 to 20-minute powers (at least three durations including 12 or 20 minutes; null when
+  the fit is non-physical).
+- `vo2max`: the ACSM cycling equation, 10.8 × (best 5-minute power / kg) + 7 ml/kg/min. It reads
+  true only when that best 5 minutes was close to all-out.
+
+| Param | In | Required | Type | Description |
+|---|---|---|---|---|
+| `as_of` | query | optional | string (date) | Defaults to today. |
+
+**Response `200`:** `CyclingPowerOut` — `available` (`false` when no ride has ever recorded power),
+`window_days` (90), `current` (`CyclingPowerPointOut` as of `as_of`, or null when no power ride
+falls in the window), `history` (the same figures as of each date a power ride happened, oldest
+first), `last_power_ride_date`, `missing` (what a figure is waiting for). A `CyclingPowerPointOut`
+carries `as_of`, `ftp_w`, `ftp_w_per_kg`, `cp_w`, `w_prime_j`, `vo2max`, `weight_kg` (all nullable)
+and `best_powers` (`duration_s`, `watts` and the ride that set it: `activity_id`, `local_date`,
+`name`).
+
 ### `GET /performance/curve`
+
+`exclude_commutes` (query, optional boolean, default false): leaves activities tagged as commutes (`PATCH /activities/{id}/commute`) out of the result.
 
 The best sustained value for each of a fixed set of durations (1s through 2h), across every
 qualifying activity in the date range — the single best D-second window anywhere, not one
@@ -949,10 +1002,10 @@ algorithm and its gap-disqualification rule.
 
 | Param | In | Required | Type | Description |
 |---|---|---|---|---|
-| `metric` | query | **required** | string | One of `pace`, `gap`, `heart_rate`. |
+| `metric` | query | **required** | string | One of `pace`, `gap`, `heart_rate`, `speed`, `power`. `speed` (m/s, higher is better) and `power` (watts) are rides only, the cycling counterparts of `pace`: the best sustained average speed and the classic power curve. They return no threshold reference values (those come from running). |
 | `start_date` | query | **required** | string (date) | |
 | `end_date` | query | **required** | string (date) | |
-| `sports` | query | optional | string | Comma-separated sport values. Only applies to `heart_rate` — ignored for `pace`/`gap`, which are always running-only. |
+| `sports` | query | optional | string | Comma-separated sport values. Only applies to `heart_rate` — ignored for `pace`/`gap`, which are always running-only, and for `speed`/`power`, which are always rides only. |
 
 **Response `200`:** `PerformanceCurveOut` — `available` (`false` — never fabricated — when no
 activity in range qualifies for this metric), `metric` (string, echoes the request), `points`
@@ -1048,6 +1101,13 @@ not its whole-activity average. Precomputed at ingest time and stored per-activi
 rows, never a live stream scan. Always returns every band, even ones with `seconds: 0`, so a
 client can render every column without checking for missing entries.
 
+`exclude_commutes` (query, optional boolean, default false): leaves activities tagged as commutes (`PATCH /activities/{id}/commute`) out of the result.
+
+`sport` (query, optional, `running` (default) | `cycling`): `cycling` returns the rides' time
+in each 50 W **power** band instead (`300+ W` down to `< 50 W`, hard to easy), from every ride's
+own power stream (rides without a power meter or smart trainer have none; coasting at 0 W is left
+out). A ride's time is never in the running bands, and the other way round.
+
 **Response `200`:** `array<PaceBandOut>`.
 
 ### `GET /insights/pace-bands/by-activity`
@@ -1056,7 +1116,9 @@ The same precomputed per-activity time-in-band rows `GET /insights/pace-bands` s
 here grouped by activity instead — one row per running activity that has at least one non-zero
 band, each listing its own full `bands` breakdown. Powers a composition-over-time view (what
 share of *this one run* was spent at each pace) as opposed to the athlete-wide aggregate above.
-Still a plain bounded query over already-stored rows, never a live stream scan.
+Still a plain bounded query over already-stored rows, never a live stream scan. Takes the
+same `sport` parameter as `GET /insights/pace-bands` (`cycling`: one row per ride, in speed
+bands).
 
 **Response `200`:** `array<ActivityPaceBandsOut>`.
 
@@ -1773,7 +1835,10 @@ only by the frontend's own rendering. `unit_preference` is the `athlete.unit_pre
 `"monday"`), `time_format` (`"24h"|"12h"`, default `"24h"`), `default_view`
 (`"week"|"month"|"day"|"activities"|"last_activity"`, default `"week"`;
 `"last_activity"` opens the activity from `GET /activities/last-imported`), `unit_preference`
-(`"metric"|"imperial"`, default `"metric"`).
+(`"metric"|"imperial"`, default `"metric"`), `insights_sport` (`"running"|"cycling"`,
+default `"running"`: the sport the Insights page opens on; the page has a switch for the
+other), `commute_filter` (boolean, default `false`: whether the Insights page offers an
+"Exclude commutes" toggle).
 
 ### `PUT /settings/personalize`
 
@@ -1781,7 +1846,7 @@ Replaces the athlete's personalize settings. **A full replacement, not a partial
 convention as `PUT /settings/profile` — omitting any field resets it to its own default, since
 every field here always carries one (none are nullable).
 
-**Request body** (`PersonalizeSettingsIn`): same four fields as the `GET` response, each
+**Request body** (`PersonalizeSettingsIn`): same fields as the `GET` response, each
 optional with its own default. Any value outside the stated closed set is rejected.
 
 **Response `200`:** `PersonalizeSettingsOut`. **`422`** — a value outside the closed set for any
@@ -2158,6 +2223,8 @@ Returned in `GET /activities` (paginated).
 | `workout_rpe` | number, nullable | required | Rate of perceived exertion, when logged. |
 | `weight_kg` | number, nullable | required | Athlete body weight at time of activity, if on-device. |
 | `vdot` | number, nullable | required | This project's own VDOT estimate, when computable (running only). |
+| `avg_power_w` | number, nullable | optional | Average power in watts (`fit.session.avg_power`); null without a power meter. |
+| `best_20min_power_w` | number, nullable | optional | Best 20-minute average power in watts (`perseverer.power.best_1200s_w`); null without 20 minutes of power. |
 | `workout_name` | string, nullable | required | Name of the attached pre-planned workout, if any. |
 | `primary_source` | string | required | `fit_folder`, `garmin_export`, `garmin_connect`, or `strava_export`. |
 | `stream_available` | boolean | required | Whether a per-second sensor stream exists for `GET .../stream`. |

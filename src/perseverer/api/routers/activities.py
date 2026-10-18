@@ -24,6 +24,8 @@ from perseverer.adapters.fit_folder import _local_date, _upsert_device, insert_n
 from perseverer.adapters.strava_export import _overlay_csv_totals
 from perseverer.api.dependencies import get_conn, get_duckdb, get_engine, require_api_key
 from perseverer.api.schemas.activities import (
+    ActivityCommuteOverrideIn,
+    ActivityCommuteOverrideOut,
     ActivityComparisonRowOut,
     ActivityComparisonsOut,
     ActivityContextOut,
@@ -107,10 +109,12 @@ from perseverer.insights.rules_activity import compute_activity_insights
 from perseverer.performance import VDOT_METRIC_KEY
 from perseverer.performance_rollup import refresh_performance_rollup
 from perseverer.reparse import reparse_raw_object
+from perseverer.ride_power import refresh_ride_power
 from perseverer.rollups import refresh_daily_and_period_rollups
 from perseverer.run_pacing import refresh_run_pacing
 from perseverer.running_load import RUNNING_TSS_METRIC_KEY
 from perseverer.sport_override import (
+    set_commute_override,
     set_fueling_override,
     set_name_override,
     set_race_override,
@@ -305,6 +309,27 @@ def list_activities(
     )
     # Same EAV pattern as training_load_peak above -- see performance.py's own docstring for how
     # this value is computed and kept fresh.
+    # A ride's average power (watts) from the FIT session, for the cycling period summary's
+    # power-vs-distance chart; None without a power meter (most rides, every run).
+    avg_power_subq = (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key == "fit.session.avg_power",
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
+    # A ride's best 20-minute power (ride_power.py), the cycling Power trends chart's dots.
+    best_20min_power_subq = (
+        select(activity_metric.c.value_num)
+        .where(
+            activity_metric.c.activity_id == activity.c.id,
+            activity_metric.c.metric_key == "perseverer.power.best_1200s_w",
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
     vdot_subq = (
         select(activity_metric.c.value_num)
         .where(
@@ -375,6 +400,7 @@ def list_activities(
         activity.c.sub_sport,
         activity.c.name,
         activity.c.is_race,
+        activity.c.is_commute,
         activity.c.duration_s,
         activity.c.moving_duration_s,
         activity.c.distance_m,
@@ -389,6 +415,8 @@ def list_activities(
         workout_rpe_subq.label("workout_rpe_raw"),
         weight_subq.label("weight_kg"),
         vdot_subq.label("vdot"),
+        avg_power_subq.label("avg_power_w"),
+        best_20min_power_subq.label("best_20min_power_w"),
         workout_name_subq.label("workout_name"),
         climb_route_count_subq.label("climb_route_count"),
         climb_max_completed_grade_subq.label("climb_max_completed_grade"),
@@ -415,6 +443,7 @@ def list_activities(
             sub_sport=r.sub_sport,
             name=r.name,
             is_race=r.is_race,
+            is_commute=bool(r.is_commute),
             duration_s=r.duration_s,
             moving_duration_s=r.moving_duration_s,
             distance_m=r.distance_m,
@@ -427,6 +456,8 @@ def list_activities(
             workout_rpe=_workout_rpe_from_raw(r.workout_rpe_raw),
             weight_kg=r.weight_kg,
             vdot=r.vdot,
+            avg_power_w=r.avg_power_w,
+            best_20min_power_w=r.best_20min_power_w,
             workout_name=r.workout_name,
             primary_source=r.primary_source,
             stream_available=bool(r.stream_available),
@@ -605,14 +636,21 @@ def get_climbing_summary(
         )
     ).fetchall()
 
-    total_climb_time_s = conn.execute(
-        select(func.coalesce(func.sum(split_table.c.duration_s), 0.0))
+    # SUM over no timed split is NULL, kept as None: a Kaya-only session has routes but no
+    # time, and an unknown climb time must not read as 0 minutes.
+    timed = conn.execute(
+        select(
+            func.sum(split_table.c.duration_s),
+            func.count(func.distinct(split_table.c.activity_id)),
+        )
         .select_from(split_table.join(activity, activity.c.id == split_table.c.activity_id))
         .where(
             *where_clauses,
             split_table.c.split_type.in_(("climb_active", "climb_active_superseded")),
+            split_table.c.duration_s.is_not(None),
         )
-    ).scalar_one()
+    ).one()
+    total_climb_time_s, timed_session_count = timed[0], timed[1]
     completed_grades = [s.climb_grade for s in climb_splits if s.climb_result == "completed"]
 
     breakdown_by_grade: dict[int, dict[str, int]] = {}
@@ -625,6 +663,7 @@ def get_climbing_summary(
     return ClimbingSummaryOut(
         session_count=session_count,
         total_climb_time_s=total_climb_time_s,
+        timed_session_count=timed_session_count,
         total_routes=len(climb_splits),
         max_completed_grade=max(completed_grades) if completed_grades else None,
         grade_breakdown=[
@@ -910,6 +949,7 @@ def get_activity(
         sub_sport=row.sub_sport,
         name=row.name,
         is_race=row.is_race,
+        is_commute=bool(row.is_commute),
         duration_s=row.duration_s,
         distance_m=row.distance_m,
         elevation_gain_m=row.elevation_gain_m,
@@ -2037,6 +2077,26 @@ def override_activity_race(
     return ActivityRaceOverrideOut(is_race=body.is_race)
 
 
+@router.patch("/activities/{activity_id}/commute")
+def override_activity_commute(
+    activity_id: str,
+    body: ActivityCommuteOverrideIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> ActivityCommuteOverrideOut:
+    """Tag (or untag) an activity as a commute, so the Insights page can leave commutes out
+    (`exclude_commutes` on its endpoints, the "Exclude commutes" toggle). A durable, rebuild-safe
+    correction keyed by start time, like the race flag -- see sport_override.py's docstring."""
+    try:
+        set_commute_override(
+            conn, athlete_id=athlete_id, activity_id=activity_id, is_commute=body.is_commute
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    conn.commit()
+    return ActivityCommuteOverrideOut(is_commute=body.is_commute)
+
+
 @router.patch("/activities/{activity_id}/name")
 def override_activity_name(
     activity_id: str,
@@ -2110,6 +2170,7 @@ def _refresh_after_activity_change(
     refresh_performance_rollup(conn, athlete_id=athlete_id)
     # A trim or merge changes what a run's start, finish and halves cover.
     refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
+    refresh_ride_power(conn, parquet_dir, athlete_id=athlete_id)
     refresh_insights(conn, athlete_id=athlete_id)
 
 

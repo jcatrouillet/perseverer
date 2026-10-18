@@ -27,6 +27,7 @@ import type { ActivitySummary } from "../api/types";
 import { ChartFullscreen } from "./ChartFullscreen";
 import { ChartLegend } from "./ChartLegend";
 import { Icon } from "./Icon";
+import { SportSectionTitle } from "./SportSectionTitle";
 import { StatTile } from "./StatTile";
 import { useTapTooltip } from "../useTapTooltip";
 import { isoDate, monthName, parseIsoDate, startOfWeek, weekdayLabels } from "../dateUtils";
@@ -183,7 +184,7 @@ export function RunningStats({
   if (activities.length === 0) {
     return (
       <section className="card">
-        <h2>Running</h2>
+        <SportSectionTitle sport="running">Running</SportSectionTitle>
         <p>No running activities recorded in {periodLabel}.</p>
       </section>
     );
@@ -444,7 +445,7 @@ export function RunningStats({
 
   return (
     <section className="card running-stats">
-      <h2>Running</h2>
+      <SportSectionTitle sport="running">Running</SportSectionTitle>
       <div className="stat-grid">
         <StatTile
           label={unitLabel === "mi" ? "Miles run" : "Kilometers run"}

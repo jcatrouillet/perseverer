@@ -17,6 +17,7 @@ import { PeriodShareButton } from "../../components/ShareButton";
 import { HealthTrendChart } from "../../components/HealthTrendChart";
 import { HealthMetricTiles } from "../../components/HealthMetricTiles";
 import { ClimbingStatsCard } from "../../components/ClimbingStatsCard";
+import { CyclingStats } from "../../components/CyclingStats";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
@@ -54,6 +55,9 @@ export function YearView({ year }: { year: number }) {
   const allActivities = useActivities({ startDate: start, endDate: end, limit: 500 });
   const runs = useActivities({ sport: "running", startDate: start, endDate: end, limit: 500 });
   const hikes = useActivities({ sport: "hiking", startDate: start, endDate: end, limit: 500 });
+  const rides = useActivities({ sport: "cycling", startDate: start, endDate: end, limit: 500 });
+  // Every ride ever, for the cycling section's trailing windows and all-time records.
+  const allRides = useAllActivities({ sport: "cycling" });
   // Unbounded, all-history fetch (distinct from `runs`' period-scoped one) so RunningStats can
   // tell a genuine all-time PR apart from merely "fastest within this year" -- see docs/ARCHITECTURE.md
   // and RunningStats.tsx's allTimeRecords prop docstring.
@@ -115,6 +119,17 @@ export function YearView({ year }: { year: number }) {
           allTimeRecords={personalRecords(allTimeRunning.data ?? [])}
           compareLabel={String(year - 1)}
           compareDistanceM={priorYearRunningDistanceM}
+        />
+      )}
+
+      {rides.data && (
+        <CyclingStats
+          rides={rides.data.items}
+          allRides={allRides.data ?? rides.data.items}
+          startDate={start}
+          endDate={end}
+          periodLabel={String(year)}
+          trailingWindowDays={30}
         />
       )}
 

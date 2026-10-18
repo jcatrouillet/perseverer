@@ -9,10 +9,14 @@
 // `ExerciseLibraryPage.tsx`'s categories and `BloodTestsPanel.tsx`'s panels already establish --
 // one open by default (Zone 2, since that's where most easy running actually happens) rather than
 // all five expanded at once.
+//
+// With the Insights switch on Cycling (`sport="cycling"`), the same five heart-rate zones for
+// rides: no VDOT and no pace, but each zone's speed range from your own rides at that heart rate
+// (pace_hr_zones.py::compute_ride_hr_zones).
 import { Link } from "wouter";
 
 import { usePaceHrZones } from "../api/queries";
-import type { PaceHrZoneOut, ZoneRunSampleOut } from "../api/types";
+import type { InsightsSport, PaceHrZoneOut, ZoneRunSampleOut } from "../api/types";
 import { useDistanceFormat } from "../formatDistance";
 import { formatDurationHM, formatMinPerKm } from "../runningStats";
 import { Icon, type IconName } from "./Icon";
@@ -36,6 +40,17 @@ function usePaceRangeFormatter() {
     // counts as, extending faster with no ceiling -- "faster than" it.
     if (slowStr != null) return `Faster than ${slowStr} /${unitLabel}`;
     return "—";
+  };
+}
+
+/** A ride zone's speed range (m/s in, km/h or mph out); "—" when too few rides qualify. */
+function useSpeedRangeFormatter() {
+  const { kmhToDisplay, speedUnitLabel } = useDistanceFormat();
+  return (low: number | null | undefined, high: number | null | undefined): string => {
+    if (low == null || high == null) return "—";
+    const lo = kmhToDisplay(low * 3.6).toFixed(1);
+    const hi = kmhToDisplay(high * 3.6).toFixed(1);
+    return `${lo}–${hi} ${speedUnitLabel}`;
   };
 }
 
@@ -65,7 +80,7 @@ function SampleRunRow({
   run: ZoneRunSampleOut;
   formatDistance: (m: number) => string;
 }) {
-  const { unitLabel, paceMinPerDisplayUnit } = useDistanceFormat();
+  const { unitLabel, paceMinPerDisplayUnit, kmhToDisplay, speedUnitLabel } = useDistanceFormat();
   return (
     <li>
       <Link href={`/activities/${run.activity_id}`} className="insight-card__link">
@@ -73,8 +88,10 @@ function SampleRunRow({
           <span className="pace-hr-zones__run-date">{run.local_date}</span>
           <span className="pace-hr-zones__run-name">{run.name ?? "Untitled activity"}</span>
           <span className="pace-hr-zones__run-stats">
-            {formatMinPerKm(paceMinPerDisplayUnit(run.pace_s_per_km))} /{unitLabel} ·{" "}
-            {run.avg_hr_bpm.toFixed(0)} bpm
+            {run.speed_mps != null
+              ? `${kmhToDisplay(run.speed_mps * 3.6).toFixed(1)} ${speedUnitLabel}`
+              : `${formatMinPerKm(paceMinPerDisplayUnit(run.pace_s_per_km))} /${unitLabel}`}{" "}
+            · {run.avg_hr_bpm.toFixed(0)} bpm
             {run.distance_m != null && ` · ${formatDistance(run.distance_m)}`}
             {run.duration_s != null && ` · ${formatDurationHM(run.duration_s)}`}
           </span>
@@ -84,15 +101,22 @@ function SampleRunRow({
   );
 }
 
-function ZoneEvidence({ zone }: { zone: PaceHrZoneOut }) {
+function ZoneEvidence({ zone, sport }: { zone: PaceHrZoneOut; sport: InsightsSport }) {
   const { formatDistance } = useDistanceFormat();
-  const note = hrSourceNote(zone);
+  const cycling = sport === "cycling";
+  const one = cycling ? "ride" : "run";
+  const note = cycling
+    ? zone.qualifying_run_count >= 3
+      ? `Speed range: the middle half (25th–75th percentile) of the average speeds of these ${zone.qualifying_run_count} rides.`
+      : "Fewer than 3 of your rides in the last 12 months sit at this heart rate, so no speed range yet."
+    : hrSourceNote(zone);
   return (
     <details className="pace-hr-zones__evidence" open={zone.number === 2}>
       <summary>
         Why these numbers{" "}
         <span className="pace-hr-zones__count">
-          {zone.qualifying_run_count} run{zone.qualifying_run_count === 1 ? "" : "s"}
+          {zone.qualifying_run_count} {one}
+          {zone.qualifying_run_count === 1 ? "" : "s"}
         </span>
       </summary>
       {note && <p className="chart-note">{note}</p>}
@@ -103,18 +127,30 @@ function ZoneEvidence({ zone }: { zone: PaceHrZoneOut }) {
           ))}
         </ul>
       ) : (
-        <p className="chart-note">No qualifying runs at this pace yet.</p>
+        <p className="chart-note">
+          {cycling ? "No rides at this heart rate yet." : "No qualifying runs at this pace yet."}
+        </p>
       )}
     </details>
   );
 }
 
-export function PaceHrZonesTable() {
-  const zones = usePaceHrZones();
+export function PaceHrZonesTable({
+  sport = "running",
+  excludeCommutes = false,
+}: {
+  sport?: InsightsSport;
+  excludeCommutes?: boolean;
+}) {
+  const zones = usePaceHrZones(undefined, sport, excludeCommutes);
   const formatRange = usePaceRangeFormatter();
+  const formatSpeedRange = useSpeedRangeFormatter();
+  const cycling = sport === "cycling";
 
   if (zones.isLoading) return <LoadingSpinner />;
-  if (zones.isError) return <p role="alert">Could not load pace/HR zones.</p>;
+  if (zones.isError) {
+    return <p role="alert">Could not load {cycling ? "HR zones" : "pace/HR zones"}.</p>;
+  }
   if (!zones.data) return null;
 
   const {
@@ -133,24 +169,36 @@ export function PaceHrZonesTable() {
   return (
     <>
       <section className="card">
-        <h2>Pace &amp; heart-rate training zones</h2>
-        <p className="chart-note">
-          Built from the best VDOT you've recorded
-          {profile_vdot != null && ` (${profile_vdot.toFixed(1)})`}, from {vdotOrigin},
-          {profile_vdot_activity && (
-            <>
-              {" "}
-              on{" "}
-              <Link href={`/activities/${profile_vdot_activity.activity_id}`}>
-                {profile_vdot_activity.local_date}
-              </Link>
-            </>
-          )}
-          {profile_max_hr_bpm != null &&
-            ` and your highest recorded heart rate in the last 2 years (${profile_max_hr_bpm.toFixed(0)} bpm)`}{" "}
-          — a reference table that follows your current fitness, not a day-to-day tracker. See each
-          zone's own "Why these numbers" below for the runs behind its heart-rate range.
-        </p>
+        <h2>
+          {cycling ? "Heart-rate training zones for rides" : "Pace & heart-rate training zones"}
+        </h2>
+        {cycling ? (
+          <p className="chart-note">
+            Heart-rate zones from your highest recorded heart rate in the last 2 years
+            {profile_max_hr_bpm != null && ` (${profile_max_hr_bpm.toFixed(0)} bpm)`}, with the
+            speed you actually ride at in each one: the middle half of the average speeds of your
+            rides in the last 12 months whose average heart rate falls in that zone. Terrain, wind
+            and indoor rides all move speed, so read it as your own typical range, not a target.
+          </p>
+        ) : (
+          <p className="chart-note">
+            Built from the best VDOT you've recorded
+            {profile_vdot != null && ` (${profile_vdot.toFixed(1)})`}, from {vdotOrigin},
+            {profile_vdot_activity && (
+              <>
+                {" "}
+                on{" "}
+                <Link href={`/activities/${profile_vdot_activity.activity_id}`}>
+                  {profile_vdot_activity.local_date}
+                </Link>
+              </>
+            )}
+            {profile_max_hr_bpm != null &&
+              ` and your highest recorded heart rate in the last 2 years (${profile_max_hr_bpm.toFixed(0)} bpm)`}{" "}
+            — a reference table that follows your current fitness, not a day-to-day tracker. See
+            each zone's own "Why these numbers" below for the runs behind its heart-rate range.
+          </p>
+        )}
         {missing.length > 0 && (
           <ul className="vo2max-factors__missing">
             {missing.map((m) => (
@@ -168,7 +216,7 @@ export function PaceHrZonesTable() {
             <thead>
               <tr>
                 <th>Zone</th>
-                <th>Pace</th>
+                <th>{cycling ? "Speed" : "Pace"}</th>
                 <th>Heart rate</th>
                 <th>When &amp; how to use it</th>
               </tr>
@@ -184,7 +232,11 @@ export function PaceHrZonesTable() {
                       Z{zone.number} {zone.label}
                     </span>
                   </td>
-                  <td>{formatRange(zone.pace_fast_s_per_km, zone.pace_slow_s_per_km)}</td>
+                  <td>
+                    {cycling
+                      ? formatSpeedRange(zone.speed_low_mps, zone.speed_high_mps)
+                      : formatRange(zone.pace_fast_s_per_km, zone.pace_slow_s_per_km)}
+                  </td>
                   <td>{hrRangeText(zone.hr_low_bpm, zone.hr_high_bpm)}</td>
                   <td className="pace-hr-zones__description">{zone.description}</td>
                 </tr>
@@ -199,7 +251,7 @@ export function PaceHrZonesTable() {
           <h3>
             Z{zone.number} {zone.label}
           </h3>
-          <ZoneEvidence zone={zone} />
+          <ZoneEvidence zone={zone} sport={sport} />
         </section>
       ))}
     </>
