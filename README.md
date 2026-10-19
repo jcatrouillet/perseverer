@@ -32,16 +32,16 @@ MCP server an AI coach can read and plan with.
 - **Your own analytics.** Fitness & Form, VO2max, race predictions, training zones, performance
   curves and records computed from your data with published models, shown next to Garmin's.
 - **Plans that reach your watch.** Write workouts on the calendar and they appear on your Garmin.
-- **Agent-ready.** 74 MCP tools let an AI assistant read everything and build a training plan.
+- **Agent-ready.** 86 MCP tools let an AI assistant read everything and build a training plan.
 
 ---
 
 ## Features
 
 Every sport a Garmin watch records is imported and shown: cycling, swimming, yoga, strength,
-HIIT, skiing and the rest all appear on the calendar with their stats, maps and charts. So far the
-deepest analysis is for **runs, hikes and bouldering**, which get dedicated sections, records and
-insights.
+HIIT, skiing and the rest all appear on the calendar with their stats, maps and charts. The
+deepest analysis is for **runs, rides, hikes and bouldering**, which get dedicated sections,
+records and insights.
 
 ### Calendar
 
@@ -121,9 +121,19 @@ that Kaya doesn't have are listed as "Watch only" and can be removed from the ro
 | ![Hike detail](docs/screenshots/activity-hike.png) | ![Bouldering routes](docs/screenshots/activity-bouldering.png) |
 
 You can correct what the devices got wrong: sport, race flag, title, trim a forgotten-stop tail,
-log fueling, assign shoes and a bike, fix a climbing route's grade or add a route the watch missed. Duplicates
+log fueling, assign shoes, fix a climbing route's grade or add a route the watch missed. Duplicates
 the automatic matcher missed can be merged by hand, choosing field by field which source wins.
 Every correction survives a full rebuild.
+
+- **Tags:** mark an activity as a **race**, a **commute** or **virtual** from its page. Commutes
+  can be left out of the Insights, and virtual activities hidden from the map. Some tags are
+  applied for you: with your **home and work addresses** in Settings (optional), every activity
+  that goes from one to the other is tagged as a commute, and any activity with **Zwift** in its
+  title is tagged as virtual. A tag you set yourself always wins over the automatic one, and
+  survives a rebuild.
+- **Bike and tires:** a ride's page shows the bike it was made on (the one you chose, else the
+  default for its type of ride) and lets you change it; the bike's tires then inherit the ride's
+  distance (see Gear).
 
 - **Duplicate detection:** activities recorded by two sources that were never merged (a Garmin
   recording and the same session from a Strava export, for example) are flagged, both on the
@@ -146,11 +156,13 @@ coloured by sport family, with a legend naming the sports behind each colour.
 | ![Activity list](docs/screenshots/activities-list.png) | ![Map explorer](docs/screenshots/map-explorer.png) |
 
 The activity list filters by sport, a distance range and the race, virtual and commute tags; the
-filters live in the page address, so Back from an activity keeps them.
+filters and the page live in the page address, so Back from an activity keeps them. On the map,
+a "Hide virtual activities" toggle leaves the virtual ones off (it appears once you have tagged
+some).
 
 **Compare runs** (Activities → Compare, or "Compare" on a run's page) puts up to eight runs
-side by side. Find runs by title, distance, date or the race, virtual and commute tags and add them; each gets its own colour. Every
-run's title, date, distance, moving time, load and VDOT sit above charts of pace, grade-adjusted
+side by side. Find runs by title, distance, date or the race, virtual and commute tags and add
+them; each gets its own colour. Every run's title, date, distance, moving time, load and VDOT sit above charts of pace, grade-adjusted
 pace, heart rate, cadence, elevation and power, on a shared distance or moving-time axis so one
 tooltip reads every run at the same point. With a single run selected, it suggests your fastest
 run of the same whole distance (any 10.x km run for a 10.02 km one). The selection lives in the
@@ -191,16 +203,16 @@ Running and cycling analytics computed from your own history:
 
 A Running/Cycling switch at the top shows the same insights for rides, compared with rides only:
 power trends (each ride's best 20 minutes against your FTP, with speed as a fallback for rides
-without power), PR progress by average power, time in each power band, heart-rate zones with the speed you
-hold in each, speed and power curves, and a rides Eddington number. Settings -> Personalize picks
-which sport the page opens on, and can add an "Exclude commutes" toggle: tag an activity as a
-commute on its page (or give your home and work addresses in Settings and they are spotted for you)
-and the toggle leaves it out of the Insights. Activities with Zwift in the title are tagged virtual
-by themselves. The map explorer has its own "Hide virtual activities" toggle for activities you tag as virtual. For rides with power, an FTP & VO2max tab tracks FTP, FTP/kg,
-Critical Power with W′ and a VO2max estimate, all computed from your own power data. Each ride's page shows
-its max speed next to the average, and its best average power over 5 s, 30 s, 1, 5, 20, 30 and
-60 minutes. VO2max, race predictions and race readiness are running models, so
-they only appear for running. Rides also have their own colour, on the map and everywhere else.
+without power), PR progress by average power, time in each power band, heart-rate zones with the
+speed you hold in each, speed and power curves, and a rides Eddington number. For rides with
+power, an FTP & VO2max tab tracks FTP, FTP/kg, Critical Power with W′ and a VO2max estimate, all
+computed from your own power data. VO2max, race predictions and race readiness are running
+models, so they only appear for running.
+
+Settings → Personalize picks which sport the page opens on, and can add an **Exclude commutes**
+toggle that leaves commute-tagged activities out of every figure. Each ride's page shows its max
+speed next to the average, and its best average power over 5 s, 30 s, 1, 5, 20, 30 and
+60 minutes. Rides have their own colour, on the map and everywhere else.
 
 | Race readiness | Pace & heart-rate zones |
 |---|---|
@@ -240,11 +252,24 @@ they only appear for running. Rides also have their own colour, on the map and e
 
 ### Gear and exercises
 
-Shoe mileage from your activities, a default pair per sport, replacement alerts by banner and
-email. Bikes too: a bike is chosen per ride or is the default for all cycling or for road, mountain,
-gravel, e-bike, eMTB or commute rides; each has a front and a rear tire with its own limit, tracked
-from the rides made while it is on the bike, and tires can be replaced, swapped, taken off or retired
-(a bike may have no tires, for a trainer). A browsable library of every exercise the strength planner supports, with photos and
+**Shoes:** mileage from your activities, a default pair per sport, and a replacement alert by
+banner and email when a pair reaches its limit.
+
+**Bikes and tires:**
+
+- A bike has a brand, model, year, size and the distance already on it. It is chosen **per ride**
+  (on the ride's page), or is the **default** for all cycling or for a type of ride: road,
+  mountain, gravel, e-bike, eMTB or bike commute. The most specific default wins, and a default
+  only counts rides from the moment you set it.
+- Each bike can have a **front** and a **rear tire**, each with a brand, model, size, comment,
+  distance already on it and a maximum distance. A tire inherits the distance of the rides made
+  while it is installed, so a replacement, a swap to another bike or a retirement never charges old
+  rides to the wrong tire. A bike may have no tires at all (a trainer bike, say).
+- Tires can be replaced, taken off (kept as spares, with their distance) and fitted again, or
+  retired. A tire at its limit raises the same banner and email as shoes.
+- Adding a bike, shoes or a tire opens as a popup, so the page stays short.
+
+Also here: a browsable library of every exercise the strength planner supports, with photos and
 step-by-step instructions.
 
 | Gear | Exercise library |
@@ -260,7 +285,12 @@ step-by-step instructions.
   your full history (Apple Health from the CLI), rebuild the whole database from the raw archive,
   and review the activities flagged as possible duplicates or as needing a trim.
 - **Personalize:** week start, 12/24-hour time, kilometres or miles, starting page (week, month, day,
-  activity list, or the last activity imported), light or dark theme.
+  activity list, or the last activity imported), the sport Insights opens on, the "Exclude
+  commutes" toggle, light or dark theme.
+- **Commute:** optionally, your home and work addresses, so commutes are spotted automatically (an
+  activity that starts near one and ends near the other, within 400 m). The card says why it asks:
+  nothing else uses them, they stay on your server, and the address text is sent once to
+  OpenStreetMap's Nominatim search service to find where it is. Your own tags always win.
 - **Profile and physical profile:** home location and time zone (for forecasts), birthdate,
   height and sex (for estimates before real data exists), heart-rate zones, and your threshold
   pace, which switches running load to a pace-based TSS.
@@ -269,7 +299,11 @@ step-by-step instructions.
   for an hour, to the address in your profile, where you choose a new password (needs the SMTP
   settings used for the email summaries).
 - **A calendar feed** of your plan for Google Calendar.
-- **Weekly and monthly email summaries.**
+- **Weekly and monthly email summaries**, sent in your own local time: the weekly on Sunday at
+  20:00, after a fresh Garmin sync, and the monthly on the month's last day at 18:00. They mirror
+  the Week and Month views: the figures with the previous period beside each, load and fitness,
+  compliance with the plan, Running and Cycling sections with records and weekly distance bars,
+  sleep and steps, and the coming week's plan, forecast and notes.
 
 | External tools | Personalize |
 |---|---|
@@ -287,7 +321,7 @@ The app is responsive and installable as a PWA.
 
 ### API and MCP server
 
-- A **REST API** (137 endpoints) with a per-athlete API key or password login. Documented in
+- A **REST API** (160 endpoints) with a per-athlete API key or password login. Documented in
   [docs/API.md](docs/API.md) and served by the app at `/api-docs.html`.
 - An **MCP server** at `/mcp` with 86 tools, including writing workouts, races, goals and notes.
   Connect it to Claude Code with an API key, or to claude.ai as a custom connector over OAuth.

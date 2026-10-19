@@ -347,7 +347,7 @@ Safety rules for every Garmin call:
 
 ## REST API
 
-FastAPI under `/api/v1`, 137 endpoints across 22 routers, all scoped to the authenticated athlete.
+FastAPI under `/api/v1`, 160 endpoints across 24 routers, all scoped to the authenticated athlete.
 The full reference is [API.md](API.md), also served by the frontend at `/api-docs.html`.
 
 | Area | Routers |

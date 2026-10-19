@@ -218,6 +218,22 @@ Fill in the SMTP block of `perseverer.env` (`PERSEVERER_SMTP_HOST`, `_PORT`, `_U
 email address in Settings → Profile and enables the weekly and/or monthly summary in Settings →
 External tools, where "Send test email" sends the current weekly report immediately.
 
+The reports go out in each athlete's **own local time** (the timezone in Settings → Profile; the
+deployment's `PERSEVERER_SCHEDULE_TIMEZONE` if it is missing): the weekly on Sunday at 20:00, after
+that athlete's Garmin data has been synced, and the monthly on the month's last day at 18:00. The
+worker checks every 15 minutes and sends each report once per day, so a restart cannot duplicate
+one. The weekday and times are `PERSEVERER_EMAIL_REPORT_WEEKLY_DAY_OF_WEEK`, `_WEEKLY_HOUR`,
+`_WEEKLY_MINUTE`, `PERSEVERER_EMAIL_REPORT_HOUR` and `_MINUTE` (monthly). Gear alerts (a shoe or a
+bike tire at its limit) use the same SMTP settings.
+
+### Commute detection
+
+Optional and per athlete: Settings → Commute takes a home and a work address and tags as a commute
+every activity that starts near one and ends near the other. The address text is sent once to
+OpenStreetMap's public Nominatim service to find its coordinates (the same service, rate limit and
+User-Agent as the place names shown on activities), so the server needs outbound HTTPS to
+`nominatim.openstreetmap.org`.
+
 ### Staleness alerts
 
 The daily job warns when the Garmin sync has not succeeded for

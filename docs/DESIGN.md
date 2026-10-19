@@ -187,6 +187,10 @@ Patterns:
 
 - **Reveal in place.** Adding a note, a blood result or a route opens a form where the "+ Add"
   link was, rather than a modal. Lists of many items collapse into `<details>`.
+- **Long creation forms open in a popup.** Adding shoes, a bike, a tire or a goal opens a `Modal`
+  from a "+ Add" button beside the list's title, so the page stays about what you own; Cancel,
+  Escape and a click outside close it. Action buttons in a form sit in a `.gear-form__actions` row
+  (`gap: var(--space-3)`), never separated by a bare space.
 - **Empty states** say what is missing and how to get it; an empty card is not shown at all
   when there is nothing useful to say.
 - **Loading** shows `LoadingSpinner`; errors show a short `role="alert"` message in the card.

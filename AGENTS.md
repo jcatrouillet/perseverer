@@ -98,6 +98,13 @@ Things that are easy to get wrong, each learned from a real bug:
   `sub_sport`; display and matching must use the sub-sport.
 - Running statistics match `sport == "running"` exactly; grouping uses `merge/engine.py::sport_family`.
 - Return `null` / `available: false` when a value isn't known; never fabricate a zero.
+- Flags the app sets by itself (`auto_tags.py`: commute from the home and work addresses, virtual
+  from "Zwift" in the title) are re-evaluated on every run in both directions, so they never record
+  who set them; the athlete's own tag (an `activity_sport_override` row with that flag set, on or
+  off) is the only thing that is never touched. A new automatic tag must follow the same rule.
+- Gear mileage (shoes, bikes, tires) is computed on read from the activities, never stored in a
+  counter. A bike's rides come from the explicit choice, else the most specific dated category
+  default; a tire counts only rides made while it was installed (`bike_tire_install`).
 
 **Runtime**
 - `api` runs two uvicorn workers: no state in process memory (sessions, locks, MCP sessions). Use
@@ -119,6 +126,11 @@ Things that are easy to get wrong, each learned from a real bug:
   fetch data a screen doesn't render.
 - Use the shared formatters (`formatDistance.ts`, `formatTime.ts`) so the athlete's unit and time
   preferences apply.
+
+**Scheduled jobs**
+- Anything an athlete is told the time of (the weekly and monthly emails) runs in that athlete's own
+  timezone (`athlete.timezone`), not the server's: the worker checks every 15 minutes who is due and
+  records the local date it last sent, so a restart cannot send twice.
 
 **Email and share pages**
 - Email HTML: inline styles only, and pixel widths for bars (percentage widths collapse to 0 in
