@@ -27,6 +27,7 @@ import { formatDurationHM, formatMinPerKm } from "../runningStats";
 import { ApiDocsCard } from "../components/ApiDocsCard";
 import { ApiKeyCard } from "../components/ApiKeyCard";
 import { BulkImportCard } from "../components/BulkImportCard";
+import { CommuteCard } from "../components/CommuteCard";
 import { CalendarFeedCard } from "../components/CalendarFeedCard";
 import { EmailReportsCard } from "../components/EmailReportsCard";
 import { EufyCard } from "../components/EufyCard";
@@ -504,6 +505,8 @@ export function SettingsPage() {
               {profileMutation.isSuccess && <span className="settings-form__saved">Saved.</span>}
             </form>
           </section>
+
+          <CommuteCard />
 
           <section className="card">
             <h2>Password</h2>

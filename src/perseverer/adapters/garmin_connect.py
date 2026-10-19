@@ -48,6 +48,7 @@ from sqlalchemy import Connection
 from perseverer.adapters.base import AdapterHealth
 from perseverer.adapters.fit_folder import IngestResult, IngestRunSummary, ingest_canonical_batch
 from perseverer.archive import archive_raw_bytes
+from perseverer.auto_tags import apply_auto_tags
 from perseverer.db.schema import ingest_run
 from perseverer.fit.parser import parse_fit
 from perseverer.fitness import refresh_fitness_rollup
@@ -1102,6 +1103,7 @@ def sync_garmin_connect(
     conn.commit()
     refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
+    apply_auto_tags(conn, athlete_id=athlete_id)
     refresh_ride_power(conn, parquet_dir, athlete_id=athlete_id)
     conn.commit()
     refresh_insights(conn, athlete_id=athlete_id)

@@ -136,12 +136,15 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from: str | None = None
     smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
-    # When the reports go out, resolved against `schedule_timezone` like every other worker job.
-    # The athlete picked Sunday 18:00 for the weekly (week just ended + coming week's plan) and
-    # the month's last day 18:00 for the monthly (day="last", not exposed as its own env var).
-    email_report_hour: int = 18
-    email_report_minute: int = 0
+    # When the reports go out, in each athlete's OWN local time (their profile timezone, falling
+    # back to `schedule_timezone` when it is missing or invalid): the weekly (week just ended +
+    # coming week's plan) on this weekday at 20:00, the monthly on the month's last day at 18:00
+    # (day="last", not exposed as its own env var). The worker checks every 15 minutes who is due.
+    email_report_weekly_hour: int = 20
+    email_report_weekly_minute: int = 0
     email_report_weekly_day_of_week: str = "sun"
+    email_report_hour: int = 18  # the monthly report's hour
+    email_report_minute: int = 0
 
     @property
     def db_path(self) -> Path:

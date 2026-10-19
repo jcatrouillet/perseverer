@@ -194,7 +194,9 @@ power trends (each ride's best 20 minutes against your FTP, with speed as a fall
 without power), PR progress by average power, time in each power band, heart-rate zones with the speed you
 hold in each, speed and power curves, and a rides Eddington number. Settings -> Personalize picks
 which sport the page opens on, and can add an "Exclude commutes" toggle: tag an activity as a
-commute on its page and the toggle leaves it out of the Insights. The map explorer has its own "Hide virtual activities" toggle for activities you tag as virtual. For rides with power, an FTP & VO2max tab tracks FTP, FTP/kg,
+commute on its page (or give your home and work addresses in Settings and they are spotted for you)
+and the toggle leaves it out of the Insights. Activities with Zwift in the title are tagged virtual
+by themselves. The map explorer has its own "Hide virtual activities" toggle for activities you tag as virtual. For rides with power, an FTP & VO2max tab tracks FTP, FTP/kg,
 Critical Power with W′ and a VO2max estimate, all computed from your own power data. Each ride's page shows
 its max speed next to the average, and its best average power over 5 s, 30 s, 1, 5, 20, 30 and
 60 minutes. VO2max, race predictions and race readiness are running models, so

@@ -6,11 +6,13 @@ All three schedules resolve against `schedule_timezone` (an IANA name, default U
 container's own system clock -- see that setting's own docstring in config.py for why a real
 timezone rather than a fixed hour offset matters here (DST).
 
-The weekly email job (Sunday 18:00 local, see email_reports.py) additionally re-syncs each
-opted-in athlete's own Garmin data immediately before building their report -- see
-`_sync_garmin_before_report`'s own docstring for why that job specifically needs it (a same-day
-sync gap the plain scheduled sync above can't close, being many hours earlier) and why the
-monthly report does not get the same treatment.
+The email reports go out in each athlete's OWN local time, not the server's: the worker wakes
+every 15 minutes and sends the weekly report (Sunday 20:00 by default) and the monthly one (the
+month's last day, 18:00) to whoever's local clock has just reached that time (`report_due`). The
+weekly job additionally re-syncs each opted-in athlete's own Garmin data immediately before
+building their report -- see `_sync_garmin_before_report`'s own docstring for why that job
+specifically needs it (a same-day sync gap the plain scheduled sync above can't close, being many
+hours earlier) and why the monthly report does not get the same treatment.
 
 `garmin_export` is deliberately never scheduled here — it's a one-off/occasional CLI action
 (`sync import garmin-export <path>`), not a recurring job. Same for `sync backup restore` --
@@ -45,7 +47,12 @@ from perseverer.db.engine import make_engine
 from perseverer.db.schema import athlete as athlete_table
 from perseverer.db.schema import planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
-from perseverer.email_reports import ReportKind, athletes_opted_in, send_report_email
+from perseverer.email_reports import (
+    ReportKind,
+    mark_report_sent,
+    opted_in_athletes,
+    send_report_email,
+)
 from perseverer.gear import send_over_limit_alerts
 from perseverer.planned_workouts import push_planned_workout
 from perseverer.staleness import check_staleness, notify_webhook
@@ -340,46 +347,93 @@ def _sync_garmin_before_report(conn: Connection, settings: Settings, athlete_id:
         logger.exception("pre-email garmin sync failed unexpectedly for athlete %s", athlete_id)
 
 
-def _run_email_reports(kind: ReportKind) -> None:
-    """Shared body for the weekly/monthly email jobs. `today` is derived from
-    `datetime.now(schedule_timezone)` -- the same wall clock the CronTrigger fires against -- so
-    the "previous week"/"previous month" window matches the day the job actually runs on. One
-    send per opted-in athlete that also has an `athlete.email`; per-athlete try/except so one
-    failure doesn't stop the rest (same shape as run_daily_sync).
+# How often the worker looks for athletes whose send time has come.  A report is due for one tick
+# only (the first `EMAIL_TICK_MINUTES` after its time); `last_sent_on` makes that safe to repeat.
+EMAIL_TICK_MINUTES = 15
+_WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
-    The weekly report additionally syncs that athlete's own Garmin data first (see
-    `_sync_garmin_before_report`) -- it runs at 18:00, long after the 04:15 scheduled sync, so
-    without this the whole day's own activities would be missing from "this week's" totals. The
-    monthly report keeps the plain last-scheduled-sync data: a whole month's own totals are not
-    meaningfully changed by one extra day, so it isn't worth a second daily Garmin API hit for
-    every athlete."""
+
+def athlete_zone(timezone: str | None, fallback: str) -> ZoneInfo:
+    """The athlete's own timezone, or the deployment's when theirs is missing or not a real one."""
+    for name in (timezone, fallback):
+        if not name:
+            continue
+        try:
+            return ZoneInfo(name)
+        except Exception:  # unknown key, malformed name
+            continue
+    return ZoneInfo("UTC")
+
+
+def report_due(kind: ReportKind, local_now: datetime, settings: Settings) -> bool:
+    """Whether `local_now` (an athlete's own wall clock) falls in the send window of `kind`: the
+    configured weekday (weekly) or the month's last day (monthly), within the first
+    `EMAIL_TICK_MINUTES` after the configured time."""
+    if kind == "weekly":
+        if _WEEKDAYS[local_now.weekday()] != settings.email_report_weekly_day_of_week.lower()[:3]:
+            return False
+        hour, minute = settings.email_report_weekly_hour, settings.email_report_weekly_minute
+    else:
+        if (local_now + timedelta(days=1)).month == local_now.month:
+            return False  # not the month's last day
+        hour, minute = settings.email_report_hour, settings.email_report_minute
+    since = (local_now.hour * 60 + local_now.minute) - (hour * 60 + minute)
+    return 0 <= since < EMAIL_TICK_MINUTES
+
+
+def _run_email_reports(kind: ReportKind, now: datetime | None = None) -> None:
+    """Shared body for the weekly/monthly email jobs, run every few minutes: sends `kind` to each
+    opted-in athlete (that has an `athlete.email`) whose OWN local clock is in the send window and
+    who hasn't had it today. `today` for the report is that athlete's local date, so "the week
+    that just ended" is right wherever they live. Per-athlete try/except so one failure doesn't
+    stop the rest (same shape as run_daily_sync). `now` is for tests.
+
+    The weekly report first syncs that athlete's own Garmin data (see `_sync_garmin_before_report`)
+    -- it goes out in the evening, long after the 04:15 scheduled sync, so without this the whole
+    day's own activities would be missing from "this week's" totals. The monthly report keeps the
+    plain last-scheduled-sync data: a whole month's own totals are not meaningfully changed by one
+    extra day, so it isn't worth a second daily Garmin API hit for every athlete."""
     settings = get_settings()
     if not settings.smtp_configured:
         logger.info("%s email reports skipped: SMTP not configured", kind)
         return
 
-    today = datetime.now(ZoneInfo(settings.schedule_timezone)).date()
+    now_utc = (now or datetime.now(UTC)).astimezone(UTC)
     engine = make_engine(settings.db_path)
     with engine.connect() as conn:
-        athlete_ids = athletes_opted_in(conn, kind=kind)
-        logger.info("%s email reports: %d athlete(s) opted in", kind, len(athlete_ids))
-        for athlete_id in athlete_ids:
+        for opted in opted_in_athletes(conn, kind=kind):
+            local_now = now_utc.astimezone(athlete_zone(opted.timezone, settings.schedule_timezone))
+            today = local_now.date()
+            if not report_due(kind, local_now, settings) or opted.last_sent_on == today.isoformat():
+                continue
+            athlete_id = opted.athlete_id
+            logger.info("%s email report due for %s (local %s)", kind, athlete_id, local_now)
             if kind == "weekly":
                 _sync_garmin_before_report(conn, settings, athlete_id)
             try:
                 send_report_email(settings, conn, athlete_id=athlete_id, kind=kind, today=today)
+                mark_report_sent(conn, athlete_id=athlete_id, kind=kind, local_date=today)
+                conn.commit()
             except ValueError as e:
+                conn.rollback()
                 logger.warning("%s email report skipped for %s: %s", kind, athlete_id, e)
             except Exception:
+                conn.rollback()
                 logger.exception("%s email report failed for athlete %s", kind, athlete_id)
 
 
-def run_weekly_email_report() -> None:
-    _run_email_reports("weekly")
+def run_weekly_email_report(now: datetime | None = None) -> None:
+    _run_email_reports("weekly", now)
 
 
-def run_monthly_email_report() -> None:
-    _run_email_reports("monthly")
+def run_monthly_email_report(now: datetime | None = None) -> None:
+    _run_email_reports("monthly", now)
+
+
+def run_email_reports(now: datetime | None = None) -> None:
+    """The scheduled tick: whichever reports have come due for anyone."""
+    run_weekly_email_report(now)
+    run_monthly_email_report(now)
 
 
 def main() -> None:
@@ -438,32 +492,22 @@ def main() -> None:
         settings.planned_workout_push_window_days,
     )
     scheduler.add_job(
-        run_weekly_email_report,
-        trigger=CronTrigger(
-            day_of_week=settings.email_report_weekly_day_of_week,
-            hour=settings.email_report_hour,
-            minute=settings.email_report_minute,
-            timezone=settings.schedule_timezone,
-        ),
-        id="weekly_email_report",
-    )
-    scheduler.add_job(
-        run_monthly_email_report,
-        trigger=CronTrigger(
-            day="last",
-            hour=settings.email_report_hour,
-            minute=settings.email_report_minute,
-            timezone=settings.schedule_timezone,
-        ),
-        id="monthly_email_report",
+        run_email_reports,
+        # On the clock's quarter hours (UTC is just the grid: each athlete's own local time is
+        # what decides whether a report is due, see report_due).
+        trigger=CronTrigger(minute="*/15", timezone="UTC"),
+        id="email_reports",
+        coalesce=True,
     )
     logger.info(
-        "scheduled weekly email report on %s and monthly on the month's last day, both at "
-        "%02d:%02d %s (SMTP configured: %s)",
+        "checking every %d minutes for email reports due in each athlete's own local time: weekly "
+        "on %s at %02d:%02d, monthly on the month's last day at %02d:%02d (SMTP configured: %s)",
+        EMAIL_TICK_MINUTES,
         settings.email_report_weekly_day_of_week,
+        settings.email_report_weekly_hour,
+        settings.email_report_weekly_minute,
         settings.email_report_hour,
         settings.email_report_minute,
-        settings.schedule_timezone,
         settings.smtp_configured,
     )
     scheduler.start()

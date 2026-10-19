@@ -517,7 +517,9 @@ case a real race was never flagged inside the Garmin Connect app. Durable, rebui
 
 ### `PATCH /activities/{activity_id}/commute`
 
-Tags or untags an activity as a commute. The Insights page's "Exclude commutes" toggle (offered
+Tags or untags an activity as a commute (activities are also tagged automatically from the
+addresses in `PUT /settings/commute`; a choice made here always wins over that detection). The
+Insights page's "Exclude commutes" toggle (offered
 when `commute_filter` is on in Personalize) then leaves tagged activities out; every
 `exclude_commutes` parameter below does the same. Durable, rebuild-safe override keyed by start
 time, like the race flag.
@@ -1936,6 +1938,29 @@ the future or implies an age over 120 years), `height_cm` (number, nullable, 50-
 name) — all optional except `timezone` carries a default rather than being nullable.
 
 **Response `200`:** `AthleteProfileOut`. **`422`** — a value fails validation.
+
+### `GET /settings/commute`
+
+The athlete's optional home and work addresses, used only to tag commutes automatically
+(`auto_tags.py`). **Response `200`** (`CommuteSettingsOut`): `home_address` / `work_address` (what
+was typed, or `null`), `home_label` / `work_label` (what the address resolved to, for the athlete to
+check), `detection_active` (both addresses are set), `detected_count` (activities currently tagged
+as a commute by detection, not by hand) and `radius_m` (`400`).
+
+### `PUT /settings/commute`
+
+Saves the addresses. **Request body** (`CommuteSettingsIn`): `home_address`, `work_address`
+(strings, nullable; empty or `null` clears one). An address is looked up (OpenStreetMap Nominatim,
+archived raw) only when it changed. On success every activity is re-evaluated: one whose start and
+finish are each within `radius_m` of the two addresses, in either direction, is tagged
+`is_commute`; one no longer matching is untagged. A tag the athlete set by hand
+(`PATCH /activities/{id}/commute`) is never touched. **Responses:** `200` → `CommuteSettingsOut`;
+`422` → an address could not be found (nothing is saved); `502` → the lookup service is
+unreachable.
+
+Separately, an activity with "Zwift" in its title is tagged `is_virtual` automatically (never
+overriding a `PATCH /activities/{id}/virtual` choice), re-evaluated after every import, rebuild and
+rename.
 
 ### `GET /settings/personalize`
 

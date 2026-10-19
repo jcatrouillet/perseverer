@@ -160,6 +160,25 @@ athlete_eufy_config = Table(
     Column("updated_at", DateTime(), nullable=False),
 )
 
+# The athlete's home and work addresses, optional, so the app can spot commutes by itself
+# (auto_tags.py: an activity from one to the other).  Each address is what the athlete typed
+# (`*_address`), what the geocoder resolved it to (`*_label`) and the point it resolved to
+# (WGS84 degrees, like route_geom).  Settings -> Commute.  Both must be set for detection to run.
+athlete_commute_config = Table(
+    "athlete_commute_config",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("home_address", String, nullable=True),
+    Column("home_label", String, nullable=True),
+    Column("home_lat", Float, nullable=True),
+    Column("home_lon", Float, nullable=True),
+    Column("work_address", String, nullable=True),
+    Column("work_label", String, nullable=True),
+    Column("work_lat", Float, nullable=True),
+    Column("work_lon", Float, nullable=True),
+    Column("updated_at", DateTime(), nullable=False),
+)
+
 # Per-athlete opt-in for the weekly/monthly training-report emails (email_reports.py). One row
 # per athlete (upsert, same shape as athlete_hr_zone_config above); no row, or a row with both
 # flags False, means "no emails" -- the default. The SMTP relay itself is deployment-global
@@ -171,6 +190,10 @@ athlete_email_report_config = Table(
     Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
     Column("weekly_enabled", Boolean, nullable=False, default=False),
     Column("monthly_enabled", Boolean, nullable=False, default=False),
+    # The athlete's own local date each report last went out on ("YYYY-MM-DD"), so a worker restart
+    # inside the sending window can't send it twice.
+    Column("weekly_last_sent_on", String, nullable=True),
+    Column("monthly_last_sent_on", String, nullable=True),
     Column("updated_at", DateTime(), nullable=False),
 )
 

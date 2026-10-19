@@ -20,6 +20,7 @@ from sqlalchemy import Connection, select
 
 from perseverer.adapters.base import AdapterHealth, ObjectRef, RawPayload
 from perseverer.archive import archive_raw_bytes
+from perseverer.auto_tags import apply_auto_tags
 from perseverer.db.schema import (
     activity,
     activity_metric,
@@ -605,6 +606,7 @@ def import_from_folder(
         conn.commit()
         refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
         conn.commit()
+        apply_auto_tags(conn, athlete_id=athlete_id)
         refresh_ride_power(conn, parquet_dir, athlete_id=athlete_id)
         conn.commit()
         refresh_insights(conn, athlete_id=athlete_id)

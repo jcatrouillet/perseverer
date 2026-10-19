@@ -1400,6 +1400,25 @@ export interface GearAlertOut {
   position: TirePosition | null;
 }
 
+/** GET/PUT /settings/commute: the optional home and work addresses behind commute detection. */
+export interface CommuteSettingsOut {
+  home_address: string | null;
+  /** What the address was resolved to, for the athlete to check. */
+  home_label: string | null;
+  work_address: string | null;
+  work_label: string | null;
+  /** Detection runs only when both addresses are set. */
+  detection_active: boolean;
+  /** Activities currently tagged as a commute by detection (not by hand). */
+  detected_count: number;
+  radius_m: number;
+}
+
+export interface CommuteSettingsIn {
+  home_address: string | null;
+  work_address: string | null;
+}
+
 export type TirePosition = "front" | "rear";
 
 /** The cycling categories a bike can be the default for: "cycling" is every ride, the rest are

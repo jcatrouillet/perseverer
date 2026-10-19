@@ -1956,6 +1956,39 @@ def send_report_email(
     )
 
 
+@dataclass(frozen=True)
+class OptedInAthlete:
+    athlete_id: str
+    timezone: str  # the athlete's own IANA timezone, "UTC" when never set
+    last_sent_on: str | None  # their local date this report last went out on
+
+
+def opted_in_athletes(conn: Connection, *, kind: ReportKind) -> list[OptedInAthlete]:
+    """Everyone with the given report enabled, with the timezone their send time is read in and
+    the local date it last went out on."""
+    config = athlete_email_report_config
+    enabled = config.c.weekly_enabled if kind == "weekly" else config.c.monthly_enabled
+    last_sent = config.c.weekly_last_sent_on if kind == "weekly" else config.c.monthly_last_sent_on
+    rows = conn.execute(
+        select(config.c.athlete_id, athlete.c.timezone, last_sent.label("last_sent"))
+        .select_from(config.join(athlete, athlete.c.id == config.c.athlete_id))
+        .where(enabled.is_(True))
+    ).fetchall()
+    return [OptedInAthlete(r.athlete_id, r.timezone or "UTC", r.last_sent) for r in rows]
+
+
+def mark_report_sent(
+    conn: Connection, *, athlete_id: str, kind: ReportKind, local_date: date
+) -> None:
+    """Records that today's report went out, so a restart inside the window can't resend it."""
+    column = "weekly_last_sent_on" if kind == "weekly" else "monthly_last_sent_on"
+    conn.execute(
+        athlete_email_report_config.update()
+        .where(athlete_email_report_config.c.athlete_id == athlete_id)
+        .values(**{column: local_date.isoformat()})
+    )
+
+
 def athletes_opted_in(conn: Connection, *, kind: ReportKind) -> list[str]:
     """athlete_ids with the given report enabled -- one row, flag True."""
     col = (

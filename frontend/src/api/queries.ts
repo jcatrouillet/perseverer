@@ -17,6 +17,8 @@ import type {
   ActivityRouteOut,
   ActivitySourcesOut,
   ActivityBikeOut,
+  CommuteSettingsIn,
+  CommuteSettingsOut,
   ActivityShoeOut,
   ActivitySplitOut,
   ActivityCommuteOverrideOut,
@@ -1219,6 +1221,29 @@ export function usePersonalizeSettings() {
   return useQuery({
     queryKey: ["personalize-settings"],
     queryFn: () => apiGet<PersonalizeSettingsOut>("/api/v1/settings/personalize"),
+  });
+}
+
+export function useCommuteSettings() {
+  return useQuery({
+    queryKey: ["commute-settings"],
+    queryFn: () => apiGet<CommuteSettingsOut>("/api/v1/settings/commute"),
+  });
+}
+
+/** Saving the addresses retags every activity, so anything that shows a commute or virtual flag
+ * is refreshed with it. */
+export function useSetCommuteSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CommuteSettingsIn) =>
+      apiPut<CommuteSettingsOut>("/api/v1/settings/commute", body),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["commute-settings"], data);
+      for (const key of ["activity", "activities", "all-activities", "insights"]) {
+        void queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
   });
 }
 

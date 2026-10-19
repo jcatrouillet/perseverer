@@ -78,6 +78,7 @@ from perseverer.api.schemas.common import Page, to_utc
 from perseverer.api.schemas.insights import InsightOut
 from perseverer.api.schemas.streams import StreamResponse
 from perseverer.archive import read_raw_bytes
+from perseverer.auto_tags import apply_auto_tags
 from perseverer.bouldering_overrides import (
     add_manual_route,
     delete_manual_route,
@@ -2166,6 +2167,8 @@ def override_activity_name(
         set_name_override(conn, athlete_id=athlete_id, activity_id=activity_id, name=body.name)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    # A title with (or without) "Zwift" in it changes whether the ride is tagged virtual.
+    apply_auto_tags(conn, athlete_id=athlete_id)
     conn.commit()
     return ActivityNameOverrideOut(name=body.name)
 
@@ -2218,6 +2221,7 @@ def _refresh_after_activity_change(
     refresh_performance_rollup(conn, athlete_id=athlete_id)
     # A trim or merge changes what a run's start, finish and halves cover.
     refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
+    apply_auto_tags(conn, athlete_id=athlete_id)
     refresh_ride_power(conn, parquet_dir, athlete_id=athlete_id)
     refresh_insights(conn, athlete_id=athlete_id)
 

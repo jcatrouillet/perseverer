@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,7 @@ from perseverer.db.schema import activity_metric
 from perseverer.metrics.registry import get_or_register_metric
 
 NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
+NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 SOURCE = "nominatim"
 USER_AGENT = "perseverer/0.1 (self-hosted personal fitness archive; github.com issues)"
 
@@ -95,6 +97,72 @@ def parse_nominatim_response(raw: dict[str, Any]) -> str | None:
     if country:
         return f"{place}, {country}"
     return str(place)
+
+
+@dataclass(frozen=True)
+class GeocodedAddress:
+    label: str  # what the geocoder calls the place it found
+    lat: float
+    lon: float
+
+
+class GeocodingUnavailable(Exception):
+    """The geocoder could not be reached or answered with an error (not "no such address")."""
+
+
+def parse_nominatim_search(raw: Any) -> GeocodedAddress | None:
+    """Pure parse of a `/search` response: the best match, or None when nothing was found."""
+    if not isinstance(raw, list) or not raw or not isinstance(raw[0], dict):
+        return None
+    best = raw[0]
+    try:
+        return GeocodedAddress(
+            label=str(best.get("display_name") or ""),
+            lat=float(best["lat"]),
+            lon=float(best["lon"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def geocode_address(
+    conn: Connection,
+    archive_root: Path,
+    *,
+    athlete_id: str,
+    query: str,
+    client: httpx.Client | None = None,
+) -> GeocodedAddress | None:
+    """Forward-geocodes a typed address via Nominatim (the same service, throttle and User-Agent as
+    the reverse lookups above), archiving the raw response.  None when nothing matches; raises
+    `GeocodingUnavailable` when the service can't be reached.  Does not commit."""
+    params = {"q": query, "format": "jsonv2", "limit": "1"}
+    owns_client = client is None
+    http_client = client or httpx.Client(timeout=10.0, headers={"User-Agent": USER_AGENT})
+    try:
+        _throttle()
+        response = http_client.get(NOMINATIM_SEARCH_URL, params=params)
+        response.raise_for_status()
+    except httpx.HTTPError as e:
+        raise GeocodingUnavailable(str(e)) from e
+    finally:
+        if owns_client:
+            http_client.close()
+
+    archive_raw_bytes(
+        conn,
+        archive_root,
+        athlete_id=athlete_id,
+        source=SOURCE,
+        kind="nominatim_search_json",
+        content=response.content,
+        locator=f"search/{query}",
+        http_status=response.status_code,
+    )
+    try:
+        return parse_nominatim_search(json.loads(response.content))
+    except json.JSONDecodeError:
+        return None
 
 
 def read_cached_location(conn: Connection, athlete_id: str, activity_id: str) -> str | None:

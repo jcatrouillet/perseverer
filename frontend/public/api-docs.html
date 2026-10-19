@@ -2628,6 +2628,15 @@ const GROUPS = [
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"threshold_pace_sec_per_km": 308}'` }
     },
+    { method: "GET", path: "/api/v1/settings/commute", summary: "Get the optional home and work addresses used to detect commutes.",
+      description: "Used only to tag commutes automatically: an activity whose start and finish are each within radius_m of the two addresses, in either direction, is tagged as a commute. Both addresses are needed.",
+      responses: [ { code: 200, note: "home_address, home_label, work_address, work_label (what each resolved to), detection_active, detected_count (activities tagged by detection, not by hand), radius_m (400)." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/settings/commute", summary: "Save the home and work addresses and re-run commute detection.",
+      description: "An address is looked up (OpenStreetMap Nominatim, archived raw) only when it changed. Every activity is then re-evaluated; a tag the athlete set by hand is never touched. Activities with Zwift in the title are separately tagged virtual automatically.",
+      body: { fields: [["home_address","string|null","opt","null","Empty or null clears it."],["work_address","string|null","opt","null","Empty or null clears it."]] },
+      responses: [ { code: 200, note: "The saved settings." }, { code: 422, note: "An address could not be found; nothing is saved." }, { code: 502, note: "The lookup service is unreachable." } ], example: {}
+    },
     { method: "GET", path: "/api/v1/settings/profile", summary: "Get the athlete's optional profile (birthdate, height, sex, email, home location, timezone).",
       description: "birthdate/height_cm/sex are used only as inputs to formula-based fallbacks elsewhere (max_hr_bpm on GET /performance, bmr_kcal on GET /health/dashboard) when there isn't enough empirical/device data yet -- never reconciled against or overriding real data once it exists. email is the recipient for the opt-in weekly/monthly training-report emails. home_lat/home_lon are the one location GET /weather/forecast fetches a forecast for. timezone is also used by GET /weather/forecast and the calendar feed. null for any field except timezone means not set (timezone defaults to \"UTC\").",
       responses: [ { code: 200, ref: "AthleteProfileOut" } ],

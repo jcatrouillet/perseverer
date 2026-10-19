@@ -361,3 +361,39 @@ fieldset.settings-form__row input {
     text-align: center;
   }
 }
+
+/* Commute card: the reasons for asking, as a short list under the intro. */
+.settings-commute__facts {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-5);
+}
+
+.settings-commute__facts li + li {
+  margin-top: var(--space-2);
+}
+
+.settings-commute__found {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Addresses are long: each takes a full row instead of the narrow inline fields of the numeric cards. */
+.settings-form .settings-commute__field {
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: 520px;
+}
+
+.settings-commute__field label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.settings-commute__field .input {
+  width: 100%;
+}

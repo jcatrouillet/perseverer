@@ -53,6 +53,7 @@ from sqlalchemy import Connection
 
 from perseverer.adapters.fit_folder import IngestRunSummary, ingest_canonical_batch
 from perseverer.archive import archive_raw_bytes
+from perseverer.auto_tags import apply_auto_tags
 from perseverer.db.schema import ingest_run
 from perseverer.fit.types import CanonicalActivity, CanonicalBatch, ParsedMetric
 from perseverer.fitness import refresh_fitness_rollup
@@ -335,6 +336,7 @@ def import_strava_export(
         conn.commit()
         refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
         conn.commit()
+        apply_auto_tags(conn, athlete_id=athlete_id)
         refresh_ride_power(conn, parquet_dir, athlete_id=athlete_id)
         conn.commit()
         refresh_insights(conn, athlete_id=athlete_id)

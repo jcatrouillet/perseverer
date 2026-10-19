@@ -821,9 +821,26 @@ nor cached: they are superseded by reality, so there is nothing to re-derive.
 - `GET /weather/forecast/last-activity`: the same, at the start point of the latest activity with
   GPS, in that location's own time zone (`source_activity.timezone`); no fallback to home.
 
+### Commute addresses and automatic tags
+
+**`athlete_commute_config`**: one row per athlete, all optional: `home_address` / `work_address`
+(as typed), `home_label` / `work_label` (what the geocoder resolved them to), `home_lat` /
+`home_lon` / `work_lat` / `work_lon` (WGS84 degrees), `updated_at`. Set via `PUT /settings/commute`
+(Settings -> Commute).
+
+`auto_tags.py::apply_auto_tags` keeps two flags up to date by itself on every activity the
+athlete has not tagged by hand (no `activity_sport_override` row with that flag recorded):
+`activity.is_commute` is true when the route's start and finish are each within 400 m of the home
+and work points, either way round (both must be set); `activity.is_virtual` is true when the title
+contains "Zwift" (any case). It runs after every import, after a rebuild's corrections are
+re-applied, after a rename, and when the addresses change, and re-evaluates both directions.
+
 ### Email reports
 
-**`athlete_email_report_config`**: `weekly_enabled`, `monthly_enabled` (both default false). The
+**`athlete_email_report_config`**: `weekly_enabled`, `monthly_enabled` (both default false);
+`weekly_last_sent_on`, `monthly_last_sent_on` (the athlete's own local date each last went out, so a
+restart can't send one twice). A report is sent at its time on the athlete's own clock
+(`athlete.timezone`, Settings -> Profile). The
 recipient is `athlete.email`; the SMTP relay is deployment-wide (`PERSEVERER_SMTP_*`, `security`
 `starttls` on 587, `ssl` on 465, or `none`). Routes: `GET/PUT /settings/email-reports` (with
 `smtp_configured`, `recipient_email`), `POST /settings/email-reports/test` (sends the current
@@ -831,13 +848,13 @@ weekly report; 400 if not configured, 502 if the send fails).
 
 `email_reports.py` builds HTML (inline styles, pixel-width bars) plus plain text:
 
-- **Weekly** (Sunday 18:00, after a Garmin re-sync): totals from `period_rollup` and per-sport split
+- **Weekly** (Sunday 20:00 in the athlete's own timezone, after a Garmin re-sync): totals from `period_rollup` and per-sport split
   (grouped by display sport, so `training` + `yoga` reads "Yoga"); running distance per day with
   average pace and the week before for comparison; each run of the week and of the week before
   (distance, pace, duration, best of each highlighted); steps and sleep per day; races this week;
   every future race with its goal pace; notes for the coming week; the coming week day by day with
   forecast and planned workouts (running ones with estimated distance, duration and load).
-- **Monthly** (last day 18:00): the month's totals and per-sport split.
+- **Monthly** (last day 18:00 in the athlete's own timezone): the month's totals and per-sport split.
 - Sections with nothing to show are omitted; missing values are never shown as zero.
 
 ### OAuth authorization server for the MCP endpoint (oauth_client, oauth_authorization_code, oauth_token)

@@ -20,8 +20,12 @@ from perseverer.db.engine import make_engine
 from perseverer.db.schema import athlete, athlete_email_report_config, metadata, planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
 from perseverer.worker.main import (
+    EMAIL_TICK_MINUTES,
+    athlete_zone,
+    report_due,
     run_daily_sync,
     run_daily_workout_push,
+    run_email_reports,
     run_monthly_email_report,
     run_weekly_email_report,
 )
@@ -103,6 +107,9 @@ def test_only_pushes_workouts_due_within_the_window_and_not_already_pushed(
     assert in_the_past not in calls
 
 
+SUNDAY_8PM_UTC = dt.datetime(2026, 9, 13, 20, 0, tzinfo=dt.UTC)  # 2026-09-13 is a Sunday
+LAST_DAY_6PM_UTC = dt.datetime(2026, 9, 30, 18, 0, tzinfo=dt.UTC)
+
 # --- run_weekly_email_report -------------------------------------------------------------------
 
 
@@ -150,7 +157,7 @@ def test_weekly_email_report_only_sends_for_opted_in_athletes(tmp_path: Path) ->
             side_effect=lambda *a, **kw: sent.append(kw["athlete_id"]),
         ),
     ):
-        run_weekly_email_report()
+        run_weekly_email_report(SUNDAY_8PM_UTC)
 
     assert sent == [DEFAULT_ATHLETE_ID]
 
@@ -165,7 +172,7 @@ def test_weekly_email_report_is_a_noop_when_smtp_unconfigured(tmp_path: Path) ->
         patch("perseverer.worker.main.make_engine", return_value=engine),
         patch("perseverer.worker.main.send_report_email") as mock_send,
     ):
-        run_weekly_email_report()
+        run_weekly_email_report(SUNDAY_8PM_UTC)
 
     mock_send.assert_not_called()
 
@@ -191,7 +198,7 @@ def test_weekly_email_report_skips_an_athlete_with_no_email_without_crashing(
             side_effect=ValueError("athlete X has no email address set"),
         ),
     ):
-        run_weekly_email_report()  # must not raise
+        run_weekly_email_report(SUNDAY_8PM_UTC)  # must not raise
 
 
 def test_weekly_email_report_syncs_garmin_first_for_each_opted_in_athlete(
@@ -243,7 +250,7 @@ def test_weekly_email_report_syncs_garmin_first_for_each_opted_in_athlete(
             side_effect=lambda *a, **kw: sent.append(kw["athlete_id"]),
         ),
     ):
-        run_weekly_email_report()
+        run_weekly_email_report(SUNDAY_8PM_UTC)
 
     assert set(synced) == {DEFAULT_ATHLETE_ID, SECOND_ATHLETE_ID}
     assert set(sent) == {DEFAULT_ATHLETE_ID, SECOND_ATHLETE_ID}
@@ -273,7 +280,7 @@ def test_weekly_email_still_sends_when_the_pre_send_garmin_sync_fails(tmp_path: 
             side_effect=lambda *a, **kw: sent.append(kw["athlete_id"]),
         ),
     ):
-        run_weekly_email_report()  # must not raise -- the send still goes out
+        run_weekly_email_report(SUNDAY_8PM_UTC)  # must not raise -- the send still goes out
 
     assert sent == [DEFAULT_ATHLETE_ID]
 
@@ -329,7 +336,7 @@ def test_weekly_email_sync_rate_limit_for_one_athlete_does_not_block_anothers_se
             side_effect=lambda *a, **kw: sent.append(kw["athlete_id"]),
         ),
     ):
-        run_weekly_email_report()
+        run_weekly_email_report(SUNDAY_8PM_UTC)
 
     # Both athletes still get their email even though the first one's own pre-send sync hit
     # Garmin's rate limit.
@@ -362,7 +369,7 @@ def test_monthly_email_report_does_not_sync_garmin_first(tmp_path: Path) -> None
         patch("perseverer.worker.main.sync_garmin_connect") as mock_sync,
         patch("perseverer.worker.main.send_report_email"),
     ):
-        run_monthly_email_report()
+        run_monthly_email_report(LAST_DAY_6PM_UTC)
 
     mock_sync.assert_not_called()
 
@@ -612,3 +619,205 @@ def test_a_kaya_failure_never_breaks_the_daily_sync(tmp_path: Path) -> None:
         assert _run_sync_with_kaya(run_dir, with_tokens=True, kaya_effect=effect) == [
             DEFAULT_ATHLETE_ID
         ]
+
+
+# --- the weekly report goes out at 20:00 Sunday in each athlete's own local time -----------------
+
+
+def _mail_settings(tmp_path: Path) -> Settings:
+    return Settings(
+        data_dir=tmp_path,
+        smtp_host="smtp.example.com",
+        smtp_username="u",
+        smtp_password="p",
+        smtp_from="f@example.com",
+    )
+
+
+def _athlete(engine: Engine, athlete_id: str, timezone: str, *, weekly: bool = True) -> None:
+    with engine.connect() as conn:
+        existing = conn.execute(
+            select(athlete.c.id).where(athlete.c.id == athlete_id)
+        ).scalar_one_or_none()
+        if existing is None:
+            conn.execute(
+                athlete.insert().values(
+                    id=athlete_id,
+                    display_name=athlete_id,
+                    timezone=timezone,
+                    unit_preference="metric",
+                    created_at=dt.datetime.now(dt.UTC),
+                )
+            )
+        else:
+            conn.execute(
+                athlete.update().where(athlete.c.id == athlete_id).values(timezone=timezone)
+            )
+        conn.commit()
+    if weekly:
+        _opt_in(engine, athlete_id, weekly=True)
+
+
+def _run_at(tmp_path: Path, engine: Engine, now: dt.datetime) -> list[str]:
+    """Runs the scheduled tick at `now` and returns who was sent a weekly report."""
+    sent: list[str] = []
+    settings = _mail_settings(tmp_path)
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.sync_garmin_connect"),
+        patch(
+            "perseverer.worker.main.send_report_email",
+            side_effect=lambda *a, **kw: sent.append(f"{kw['kind']}:{kw['athlete_id']}"),
+        ),
+    ):
+        run_email_reports(now)
+    return [x.split(":", 1)[1] for x in sent if x.startswith("weekly:")]
+
+
+def test_the_report_goes_out_at_8pm_sunday_where_the_athlete_lives(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _athlete(engine, DEFAULT_ATHLETE_ID, "Europe/Paris")
+    # 20:00 on Sunday 13 September in Paris (CEST, UTC+2) is 18:00 UTC.
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 13, 18, 0, tzinfo=dt.UTC)) == [
+        DEFAULT_ATHLETE_ID
+    ]
+
+
+def test_nothing_goes_out_at_8pm_server_time_when_it_is_not_8pm_for_the_athlete(
+    tmp_path: Path,
+) -> None:
+    engine = _engine(tmp_path)
+    _athlete(engine, DEFAULT_ATHLETE_ID, "Europe/Paris")
+    # 20:00 UTC is 22:00 in Paris: the report went out two hours earlier.
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 13, 20, 0, tzinfo=dt.UTC)) == []
+    # 17:45 UTC is 19:45 in Paris: not yet.
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 13, 17, 45, tzinfo=dt.UTC)) == []
+
+
+def test_each_athlete_is_served_at_their_own_hour(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _athlete(engine, DEFAULT_ATHLETE_ID, "America/Los_Angeles")  # PDT, UTC-7
+    _athlete(engine, SECOND_ATHLETE_ID, "Europe/Paris")  # CEST, UTC+2
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 13, 18, 0, tzinfo=dt.UTC)) == [
+        SECOND_ATHLETE_ID
+    ]
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 14, 3, 0, tzinfo=dt.UTC)) == [
+        DEFAULT_ATHLETE_ID
+    ]  # Sunday 20:00 in Los Angeles is already Monday 03:00 UTC
+
+
+def test_the_athletes_own_date_decides_which_sunday_it_is(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _athlete(engine, DEFAULT_ATHLETE_ID, "Pacific/Auckland")  # NZST, UTC+12
+    # Saturday 12 September 20:00 UTC is already Sunday 08:00 in Auckland: not the send time.
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 12, 20, 0, tzinfo=dt.UTC)) == []
+    # Sunday 20:00 in Auckland is Sunday 08:00 UTC.
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 13, 8, 0, tzinfo=dt.UTC)) == [
+        DEFAULT_ATHLETE_ID
+    ]
+
+
+def test_only_on_sunday(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _athlete(engine, DEFAULT_ATHLETE_ID, "UTC")
+    monday = dt.datetime(2026, 9, 14, 20, 0, tzinfo=dt.UTC)
+    assert _run_at(tmp_path, engine, monday) == []
+
+
+def test_a_report_is_sent_once_even_if_the_window_is_hit_twice(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _athlete(engine, DEFAULT_ATHLETE_ID, "UTC")
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 13, 20, 0, tzinfo=dt.UTC)) == [
+        DEFAULT_ATHLETE_ID
+    ]
+    # A restart (or a second tick) inside the same window.
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 13, 20, 5, tzinfo=dt.UTC)) == []
+    with engine.connect() as conn:
+        last = conn.execute(select(athlete_email_report_config.c.weekly_last_sent_on)).scalar_one()
+    assert last == "2026-09-13"
+    # And next Sunday it goes out again.
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 20, 20, 0, tzinfo=dt.UTC)) == [
+        DEFAULT_ATHLETE_ID
+    ]
+
+
+def test_a_failed_send_is_not_recorded_so_the_next_tick_retries(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _athlete(engine, DEFAULT_ATHLETE_ID, "UTC")
+    settings = _mail_settings(tmp_path)
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.sync_garmin_connect"),
+        patch("perseverer.worker.main.send_report_email", side_effect=RuntimeError("smtp down")),
+    ):
+        run_weekly_email_report(dt.datetime(2026, 9, 13, 20, 0, tzinfo=dt.UTC))
+    with engine.connect() as conn:
+        assert (
+            conn.execute(select(athlete_email_report_config.c.weekly_last_sent_on)).scalar_one()
+            is None
+        )
+    assert _run_at(tmp_path, engine, dt.datetime(2026, 9, 13, 20, 10, tzinfo=dt.UTC)) == [
+        DEFAULT_ATHLETE_ID
+    ]
+
+
+def test_garmin_is_synced_before_the_report_is_built(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _athlete(engine, DEFAULT_ATHLETE_ID, "UTC")
+    order: list[str] = []
+    settings = _mail_settings(tmp_path)
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch(
+            "perseverer.worker.main.sync_garmin_connect",
+            side_effect=lambda *a, **kw: order.append("sync"),
+        ),
+        patch(
+            "perseverer.worker.main.send_report_email",
+            side_effect=lambda *a, **kw: order.append("email"),
+        ),
+    ):
+        run_weekly_email_report(dt.datetime(2026, 9, 13, 20, 0, tzinfo=dt.UTC))
+    assert order == ["sync", "email"]
+
+
+class TestReportDue:
+    def _local(self, text: str) -> dt.datetime:
+        return dt.datetime.fromisoformat(text)
+
+    def test_weekly_window_is_the_first_quarter_hour_of_8pm_sunday(self) -> None:
+        settings = Settings()
+        assert settings.email_report_weekly_hour == 20
+        assert report_due("weekly", self._local("2026-09-13T20:00:00"), settings)
+        assert report_due("weekly", self._local("2026-09-13T20:14:59"), settings)
+        assert not report_due("weekly", self._local("2026-09-13T20:15:00"), settings)
+        assert not report_due("weekly", self._local("2026-09-13T19:59:00"), settings)
+        assert not report_due("weekly", self._local("2026-09-12T20:00:00"), settings)  # Saturday
+        assert EMAIL_TICK_MINUTES == 15
+
+    def test_monthly_is_the_last_day_at_6pm(self) -> None:
+        settings = Settings()
+        assert report_due("monthly", self._local("2026-09-30T18:00:00"), settings)
+        assert report_due(
+            "monthly", self._local("2026-02-28T18:05:00"), settings
+        )  # not a leap year
+        assert not report_due("monthly", self._local("2026-09-29T18:00:00"), settings)
+        assert not report_due("monthly", self._local("2026-09-30T20:00:00"), settings)
+
+    def test_the_weekday_and_hour_are_configurable(self) -> None:
+        settings = Settings(
+            email_report_weekly_day_of_week="fri",
+            email_report_weekly_hour=7,
+            email_report_weekly_minute=30,
+        )
+        assert report_due("weekly", self._local("2026-09-11T07:30:00"), settings)  # a Friday
+        assert not report_due("weekly", self._local("2026-09-13T07:30:00"), settings)
+
+    def test_an_unknown_timezone_falls_back_to_the_deployments(self) -> None:
+        assert str(athlete_zone("Mars/Olympus", "Europe/Paris")) == "Europe/Paris"
+        assert str(athlete_zone(None, "America/Los_Angeles")) == "America/Los_Angeles"
+        assert str(athlete_zone("Asia/Tokyo", "UTC")) == "Asia/Tokyo"
+        assert str(athlete_zone("nonsense", "also nonsense")) == "UTC"

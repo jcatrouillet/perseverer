@@ -30,6 +30,7 @@ from perseverer.adapters.strava_export import (
     ingest_manual_entry_content,
 )
 from perseverer.archive import read_raw_bytes, restore_raw_object_table
+from perseverer.auto_tags import apply_auto_tags
 from perseverer.bouldering_overrides import apply_bouldering_route_overrides
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
@@ -565,6 +566,7 @@ def rebuild_database(
         refresh_fitness_rollup(conn, athlete_id=athlete_id)
         conn.commit()
         refresh_run_pacing(conn, parquet_dir, athlete_id=athlete_id)
+        apply_auto_tags(conn, athlete_id=athlete_id)
         refresh_ride_power(conn, parquet_dir, athlete_id=athlete_id)
         refresh_insights(conn, athlete_id=athlete_id)
         conn.commit()

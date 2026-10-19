@@ -287,6 +287,10 @@ own numbers:
   "Exclude commutes" toggle: activity lists are filtered client-side and the bands, zones,
   curve and FTP endpoints take `exclude_commutes`. The race predictions, race readiness and
   VO2max rollups (running physiology models) are not filtered.
+- **Automatic tags** (`auto_tags.py`): an activity from the athlete's home address to their work
+  address (or back; Settings -> Commute, both optional, geocoded once through Nominatim) is tagged as
+  a commute, and one with "Zwift" in its title as virtual. Both are re-evaluated after every
+  import, rebuild, rename and address change, and a tag the athlete set by hand always wins.
 - **Bikes and tires:** a bike is chosen per ride (`activity.bike_id`, durable through
   `activity_sport_override`) or falls back to the most specific dated category default (all cycling,
   road, mountain, gravel, e-bike, eMTB, commute). Front and rear tires are separate records with an
@@ -423,7 +427,7 @@ Recharts for charts, Leaflet with a MapLibre-rendered CARTO vector basemap for m
 
 ## Worker and schedules
 
-All schedules resolve against `PERSEVERER_SCHEDULE_TIMEZONE` (an IANA zone), so wall-clock times
+All schedules except the email reports (which follow each athlete's own timezone, below) resolve against `PERSEVERER_SCHEDULE_TIMEZONE` (an IANA zone), so wall-clock times
 stay correct across daylight saving.
 
 | Job | Default | What it does |
@@ -431,8 +435,7 @@ stay correct across daylight saving.
 | `daily_garmin_sync` | 04:15 | Per athlete: Garmin Connect sync, Eufy sync, Kaya import, rollups and insights, staleness check, gear replacement alerts. One athlete's failure never stops the others. |
 | `daily_backup` | 03:30 | `VACUUM INTO` snapshot of SQLite, then rsync of the database, raw archive and Parquet to a backup host over SSH. |
 | `daily_workout_push` | 04:45 | Pushes planned workouts (and courses) due within the push window to Garmin. |
-| `weekly_email_report` | Sunday 18:00 | Re-syncs Garmin, then emails the week's summary and the coming week's plan. |
-| `monthly_email_report` | Last day of month 18:00 | Emails the month's totals. |
+| `email_reports` | every 15 minutes | Sends each report to whoever's **own local clock** has reached its time (profile timezone, `PERSEVERER_SCHEDULE_TIMEZONE` if unset): the weekly on Sunday 20:00, after re-syncing that athlete's Garmin data, with the week's summary and the coming week's plan; the monthly on the month's last day at 18:00 with the month's totals. Each goes out once per day (`athlete_email_report_config.*_last_sent_on`). |
 
 Long Settings-page operations (sync now, rebuild, bulk import) run as FastAPI background tasks in
 the `api` container and are polled through the `ingest_run` table. The bulk import's `.zip` is the
