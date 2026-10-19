@@ -84,6 +84,10 @@ month, year and all time):
 |---|---|
 | ![Running statistics for a month](docs/screenshots/calendar-month-stats.png) | ![Hiking and bouldering for a month](docs/screenshots/calendar-month-hikes.png) |
 
+| Cycling, week | Cycling, month |
+|---|---|
+| ![Cycling summary for a week](docs/screenshots/calendar-week-cycling.png) | ![Cycling summary for a month](docs/screenshots/calendar-month-cycling.png) |
+
 ### Activities
 
 Every activity has a detail page: weather at the time, pace variability, distance, heart rate and
@@ -230,6 +234,16 @@ speed next to the average, and its best average power over 5 s, 30 s, 1, 5, 20, 
 |---|---|
 | ![Performance curve](docs/screenshots/insights-performance-curve.png) | ![Eddington number](docs/screenshots/insights-eddington.png) |
 
+With the **Cycling** switch, the same tabs describe your rides:
+
+| Power trends | FTP & VO2max |
+|---|---|
+| ![Cycling power trends](docs/screenshots/insights-cycling-power-trends.png) | ![FTP, Critical Power and VO2max](docs/screenshots/insights-cycling-ftp.png) |
+
+| Training bands (by power) | PR progress (by power) |
+|---|---|
+| ![Time in each power band](docs/screenshots/insights-cycling-training-bands.png) | ![PR progress by average power](docs/screenshots/insights-cycling-pr-progress.png) |
+
 ### Planning and goals
 
 - **Planned workouts on the calendar**, pushed to Garmin automatically within a week of their date:
@@ -275,6 +289,10 @@ step-by-step instructions.
 | Gear | Exercise library |
 |---|---|
 | ![Gear](docs/screenshots/gear.png) | ![Exercise library](docs/screenshots/exercises.png) |
+
+| Bikes and tires |
+|---|
+| ![Bikes with front and rear tires, defaults per type of ride](docs/screenshots/gear-bikes.png) |
 
 ### Settings and reports
 
