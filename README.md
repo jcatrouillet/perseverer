@@ -121,7 +121,7 @@ that Kaya doesn't have are listed as "Watch only" and can be removed from the ro
 | ![Hike detail](docs/screenshots/activity-hike.png) | ![Bouldering routes](docs/screenshots/activity-bouldering.png) |
 
 You can correct what the devices got wrong: sport, race flag, title, trim a forgotten-stop tail,
-log fueling, assign shoes, fix a climbing route's grade or add a route the watch missed. Duplicates
+log fueling, assign shoes and a bike, fix a climbing route's grade or add a route the watch missed. Duplicates
 the automatic matcher missed can be merged by hand, choosing field by field which source wins.
 Every correction survives a full rebuild.
 
@@ -239,7 +239,10 @@ they only appear for running. Rides also have their own colour, on the map and e
 ### Gear and exercises
 
 Shoe mileage from your activities, a default pair per sport, replacement alerts by banner and
-email. A browsable library of every exercise the strength planner supports, with photos and
+email. Bikes too: a bike is chosen per ride or is the default for all cycling or for road, mountain,
+gravel, e-bike, eMTB or commute rides; each has a front and a rear tire with its own limit, tracked
+from the rides made while it is on the bike, and tires can be replaced, swapped, taken off or retired
+(a bike may have no tires, for a trainer). A browsable library of every exercise the strength planner supports, with photos and
 step-by-step instructions.
 
 | Gear | Exercise library |
@@ -284,7 +287,7 @@ The app is responsive and installable as a PWA.
 
 - A **REST API** (137 endpoints) with a per-athlete API key or password login. Documented in
   [docs/API.md](docs/API.md) and served by the app at `/api-docs.html`.
-- An **MCP server** at `/mcp` with 74 tools, including writing workouts, races, goals and notes.
+- An **MCP server** at `/mcp` with 86 tools, including writing workouts, races, goals and notes.
   Connect it to Claude Code with an API key, or to claude.ai as a custom connector over OAuth.
 
 ---

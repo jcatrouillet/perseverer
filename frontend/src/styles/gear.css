@@ -123,7 +123,9 @@
 
 .gear-form__actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: var(--space-3);
 }
 
 .gear-defaults__grid {
@@ -159,6 +161,11 @@
 
 .gear-inventory__heading h2 {
   margin: 0;
+}
+
+/* The add button sits next to the title, the retired filter stays at the far end. */
+.gear-inventory__heading .button {
+  margin-right: auto;
 }
 
 .gear-show-retired {
@@ -306,4 +313,69 @@
     margin: var(--space-3) var(--space-3) 0;
     padding: var(--space-3);
   }
+}
+
+/* Bikes and tires */
+
+.gear-bike {
+  grid-column: 1 / -1;
+}
+
+.gear-tires {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.gear-slot {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.gear-slot__empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.gear-tire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.gear-tire--limit {
+  border-left: 3px solid var(--color-load);
+  padding-left: var(--space-3);
+}
+
+.gear-tire__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.gear-tire__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.gear-tire-form {
+  margin-top: var(--space-2);
+}
+
+/* Category names keep their own capitalisation (eMTB, E-bike). */
+.gear-bike .badge,
+.gear-sport-option--bike span {
+  text-transform: none;
+}
+
+/* The shoes' last card ("Default shoes by sport") is followed by the bikes: keep them apart. */
+.gear-defaults {
+  margin-bottom: var(--space-6);
 }

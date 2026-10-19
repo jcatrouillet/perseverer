@@ -44,8 +44,14 @@ class ActivityShoeOut(BaseModel):
 
 
 class GearAlertOut(BaseModel):
-    shoe_id: str
+    # "shoe" (a pair at its limit) or "tire" (an installed bike tire at its limit).
+    kind: str = "shoe"
+    shoe_id: str | None = None
     brand: str
     model: str
     distance_km: float
     max_distance_km: float
+    # Tires only: which tire, which bike, front or rear.
+    tire_id: str | None = None
+    bike_name: str | None = None
+    position: str | None = None

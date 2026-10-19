@@ -43,6 +43,7 @@ import { ActivityMergePanel } from "../components/ActivityMergePanel";
 import { ActivityNameCorrection } from "../components/ActivityNameCorrection";
 import { ActivityRoute, buildRouteData } from "../components/ActivityRoute";
 import { ActivitySourcesPanel } from "../components/ActivitySourcesPanel";
+import { ActivityBikePicker } from "../components/ActivityBikePicker";
 import { ActivityShoePicker } from "../components/ActivityShoePicker";
 import { ActivitySportCorrection } from "../components/ActivitySportCorrection";
 import { ActivityShareButton } from "../components/ShareButton";
@@ -362,6 +363,7 @@ export function ActivityDetailPage({ id }: { id: string }) {
           a.device.manufacturer &&
           ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
         <ActivityShoePicker activityId={id} hasDistance={(a.distance_m ?? 0) > 0} />
+        <ActivityBikePicker activityId={id} isRide={isCyclingSport(a.sport)} />
       </p>
       <nav className="activity-detail__sections" aria-label="Activity sections">
         <a

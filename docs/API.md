@@ -1085,9 +1085,94 @@ explicit choice with `null` immediately resolves back to the sport default, if o
 
 ### `GET /gear/alerts`
 
-Returns each pair whose calculated mileage, including its initial distance, has reached its
-configured maximum. The app uses this for its persistent banner. The worker sends one email per
-pair when SMTP and an athlete email address are configured.
+Returns each shoe pair, and each installed bike tire, whose calculated mileage (including its
+initial distance) has reached its configured maximum. `GearAlertOut.kind` is `"shoe"` or `"tire"`;
+a tire alert also carries `tire_id`, `bike_name` and `position`. The app uses this for its
+persistent banner. The worker sends one email per pair or tire when SMTP and an athlete email
+address are configured.
+
+### Bikes and tires
+
+A bike has a brand, model, year, size and initial distance, and may have **no tires** (an indoor
+trainer bike). Its distance is the initial distance plus the rides made on it. A ride's bike is the
+one chosen for that ride, else the athlete's **dated default for the ride's category**:
+`cycling` (every ride), or the more specific `road`, `mountain`, `gravel`, `ebike`, `emtb`,
+`commute` (the athlete's commute tag). The most specific default that applies wins, and a default
+only counts rides from its own assignment time on, so past rides are never reassigned.
+
+Tires are separate records, **front and rear**, each with a brand, model, size, comments, initial
+distance and optional maximum distance. A tire inherits the distance of every ride made on a bike **while it
+is installed there**, so replacing a tire, swapping it to another bike, taking it off or retiring it
+never charges old rides to the wrong tire. A tire that is not installed is *in stock* and keeps its
+distance.
+
+### `GET /gear/bikes`
+
+Returns `array<BikeOut>`: `id`, `brand`, `model`, `year`, `size`, `comments`,
+`initial_distance_km`, live `distance_km`, `retired`, `default_categories`, `front_tire` and
+`rear_tire` (`TireOut` or `null`). `include_retired=true` adds retired bikes.
+
+### `POST /gear/bikes`
+
+Creates a bike. Body (`BikeIn`): `brand`, `model` (required); `year` (1900–2100), `size`,
+`comments`; `initial_distance_km` (default `0`). `201` → `BikeOut`.
+
+### `PUT /gear/bikes/{bike_id}/retire`
+
+Retires a bike: it stops being any category's default and its tires come off (back in stock, not
+retired). History is kept. `200` → `BikeOut`; `404`.
+
+### `PUT /gear/bike-defaults/{category}`
+
+Makes a bike the default for a category (`cycling`, `road`, `mountain`, `gravel`, `ebike`, `emtb`
+or `commute`) from now on. Body: `{ "bike_id": "…" }`. One bike may be the default for several
+categories. `200` → `BikeOut`; `404` (unknown or retired bike); `422` (unknown category).
+
+### `DELETE /gear/bike-defaults/{category}`
+
+Stops using a bike by default for that category. `200`; `404` when none was set.
+
+### `GET /gear/tires`
+
+Returns `array<TireOut>`: `id`, `brand`, `model`, `size`, `comments`, `initial_distance_km`,
+`max_distance_km`, live `distance_km`, `remaining_km`, `over_limit`, `retired`, and where it is
+now — `bike_id`, `bike_name`, `position` (`front`/`rear`), `installed_at` — all `null` while in
+stock. `include_retired=true` adds retired tires.
+
+### `POST /gear/tires`
+
+Adds a tire. Body (`TireCreateIn`): `brand`, `model` (required); `size`; `comments`; `initial_distance_km`;
+`max_distance_km`; and optionally `bike_id` **and** `position` (`front`/`rear`, both or neither) to
+fit it at once, replacing the tire in that slot; `installed_on` (a date) back-dates the fitting.
+`201` → `TireOut`; `404` (unknown bike); `422`.
+
+### `PUT /gear/tires/{tire_id}/install`
+
+Makes the tire active on a bike. Body: `bike_id`, `position`, optional `installed_on`. It comes off
+wherever it was, and the tire that was in that slot comes off the bike (it stays in stock).
+`200` → `TireOut`; `404` (unknown or retired tire or bike); `422` when `installed_on` precedes the
+fitting of the tire it would replace.
+
+### `PUT /gear/tires/{tire_id}/remove`
+
+Takes the tire off its bike without retiring it. `200` → `TireOut`.
+
+### `PUT /gear/tires/{tire_id}/retire`
+
+Retires a tire for good: it comes off its bike, stops alerting and can't be fitted again. History
+is kept. `200` → `TireOut`.
+
+### `GET /gear/activities/{activity_id}/bike`
+
+Returns `{ "bike_id": string | null, "is_default": boolean }`: this ride's own choice, else the
+most specific category default whose ledger had started by the ride. `404`; `422` for an activity
+that is not cycling.
+
+### `PUT /gear/activities/{activity_id}/bike`
+
+Chooses the bike for one ride. Body: `{ "bike_id": string | null }`; `null` clears the choice (the
+category default applies again). Durable: it is recorded in `activity_sport_override` and
+re-applied after a rebuild. Returns the resolved shape above.
 
 ---
 

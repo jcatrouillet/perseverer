@@ -7,7 +7,9 @@ import {
   useSetDefaultShoe,
   useShoes,
 } from "../api/queries";
+import { BikesSection } from "../components/BikesSection";
 import { Icon } from "../components/Icon";
+import { Modal } from "../components/Modal";
 import "../styles/gear.css";
 
 const initial = {
@@ -23,6 +25,8 @@ const initial = {
 export function GearPage() {
   const [form, setForm] = useState(initial);
   const [showRetired, setShowRetired] = useState(false);
+  // The add form is a popup, not part of the page: the page is mostly about what you own.
+  const [adding, setAdding] = useState(false);
   const shoes = useShoes(showRetired);
   const activities = useAllActivities({});
   const create = useCreateShoe();
@@ -48,6 +52,7 @@ export function GearPage() {
         onSuccess: (shoe) => {
           defaultSports.forEach((sport) => setDefault.mutate({ sport, shoeId: shoe.id }));
           setForm(initial);
+          setAdding(false);
         },
       },
     );
@@ -61,13 +66,18 @@ export function GearPage() {
         </span>
         <div>
           <h1>Gear</h1>
-          <p className="gear-page__intro">Track shoe mileage, defaults, and replacement limits.</p>
+          <p className="gear-page__intro">
+            Track shoe and bike mileage, defaults, tires and replacement limits.
+          </p>
         </div>
       </div>
 
       <section className="gear-inventory">
         <div className="gear-inventory__heading">
           <h2>Your shoes</h2>
+          <button type="button" className="button" onClick={() => setAdding(true)}>
+            + Add shoes
+          </button>
           <label className="gear-show-retired">
             <input
               type="checkbox"
@@ -140,120 +150,124 @@ export function GearPage() {
               <Icon name="shoe" />
             </span>
             <h3>No shoes added yet</h3>
-            <p>Add your first pair below to start tracking its mileage.</p>
+            <p>Use “Add shoes” above to add your first pair and start tracking its mileage.</p>
           </div>
         )}
       </section>
 
-      <section className="card gear-card">
-        <h2>Add shoes</h2>
-        <p className="gear-card__description">
-          Initial distance includes kilometres already used before adding the pair.
-        </p>
-        <form className="gear-form" onSubmit={submit}>
-          <label className="field">
-            Brand
-            <input
-              className="input"
-              required
-              value={form.brand}
-              onChange={(e) => setForm({ ...form, brand: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            Model
-            <input
-              className="input"
-              required
-              value={form.model}
-              onChange={(e) => setForm({ ...form, model: e.target.value })}
-            />
-          </label>
-          <label className="field gear-form__size">
-            Size
-            <input
-              className="input"
-              value={form.size}
-              onChange={(e) => setForm({ ...form, size: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            Initial distance (km)
-            <input
-              className="input"
-              type="number"
-              min="0"
-              step="0.1"
-              required
-              value={form.initialDistance}
-              onChange={(e) => setForm({ ...form, initialDistance: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            Maximum distance (km)
-            <input
-              className="input"
-              type="number"
-              min="0"
-              step="0.1"
-              placeholder="No limit"
-              value={form.maxDistance}
-              onChange={(e) => setForm({ ...form, maxDistance: e.target.value })}
-            />
-            <span className="gear-form__hint">Leave empty for no limit</span>
-          </label>
-          {sports.length > 0 && (
-            <fieldset className="gear-form__sports">
-              <legend>Use as default for</legend>
-              <div className="gear-sport-options">
-                {sports.map((sport) => (
-                  <label
-                    className={
-                      form.defaultSports.includes(sport)
-                        ? "gear-sport-option is-selected"
-                        : "gear-sport-option"
-                    }
-                    key={sport}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={form.defaultSports.includes(sport)}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          defaultSports: e.target.checked
-                            ? [...form.defaultSports, sport]
-                            : form.defaultSports.filter((item) => item !== sport),
-                        })
+      <Modal open={adding} onClose={() => setAdding(false)} title="Add shoes">
+        <>
+          <p className="gear-card__description">
+            Initial distance includes kilometres already used before adding the pair.
+          </p>
+          <form className="gear-form" onSubmit={submit}>
+            <label className="field">
+              Brand
+              <input
+                className="input"
+                required
+                value={form.brand}
+                onChange={(e) => setForm({ ...form, brand: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              Model
+              <input
+                className="input"
+                required
+                value={form.model}
+                onChange={(e) => setForm({ ...form, model: e.target.value })}
+              />
+            </label>
+            <label className="field gear-form__size">
+              Size
+              <input
+                className="input"
+                value={form.size}
+                onChange={(e) => setForm({ ...form, size: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              Initial distance (km)
+              <input
+                className="input"
+                type="number"
+                min="0"
+                step="0.1"
+                required
+                value={form.initialDistance}
+                onChange={(e) => setForm({ ...form, initialDistance: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              Maximum distance (km)
+              <input
+                className="input"
+                type="number"
+                min="0"
+                step="0.1"
+                placeholder="No limit"
+                value={form.maxDistance}
+                onChange={(e) => setForm({ ...form, maxDistance: e.target.value })}
+              />
+              <span className="gear-form__hint">Leave empty for no limit</span>
+            </label>
+            {sports.length > 0 && (
+              <fieldset className="gear-form__sports">
+                <legend>Use as default for</legend>
+                <div className="gear-sport-options">
+                  {sports.map((sport) => (
+                    <label
+                      className={
+                        form.defaultSports.includes(sport)
+                          ? "gear-sport-option is-selected"
+                          : "gear-sport-option"
                       }
-                    />
-                    <span>{sport.replace(/_/g, " ")}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          )}
-          <label className="field gear-form__comments">
-            Comments
-            <textarea
-              className="input"
-              value={form.comments}
-              onChange={(e) => setForm({ ...form, comments: e.target.value })}
-            />
-          </label>
-          <div className="gear-form__actions">
-            <button className="button button--primary" disabled={create.isPending}>
-              <Icon name="shoe" />
-              {create.isPending ? "Adding…" : "Add shoes"}
-            </button>
-          </div>
-          {create.isError && (
-            <p className="form-error" role="alert">
-              Could not add this pair.
-            </p>
-          )}
-        </form>
-      </section>
+                      key={sport}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.defaultSports.includes(sport)}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            defaultSports: e.target.checked
+                              ? [...form.defaultSports, sport]
+                              : form.defaultSports.filter((item) => item !== sport),
+                          })
+                        }
+                      />
+                      <span>{sport.replace(/_/g, " ")}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            <label className="field gear-form__comments">
+              Comments
+              <textarea
+                className="input"
+                value={form.comments}
+                onChange={(e) => setForm({ ...form, comments: e.target.value })}
+              />
+            </label>
+            <div className="gear-form__actions">
+              <button className="button button--primary" disabled={create.isPending}>
+                <Icon name="shoe" />
+                {create.isPending ? "Adding…" : "Add shoes"}
+              </button>{" "}
+              <button type="button" className="button" onClick={() => setAdding(false)}>
+                Cancel
+              </button>
+            </div>
+            {create.isError && (
+              <p className="form-error" role="alert">
+                Could not add this pair.
+              </p>
+            )}
+          </form>
+        </>
+      </Modal>
 
       <section className="card gear-defaults">
         <h2>Default shoes by sport</h2>
@@ -293,6 +307,8 @@ export function GearPage() {
           </div>
         )}
       </section>
+
+      <BikesSection />
     </section>
   );
 }

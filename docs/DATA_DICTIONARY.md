@@ -758,6 +758,28 @@ corrections apply immediately. Routes: `GET/POST /bouldering-goals`, `POST /boul
   daily job emails each pair once (`alert_emailed_at`). `PUT /gear/shoes/{id}/retire` removes a pair
   from lists, defaults and alerts.
 
+#### Bikes and tires
+
+- **`bike`**: `brand`, `model`, optional `year`, `size`, `comments`; `initial_distance_m`;
+  `retired_at`.
+- **`athlete_default_bike`**: one row per `(athlete_id, category)`: `bike_id`, `assigned_at`.
+  `category` is `cycling` (every ride) or `road`, `mountain`, `gravel`, `ebike`, `emtb`, `commute`;
+  one bike may hold several rows.
+- **`activity.bike_id`**: the bike the athlete chose for the ride; the athlete's own correction,
+  also recorded in `activity_sport_override.bike_id` (keyed by start time) and re-applied after a
+  rebuild. Null falls back to the category default.
+- **`bike_tire`**: a tire as its own record: `brand`, `model`, `size`, `comments`, `initial_distance_m`,
+  `max_distance_m` (null = no limit), `alert_emailed_at`, `retired_at`.
+- **`bike_tire_install`**: where a tire was and when: `tire_id`, `bike_id`, `position`
+  (`front`/`rear`), `installed_at`, `removed_at` (null = installed now). At most one open row per
+  tire and per bike slot, enforced by the API.
+- **Resolution and mileage** (`bikes.py`): a ride's bike is `activity.bike_id`, else the most
+  specific category default (`commute` > `emtb` > `ebike` > `gravel` > `mountain` > `road` >
+  `cycling`) whose `assigned_at` is not after the ride. A ride's categories come from its sport and
+  sub-sport, and from the athlete's commute tag. A bike's distance is `initial_distance_m` plus its
+  rides; a tire's is `initial_distance_m` plus the rides made on a bike while the tire was installed
+  there. Computed on every read, never stored.
+
 ### Activity weather
 
 `weather.py` fetches Open-Meteo's historical API once per activity (hourly UTC data, wind in m/s,

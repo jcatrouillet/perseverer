@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlalchemy import Connection, and_, func, select
 
+from perseverer.bikes import send_tire_alerts
 from perseverer.config import Settings
 from perseverer.db.schema import activity, athlete_default_shoe, shoe
 from perseverer.email_delivery import send_email
@@ -136,7 +137,7 @@ def send_over_limit_alerts(
     """Email each newly-over-limit pair once.  The visible app banner remains live separately."""
     if not settings.smtp_configured or not recipient:
         return 0
-    sent = 0
+    sent = send_tire_alerts(conn, settings, athlete_id, recipient)
     for pair, mileage in over_limit_shoes(conn, athlete_id):
         if pair.alert_emailed_at is not None:
             continue

@@ -18,6 +18,7 @@ from perseverer.api.schemas.gear import (
     ShoeIn,
     ShoeOut,
 )
+from perseverer.bikes import over_limit_tires
 from perseverer.db.schema import activity, athlete_default_shoe, shoe
 from perseverer.gear import over_limit_shoes, resolve_activity_shoe, shoe_mileages
 
@@ -164,7 +165,7 @@ def retire_shoe(
 def gear_alerts(
     athlete_id: Annotated[str, Depends(require_api_key)], conn: Connection = Depends(get_conn)
 ) -> list[GearAlertOut]:
-    return [
+    alerts = [
         GearAlertOut(
             shoe_id=row.id,
             brand=row.brand,
@@ -174,6 +175,20 @@ def gear_alerts(
         )
         for row, mileage in over_limit_shoes(conn, athlete_id)
     ]
+    alerts += [
+        GearAlertOut(
+            kind="tire",
+            tire_id=alert.tire.id,
+            brand=alert.tire.brand,
+            model=alert.tire.model,
+            distance_km=alert.distance_m / 1000,
+            max_distance_km=alert.tire.max_distance_m / 1000,
+            bike_name=f"{alert.bike.brand} {alert.bike.model}",
+            position=alert.position,
+        )
+        for alert in over_limit_tires(conn, athlete_id)
+    ]
+    return alerts
 
 
 @router.get("/gear/activities/{activity_id}/shoe", response_model=ActivityShoeOut)

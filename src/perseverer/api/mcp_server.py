@@ -509,8 +509,8 @@ async def list_shoes(include_retired: bool = False) -> list[dict[str, Any]]:
 
 @mcp.tool()
 async def get_gear_alerts() -> list[dict[str, Any]]:
-    """Every shoe pair whose live accumulated distance has reached its own configured
-    replacement limit."""
+    """Every shoe pair, and every installed bike tire, whose live accumulated distance has reached
+    its own configured replacement limit (`kind` is "shoe" or "tire")."""
     response = await _call_api("GET", "/api/v1/gear/alerts")
     return list(response.json())
 
@@ -1165,6 +1165,136 @@ async def set_activity_shoe(activity_id: str, shoe_id: str | None) -> dict[str, 
     response = await _call_api(
         "PUT", f"/api/v1/gear/activities/{activity_id}/shoe", json={"shoe_id": shoe_id}
     )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def list_bikes(include_retired: bool = False) -> list[dict[str, Any]]:
+    """The athlete's bikes, each with live distance (the initial distance plus the rides made on
+    it), the cycling categories it is the default for, and its installed front and rear tire
+    (null when it has none, e.g. an indoor trainer bike)."""
+    response = await _call_api(
+        "GET", "/api/v1/gear/bikes", params={"include_retired": include_retired}
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def create_bike(
+    brand: str,
+    model: str,
+    year: int | None = None,
+    size: str | None = None,
+    comments: str | None = None,
+    initial_distance_km: float = 0.0,
+) -> dict[str, Any]:
+    """Add a bike (initial_distance_km = distance already on it)."""
+    response = await _call_api(
+        "POST",
+        "/api/v1/gear/bikes",
+        json={
+            "brand": brand,
+            "model": model,
+            "year": year,
+            "size": size,
+            "comments": comments,
+            "initial_distance_km": initial_distance_km,
+        },
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def set_default_bike(category: str, bike_id: str) -> dict[str, Any]:
+    """Make a bike the default for a cycling category from now on (never reassigns past rides).
+    `category`: "cycling" (every ride), "road", "mountain", "gravel", "ebike", "emtb" or
+    "commute". The most specific default that applies to a ride wins."""
+    response = await _call_api(
+        "PUT", f"/api/v1/gear/bike-defaults/{category}", json={"bike_id": bike_id}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def retire_bike(bike_id: str) -> dict[str, Any]:
+    """Retire a bike (history kept; clears its defaults; its tires come off back into stock)."""
+    response = await _call_api("PUT", f"/api/v1/gear/bikes/{bike_id}/retire")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def set_activity_bike(activity_id: str, bike_id: str | None) -> dict[str, Any]:
+    """Choose the bike for one cycling activity; None clears the choice (falling back to the
+    category default). Its tires then inherit the ride's distance while installed."""
+    response = await _call_api(
+        "PUT", f"/api/v1/gear/activities/{activity_id}/bike", json={"bike_id": bike_id}
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def list_tires(include_retired: bool = False) -> list[dict[str, Any]]:
+    """Every bike tire with its live distance, limit, and where it is now (bike and front/rear
+    position, or in stock)."""
+    response = await _call_api(
+        "GET", "/api/v1/gear/tires", params={"include_retired": include_retired}
+    )
+    return list(response.json())
+
+
+@mcp.tool()
+async def create_tire(
+    brand: str,
+    model: str,
+    size: str | None = None,
+    comments: str | None = None,
+    initial_distance_km: float = 0.0,
+    max_distance_km: float | None = None,
+    bike_id: str | None = None,
+    position: str | None = None,
+) -> dict[str, Any]:
+    """Add a tire (max_distance_km = replacement limit, None for none). With bike_id and position
+    ("front" or "rear") it is fitted at once, replacing the tire in that slot."""
+    response = await _call_api(
+        "POST",
+        "/api/v1/gear/tires",
+        json={
+            "brand": brand,
+            "model": model,
+            "size": size,
+            "comments": comments,
+            "initial_distance_km": initial_distance_km,
+            "max_distance_km": max_distance_km,
+            "bike_id": bike_id,
+            "position": position,
+        },
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def install_tire(tire_id: str, bike_id: str, position: str) -> dict[str, Any]:
+    """Make a tire active on a bike, front or rear; the tire that was there comes off (kept in
+    stock) and this tire comes off wherever it was."""
+    response = await _call_api(
+        "PUT",
+        f"/api/v1/gear/tires/{tire_id}/install",
+        json={"bike_id": bike_id, "position": position},
+    )
+    return dict(response.json())
+
+
+@mcp.tool()
+async def remove_tire(tire_id: str) -> dict[str, Any]:
+    """Take a tire off its bike without retiring it."""
+    response = await _call_api("PUT", f"/api/v1/gear/tires/{tire_id}/remove")
+    return dict(response.json())
+
+
+@mcp.tool()
+async def retire_tire(tire_id: str) -> dict[str, Any]:
+    """Retire a tire for good (history kept; comes off its bike; stops alerts)."""
+    response = await _call_api("PUT", f"/api/v1/gear/tires/{tire_id}/retire")
     return dict(response.json())
 
 

@@ -1387,11 +1387,78 @@ export interface ShoeOut extends ShoeIn {
 }
 
 export interface GearAlertOut {
-  shoe_id: string;
+  /** "shoe" (a pair at its limit) or "tire" (an installed bike tire at its limit). */
+  kind: "shoe" | "tire";
+  shoe_id: string | null;
   brand: string;
   model: string;
   distance_km: number;
   max_distance_km: number;
+  /** Tires only: which tire, on which bike, front or rear. */
+  tire_id: string | null;
+  bike_name: string | null;
+  position: TirePosition | null;
+}
+
+export type TirePosition = "front" | "rear";
+
+/** The cycling categories a bike can be the default for: "cycling" is every ride, the rest are
+ * more specific and win over it (bikes.py::CATEGORIES). */
+export type BikeCategory =
+  "cycling" | "road" | "mountain" | "gravel" | "ebike" | "emtb" | "commute";
+
+export interface BikeIn {
+  brand: string;
+  model: string;
+  year?: number | null;
+  size?: string | null;
+  comments?: string | null;
+  initial_distance_km: number;
+}
+
+export interface TireIn {
+  brand: string;
+  model: string;
+  size?: string | null;
+  comments?: string | null;
+  initial_distance_km: number;
+  max_distance_km: number | null;
+}
+
+export interface TireCreateIn extends TireIn {
+  /** Fit it at once: both or neither. */
+  bike_id?: string | null;
+  position?: TirePosition | null;
+}
+
+export interface TireOut extends TireIn {
+  id: string;
+  distance_km: number;
+  remaining_km: number | null;
+  over_limit: boolean;
+  retired: boolean;
+  /** Where it is now; a null bike means it is in stock. */
+  bike_id: string | null;
+  bike_name: string | null;
+  position: TirePosition | null;
+  installed_at: string | null;
+  created_at: string;
+}
+
+export interface BikeOut extends BikeIn {
+  id: string;
+  distance_km: number;
+  retired: boolean;
+  default_categories: BikeCategory[];
+  front_tire: TireOut | null;
+  rear_tire: TireOut | null;
+  created_at: string;
+}
+
+export interface ActivityBikeOut {
+  bike_id: string | null;
+  /** True when bike_id came from the category default, not an explicit per-ride choice. */
+  is_default: boolean;
 }
 
 export interface ActivityShoeOut {

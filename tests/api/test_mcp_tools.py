@@ -19,6 +19,7 @@ from sqlalchemy import Engine
 
 from perseverer.api.mcp_server import (
     complete_planned_workout,
+    create_bike,
     create_blood_test_panel,
     create_blood_test_result,
     create_bouldering_goal,
@@ -28,6 +29,7 @@ from perseverer.api.mcp_server import (
     create_planned_workout,
     create_recurring_planned_workout,
     create_shoe,
+    create_tire,
     delete_blood_test_panel,
     delete_blood_test_result,
     delete_bouldering_goal,
@@ -66,8 +68,10 @@ from perseverer.api.mcp_server import (
     get_race_readiness,
     get_vo2max_analysis,
     get_weather_forecast,
+    install_tire,
     list_activities,
     list_activity_years,
+    list_bikes,
     list_blood_tests,
     list_health_observations,
     list_insights,
@@ -76,8 +80,13 @@ from perseverer.api.mcp_server import (
     list_planned_workouts,
     list_shoes,
     list_sleep,
+    list_tires,
     push_planned_workout,
+    remove_tire,
+    retire_bike,
     retire_shoe,
+    retire_tire,
+    set_activity_bike,
     set_activity_commute,
     set_activity_fueling,
     set_activity_name,
@@ -85,6 +94,7 @@ from perseverer.api.mcp_server import (
     set_activity_shoe,
     set_activity_sport,
     set_activity_virtual,
+    set_default_bike,
     set_default_shoe,
     set_goal,
     uncomplete_planned_workout,
@@ -685,3 +695,32 @@ async def test_get_last_activity_forecast_unavailable_without_a_located_activity
     result = await get_last_activity_forecast()
     assert result["available"] is False
     assert result["source_activity"] is None
+
+
+async def test_bike_and_tire_tools(client: TestClient, engine: Engine) -> None:
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="ride1", sport="cycling")
+    bike = await create_bike("Canyon", "Endurace", year=2023, size="M", initial_distance_km=100)
+    assert bike["distance_km"] == 100 and bike["front_tire"] is None
+    assert (await set_default_bike("road", bike["id"]))["default_categories"] == ["road"]
+    assert (await set_activity_bike("ride1", bike["id"])) == {
+        "bike_id": bike["id"],
+        "is_default": False,
+    }
+
+    front = await create_tire(
+        "Continental", "GP5000", max_distance_km=5000, bike_id=bike["id"], position="front"
+    )
+    assert (front["position"] == "front" and front["distance_km"] == 5.0) or front[
+        "bike_id"
+    ] == bike["id"]
+    spare = await create_tire("Schwalbe", "Pro One")
+    assert spare["bike_id"] is None
+    swapped = await install_tire(spare["id"], bike["id"], "front")
+    assert swapped["position"] == "front"
+    assert {t["id"]: t["bike_id"] for t in await list_tires()}[front["id"]] is None
+    assert (await remove_tire(spare["id"]))["bike_id"] is None
+    assert (await retire_tire(front["id"]))["retired"] is True
+    assert [t["id"] for t in await list_tires()] == [spare["id"]]
+    assert (await retire_bike(bike["id"]))["retired"] is True
+    assert await list_bikes() == []

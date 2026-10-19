@@ -138,7 +138,8 @@ Main table groups (see [DATA_DICTIONARY.md](DATA_DICTIONARY.md) for every column
 - **Rollups:** `day_rollup`, `period_rollup`, `health_metric_daily_rollup`,
   `health_metric_period_rollup`, `fitness_daily_rollup`, `performance_daily_rollup`, `insight`.
 - **Athlete input:** `note`, `goal`, `duration_goal`, `bouldering_goal`, `planned_workout`,
-  `planned_workout_step`, `planned_race`, `shoe`, `athlete_default_shoe`, `blood_test_result`,
+  `planned_workout_step`, `planned_race`, `shoe`, `athlete_default_shoe`, `bike`, `athlete_default_bike`, `bike_tire`,
+  `bike_tire_install`, `blood_test_result`,
   `kaya_climb_note`.
 - **Durable overrides:** `activity_sport_override`, `activity_trim_override`,
   `activity_merge_override`, `bouldering_route_status_override`, `bouldering_manual_route`,
@@ -286,6 +287,12 @@ own numbers:
   "Exclude commutes" toggle: activity lists are filtered client-side and the bands, zones,
   curve and FTP endpoints take `exclude_commutes`. The race predictions, race readiness and
   VO2max rollups (running physiology models) are not filtered.
+- **Bikes and tires:** a bike is chosen per ride (`activity.bike_id`, durable through
+  `activity_sport_override`) or falls back to the most specific dated category default (all cycling,
+  road, mountain, gravel, e-bike, eMTB, commute). Front and rear tires are separate records with an
+  installation ledger, so each inherits the distance of the rides made while it was on a bike and a
+  replacement, swap or retirement never re-charges old rides. A bike may have no tires. All of it is
+  computed on read (`bikes.py`); an installed tire at its limit raises a banner and one email.
 - **Goals:** a week, month or year holds any number of distance goals and time goals, one per sport
   (plus one for every sport combined), and bouldering goals by grade; the Goals popup lists each
   with its own pace-to-target chart.
@@ -346,7 +353,7 @@ The full reference is [API.md](API.md), also served by the frontend at `/api-doc
 | Health | dashboard (logical metrics merged across sources), observations, intraday streams, sleep, blood tests |
 | Fitness & performance | fitness rollup, performance rollup, pace/HR zones, VO2max analysis, race readiness, performance curve |
 | Planning | planned workouts (incl. recurring, push, routes), planned races, distance/duration/bouldering goals |
-| Gear | shoes, defaults, mileage, alerts |
+| Gear | shoes, bikes and tires, defaults, mileage, alerts |
 | Other | notes, insights, weather forecast, settings (credentials, imports, rebuild, jobs), share links, calendar feed, auth |
 
 Conventions: request-time computation is reserved for bounded lookups (one activity, one goal
@@ -356,7 +363,7 @@ period, one race); everything list-wide reads rollups. Values the app does not h
 ## MCP server
 
 The MCP server (`api/mcp_server.py`) is mounted inside the `api` process at `/mcp` (Streamable
-HTTP, stateless, so either uvicorn worker can serve any request). Its 74 tools are thin proxies:
+HTTP, stateless, so either uvicorn worker can serve any request). Its 86 tools are thin proxies:
 each calls the corresponding REST endpoint in-process, so there is one implementation of every
 rule. Tools cover reading everything and writing a training plan (planned workouts and races,
 goals, notes, blood tests, gear, activity corrections); the workout-syntax grammar is embedded in

@@ -211,6 +211,79 @@ athlete_default_shoe = Table(
     Index("ix_default_shoe_athlete_shoe", "athlete_id", "shoe_id"),
 )
 
+# Bikes, with tires as separate components.  A bike is chosen per ride (`activity.bike_id`, an
+# athlete correction re-applied after a rebuild from `activity_sport_override.bike_id`), or falls
+# back to the athlete's dated default for the ride's category (`athlete_default_bike`; "cycling" is
+# the general default, the others are more specific: road, mountain, gravel, ebike, emtb,
+# commute).  Like shoes, `assigned_at` is the start of that default's mileage ledger.
+bike = Table(
+    "bike",
+    metadata,
+    Column("id", String(26), primary_key=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("brand", String, nullable=False),
+    Column("model", String, nullable=False),
+    Column("year", Integer, nullable=True),
+    Column("size", String, nullable=True),
+    Column("comments", Text, nullable=True),
+    # Distance already on the bike when it was added; ride distance is added to it, never replaces.
+    Column("initial_distance_m", Float, nullable=False, default=0.0),
+    Column("retired_at", DateTime(), nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    Index("ix_bike_athlete", "athlete_id"),
+)
+
+athlete_default_bike = Table(
+    "athlete_default_bike",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("category", String, primary_key=True),
+    Column("bike_id", String(26), ForeignKey("bike.id"), nullable=False),
+    Column("assigned_at", DateTime(), nullable=False),
+    Index("ix_default_bike_athlete_bike", "athlete_id", "bike_id"),
+)
+
+# A tire is its own record, not a column of the bike: it can be bought and kept in stock, put on a
+# bike, swapped to another bike, taken off and retired.  Where it was and when is the installation
+# ledger below; the tire's distance is its `initial_distance_m` plus the distance of every ride
+# made on a bike while the tire was installed on it (bikes.py::tire_mileages), computed on read.
+bike_tire = Table(
+    "bike_tire",
+    metadata,
+    Column("id", String(26), primary_key=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("brand", String, nullable=False),
+    Column("model", String, nullable=False),
+    Column("size", String, nullable=True),
+    Column("comments", Text, nullable=True),
+    Column("initial_distance_m", Float, nullable=False, default=0.0),
+    Column("max_distance_m", Float, nullable=True),
+    # Set once an over-limit alert email has gone out (the banner itself is live).
+    Column("alert_emailed_at", DateTime(), nullable=True),
+    Column("retired_at", DateTime(), nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    Column("updated_at", DateTime(), nullable=False),
+    Index("ix_bike_tire_athlete", "athlete_id"),
+)
+
+# One row per stretch of time a tire spent on a bike, at the front or the rear.  `removed_at` NULL
+# = still installed.  A bike has at most one installed tire per position, a tire at most one
+# installation open at a time (both enforced by the API).
+bike_tire_install = Table(
+    "bike_tire_install",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("tire_id", String(26), ForeignKey("bike_tire.id"), nullable=False),
+    Column("bike_id", String(26), ForeignKey("bike.id"), nullable=False),
+    Column("position", String, nullable=False),  # "front" | "rear"
+    Column("installed_at", DateTime(), nullable=False),
+    Column("removed_at", DateTime(), nullable=True),
+    Index("ix_bike_tire_install_tire", "tire_id"),
+    Index("ix_bike_tire_install_bike", "bike_id"),
+)
+
 # A distance goal for a week, month or year. A period may hold several, one per sport (or one for
 # every sport combined): identity is (athlete, period_type, period_start, sport), enforced by the
 # API because a NULL sport can't carry a SQL unique constraint -- the duration goals' own rule.
@@ -548,6 +621,9 @@ activity = Table(
     # Athlete-selected pair for this activity.  Null uses the sport default as a read-time
     # fallback in gear.py, so existing activities are never silently assigned.
     Column("shoe_id", String(26), ForeignKey("shoe.id"), nullable=True),
+    # Athlete-selected bike for this ride; null uses the dated category default as a read-time
+    # fallback (bikes.py).  Durable across a rebuild via activity_sport_override.bike_id.
+    Column("bike_id", String(26), ForeignKey("bike.id"), nullable=True),
     Column("elevation_gain_m", Float, nullable=True),
     # Peak altitude reached, not cumulative ascent (elevation_gain_m above) -- a hike with modest
     # total climb can still summit a very high point starting from an already-high trailhead, and
@@ -565,6 +641,7 @@ activity = Table(
     Index("ix_activity_athlete_start", "athlete_id", "start_time_utc"),
     Index("ix_activity_athlete_local_date", "athlete_id", "local_date"),
     Index("ix_activity_shoe", "shoe_id"),
+    Index("ix_activity_bike", "bike_id"),
 )
 
 # An athlete's own after-the-fact correction -- originally just "this sport is wrong" (see
@@ -603,6 +680,8 @@ activity_sport_override = Table(
     Column("is_race", Boolean, nullable=True),
     Column("is_commute", Boolean, nullable=True),
     Column("is_virtual", Boolean, nullable=True),
+    # The bike the athlete chose for this ride (activity.bike_id).  NULL = no choice recorded.
+    Column("bike_id", String(26), ForeignKey("bike.id"), nullable=True),
     Column("name", String, nullable=True),
     Column("carbohydrates_g", Float, nullable=True),
     Column("sodium_mg", Float, nullable=True),

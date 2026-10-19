@@ -16,6 +16,7 @@ import type {
   ActivityPaceBandsOut,
   ActivityRouteOut,
   ActivitySourcesOut,
+  ActivityBikeOut,
   ActivityShoeOut,
   ActivitySplitOut,
   ActivityCommuteOverrideOut,
@@ -100,6 +101,12 @@ import type {
   SleepSessionOut,
   ShoeIn,
   ShoeOut,
+  BikeCategory,
+  BikeIn,
+  BikeOut,
+  TireCreateIn,
+  TireOut,
+  TirePosition,
   SplitOut,
   StreamResponse,
   TrimCandidateOut,
@@ -399,6 +406,123 @@ export function useGearAlerts() {
   return useQuery({
     queryKey: ["gear-alerts"],
     queryFn: () => apiGet<GearAlertOut[]>("/api/v1/gear/alerts"),
+  });
+}
+
+export function useBikes(includeRetired = false) {
+  return useQuery({
+    queryKey: ["gear-bikes", includeRetired],
+    queryFn: () => apiGet<BikeOut[]>(`/api/v1/gear/bikes?include_retired=${includeRetired}`),
+  });
+}
+
+export function useTires(includeRetired = false) {
+  return useQuery({
+    queryKey: ["gear-tires", includeRetired],
+    queryFn: () => apiGet<TireOut[]>(`/api/v1/gear/tires?include_retired=${includeRetired}`),
+  });
+}
+
+/** Every bike, tire, alert and per-ride bike can change when any of them does (a ride's distance
+ * moves with its bike, a tire with its bike), so every mutation refreshes the lot. */
+function invalidateBikeGear(client: ReturnType<typeof useQueryClient>) {
+  for (const key of ["gear-bikes", "gear-tires", "gear-alerts", "activity-bike"]) {
+    void client.invalidateQueries({ queryKey: [key] });
+  }
+}
+
+export function useCreateBike() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BikeIn) => apiPost<BikeOut>("/api/v1/gear/bikes", body),
+    onSuccess: () => invalidateBikeGear(client),
+  });
+}
+
+export function useRetireBike() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (bikeId: string) => apiPut<BikeOut>(`/api/v1/gear/bikes/${bikeId}/retire`, {}),
+    onSuccess: () => invalidateBikeGear(client),
+  });
+}
+
+export function useSetDefaultBike() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ category, bikeId }: { category: BikeCategory; bikeId: string }) =>
+      apiPut<BikeOut>(`/api/v1/gear/bike-defaults/${category}`, { bike_id: bikeId }),
+    onSuccess: () => invalidateBikeGear(client),
+  });
+}
+
+export function useClearDefaultBike() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (category: BikeCategory) =>
+      apiDelete<void>(`/api/v1/gear/bike-defaults/${category}`),
+    onSuccess: () => invalidateBikeGear(client),
+  });
+}
+
+export function useCreateTire() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: TireCreateIn) => apiPost<TireOut>("/api/v1/gear/tires", body),
+    onSuccess: () => invalidateBikeGear(client),
+  });
+}
+
+export function useInstallTire() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      tireId,
+      bikeId,
+      position,
+    }: {
+      tireId: string;
+      bikeId: string;
+      position: TirePosition;
+    }) =>
+      apiPut<TireOut>(`/api/v1/gear/tires/${tireId}/install`, {
+        bike_id: bikeId,
+        position,
+      }),
+    onSuccess: () => invalidateBikeGear(client),
+  });
+}
+
+export function useRemoveTire() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (tireId: string) => apiPut<TireOut>(`/api/v1/gear/tires/${tireId}/remove`, {}),
+    onSuccess: () => invalidateBikeGear(client),
+  });
+}
+
+export function useRetireTire() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (tireId: string) => apiPut<TireOut>(`/api/v1/gear/tires/${tireId}/retire`, {}),
+    onSuccess: () => invalidateBikeGear(client),
+  });
+}
+
+export function useActivityBike(activityId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["activity-bike", activityId],
+    queryFn: () => apiGet<ActivityBikeOut>(`/api/v1/gear/activities/${activityId}/bike`),
+    enabled,
+  });
+}
+
+export function useSetActivityBike(activityId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (bikeId: string | null) =>
+      apiPut<ActivityBikeOut>(`/api/v1/gear/activities/${activityId}/bike`, { bike_id: bikeId }),
+    onSuccess: () => invalidateBikeGear(client),
   });
 }
 

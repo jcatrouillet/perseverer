@@ -2060,7 +2060,53 @@ const GROUPS = [
       description: "Mileage is derived from the current assignment. Replacing a pair moves the activity distance from the old pair to the replacement. Clearing with null immediately resolves back to the sport default, if one applies.",
       body: { fields: [["shoe_id","string|null","req","","Null clears the explicit choice."]] }, responses: [ { code: 200, note: "The resolved shoe_id/is_default, same shape as the GET above." } ], example: {}
     },
-    { method: "GET", path: "/api/v1/gear/alerts", summary: "List active pairs that reached their mileage limit.", responses: [ { code: 200, note: "An array of over-limit shoe alerts." } ], example: {}
+    { method: "GET", path: "/api/v1/gear/alerts", summary: "List shoes and installed bike tires that reached their mileage limit.", responses: [ { code: 200, note: "An array of alerts; kind is shoe or tire (tires also carry tire_id, bike_name and position)." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/gear/bikes", summary: "List bikes with live distance, defaults and installed tires.",
+      description: "A bike's distance is its initial distance plus the rides made on it. default_categories lists the cycling categories it is the default for; front_tire and rear_tire are the installed tires (null for none, e.g. a trainer bike).",
+      params: [ ["include_retired","query","opt","boolean","false","Include retired bikes."] ],
+      responses: [ { code: 200, note: "An array of bikes: id, brand, model, year, size, comments, initial_distance_km, distance_km, retired, default_categories, front_tire, rear_tire." } ], example: {}
+    },
+    { method: "POST", path: "/api/v1/gear/bikes", summary: "Add a bike.",
+      body: { fields: [["brand","string","req","",""],["model","string","req","",""],["year","integer|null","opt","null","1900 to 2100."],["size","string|null","opt","null",""],["comments","string|null","opt","null",""],["initial_distance_km","number","opt","0","Distance already on the bike."]] },
+      responses: [ { code: 201, note: "The created bike." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/bikes/{bike_id}/retire", summary: "Retire a bike.",
+      description: "It stops being any category's default and its tires come off (back in stock, not retired). History is kept.", responses: [ { code: 200, note: "The retired bike." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/bike-defaults/{category}", summary: "Make a bike the default for a cycling category.",
+      description: "category is cycling (every ride), road, mountain, gravel, ebike, emtb or commute (the commute tag). The most specific default that applies to a ride wins; a default only counts rides from its own assignment time on. One bike may be the default for several categories.",
+      body: { fields: [["bike_id","string","req","","Must be an active bike."]] }, responses: [ { code: 200, note: "The updated bike." }, { code: 422, note: "Unknown category." } ], example: {}
+    },
+    { method: "DELETE", path: "/api/v1/gear/bike-defaults/{category}", summary: "Stop using a bike by default for a category.", responses: [ { code: 200, note: "Cleared." }, { code: 404, note: "No default for that category." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/gear/tires", summary: "List tires with live distance and where each is.",
+      description: "A tire inherits the distance of every ride made on a bike while it is installed there. bike_id, bike_name, position and installed_at are null while it is in stock.",
+      params: [ ["include_retired","query","opt","boolean","false","Include retired tires."] ],
+      responses: [ { code: 200, note: "An array of tires: id, brand, model, size, comments, initial_distance_km, max_distance_km, distance_km, remaining_km, over_limit, retired, bike_id, bike_name, position, installed_at." } ], example: {}
+    },
+    { method: "POST", path: "/api/v1/gear/tires", summary: "Add a tire, optionally fitting it at once.",
+      description: "With bike_id and position (front or rear; both or neither) it is fitted straight away, replacing the tire in that slot.",
+      body: { fields: [["brand","string","req","",""],["model","string","req","",""],["size","string|null","opt","null",""],["comments","string|null","opt","null",""],["initial_distance_km","number","opt","0",""],["max_distance_km","number|null","opt","null","Null means no limit."],["bike_id","string|null","opt","null",""],["position","string|null","opt","null","front or rear."],["installed_on","string(date)|null","opt","now","Back-dates the fitting."]] },
+      responses: [ { code: 201, note: "The created tire." }, { code: 404, note: "Unknown bike." }, { code: 422, note: "" } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/tires/{tire_id}/install", summary: "Make a tire active on a bike, front or rear.",
+      description: "It comes off wherever it was, and the tire that was in that slot comes off the bike (kept in stock).",
+      body: { fields: [["bike_id","string","req","",""],["position","string","req","","front or rear."],["installed_on","string(date)|null","opt","now",""]] },
+      responses: [ { code: 200, note: "The tire." }, { code: 404, note: "Unknown or retired tire or bike." }, { code: 422, note: "installed_on precedes the fitting of the tire it would replace." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/tires/{tire_id}/remove", summary: "Take a tire off its bike without retiring it.", responses: [ { code: 200, note: "The tire, now in stock." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/tires/{tire_id}/retire", summary: "Retire a tire for good.",
+      description: "It comes off its bike, stops alerting and can't be fitted again. History is kept.", responses: [ { code: 200, note: "The retired tire." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/gear/activities/{activity_id}/bike", summary: "Read the bike that applies to a ride.",
+      description: "This ride's own choice, else the most specific category default whose ledger had started by the ride.",
+      responses: [ { code: 200, note: "bike_id is a string or null; is_default is true when it came from a category default." }, { code: 422, note: "Not a cycling activity." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/gear/activities/{activity_id}/bike", summary: "Choose, change or clear the bike of a ride.",
+      description: "Durable: re-applied after a rebuild. Clearing with null resolves back to the category default.",
+      body: { fields: [["bike_id","string|null","req","","Null clears the explicit choice."]] }, responses: [ { code: 200, note: "The resolved bike_id/is_default." } ], example: {}
     },
   ]},
 

@@ -1,7 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GearPage } from "./GearPage";
+
+// The bikes half has its own tests (BikesSection.test.tsx).
+vi.mock("../components/BikesSection", () => ({ BikesSection: () => null }));
 
 const mockCreateMutate = vi.fn();
 const mockSetDefaultMutate = vi.fn();
@@ -37,6 +40,7 @@ describe("GearPage", () => {
 
   it("accepts the default 800 km maximum and submits it as a number", () => {
     render(<GearPage />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add shoes" }));
     fireEvent.change(screen.getByLabelText("Brand"), { target: { value: "Brooks" } });
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "Catamount" } });
 
@@ -53,6 +57,7 @@ describe("GearPage", () => {
 
   it("sets a newly-created pair as the default for every selected sport", () => {
     render(<GearPage />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add shoes" }));
     fireEvent.change(screen.getByLabelText("Brand"), { target: { value: "Brooks" } });
     fireEvent.change(screen.getByLabelText("Model"), { target: { value: "Catamount" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /running/i }));
@@ -74,10 +79,41 @@ describe("GearPage", () => {
     expect(mockUseShoes).toHaveBeenLastCalledWith(true);
   });
 
-  it("shows the shoe inventory before the add form and sport defaults", () => {
+  it("keeps the add form in a popup that opens on request and closes again", () => {
     render(<GearPage />);
+    expect(screen.queryByLabelText("Brand")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Add shoes" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "+ Add shoes" }));
+    expect(screen.getByLabelText("Brand")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Add shoes" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByLabelText("Brand")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "+ Add shoes" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes the form once the pair is added", () => {
+    render(<GearPage />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add shoes" }));
+    fireEvent.change(screen.getByLabelText("Brand"), { target: { value: "Brooks" } });
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "Catamount" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add shoes" }));
+    act(() => mockCreateMutate.mock.calls[0][1].onSuccess({ id: "shoe-1" }));
+    expect(screen.queryByLabelText("Brand")).not.toBeInTheDocument();
+  });
+
+  it("shows the shoe inventory and the sport defaults, with the add form in its own popup when open", () => {
+    const { unmount } = render(<GearPage />);
     expect(
       screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
-    ).toEqual(["Your shoes", "Add shoes", "Default shoes by sport"]);
+    ).toEqual(["Your shoes", "Default shoes by sport"]);
+    unmount();
+    render(<GearPage />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add shoes" }));
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(["Your shoes", "Default shoes by sport", "Add shoes"]);
   });
 });

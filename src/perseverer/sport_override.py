@@ -189,6 +189,30 @@ def set_virtual_override(
     )
 
 
+def set_bike_override(
+    conn: Connection, *, athlete_id: str, activity_id: str, bike_id: str | None
+) -> None:
+    """Records the bike the athlete chose for one ride (None clears the choice, so the dated
+    category default applies again) and applies it immediately.  Durable like the other
+    corrections: `apply_sport_overrides` puts it back after a rebuild."""
+    start_time_utc = _start_time_for(conn, athlete_id=athlete_id, activity_id=activity_id)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    stmt = sqlite_insert(activity_sport_override).values(
+        athlete_id=athlete_id, start_time_utc=start_time_utc, bike_id=bike_id, created_at=now
+    )
+    conn.execute(
+        stmt.on_conflict_do_update(
+            index_elements=["athlete_id", "start_time_utc"],
+            set_={"bike_id": bike_id, "created_at": now},
+        )
+    )
+    conn.execute(
+        activity.update()
+        .where(activity.c.id == activity_id)
+        .values(bike_id=bike_id, updated_at=now)
+    )
+
+
 def set_name_override(conn: Connection, *, athlete_id: str, activity_id: str, name: str) -> None:
     """Same shape as `set_sport_override`/`set_race_override`, for the athlete's own "this
     title is wrong" correction -- upserts on the athlete/start_time_utc identity without
@@ -270,6 +294,7 @@ def apply_sport_overrides(conn: Connection, *, athlete_id: str) -> int:
             activity_sport_override.c.is_race,
             activity_sport_override.c.is_commute,
             activity_sport_override.c.is_virtual,
+            activity_sport_override.c.bike_id,
             activity_sport_override.c.name,
             activity_sport_override.c.carbohydrates_g,
             activity_sport_override.c.sodium_mg,
@@ -291,6 +316,8 @@ def apply_sport_overrides(conn: Connection, *, athlete_id: str) -> int:
             values["is_commute"] = o.is_commute
         if o.is_virtual is not None:
             values["is_virtual"] = o.is_virtual
+        if o.bike_id is not None:
+            values["bike_id"] = o.bike_id
         if o.name is not None:
             values["name"] = o.name
         if o.carbohydrates_g is not None:
