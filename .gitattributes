@@ -23,6 +23,7 @@ quadlet/*.container text eol=lf
 *.png binary
 *.jpg binary
 *.jpeg binary
+*.mp4 binary
 *.gif binary
 *.ico binary
 *.pmtiles binary

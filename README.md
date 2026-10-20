@@ -22,6 +22,12 @@ everything your Garmin watch, your smart scale and your climbing logbook record,
 original files forever, and turns them into a fast calendar-centred web app, a REST API and an
 MCP server an AI coach can read and plan with.
 
+**See Perseverer in action (30 seconds):**
+
+[![Watch the Perseverer overview video](docs/media/perseverer-overview.jpg)](docs/media/perseverer-overview.mp4)
+
+[▶ Watch the video](docs/media/perseverer-overview.mp4)
+
 ![Week view](docs/screenshots/calendar-week.png)
 
 - **Every data point, kept raw.** Every FIT file and API response is archived verbatim before it
