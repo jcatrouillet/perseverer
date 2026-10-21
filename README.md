@@ -26,7 +26,7 @@ MCP server an AI coach can read and plan with.
 
 [![Play the Perseverer overview on YouTube](docs/media/perseverer-overview.jpg)](https://www.youtube.com/watch?v=07qXTe9qTJ8)
 
-[▶ Watch on YouTube](https://www.youtube.com/watch?v=07qXTe9qTJ8) · [Download MP4](docs/media/perseverer-overview.mp4)
+[▶ Watch on YouTube](https://www.youtube.com/watch?v=07qXTe9qTJ8)
 
 ![Week view](docs/screenshots/calendar-week.png)
 
