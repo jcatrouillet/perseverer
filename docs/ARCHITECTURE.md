@@ -434,7 +434,7 @@ stay correct across daylight saving.
 |---|---|---|
 | `daily_garmin_sync` | 04:15 | Per athlete: Garmin Connect sync, Eufy sync, Kaya import, rollups and insights, staleness check, gear replacement alerts. One athlete's failure never stops the others. |
 | `daily_backup` | 03:30 | `VACUUM INTO` snapshot of SQLite, then rsync of the database, raw archive and Parquet to a backup host over SSH. |
-| `daily_workout_push` | 04:45 | Pushes planned workouts (and courses) due within the push window to Garmin. |
+| `daily_workout_push` | 04:45 | Pushes planned workouts (and courses) due within the push window to Garmin, then deletes from the Garmin library the workouts Perseverer sent for days that are already past (in each athlete's own date), so the watch does not fill up. Only Perseverer's own workouts are touched; the local plan keeps its history and only the Garmin id is cleared. `PERSEVERER_PLANNED_WORKOUT_CLEANUP_ENABLED=false` turns the deletion off. |
 | `email_reports` | every 15 minutes | Sends each report to whoever's **own local clock** has reached its time (profile timezone, `PERSEVERER_SCHEDULE_TIMEZONE` if unset): the weekly on Sunday 20:00, after re-syncing that athlete's Garmin data, with the week's summary and the coming week's plan; the monthly on the month's last day at 18:00 with the month's totals. Each goes out once per day (`athlete_email_report_config.*_last_sent_on`). |
 
 Long Settings-page operations (sync now, rebuild, bulk import) run as FastAPI background tasks in

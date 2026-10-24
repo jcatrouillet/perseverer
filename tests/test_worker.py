@@ -11,6 +11,7 @@ import datetime as dt
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import Engine, select
 
@@ -821,3 +822,116 @@ class TestReportDue:
         assert str(athlete_zone(None, "America/Los_Angeles")) == "America/Los_Angeles"
         assert str(athlete_zone("Asia/Tokyo", "UTC")) == "Asia/Tokyo"
         assert str(athlete_zone("nonsense", "also nonsense")) == "UTC"
+
+
+# --- the daily push also clears finished days from Garmin ----------------------------------------
+
+
+def _push_job(tmp_path: Path, engine: Engine, **settings_kw: Any) -> list[tuple[str, dt.date]]:
+    """Runs the daily push job with Garmin cleanup stubbed out; returns what it asked to clean."""
+    cleaned: list[tuple[str, dt.date]] = []
+    settings = Settings(data_dir=tmp_path, **settings_kw)
+
+    def fake_cleanup(conn: Any, *, athlete_id: str, today: dt.date, **kw: Any) -> Any:
+        from perseverer.planned_workouts import CleanupResult
+
+        cleaned.append((athlete_id, today))
+        return CleanupResult(2, 0, 0, False)
+
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.cleanup_past_garmin_workouts", side_effect=fake_cleanup),
+    ):
+        run_daily_workout_push()
+    return cleaned
+
+
+def _pushed(
+    engine: Engine, local_date: str, garmin_id: int, athlete_id: str = DEFAULT_ATHLETE_ID
+) -> None:
+    now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+    with engine.connect() as conn:
+        conn.execute(
+            planned_workout.insert().values(
+                athlete_id=athlete_id,
+                local_date=local_date,
+                sport="running",
+                name="Run",
+                source_text="Warmup 10m",
+                estimated_duration_s=600,
+                push_status="pushed",
+                garmin_workout_id=garmin_id,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        conn.commit()
+
+
+def test_the_daily_push_cleans_up_each_athlete_with_workouts_on_garmin(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _pushed(engine, "2026-01-01", 1)
+    assert [a for a, _ in _push_job(tmp_path, engine)] == [DEFAULT_ATHLETE_ID]
+
+
+def test_an_athlete_with_nothing_on_garmin_is_not_visited(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _insert(engine, local_date="2026-01-01")  # a plain draft, never pushed
+    assert _push_job(tmp_path, engine) == []
+
+
+def test_cleanup_uses_each_athletes_own_date(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.update()
+            .where(athlete.c.id == DEFAULT_ATHLETE_ID)
+            .values(timezone="Pacific/Auckland")
+        )
+        conn.commit()
+    _pushed(engine, "2026-01-01", 1)
+    ((_, today),) = _push_job(tmp_path, engine)
+    expected = dt.datetime.now(dt.UTC).astimezone(ZoneInfo("Pacific/Auckland")).date()
+    assert today == expected
+
+
+def test_cleanup_can_be_switched_off(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    _pushed(engine, "2026-01-01", 1)
+    assert _push_job(tmp_path, engine, planned_workout_cleanup_enabled=False) == []
+
+
+def test_a_cleanup_failure_never_breaks_the_job_or_other_athletes(tmp_path: Path) -> None:
+    engine = _engine(tmp_path)
+    with engine.connect() as conn:
+        conn.execute(
+            athlete.insert().values(
+                id=SECOND_ATHLETE_ID,
+                display_name="Two",
+                timezone="UTC",
+                unit_preference="metric",
+                created_at=dt.datetime.now(dt.UTC),
+            )
+        )
+        conn.commit()
+    _pushed(engine, "2026-01-01", 1)
+    _pushed(engine, "2026-01-01", 2, athlete_id=SECOND_ATHLETE_ID)
+    seen: list[str] = []
+
+    def flaky(conn: Any, *, athlete_id: str, **kw: Any) -> Any:
+        from perseverer.planned_workouts import CleanupResult
+
+        seen.append(athlete_id)
+        if athlete_id == DEFAULT_ATHLETE_ID:
+            raise RuntimeError("boom")
+        return CleanupResult(1, 0, 0, False)
+
+    settings = Settings(data_dir=tmp_path)
+    with (
+        patch("perseverer.worker.main.get_settings", return_value=settings),
+        patch("perseverer.worker.main.make_engine", return_value=engine),
+        patch("perseverer.worker.main.cleanup_past_garmin_workouts", side_effect=flaky),
+    ):
+        run_daily_workout_push()  # must not raise
+    assert set(seen) == {DEFAULT_ATHLETE_ID, SECOND_ATHLETE_ID}

@@ -225,7 +225,9 @@ Derived caches, written only by the refresh functions and recomputed by `sync re
   `scheduled_time` (`HH:MM`, optional) orders same-day workouts and is display-only (Garmin's
   schedule API is date-only). `comment` is a note for the whole workout, pushed as Garmin's
   `description`. Push lifecycle: `push_status` (`draft` | `pushed` | `push_failed`), `push_error`,
-  `garmin_workout_id`, `garmin_scheduled_at`. `completed_at` is set only by the athlete; a matching
+  `garmin_workout_id`, `garmin_scheduled_at` (both cleared once the day has passed and the worker has
+  deleted the workout from Garmin, the row itself and `push_status` are kept as history).
+  `completed_at` is set only by the athlete; a matching
   recorded activity is reported at read time as `matched_activity_id`, never stored. Route columns
   (`route_*`) and course columns (`garmin_course_*`): see
   [Planned-workout GPX route](#planned-workout-gpx-route).

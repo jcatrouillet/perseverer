@@ -122,6 +122,10 @@ class Settings(BaseSettings):
     # rolling-window check on tomorrow's run if this run's own DB read happened to race it.
     workout_push_schedule_hour: int = 4
     workout_push_schedule_minute: int = 45
+    # Right after that push, the workouts Perseverer sent for days that are already past are deleted
+    # from the athlete's Garmin library (the watch holds a limited number, and warns when it is
+    # full). Only workouts Perseverer created are touched, the local plan keeps its history.
+    planned_workout_cleanup_enabled: bool = True
 
     # --- Weekly/monthly email reports (email_reports.py, worker/main.py) ---
     # One shared SMTP relay for the whole deployment, not a per-athlete credential -- same

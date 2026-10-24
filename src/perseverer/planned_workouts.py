@@ -558,6 +558,73 @@ class PushResult:
     error: str | None
 
 
+@dataclass(frozen=True)
+class CleanupResult:
+    deleted: int  # removed from the Garmin library
+    already_gone: int  # Garmin no longer had it: the id was just forgotten
+    failed: int  # left in place, tried again on the next run
+    rate_limited: bool  # stopped early by Garmin's rate limit
+
+
+def cleanup_past_garmin_workouts(
+    conn: Connection,
+    *,
+    athlete_id: str,
+    today: date,
+    tokenstore_dir: Path,
+    rate_limits: RateLimitSettings,
+    client_factory: Any = Garmin,
+) -> CleanupResult:
+    """Removes from the athlete's Garmin workout library the workouts Perseverer pushed for days
+    before `today` (their own local date), so the watch -- which holds a limited number -- is not
+    filled with finished sessions. Only workouts Perseverer created are touched (their Garmin ids
+    are in `planned_workout.garmin_workout_id`); anything the athlete added in Garmin Connect
+    themselves is never listed, let alone deleted. The local row stays as plan history, only its
+    Garmin id and scheduled-at are cleared. A workout Garmin no longer has is simply forgotten.
+    Rate limited like every Garmin call: a 429 stops the run (no retry, the next run continues).
+    Raises `GarminAuthRequired` when there is no valid token store; commits after each deletion
+    so a stop halfway loses nothing."""
+    rows = conn.execute(
+        select(planned_workout.c.id, planned_workout.c.garmin_workout_id)
+        .where(
+            planned_workout.c.athlete_id == athlete_id,
+            planned_workout.c.garmin_workout_id.is_not(None),
+            planned_workout.c.local_date < today.isoformat(),
+        )
+        .order_by(planned_workout.c.local_date)
+    ).fetchall()
+    if not rows:
+        return CleanupResult(0, 0, 0, False)
+
+    adapter = GarminConnectAdapter(
+        tokenstore_dir,
+        RateLimiter(rate_limits.request_interval_s, rate_limits.max_requests_per_hour),
+        client_factory,
+    )
+    adapter.authenticate()
+    deleted = gone = failed = 0
+    for row in rows:
+        try:
+            adapter.delete_workout(row.garmin_workout_id)
+            deleted += 1
+        except GarminRateLimitAborted:
+            return CleanupResult(deleted, gone, failed, True)
+        except Exception as e:
+            text = str(e)
+            if "404" in text or "not found" in text.lower():
+                gone += 1
+            else:
+                failed += 1
+                continue
+        conn.execute(
+            planned_workout.update()
+            .where(planned_workout.c.id == row.id)
+            .values(garmin_workout_id=None, garmin_scheduled_at=None)
+        )
+        conn.commit()
+    return CleanupResult(deleted, gone, failed, False)
+
+
 def push_planned_workout(
     conn: Connection,
     *,

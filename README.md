@@ -252,7 +252,8 @@ With the **Cycling** switch, the same tabs describe your rides:
 
 ### Planning and goals
 
-- **Planned workouts on the calendar**, pushed to Garmin automatically within a week of their date:
+- **Planned workouts on the calendar**, pushed to Garmin automatically within a week of their date
+  and removed from Garmin once their day has passed, so the watch never fills up:
   - **Running** uses a compact text syntax with a live preview: paces, heart-rate or zone targets,
     cadence, repeats, and lap-button steps.
   - **HIIT and strength** use 1,527 Garmin exercises with sets, reps and weights.

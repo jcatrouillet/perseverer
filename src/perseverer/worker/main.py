@@ -34,6 +34,7 @@ from sqlalchemy import Connection, select
 
 from perseverer.adapters.eufy import resolve_eufy_credentials, sync_eufy
 from perseverer.adapters.garmin_connect import (
+    GarminAuthRequired,
     GarminRateLimitAborted,
     RateLimitSettings,
     sync_garmin_connect,
@@ -54,7 +55,7 @@ from perseverer.email_reports import (
     send_report_email,
 )
 from perseverer.gear import send_over_limit_alerts
-from perseverer.planned_workouts import push_planned_workout
+from perseverer.planned_workouts import cleanup_past_garmin_workouts, push_planned_workout
 from perseverer.staleness import check_staleness, notify_webhook
 
 logger = logging.getLogger("perseverer.worker")
@@ -309,6 +310,57 @@ def run_daily_workout_push() -> None:
                 )
                 rate_limited_athletes.add(row.athlete_id)
         logger.info("scheduled workout push finished: pushed=%d of %d due", pushed, len(due))
+        if settings.planned_workout_cleanup_enabled:
+            _cleanup_past_garmin_workouts(conn, settings, rate_limits, skip=rate_limited_athletes)
+
+
+def _cleanup_past_garmin_workouts(
+    conn: Connection,
+    settings: Settings,
+    rate_limits: RateLimitSettings,
+    *,
+    skip: set[str],
+) -> None:
+    """After the push: every athlete's finished days come off their Garmin workout library (see
+    `cleanup_past_garmin_workouts`). An athlete who just hit Garmin's rate limit is left for
+    tomorrow; one athlete's failure never stops another's."""
+    athletes = conn.execute(
+        select(planned_workout.c.athlete_id, athlete_table.c.timezone)
+        .select_from(
+            planned_workout.join(athlete_table, athlete_table.c.id == planned_workout.c.athlete_id)
+        )
+        .where(planned_workout.c.garmin_workout_id.is_not(None))
+        .distinct()
+    ).fetchall()
+    now = datetime.now(UTC)
+    for row in athletes:
+        if row.athlete_id in skip:
+            continue
+        today = now.astimezone(athlete_zone(row.timezone, settings.schedule_timezone)).date()
+        try:
+            result = cleanup_past_garmin_workouts(
+                conn,
+                athlete_id=row.athlete_id,
+                today=today,
+                tokenstore_dir=settings.garmin_tokenstore_dir_for(row.athlete_id),
+                rate_limits=rate_limits,
+            )
+        except GarminAuthRequired:
+            logger.info("workout cleanup skipped for %s: no Garmin login", row.athlete_id)
+            continue
+        except Exception:
+            conn.rollback()
+            logger.exception("garmin workout cleanup failed for athlete %s", row.athlete_id)
+            continue
+        if result.deleted or result.already_gone or result.failed or result.rate_limited:
+            logger.info(
+                "garmin workout cleanup for %s: deleted=%d already_gone=%d failed=%d%s",
+                row.athlete_id,
+                result.deleted,
+                result.already_gone,
+                result.failed,
+                " (stopped by the rate limit)" if result.rate_limited else "",
+            )
 
 
 def _sync_garmin_before_report(conn: Connection, settings: Settings, athlete_id: str) -> None:

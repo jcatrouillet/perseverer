@@ -33,6 +33,7 @@ from perseverer.planned_workouts import (
     activity_matches_planned_sport,
     build_exercise_workout,
     build_running_workout,
+    cleanup_past_garmin_workouts,
     matching_activity_id,
     push_planned_workout,
 )
@@ -792,3 +793,193 @@ class TestActivitiesByLocalDateAndMatchingActivityId:
         with engine.connect() as conn:
             by_date = activities_by_local_date(conn, DEFAULT_ATHLETE_ID, "2026-09-14", "2026-09-14")
         assert matching_activity_id(by_date.get("2026-09-14", []), "running") is None
+
+
+class TestCleanupPastGarminWorkouts:
+    """Workouts pushed for days that are over come off the Garmin library, and only those."""
+
+    TODAY = dt.date(2026, 10, 24)
+    LIMITS = RateLimitSettings(request_interval_s=0, max_requests_per_hour=999)
+
+    def _row(
+        self, engine: Engine, local_date: str, garmin_id: int | None, status: str = "pushed"
+    ) -> int:
+        now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+        with engine.connect() as conn:
+            result = conn.execute(
+                planned_workout.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    local_date=local_date,
+                    sport="running",
+                    name="Run",
+                    source_text="Warmup 10m",
+                    estimated_duration_s=600,
+                    push_status=status,
+                    garmin_workout_id=garmin_id,
+                    garmin_scheduled_at=now if garmin_id else None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            conn.commit()
+            assert result.inserted_primary_key is not None
+            return int(result.inserted_primary_key[0])
+
+    def _clean(self, engine: Engine, tmp_path: Path, client: Any) -> Any:
+        with engine.connect() as conn:
+            return cleanup_past_garmin_workouts(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                today=self.TODAY,
+                tokenstore_dir=tmp_path / "tokens",
+                rate_limits=self.LIMITS,
+                client_factory=lambda: client,
+            )
+
+    def _garmin_id(self, engine: Engine, row_id: int) -> int | None:
+        with engine.connect() as conn:
+            value = conn.execute(
+                select(planned_workout.c.garmin_workout_id).where(planned_workout.c.id == row_id)
+            ).scalar_one()
+        return None if value is None else int(value)
+
+    def test_past_workouts_are_deleted_from_garmin_and_today_and_later_are_kept(
+        self, tmp_path: Path
+    ) -> None:
+        engine = _engine(tmp_path)
+        yesterday = self._row(engine, "2026-10-23", 11)
+        long_ago = self._row(engine, "2026-09-01", 12, status="push_failed")
+        today = self._row(engine, "2026-10-24", 13)
+        tomorrow = self._row(engine, "2026-10-25", 14)
+        never_pushed = self._row(engine, "2026-09-02", None, status="draft")
+        client = FakePushGarminClient()
+
+        result = self._clean(engine, tmp_path, client)
+
+        assert (result.deleted, result.already_gone, result.failed, result.rate_limited) == (
+            2, 0, 0, False,
+        )  # fmt: skip
+        assert sorted(client.deleted) == [11, 12]
+        assert self._garmin_id(engine, yesterday) is None
+        assert self._garmin_id(engine, long_ago) is None
+        assert self._garmin_id(engine, today) == 13
+        assert self._garmin_id(engine, tomorrow) == 14
+        assert self._garmin_id(engine, never_pushed) is None
+
+    def test_the_local_plan_is_kept_as_history(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        row = self._row(engine, "2026-10-01", 21)
+        self._clean(engine, tmp_path, FakePushGarminClient())
+        with engine.connect() as conn:
+            kept = conn.execute(select(planned_workout).where(planned_workout.c.id == row)).one()
+        assert kept.name == "Run" and kept.push_status == "pushed"
+        assert kept.garmin_workout_id is None and kept.garmin_scheduled_at is None
+
+    def test_another_athletes_workouts_are_never_touched(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        mine = self._row(engine, "2026-10-01", 31)
+        with engine.connect() as conn:
+            conn.execute(
+                athlete.insert().values(
+                    id="other",
+                    display_name="Other",
+                    timezone="UTC",
+                    unit_preference="metric",
+                    created_at=dt.datetime.now(dt.UTC),
+                )
+            )
+            now = dt.datetime.now(dt.UTC).replace(tzinfo=None)
+            conn.execute(
+                planned_workout.insert().values(
+                    athlete_id="other",
+                    local_date="2026-10-01",
+                    sport="running",
+                    name="Theirs",
+                    source_text="Warmup 10m",
+                    estimated_duration_s=600,
+                    push_status="pushed",
+                    garmin_workout_id=32,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            conn.commit()
+        client = FakePushGarminClient()
+        self._clean(engine, tmp_path, client)
+        assert client.deleted == [31]
+        assert self._garmin_id(engine, mine) is None
+
+    def test_a_workout_garmin_no_longer_has_is_just_forgotten(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        row = self._row(engine, "2026-10-01", 41)
+
+        class Gone(FakePushGarminClient):
+            def delete_workout(self, workout_id: int) -> None:
+                raise RuntimeError("404 Not Found")
+
+        result = self._clean(engine, tmp_path, Gone())
+        assert (result.deleted, result.already_gone, result.failed) == (0, 1, 0)
+        assert self._garmin_id(engine, row) is None
+
+    def test_another_error_leaves_it_for_the_next_run(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        broken = self._row(engine, "2026-10-01", 51)
+        fine = self._row(engine, "2026-10-02", 52)
+
+        class Flaky(FakePushGarminClient):
+            def delete_workout(self, workout_id: int) -> None:
+                if workout_id == 51:
+                    raise RuntimeError("500 Internal Server Error")
+                self.deleted.append(workout_id)
+
+        result = self._clean(engine, tmp_path, Flaky())
+        assert (result.deleted, result.failed) == (1, 1)
+        assert self._garmin_id(engine, broken) == 51
+        assert self._garmin_id(engine, fine) is None
+
+    def test_a_rate_limit_stops_the_run_at_once_without_retrying(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        first = self._row(engine, "2026-10-01", 61)
+        second = self._row(engine, "2026-10-02", 62)
+
+        class Limited(FakePushGarminClient):
+            calls = 0
+
+            def delete_workout(self, workout_id: int) -> None:
+                Limited.calls += 1
+                if workout_id == 62:
+                    raise GarminConnectTooManyRequestsError("429")
+                self.deleted.append(workout_id)
+
+        result = self._clean(engine, tmp_path, Limited())
+        assert result.rate_limited is True and result.deleted == 1
+        assert Limited.calls == 2  # the 429 was not retried
+        assert self._garmin_id(engine, first) is None
+        assert self._garmin_id(engine, second) == 62
+
+    def test_nothing_to_clean_never_touches_garmin(self, tmp_path: Path) -> None:
+        engine = _engine(tmp_path)
+        self._row(engine, "2026-10-30", 71)  # upcoming only
+
+        def explode() -> Any:
+            raise AssertionError("must not log in to Garmin when there is nothing to delete")
+
+        with engine.connect() as conn:
+            result = cleanup_past_garmin_workouts(
+                conn,
+                athlete_id=DEFAULT_ATHLETE_ID,
+                today=self.TODAY,
+                tokenstore_dir=tmp_path / "tokens",
+                rate_limits=self.LIMITS,
+                client_factory=explode,
+            )
+        assert (result.deleted, result.already_gone, result.failed) == (0, 0, 0)
+
+    def test_without_a_garmin_login_it_raises_for_the_caller_to_skip(self, tmp_path: Path) -> None:
+        from perseverer.adapters.garmin_connect import GarminAuthRequired
+
+        engine = _engine(tmp_path)
+        self._row(engine, "2026-10-01", 81)
+        client = FakePushGarminClient(raise_on_login=GarminConnectAuthenticationError("no token"))
+        with pytest.raises(GarminAuthRequired):
+            self._clean(engine, tmp_path, client)
