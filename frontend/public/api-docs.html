@@ -2815,6 +2815,35 @@ const GROUPS = [
     },
   ]},
 
+  { id: "posters", title: "Posters", endpoints: [
+    { method: "POST", path: "/api/v1/posters", summary: "Queue a year poster (grid, heatmap, calendar or circular); it is drawn in the background.",
+      description: "Returns at once with status queued; poll GET /posters/{id} until done or failed. sports empty = every sport; virtual activities are left out unless include_virtual. Heatmap only: center_lat/center_lon (both or neither) and radius_km; omitted, the centre is the home address (else profile home, else where the activities start) and the radius is the smallest that holds at least half of the activities' start points.",
+      body: { fields: [["kind","string","req","","grid | heatmap | calendar | circular"],["year","integer","req","","1990..2100"],["sports","string[]","opt","[]","Empty = every sport."],["include_virtual","boolean","opt","false",""],["center_lat","number|null","opt","null","Heatmap only."],["center_lon","number|null","opt","null","Heatmap only."],["radius_km","number|null","opt","null","Heatmap only: half the picture's width on the ground."]] },
+      responses: [ { code: 202, note: "PosterOut with status queued." }, { code: 422, note: "Invalid body, e.g. only one of center_lat / center_lon." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/posters", summary: "List the posters, newest first.",
+      description: "Optional year query. A job still queued or running after 30 minutes was lost to a restart and is reported failed.",
+      responses: [ { code: 200, note: "PosterOut[]: id, kind, year, sports, include_virtual, center_lat, center_lon, radius_km, status (queued|running|done|failed), error, filename, size_bytes, activity_count, created_at, finished_at." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/posters/{poster_id}", summary: "One poster.",
+      responses: [ { code: 200, note: "PosterOut." }, { code: 404, note: "Not the caller's." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/posters/{poster_id}/file", summary: "Download the poster PNG.",
+      description: "image/png, downloaded as the poster's filename.",
+      responses: [ { code: 200, note: "The image." }, { code: 409, note: "Not done yet." }, { code: 404, note: "Not the caller's." } ], example: {}
+    },
+    { method: "DELETE", path: "/api/v1/posters/{poster_id}", summary: "Delete a poster and its file.",
+      responses: [ { code: 200, note: "Deleted." }, { code: 404, note: "Not the caller's." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/posters/sports", summary: "The sports a year has, for choosing what to draw.",
+      description: "year is required; include_virtual defaults to false.",
+      responses: [ { code: 200, note: "Most frequent first: sport, activities, with_route (those with a GPS trace)." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/posters/heatmap-defaults", summary: "The heatmap's default centre and range for a selection.",
+      description: "year is required; sports (repeatable) and include_virtual narrow the selection.",
+      responses: [ { code: 200, note: "available, center_lat, center_lon, radius_km, source (home_address | profile_home | activities), activities (with a GPS trace)." } ], example: {}
+    },
+  ]},
   { id: "sharing", title: "Sharing", endpoints: [
     { method: "POST", path: "/api/v1/activities/{activity_id}/share", summary: "Create an unauthenticated share link for one activity.",
       description: "The raw token is only ever returned here — only its SHA-256 hash is stored. Anyone with the resulting URL can view the activity without signing in.",

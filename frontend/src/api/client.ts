@@ -136,6 +136,24 @@ export function apiDelete<T>(path: string): Promise<T> {
   return request<T>(path, { method: "DELETE" });
 }
 
+/** A binary response (a poster PNG) fetched with the stored credential, since an <img> or a plain
+ * link cannot send the Authorization header. */
+export async function apiBlob(path: string): Promise<Blob> {
+  const credential = getStoredCredential();
+  const headers = new Headers();
+  if (credential) headers.set(credential.header, credential.value);
+  const response = await fetch(`${getBaseUrl()}${path}`, { method: "GET", headers });
+  if (response.status === 401) {
+    clearCredential();
+    throw new AuthError("authentication failed or expired -- please sign in again");
+  }
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new ApiError(response.status, body, errorDetail(body));
+  }
+  return response.blob();
+}
+
 // For multipart/form-data bodies (file uploads) -- see request()'s own FormData branch above.
 export function apiPostForm<T>(path: string, formData: FormData): Promise<T> {
   return request<T>(path, { method: "POST", body: formData });

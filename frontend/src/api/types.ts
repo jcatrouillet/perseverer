@@ -1516,3 +1516,51 @@ export interface CyclingPowerOut {
   last_power_ride_date: string | null;
   missing: string[];
 }
+
+// POST/GET /posters -- year posters rendered in the background (posters.py).
+export type PosterKind = "grid" | "heatmap" | "calendar" | "circular";
+
+export interface PosterIn {
+  kind: PosterKind;
+  year: number;
+  /** Empty = every sport. */
+  sports: string[];
+  include_virtual: boolean;
+  /** Heatmap only; omitted = the home address and a radius holding half the activities. */
+  center_lat?: number | null;
+  center_lon?: number | null;
+  radius_km?: number | null;
+}
+
+export interface PosterOut {
+  id: string;
+  kind: PosterKind;
+  year: number;
+  sports: string[];
+  include_virtual: boolean;
+  center_lat: number | null;
+  center_lon: number | null;
+  radius_km: number | null;
+  status: "queued" | "running" | "done" | "failed";
+  error: string | null;
+  filename: string | null;
+  size_bytes: number | null;
+  activity_count: number | null;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface PosterSportOut {
+  sport: string;
+  activities: number;
+  with_route: number;
+}
+
+export interface HeatmapDefaultsOut {
+  available: boolean;
+  center_lat: number | null;
+  center_lon: number | null;
+  radius_km: number | null;
+  source: "home_address" | "profile_home" | "activities" | null;
+  activities: number;
+}

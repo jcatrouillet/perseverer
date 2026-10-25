@@ -21,6 +21,7 @@ import { CyclingStats } from "../../components/CyclingStats";
 import { HikeStatsCard } from "../../components/HikeStatsCard";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { PeriodStatsCard } from "../../components/PeriodStatsCard";
+import { PostersSection } from "../../components/PostersSection";
 import { RunningStats } from "../../components/RunningStats";
 import { SleepDurationChart } from "../../components/SleepDurationChart";
 import { monthName, yearRange } from "../../dateUtils";
@@ -214,6 +215,8 @@ export function YearView({ year }: { year: number }) {
           );
         })}
       </div>
+
+      <PostersSection year={year} />
     </main>
   );
 }

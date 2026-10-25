@@ -97,6 +97,10 @@ import type {
   PlannedWorkoutStepIn,
   RaceReadinessOut,
   RecurringWorkoutOut,
+  HeatmapDefaultsOut,
+  PosterIn,
+  PosterOut,
+  PosterSportOut,
   RunningLoadConfigIn,
   RunningLoadConfigOut,
   ShareLinkOut,
@@ -1980,5 +1984,55 @@ export function useCreatePeriodShare(
       const qs = periodStart ? `?period_start=${encodeURIComponent(periodStart)}` : "";
       return apiPost<ShareLinkOut>(`/api/v1/periods/${periodType}/share${qs}`, {});
     },
+  });
+}
+
+const POSTERS_KEY = "posters";
+
+/** The year's posters, newest first; polls while any is still being drawn. */
+export function usePosters(year: number) {
+  return useQuery({
+    queryKey: [POSTERS_KEY, year],
+    queryFn: () => apiGet<PosterOut[]>(`/api/v1/posters?year=${year}`),
+    refetchInterval: (query) =>
+      query.state.data?.some((p) => p.status === "queued" || p.status === "running") ? 2000 : false,
+  });
+}
+
+export function usePosterSports(year: number, includeVirtual: boolean) {
+  return useQuery({
+    queryKey: ["poster-sports", year, includeVirtual],
+    queryFn: () =>
+      apiGet<PosterSportOut[]>(
+        `/api/v1/posters/sports?year=${year}&include_virtual=${includeVirtual}`,
+      ),
+  });
+}
+
+export function useHeatmapDefaults(year: number, sports: string[], includeVirtual: boolean) {
+  return useQuery({
+    queryKey: ["poster-heatmap-defaults", year, sports, includeVirtual],
+    queryFn: () => {
+      const params = new URLSearchParams({ year: String(year) });
+      params.set("include_virtual", String(includeVirtual));
+      for (const s of sports) params.append("sports", s);
+      return apiGet<HeatmapDefaultsOut>(`/api/v1/posters/heatmap-defaults?${params}`);
+    },
+  });
+}
+
+export function useCreatePoster() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PosterIn) => apiPost<PosterOut>("/api/v1/posters", body),
+    onSuccess: () => void client.invalidateQueries({ queryKey: [POSTERS_KEY] }),
+  });
+}
+
+export function useDeletePoster() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<void>(`/api/v1/posters/${id}`),
+    onSuccess: () => void client.invalidateQueries({ queryKey: [POSTERS_KEY] }),
   });
 }

@@ -2172,6 +2172,70 @@ nullable).
 
 ---
 
+## Posters
+
+A year turned into a 2667 x 4000 PNG to print or share (`posters.py`). Four kinds: `grid` (every
+GPS trace of the year, one small tile each), `heatmap` (the traces over one point, glowing where
+the athlete goes most), `calendar` (each day of the year, coloured by sport) and `circular` (one
+bar per activity around the year, as long as its distance; races in their own colour). A poster
+is drawn **in the background**: `POST /posters` returns at once with status `queued`, and the
+client polls `GET /posters/{id}` (the Year view polls the list) until it is `done` or `failed`.
+Posters are derived files under `<data dir>/posters/`, so deleting one loses nothing. A job still
+`queued` or `running` after 30 minutes was lost to a restart and is reported `failed`.
+
+`sports` is a list of activity sports; empty means every sport. Virtual activities (Zwift and the
+like) are left out unless `include_virtual` is set. The grid and the heatmap use only activities
+with a GPS trace; the calendar and the circular view use those with a distance.
+
+### `POST /posters`
+
+**Request body** (`PosterIn`): `kind` (`"grid"|"heatmap"|"calendar"|"circular"`), `year`,
+`sports` (strings, default `[]`), `include_virtual` (default `false`). Heatmap only, and optional:
+`center_lat` / `center_lon` (both or neither) and `radius_km` (the half-width of the picture on
+the ground). Omitted, the centre is the home address (Settings -> Commute), else the profile's
+home point, else the middle of where the activities start, and the radius is the smallest that
+holds at least half of the activities' start points (never under 1 km).
+
+**Responses:** `202` -> `PosterOut` with status `queued`; `422` -> invalid body (for example only
+one of `center_lat` / `center_lon`).
+
+### `GET /posters`
+
+The athlete's posters, newest first. Query: `year` (optional). **Response `200`:** `PosterOut[]`:
+`id`, `kind`, `year`, `sports`, `include_virtual`, `center_lat` / `center_lon` / `radius_km` (as
+requested, or `null`), `status` (`"queued"|"running"|"done"|"failed"`), `error` (why it failed,
+for example nothing matched the selection), `filename` (the name it downloads as, such as
+`Running-2026-all-grid-4000-20261025-0121-d009.png`), `size_bytes`, `activity_count`,
+`created_at`, `finished_at`.
+
+### `GET /posters/{poster_id}`
+
+One poster (`PosterOut`). **`404`** if it is not the caller's.
+
+### `GET /posters/{poster_id}/file`
+
+The PNG (`image/png`, downloaded as `filename`). **`409`** while it is not `done`; **`404`** if it
+is not the caller's.
+
+### `DELETE /posters/{poster_id}`
+
+Deletes the row and the file. **`404`** if it is not the caller's.
+
+### `GET /posters/sports`
+
+What the poster page offers to choose from. Query: `year` (required), `include_virtual` (default
+`false`). **Response `200`:** `PosterSportOut[]`, most frequent first: `sport`, `activities`,
+`with_route` (how many of them have a GPS trace).
+
+### `GET /posters/heatmap-defaults`
+
+The heatmap's default centre and range for a selection. Query: `year` (required), `sports`
+(repeatable), `include_virtual`. **Response `200`:** `HeatmapDefaultsOut`: `available` (`false`
+when no selected activity has a start point), `center_lat`, `center_lon`, `radius_km`, `source`
+(`"home_address"|"profile_home"|"activities"`), `activities` (with a GPS trace).
+
+---
+
 ## Sharing
 
 An athlete-issued link granting **unauthenticated, read-only** access to one activity or one

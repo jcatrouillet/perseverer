@@ -837,6 +837,18 @@ and work points, either way round (both must be set); `activity.is_virtual` is t
 contains "Zwift" (any case). It runs after every import, after a rebuild's corrections are
 re-applied, after a rename, and when the addresses change, and re-evaluates both directions.
 
+### Year posters (poster)
+
+**`poster`**: one row per poster the athlete asked for, which is also the background job's state:
+`id` (ULID), `athlete_id`, `kind` (`grid | heatmap | calendar | circular`), `year`, `params`
+(JSON: `sports`, `include_virtual`, and for a heatmap `center_lat`, `center_lon`, `radius_km`, any
+of which may be null), `status` (`queued | running | done | failed`), `error`, `filename` (the
+download name, `<Sport>-<year>-all-<kind>-4000-<yyyymmdd>-<hhmm>-<4 hex>.png`), `size_bytes`,
+`activity_count`, `created_at`, `started_at`, `finished_at` (naive UTC). The picture is the file
+`<data dir>/posters/<id>.png`, derived from the activities and regenerable, so it is not part of
+the raw archive and a rebuild leaves it alone. A row still `queued`/`running` 30 minutes after it
+was created is reported `failed` (a restart lost it).
+
 ### Email reports
 
 **`athlete_email_report_config`**: `weekly_enabled`, `monthly_enabled` (both default false);

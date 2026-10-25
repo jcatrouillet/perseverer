@@ -67,6 +67,12 @@ Form and health summaries.
 |---|---|
 | ![Month view](docs/screenshots/calendar-month.png) | ![Year view](docs/screenshots/calendar-year.png) |
 
+The year view can also make **posters** of the year, drawn in the background and downloaded as
+PNGs: a grid of every GPS trace (one sport or all), a heatmap around a point you pick on a map
+(by default your home, with a range that holds at least half of your activities), a calendar
+coloured by sport, and a circular view with one bar per activity, as long as its distance, with
+races in their own colour.
+
 Runs, rides, hikes and bouldering each get their own section in the period summaries (week,
 month, year and all time):
 

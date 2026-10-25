@@ -179,6 +179,30 @@ athlete_commute_config = Table(
     Column("updated_at", DateTime(), nullable=False),
 )
 
+# A year poster (posters.py): a PNG rendered in the background from the athlete's activities --
+# a grid of every GPS trace, a heatmap around a chosen point, a calendar, a circular view.  The row
+# is the job (queued -> running -> done | failed); the picture itself is a file under
+# <data_dir>/posters/<id>.png, derived and regenerable, so deleting one loses nothing.  `params`
+# is the selection as JSON (sports, include_virtual, and the heatmap's centre and radius).
+poster = Table(
+    "poster",
+    metadata,
+    Column("id", String(26), primary_key=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("kind", String, nullable=False),  # grid | heatmap | calendar | circular
+    Column("year", Integer, nullable=False),
+    Column("params", Text, nullable=False),
+    Column("status", String, nullable=False),  # queued | running | done | failed
+    Column("error", Text, nullable=True),
+    Column("filename", String, nullable=True),  # the name the file is downloaded as
+    Column("size_bytes", Integer, nullable=True),
+    Column("activity_count", Integer, nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    Column("started_at", DateTime(), nullable=True),
+    Column("finished_at", DateTime(), nullable=True),
+    Index("ix_poster_athlete_year", "athlete_id", "year"),
+)
+
 # Per-athlete opt-in for the weekly/monthly training-report emails (email_reports.py). One row
 # per athlete (upsert, same shape as athlete_hr_zone_config above); no row, or a row with both
 # flags False, means "no emails" -- the default. The SMTP relay itself is deployment-global

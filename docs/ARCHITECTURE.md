@@ -121,6 +121,7 @@ directory and the archive is browsable with ordinary tools.
 | SQLite (WAL) | `perseverer.db` | Activities, laps, splits, health observations, sleep, rollups, notes, goals, plans, config | Single file, transactional, no server; WAL lets the api and worker read while one writes. |
 | Parquet | `parquet/<athlete>/<activity>.parquet` and monthly health-stream files | Full-resolution per-second activity streams and intraday health series (body battery) | Columnar, compressed, cheap to scan; never rows in SQLite. |
 | DuckDB | in-process, read-only over SQLite + Parquet | Stream downsampling and multi-file scans | One SQL statement replaces Python loops for the few queries that need it. |
+| Posters | `posters/<poster id>.png`, table `poster` | The year posters, rendered on request | Derived and regenerable (Pillow, [posters.py](../src/perseverer/posters.py)); the row is the background job's state. |
 | Token stores | `garmin_tokens/<athlete>/`, `kaya_tokens/<athlete>/` | Vendor session tokens | Credentials are never stored; see [Writing back to Garmin](#writing-back-to-garmin). |
 
 The schema is SQLAlchemy Core (no ORM), defined in one file, `db/schema.py`, and migrated with
@@ -192,6 +193,21 @@ family and duration, independent of source, and every decision is logged in `mer
 with human-readable reasons. Merges are inspectable and reversible from the activity page
 (split re-parses the archived bytes of one source). For duplicates the matcher missed, the athlete
 can merge two activities by hand and pick, field by field, which side wins.
+
+### Year posters
+
+`posters.py` draws four 2667 x 4000 pictures of a year with Pillow: a grid of every GPS trace, a
+heatmap around a point (each trace accumulated per colour and added, so overlaps glow), a calendar
+and a circular view of the distances. Lines are drawn at three times the size and reduced, so they
+are smooth. `POST /posters` inserts a `poster` row and schedules `api/routers/posters.py::
+run_poster_job` as a FastAPI background task, so the request returns at once; the job reads the
+activities and closes its read transaction **before** drawing (SQLite has one writer, and drawing
+takes seconds), writes the PNG under `<data dir>/posters/`, then marks the row `done`. The Year
+view polls `GET /posters` every two seconds while one is `queued` or `running`. The job runs in the
+`api` process, so a restart loses it: a row still unfinished after 30 minutes is reported
+`failed`. The heatmap's default centre is the home address (`athlete_commute_config`), else the
+profile's home point, else the middle of the start points, with the smallest radius holding half
+of them.
 
 ### Durable overrides and rebuild
 

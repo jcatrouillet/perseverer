@@ -114,6 +114,9 @@ Things that are easy to get wrong, each learned from a real bug:
   while reading many stream files: download or compute first, then write and commit, and commit
   between the steps of an import's refresh chain (`tests/test_short_write_transactions.py`).
 - Every container write goes under `/data`; `api` and `worker` run read-only.
+- Anything that takes seconds (the year posters) runs as a background job with a table row for its
+  state, which the page polls; never draw or compute for seconds inside a request or while a write
+  transaction is open.
 - Vendor lookups that cost money or are rate limited (weather, geocoding) are cached and archived;
   public pages read the cache only.
 - The PWA service worker must not intercept `/api/`, `/mcp`, `/share/`, `/oauth/` or the OAuth

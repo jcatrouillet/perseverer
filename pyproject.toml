@@ -33,6 +33,7 @@ dependencies = [
   # of vendor-format correctness this project defers to a real library for elsewhere rather than
   # hand-rolling.
   "icalendar>=7.3.0",
+  "pillow>=13.0.0",
 ]
 
 [project.scripts]
