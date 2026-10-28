@@ -10,6 +10,7 @@ import {
 import { BikesSection } from "../components/BikesSection";
 import { Icon } from "../components/Icon";
 import { Modal } from "../components/Modal";
+import { sportUsesShoes } from "../shoeSports";
 import "../styles/gear.css";
 
 const initial = {
@@ -33,7 +34,11 @@ export function GearPage() {
   const setDefault = useSetDefaultShoe();
   const retire = useRetireShoe();
   const sports = [
-    ...new Set((activities.data ?? []).filter((a) => (a.distance_m ?? 0) > 0).map((a) => a.sport)),
+    ...new Set(
+      (activities.data ?? [])
+        .filter((a) => (a.distance_m ?? 0) > 0 && sportUsesShoes(a.sport, a.sub_sport))
+        .map((a) => a.sport),
+    ),
   ].sort();
 
   const submit = (event: FormEvent) => {

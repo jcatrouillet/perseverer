@@ -82,6 +82,7 @@ import {
   isRunningSport,
   localTimeLabel,
 } from "../runningStats";
+import { sportUsesShoes } from "../shoeSports";
 import { computeSplitsAtInterval } from "../splits";
 import {
   alignLapsToWorkoutSteps,
@@ -362,7 +363,11 @@ export function ActivityDetailPage({ id }: { id: string }) {
         {a.device &&
           a.device.manufacturer &&
           ` · ${a.device.manufacturer} ${a.device.product ?? ""}`}
-        <ActivityShoePicker activityId={id} hasDistance={(a.distance_m ?? 0) > 0} />
+        {/* Shoes only where the sport is done in them (a ride has a bike, below). */}
+        <ActivityShoePicker
+          activityId={id}
+          hasDistance={(a.distance_m ?? 0) > 0 && sportUsesShoes(a.sport, a.sub_sport)}
+        />
         <ActivityBikePicker activityId={id} isRide={isCyclingSport(a.sport)} />
       </p>
       <nav className="activity-detail__sections" aria-label="Activity sections">

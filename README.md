@@ -280,7 +280,8 @@ With the **Cycling** switch, the same tabs describe your rides:
 ### Gear and exercises
 
 **Shoes:** mileage from your activities, a default pair per sport, and a replacement alert by
-banner and email when a pair reaches its limit.
+banner and email when a pair reaches its limit. Shoes are offered only for sports done in them
+(running, walking, hiking, racket sports, gym training), not for rides, rowing, yoga and the like.
 
 **Bikes and tires:**
 
