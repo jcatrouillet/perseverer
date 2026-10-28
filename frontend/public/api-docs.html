@@ -1235,6 +1235,7 @@ const SCHEMAS = [
       ["unit_preference","string","\"metric\" or \"imperial\" -- km vs. miles for every distance/pace/speed display. Default \"metric\"."],
       ["insights_sport","string","\"running\" or \"cycling\" -- the sport the Insights page opens on (it has a switch for the other). Default \"running\"."],
       ["commute_filter","boolean","Whether the Insights page offers an \"Exclude commutes\" toggle. Default false."],
+      ["map_style","string","\"light\" (CARTO Positron) or \"terrain\" (OpenTopoMap, relief and contour lines) -- the background of an activity's route map and its GIF export. Default \"light\"."],
     ] },
   { name: "WeatherForecastOut", note: "Returned by GET /weather/forecast. See “available: false” in Conventions -- false when the athlete hasn't set a home location (home_lat/home_lon on PUT /settings/profile) or the coarse-forecast Open-Meteo fetch failed. Deliberately not archived or cached, unlike every other Open-Meteo response in this API -- see docs/DATA_DICTIONARY.md's own Weather forecast section.", fields: [
       ["available","boolean","required"],
@@ -2670,6 +2671,7 @@ const GROUPS = [
         ["time_format","string","opt","\"24h\"","\"24h\" or \"12h\"."],
         ["default_view","string","opt","\"week\"","\"week\", \"month\", \"day\", \"activities\", or \"last_activity\"."],
         ["unit_preference","string","opt","\"metric\"","\"metric\" or \"imperial\"."],
+        ["map_style","string","opt","\"light\"","\"light\" or \"terrain\"."],
       ]},
       responses: [ { code: 200, ref: "PersonalizeSettingsOut" }, { code: 422, note: "A value outside the closed set for any field." } ],
       example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/personalize \\

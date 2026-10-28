@@ -103,8 +103,8 @@ month, year and all time):
 ### Activities
 
 Every activity has a detail page: weather at the time, pace variability, distance, heart rate and
-elevation stats, training effect, the place name, the route on a map with a replay (exportable as
-an image or an animated GIF), and a per-km split table with grade-adjusted pace. Activities from several sources are merged into one, with the evidence shown
+elevation stats, training effect, the place name, the route on a map (light or terrain background, your choice in Personalize or on the map) with a replay (exportable as
+an image or an animated GIF showing the start and finish), and a per-km split table with grade-adjusted pace. Activities from several sources are merged into one, with the evidence shown
 and a one-click split if the merge was wrong.
 
 | Run | Route and splits |

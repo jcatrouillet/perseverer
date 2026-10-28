@@ -1977,7 +1977,9 @@ only by the frontend's own rendering. `unit_preference` is the `athlete.unit_pre
 (`"metric"|"imperial"`, default `"metric"`), `insights_sport` (`"running"|"cycling"`,
 default `"running"`: the sport the Insights page opens on; the page has a switch for the
 other), `commute_filter` (boolean, default `false`: whether the Insights page offers an
-"Exclude commutes" toggle).
+"Exclude commutes" toggle), `map_style` (`"light"|"terrain"`, default `"light"`: the background
+of an activity's route map and its GIF export, CARTO Positron or OpenTopoMap with relief and
+contour lines).
 
 ### `PUT /settings/personalize`
 

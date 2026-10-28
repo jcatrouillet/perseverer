@@ -599,6 +599,7 @@ def test_personalize_get_returns_the_seeded_defaults(
         "unit_preference": "metric",
         "insights_sport": "running",
         "commute_filter": False,
+        "map_style": "light",
     }
 
 
@@ -614,6 +615,7 @@ def test_personalize_put_stores_and_returns_the_values(
             "unit_preference": "imperial",
             "insights_sport": "cycling",
             "commute_filter": True,
+            "map_style": "terrain",
         },
         headers=auth_headers,
     )
@@ -625,6 +627,7 @@ def test_personalize_put_stores_and_returns_the_values(
         "unit_preference": "imperial",
         "insights_sport": "cycling",
         "commute_filter": True,
+        "map_style": "terrain",
     }
 
     with engine.connect() as conn:
@@ -657,6 +660,7 @@ def test_personalize_accepts_last_activity_as_starting_page(
         "unit_preference": "metric",
         "insights_sport": "running",
         "commute_filter": False,
+        "map_style": "light",
     }
     r = client.put("/api/v1/settings/personalize", json=body, headers=auth_headers)
     assert r.status_code == 200
@@ -688,6 +692,7 @@ def test_personalize_put_defaults_every_field_when_omitted(
         "unit_preference": "metric",
         "insights_sport": "running",
         "commute_filter": False,
+        "map_style": "light",
     }
 
 
@@ -698,6 +703,7 @@ def test_personalize_put_defaults_every_field_when_omitted(
         ("insights_sport", "swimming"),
         ("time_format", "military"),
         ("default_view", "year"),
+        ("map_style", "satellite"),
         ("unit_preference", "furlongs"),
     ],
 )

@@ -899,6 +899,7 @@ backend computations.
 | `athlete.unit_preference` | `metric`, `imperial` | `metric` |
 | `athlete.insights_sport` | `running`, `cycling`: the sport the Insights page opens on | `running` |
 | `athlete.commute_filter` | `true`, `false`: whether the Insights page offers an "Exclude commutes" toggle | `false` |
+| `athlete.map_style` | `light` (CARTO Positron), `terrain` (OpenTopoMap, relief and contour lines): the background of an activity's route map and GIF export | `light` |
 
 All backend weekly data (rollups, week notes, race readiness, email reports, share pages) stays
 Monday-based; the week start only changes the frontend's calendar grids and client-side weekly

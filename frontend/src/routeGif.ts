@@ -15,8 +15,10 @@
 import GIF from "gif.js";
 import gifWorkerUrl from "gif.js/dist/gif.worker.js?url";
 
+import type { MapStyle } from "./api/types";
 import type { RoutePoint } from "./components/ActivityRouteMap";
 import { resolveTone } from "./components/ActivityRouteMap";
+import type { Rgb } from "./colorGradient";
 import { drawBasemapTiles } from "./mapTiles";
 import {
   drawOutlinedText,
@@ -34,6 +36,44 @@ const FRAME_COUNT = 60;
 const TOTAL_DURATION_MS = 15000;
 const FRAME_DELAY_MS = Math.round(TOTAL_DURATION_MS / FRAME_COUNT);
 const MARKER_RADIUS = 9;
+const ENDPOINT_RADIUS = 9;
+
+/** The start: a filled dot with a white ring, like the on-screen map's. */
+function drawStartMarker(ctx: CanvasRenderingContext2D, at: ProjectedPoint, rgb: Rgb): void {
+  ctx.beginPath();
+  ctx.arc(at.x, at.y, ENDPOINT_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke();
+}
+
+/** The finish: the on-screen map's checkered flag marker, drawn as a white disc with two black
+ * quadrants. */
+function drawFinishMarker(ctx: CanvasRenderingContext2D, at: ProjectedPoint): void {
+  const r = ENDPOINT_RADIUS + 2;
+  ctx.beginPath();
+  ctx.arc(at.x, at.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.fillStyle = "#111111";
+  ctx.beginPath();
+  ctx.moveTo(at.x, at.y);
+  ctx.arc(at.x, at.y, r - 1, -Math.PI / 2, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(at.x, at.y);
+  ctx.arc(at.x, at.y, r - 1, Math.PI / 2, Math.PI);
+  ctx.closePath();
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#111111";
+  ctx.beginPath();
+  ctx.arc(at.x, at.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+}
 
 /** Renders a `points.length`-point route as an animated GIF over the real map basemap: the
  * tiles + full pace-coloured trace drawn once as a shared backdrop (tiles don't change frame to
@@ -48,6 +88,7 @@ export async function renderRouteGif(
   elapsedS: number[],
   stats: RoutePosterStats,
   onProgress?: (fraction: number) => void,
+  mapStyle: MapStyle = "light",
 ): Promise<Blob> {
   if (points.length < 2) {
     throw new Error("need at least 2 route points");
@@ -66,9 +107,12 @@ export async function renderRouteGif(
   bgCtx.fillStyle = `rgb(${surfaceRgb[0]}, ${surfaceRgb[1]}, ${surfaceRgb[2]})`;
   bgCtx.fillRect(0, 0, GIF_SIZE, GIF_SIZE);
 
-  const tiles = await drawBasemapTiles(bgCtx, points, GIF_SIZE, GIF_SIZE, POSTER_PADDING);
+  const tiles = await drawBasemapTiles(bgCtx, points, GIF_SIZE, GIF_SIZE, POSTER_PADDING, mapStyle);
   const projected: ProjectedPoint[] = points.map((p) => tiles.project(p));
   drawRouteTrace(bgCtx, points, projected, distanceM, elapsedS);
+  // Start and finish, on the shared backdrop (the moving dot is drawn per frame, over them).
+  drawStartMarker(bgCtx, projected[0]!, resolveTone("--color-elevation"));
+  drawFinishMarker(bgCtx, projected[projected.length - 1]!);
 
   const canvas = document.createElement("canvas");
   canvas.width = GIF_SIZE;

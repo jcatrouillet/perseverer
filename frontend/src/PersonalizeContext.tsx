@@ -16,6 +16,7 @@ const DEFAULT_PERSONALIZE_SETTINGS: PersonalizeSettingsOut = {
   unit_preference: "metric",
   insights_sport: "running",
   commute_filter: false,
+  map_style: "light",
 };
 
 // Exported (not just the Provider/hook below) so a test can wrap a component in

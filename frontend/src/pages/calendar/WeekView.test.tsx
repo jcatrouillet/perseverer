@@ -571,6 +571,7 @@ describe("WeekView week stats", () => {
           unit_preference: "metric",
           insights_sport: "running",
           commute_filter: false,
+          map_style: "light",
         }}
       >
         <WeekView date="2026-09-01" />

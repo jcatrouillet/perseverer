@@ -522,6 +522,7 @@ def get_personalize_settings(
             athlete.c.unit_preference,
             athlete.c.insights_sport,
             athlete.c.commute_filter,
+            athlete.c.map_style,
         ).where(athlete.c.id == athlete_id)
     ).fetchone()
     if row is None:
@@ -532,6 +533,7 @@ def get_personalize_settings(
             unit_preference="metric",
             insights_sport="running",
             commute_filter=False,
+            map_style="light",
         )
     return PersonalizeSettingsOut(
         week_start_day=row.week_start_day,
@@ -540,6 +542,7 @@ def get_personalize_settings(
         unit_preference=row.unit_preference,
         insights_sport=row.insights_sport,
         commute_filter=row.commute_filter,
+        map_style=row.map_style,
     )
 
 
@@ -559,6 +562,7 @@ def put_personalize_settings(
             unit_preference=payload.unit_preference,
             insights_sport=payload.insights_sport,
             commute_filter=payload.commute_filter,
+            map_style=payload.map_style,
         )
     )
     conn.commit()
@@ -569,6 +573,7 @@ def put_personalize_settings(
         unit_preference=payload.unit_preference,
         insights_sport=payload.insights_sport,
         commute_filter=payload.commute_filter,
+        map_style=payload.map_style,
     )
 
 

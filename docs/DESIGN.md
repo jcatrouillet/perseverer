@@ -172,6 +172,7 @@ Use these before writing new markup. All live in `frontend/src/components/`.
 | `.badge` | A small neutral pill for a status or count ("Done", "Draft"). |
 | `SportSectionTitle` / `.section-title` | The heading of a sport's section in the period summaries (Running, Cycling, Hikes, Climbing): the sport's icon chip in its tone, then the title, on one line. Use it for any new sport section. |
 | `PostersSection` / `.posters` | The Year view's poster generator: a radio group of poster types (`.posters__kind`, the selected one outlined in the accent), a sport checkbox group, and one `.poster-row` per poster with its progress, Preview (in a `Modal`) and Download. The posters themselves are drawn server-side in a fixed dark palette (cyan sport, yellow races), independent of the app theme. |
+| `.activity-route-map__style` | The Light / Terrain switch on an activity's route map: a small segmented control over the map's top-right corner (left of the fullscreen button), the active side in the accent. |
 | `.button`, `.button--primary`, `.button--full` | Buttons. One primary action per form. |
 | `.field` + `.input` | A labelled form field; focus shows the accent border and a soft ring. |
 | `MetricExplorer` | The list-plus-detail shell of the Fitness, Health and Insights pages: a grouped, collapsible metric list on the left and the selected chart on the right; a vertical accordion on a phone. |

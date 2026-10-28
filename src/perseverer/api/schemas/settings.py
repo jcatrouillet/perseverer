@@ -184,6 +184,8 @@ class PersonalizeSettingsIn(BaseModel):
     insights_sport: Literal["running", "cycling"] = "running"
     # Whether the Insights page offers an "Exclude commutes" toggle.
     commute_filter: bool = False
+    # The background of an activity's route map and its GIF export.
+    map_style: Literal["light", "terrain"] = "light"
 
 
 class PersonalizeSettingsOut(BaseModel):
@@ -193,6 +195,7 @@ class PersonalizeSettingsOut(BaseModel):
     unit_preference: Literal["metric", "imperial"]
     insights_sport: Literal["running", "cycling"]
     commute_filter: bool
+    map_style: Literal["light", "terrain"]
 
 
 # PUT /settings/password -- self-service password change, see api/routers/settings.py for the

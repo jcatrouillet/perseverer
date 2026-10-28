@@ -102,6 +102,9 @@ athlete = Table(
     # Whether the Insights page offers an "Exclude commutes" toggle (activities tagged
     # is_commute). Display only, like the columns above.
     Column("commute_filter", Boolean, nullable=False, default=False, server_default=text("0")),
+    # The background of an activity's route map: "light" (CARTO Positron) or "terrain"
+    # (OpenTopoMap, with relief and contour lines). Display only, like the columns above.
+    Column("map_style", String, nullable=False, default="light", server_default="light"),
     # Which sport the Insights page opens on ("running" | "cycling"); the page has a
     # switch for the other one. Display only, like the three columns above.
     Column("insights_sport", String, nullable=False, default="running", server_default="running"),

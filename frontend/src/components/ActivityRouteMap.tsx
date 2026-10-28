@@ -7,9 +7,16 @@
 import "leaflet/dist/leaflet.css";
 import { DivIcon, type LatLngBoundsExpression, type LatLngTuple } from "leaflet";
 import { useEffect, useMemo, useState } from "react";
-import { CircleMarker, MapContainer, Marker, Polyline, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, useMap } from "react-leaflet";
 
+import type { MapStyle } from "../api/types";
 import { hexToRgb, lerpColor, type Rgb } from "../colorGradient";
+import {
+  TERRAIN_ATTRIBUTION,
+  TERRAIN_MAX_NATIVE_ZOOM,
+  TERRAIN_SUBDOMAINS,
+  TERRAIN_TILE_URL,
+} from "../mapBasemap";
 import "../styles/activity-route.css";
 import { CartoBasemapLayer } from "./CartoBasemapLayer";
 
@@ -39,6 +46,12 @@ const MIN_MOVING_SPEED_MPS = 0.3;
 // A genuinely checkered finish marker (plain-fill CircleMarkers can't render a pattern) --
 // a small inline black/white checker SVG as a Leaflet DivIcon, built once at module scope
 // since it doesn't depend on any prop.
+const FINISH_ICON_HTML = `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="9" cy="9" r="8" fill="#fff" stroke="var(--color-surface)" stroke-width="2"/>
+    <path d="M9,9 L9,1 A8,8 0 0,1 17,9 Z" fill="#111"/>
+    <path d="M9,9 L9,17 A8,8 0 0,1 1,9 Z" fill="#111"/>
+  </svg>`;
+
 const FINISH_ICON = new DivIcon({
   className: "activity-route-map__finish-icon",
   // Four alternating black/white quadrants via plain arc paths -- no <clipPath> id needed
@@ -46,11 +59,7 @@ const FINISH_ICON = new DivIcon({
   // one per activity in the day view, and SVG ids aren't guaranteed unique across
   // duplicated inline markup). Reads as a checker flag at marker scale; a finer 8-square grid
   // wouldn't be distinguishable at 18px anyway.
-  html: `<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="9" cy="9" r="8" fill="#fff" stroke="var(--color-surface)" stroke-width="2"/>
-    <path d="M9,9 L9,1 A8,8 0 0,1 17,9 Z" fill="#111"/>
-    <path d="M9,9 L9,17 A8,8 0 0,1 1,9 Z" fill="#111"/>
-  </svg>`,
+  html: FINISH_ICON_HTML,
   iconSize: [18, 18],
   iconAnchor: [9, 9],
 });
@@ -131,6 +140,8 @@ export function ActivityRouteMap({
   highlightRange,
   markerIndex,
   resizeSignal,
+  background = "light",
+  onBackgroundChange,
 }: {
   points: RoutePoint[];
   /** Cumulative distance, parallel to `points`. */
@@ -145,6 +156,10 @@ export function ActivityRouteMap({
    * exiting fullscreen) -- see MapResizeHandler above. Omitted by callers whose container size
    * never changes after mount. */
   resizeSignal?: unknown;
+  /** The map's background: CARTO Positron or OpenTopoMap's terrain. */
+  background?: MapStyle;
+  /** When given, the map offers a Light / Terrain switch and calls this with the choice. */
+  onBackgroundChange?: (style: MapStyle) => void;
 }) {
   const [tones, setTones] = useState<{ slow: Rgb; fast: Rgb } | null>(null);
 
@@ -176,7 +191,18 @@ export function ActivityRouteMap({
         {/* CARTO Positron, vector -- the same basemap ActivityMap.tsx's day-view "large"
             thumbnail already uses; a route this detailed reads better without OSM's building
             outlines/POI icons/road-name clutter underneath it. */}
-        <CartoBasemapLayer style="positron" />
+        {background === "terrain" ? (
+          <TileLayer
+            key="terrain"
+            attribution={TERRAIN_ATTRIBUTION}
+            url={TERRAIN_TILE_URL}
+            subdomains={TERRAIN_SUBDOMAINS}
+            maxNativeZoom={TERRAIN_MAX_NATIVE_ZOOM}
+            maxZoom={19}
+          />
+        ) : (
+          <CartoBasemapLayer style="positron" />
+        )}
         {segments.map((seg, i) => (
           <Polyline
             key={i}
@@ -224,6 +250,21 @@ export function ActivityRouteMap({
           />
         )}
       </MapContainer>
+      {onBackgroundChange && (
+        <div className="activity-route-map__style" role="group" aria-label="Map background">
+          {(["light", "terrain"] as const).map((style) => (
+            <button
+              key={style}
+              type="button"
+              className={background === style ? "is-active" : undefined}
+              aria-pressed={background === style}
+              onClick={() => onBackgroundChange(style)}
+            >
+              {style === "light" ? "Light" : "Terrain"}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="activity-route-map__legend">
         <span>Faster</span>
         <span className="activity-route-map__legend-bar" />

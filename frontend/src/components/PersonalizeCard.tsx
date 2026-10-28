@@ -7,6 +7,7 @@ import { usePersonalizeSettings, useSetPersonalizeSettings } from "../api/querie
 import type {
   DefaultView,
   InsightsSport,
+  MapStyle,
   TimeFormat,
   UnitPreference,
   WeekStartDay,
@@ -25,6 +26,7 @@ export function PersonalizeCard() {
   const [unitPreference, setUnitPreference] = useState<UnitPreference>("metric");
   const [insightsSport, setInsightsSport] = useState<InsightsSport>("running");
   const [commuteFilter, setCommuteFilter] = useState(false);
+  const [mapStyle, setMapStyle] = useState<MapStyle>("light");
   // Unlike every field below, the color theme is a per-device browser setting (localStorage, see
   // theme.ts) rather than an account setting, so it applies the moment it is picked and is not
   // part of the Save button's payload.
@@ -49,6 +51,7 @@ export function PersonalizeCard() {
     setUnitPreference(settings.data.unit_preference);
     setInsightsSport(settings.data.insights_sport);
     setCommuteFilter(settings.data.commute_filter);
+    setMapStyle(settings.data.map_style);
   }, [settings.isSuccess, settings.data]);
 
   return (
@@ -70,6 +73,7 @@ export function PersonalizeCard() {
             unit_preference: unitPreference,
             insights_sport: insightsSport,
             commute_filter: commuteFilter,
+            map_style: mapStyle,
           });
         }}
       >
@@ -205,6 +209,32 @@ export function PersonalizeCard() {
             />
             Cycling
           </label>
+        </fieldset>
+
+        <fieldset className="settings-form__row">
+          <legend>Activity map</legend>
+          <label>
+            <input
+              type="radio"
+              name="map_style"
+              checked={mapStyle === "light"}
+              onChange={() => setMapStyle("light")}
+            />
+            Light map
+          </label>
+          <label>
+            <input
+              type="radio"
+              name="map_style"
+              checked={mapStyle === "terrain"}
+              onChange={() => setMapStyle("terrain")}
+            />
+            Terrain map (relief and contour lines)
+          </label>
+          <span className="chart-note">
+            The background of an activity&apos;s route and of its GIF export. You can also switch it
+            on the map itself.
+          </span>
         </fieldset>
 
         <label className="settings-form__checkbox">

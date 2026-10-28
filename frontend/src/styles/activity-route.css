@@ -172,3 +172,34 @@
 .splits-table tbody tr {
   cursor: default;
 }
+
+/* The Light / Terrain switch on the route map, left of the fullscreen button. */
+.activity-route-map__style {
+  position: absolute;
+  top: var(--space-2);
+  right: calc(var(--space-2) + 2.75rem);
+  z-index: 1000;
+  display: flex;
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.activity-route__map-col--fullscreen .activity-route-map__style {
+  right: var(--space-2);
+}
+
+.activity-route-map__style button {
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.activity-route-map__style button.is-active {
+  background: var(--color-accent);
+  color: #fff;
+}

@@ -455,6 +455,9 @@ export type UnitPreference = "metric" | "imperial";
 /** The sport the Insights page shows: its tabs compare runs with runs, rides with rides. */
 export type InsightsSport = "running" | "cycling";
 
+/** The background of an activity's route map: CARTO Positron or OpenTopoMap (relief and contours). */
+export type MapStyle = "light" | "terrain";
+
 export interface PersonalizeSettingsOut {
   week_start_day: WeekStartDay;
   time_format: TimeFormat;
@@ -463,6 +466,7 @@ export interface PersonalizeSettingsOut {
   insights_sport: InsightsSport;
   /** Whether the Insights page offers an "Exclude commutes" toggle. */
   commute_filter: boolean;
+  map_style: MapStyle;
 }
 
 export interface PersonalizeSettingsIn {
@@ -472,6 +476,7 @@ export interface PersonalizeSettingsIn {
   unit_preference: UnitPreference;
   insights_sport: InsightsSport;
   commute_filter: boolean;
+  map_style: MapStyle;
 }
 
 // GET /weather/forecast -- the athlete's own home-location forecast, up to Open-Meteo's own

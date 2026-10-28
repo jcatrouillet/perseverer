@@ -7,8 +7,9 @@
 // section does).
 import { useEffect, useMemo, useState } from "react";
 
-import type { StreamResponse } from "../api/types";
+import type { MapStyle, StreamResponse } from "../api/types";
 import { useDistanceFormat } from "../formatDistance";
+import { usePersonalize } from "../PersonalizeContext";
 import { downloadBlob, renderRoutePosterBlob } from "../routeExport";
 import {
   buildPauseCompressor,
@@ -110,6 +111,10 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
   // null = not exporting; 0..1 = gif.js's own encoding progress. Frame generation itself is
   // fast (plain canvas draws); encoding is the part worth showing progress for.
   const [gifProgress, setGifProgress] = useState<number | null>(null);
+  // Starts on the athlete's Personalize choice; the switch on the map changes it for this view.
+  const preferredStyle = usePersonalize().map_style;
+  const [chosenStyle, setChosenStyle] = useState<MapStyle | null>(null);
+  const mapStyle = chosenStyle ?? preferredStyle;
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -209,6 +214,7 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
           paceLabel: `Pace: ${paceLabel}`,
         },
         setGifProgress,
+        mapStyle,
       );
       downloadBlob(blob, "route.gif");
     } finally {
@@ -238,6 +244,8 @@ export function ActivityRoute({ stream, sport }: { stream: StreamResponse; sport
             highlightRange={highlightRange}
             markerIndex={currentIndex}
             resizeSignal={isFullscreen}
+            background={mapStyle}
+            onBackgroundChange={setChosenStyle}
           />
           <div className="activity-route__player">
             <button

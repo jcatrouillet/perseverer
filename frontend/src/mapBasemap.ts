@@ -17,6 +17,24 @@
 // var here because it lets the deployment's key be rotated (CARTO's free tier is a shared 5M
 // tiles/month fair-use ceiling) without a rebuild, matching every other prod-tunable value in
 // this app.
+import type { MapStyle } from "./api/types";
+
+// The "terrain" background: OpenTopoMap's raster tiles (OpenStreetMap data with SRTM relief and
+// contour lines), free to use with attribution and sending `Access-Control-Allow-Origin: *`, so
+// the GIF export can draw them onto a canvas like CARTO's. Needs no key. Raster only (no vector
+// style), which also keeps it off the WebGL-context ceiling described above.
+export const TERRAIN_TILE_URL = "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png";
+export const TERRAIN_ATTRIBUTION =
+  'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="https://viewfinderpanoramas.org">SRTM</a> | Style &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)';
+// OpenTopoMap has no tiles past this zoom; Leaflet scales the last level up beyond it.
+export const TERRAIN_MAX_NATIVE_ZOOM = 17;
+export const TERRAIN_SUBDOMAINS = ["a", "b", "c"];
+
+/** The raster tile URL template for a map style, for the canvas rasterizer (mapTiles.ts). */
+export function rasterTileUrlTemplate(style: MapStyle): string {
+  return style === "terrain" ? TERRAIN_TILE_URL : cartoRasterTileUrlTemplate();
+}
+
 export type CartoBasemapStyle = "positron" | "voyager" | "dark-matter";
 
 const STYLE_PATH: Record<CartoBasemapStyle, string> = {

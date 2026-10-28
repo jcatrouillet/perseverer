@@ -49,6 +49,7 @@ function renderWith(insights_sport: "running" | "cycling", commute_filter = fals
     unit_preference: "metric",
     insights_sport,
     commute_filter,
+    map_style: "light",
   };
   return render(
     <PersonalizeContext.Provider value={settings}>

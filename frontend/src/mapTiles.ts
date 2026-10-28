@@ -14,7 +14,8 @@
 // one use -- a low-zoom, small-canvas background baked once per export -- so left unchanged here
 // beyond authenticating the request with the same CARTO API key the vector maps now use (see
 // mapBasemap.ts; both services share one fair-use quota).
-import { cartoRasterTileUrlTemplate } from "./mapBasemap";
+import type { MapStyle } from "./api/types";
+import { rasterTileUrlTemplate, TERRAIN_MAX_NATIVE_ZOOM } from "./mapBasemap";
 import type { RoutePoint } from "./components/ActivityRouteMap";
 import type { ProjectedPoint } from "./routeExport";
 
@@ -85,6 +86,7 @@ export async function drawBasemapTiles(
   width: number,
   height: number,
   padding: number,
+  style: MapStyle = "light",
 ): Promise<TileProjection> {
   let minLat = points[0]!.lat;
   let maxLat = points[0]!.lat;
@@ -99,7 +101,12 @@ export async function drawBasemapTiles(
 
   const availW = Math.max(width - padding * 2, 1);
   const availH = Math.max(height - padding * 2, 1);
-  const zoom = chooseZoom(minLon, minLat, maxLon, maxLat, availW, availH);
+  // OpenTopoMap has no tiles past its own max zoom, so a tiny route stops there rather than
+  // asking for tiles that do not exist.
+  const zoom = Math.min(
+    chooseZoom(minLon, minLat, maxLon, maxLat, availW, availH),
+    style === "terrain" ? TERRAIN_MAX_NATIVE_ZOOM : MAX_ZOOM,
+  );
 
   const centerLon = (minLon + maxLon) / 2;
   const centerLat = (minLat + maxLat) / 2;
@@ -113,11 +120,12 @@ export async function drawBasemapTiles(
   const tileMinY = Math.max(0, Math.floor(originY / TILE_SIZE));
   const tileMaxY = Math.min(maxTileIndex, Math.floor((originY + height) / TILE_SIZE));
 
-  const urlTemplate = cartoRasterTileUrlTemplate();
+  const urlTemplate = rasterTileUrlTemplate(style);
   const loads: Promise<void>[] = [];
   for (let tx = tileMinX; tx <= tileMaxX; tx++) {
     for (let ty = tileMinY; ty <= tileMaxY; ty++) {
-      const sub = TILE_SUBDOMAINS[(tx + ty) % TILE_SUBDOMAINS.length];
+      // a-c is the common set: OpenTopoMap has no "d".
+      const sub = TILE_SUBDOMAINS[(tx + ty) % 3];
       const url = urlTemplate
         .replace("{s}", sub!)
         .replace("{z}", String(zoom))

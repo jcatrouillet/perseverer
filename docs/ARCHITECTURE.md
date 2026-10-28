@@ -420,7 +420,9 @@ claude.ai's can sign in with the athlete's normal password on Perseverer's own c
 ## Frontend
 
 React 19 + TypeScript (strict) built with Vite; `wouter` for routing, TanStack Query for data,
-Recharts for charts, Leaflet with a MapLibre-rendered CARTO vector basemap for maps.
+Recharts for charts, Leaflet with a MapLibre-rendered CARTO vector basemap for maps. An activity's route map can instead
+use OpenTopoMap raster tiles (relief and contour lines; Settings -> Personalize, or the switch on
+the map), which the GIF export rasterizes the same way as CARTO's.
 
 - **Pages:** calendar (day, week, month, year, all time), activities (the list, and a comparison of
   up to eight runs or rides, resampled onto one distance or moving-time axis in the browser from each
