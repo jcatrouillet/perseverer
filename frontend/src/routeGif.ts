@@ -22,6 +22,7 @@ import type { Rgb } from "./colorGradient";
 import { drawBasemapTiles } from "./mapTiles";
 import {
   drawOutlinedText,
+  drawRouteLegend,
   drawRouteTrace,
   POSTER_PADDING,
   type ProjectedPoint,
@@ -163,6 +164,8 @@ export async function renderRouteGif(
         GIF_SIZE - POSTER_PADDING + i * STATS_LINE_HEIGHT - (lines.length - 1) * STATS_LINE_HEIGHT,
       );
     });
+
+    drawRouteLegend(ctx, GIF_SIZE, GIF_SIZE, 20);
 
     gif.addFrame(ctx, { copy: true, delay: FRAME_DELAY_MS });
   }

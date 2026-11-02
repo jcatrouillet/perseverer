@@ -118,6 +118,46 @@ export function drawRouteTrace(
   }
 }
 
+/** The on-screen map's "Faster [red-to-blue bar] Slower" legend, bottom-right, aligned with the
+ * last stats line. Outlined text like the stats, so it reads over any background; the bar gets a
+ * dark outline for the same reason. Shared by the PNG poster and the GIF. */
+export function drawRouteLegend(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  fontPx: number,
+): void {
+  const slowRgb = resolveTone("--color-pace");
+  const fastRgb = resolveTone("--color-heart-rate");
+  ctx.font = `600 ${fontPx}px system-ui, sans-serif`;
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+  const gap = Math.round(fontPx * 0.5);
+  const barW = fontPx * 4;
+  const barH = Math.max(Math.round(fontPx * 0.4), 6);
+  const slowW = ctx.measureText("Slower").width;
+  const fastW = ctx.measureText("Faster").width;
+  const baseline = height - POSTER_PADDING;
+  const slowX = width - POSTER_PADDING - slowW;
+  const barX = slowX - gap - barW;
+  const fastX = barX - gap - fastW;
+  const barY = baseline - fontPx * 0.35 - barH / 2;
+
+  drawOutlinedText(ctx, "Faster", fastX, baseline);
+  drawOutlinedText(ctx, "Slower", slowX, baseline);
+
+  const grad = ctx.createLinearGradient(barX, 0, barX + barW, 0);
+  grad.addColorStop(0, `rgb(${fastRgb[0]}, ${fastRgb[1]}, ${fastRgb[2]})`);
+  grad.addColorStop(1, `rgb(${slowRgb[0]}, ${slowRgb[1]}, ${slowRgb[2]})`);
+  ctx.beginPath();
+  ctx.roundRect(barX, barY, barW, barH, barH / 2);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#000000";
+  ctx.stroke();
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
 /** Draws the pace-coloured trace plus a small stats block onto `ctx`, background left fully
  * transparent (no `fillRect` before drawing) -- the whole point of this export is a trace the
  * user can lay over any photo/background of their own choosing. */
@@ -148,6 +188,7 @@ export function drawRoutePoster(
       height - POSTER_PADDING + i * lineHeight - (lines.length - 1) * lineHeight,
     );
   });
+  drawRouteLegend(ctx, width, height, 32);
 }
 
 /** Renders the poster onto an offscreen canvas at `width`x`height` and returns it as a PNG
