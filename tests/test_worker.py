@@ -20,9 +20,9 @@ from perseverer.config import Settings
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import athlete, athlete_email_report_config, metadata, planned_workout
 from perseverer.db.seed import DEFAULT_ATHLETE_ID
+from perseverer.sync_schedule import athlete_zone
 from perseverer.worker.main import (
     EMAIL_TICK_MINUTES,
-    athlete_zone,
     report_due,
     run_daily_sync,
     run_daily_workout_push,

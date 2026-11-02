@@ -1,10 +1,11 @@
-"""Worker container entrypoint: runs the daily garmin_connect sync + staleness check on a
-cron schedule (default 04:15 UTC, jittered — see §6 of the project spec), a separate daily
-backup job (docs/ARCHITECTURE.md, default 03:30 UTC — see backup.py), and a separate daily
-scheduled-workout push job (default 04:45 UTC, right after the sync — see planned_workouts.py).
-All three schedules resolve against `schedule_timezone` (an IANA name, default UTC), not the
-container's own system clock -- see that setting's own docstring in config.py for why a real
-timezone rather than a fixed hour offset matters here (DST).
+"""Worker container entrypoint: runs each data source's automatic sync (Garmin Connect, Eufy, Kaya)
+at that source's own time, in each athlete's own local time (default 04:15, per source in
+Settings -- see sync_schedule.py), then the staleness check; a separate daily backup job
+(docs/ARCHITECTURE.md, default 03:30 UTC — see backup.py), and a separate daily scheduled-workout
+push job (default 04:45 UTC — see planned_workouts.py). The default times and the backup and push
+schedules resolve against `schedule_timezone` (an IANA name, default UTC), not the container's own
+system clock -- see that setting's own docstring in config.py for why a real timezone rather than
+a fixed hour offset matters here (DST).
 
 The email reports go out in each athlete's OWN local time, not the server's: the worker wakes
 every 15 minutes and sends the weekly report (Sunday 20:00 by default) and the monthly one (the
@@ -26,7 +27,6 @@ credentials are resolved per-athlete rather than from one shared global.
 
 import logging
 from datetime import UTC, datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -57,13 +57,20 @@ from perseverer.email_reports import (
 from perseverer.gear import send_over_limit_alerts
 from perseverer.planned_workouts import cleanup_past_garmin_workouts, push_planned_workout
 from perseverer.staleness import check_staleness, notify_webhook
+from perseverer.sync_schedule import (
+    SOURCE_LABELS,
+    TICK_MINUTES,
+    athlete_zone,
+    is_due,
+    load_schedules,
+    mark_run,
+    source_configured,
+)
 
 logger = logging.getLogger("perseverer.worker")
 
 
-def _sync_one_athlete(
-    conn: Connection, settings: Settings, athlete_id: str, display_name: str
-) -> None:
+def _sync_garmin(conn: Connection, settings: Settings, athlete_id: str, display_name: str) -> None:
     logger.info("starting scheduled garmin_connect sync for %s (%s)", display_name, athlete_id)
     summary = sync_garmin_connect(
         conn,
@@ -85,8 +92,10 @@ def _sync_one_athlete(
         len(summary.errors),
     )
 
-    # Separately try/excepted -- a Eufy failure (e.g. bad credentials, API change) must
-    # never block the Garmin sync or the staleness check that follows.
+
+def _sync_eufy(conn: Connection, settings: Settings, athlete_id: str) -> None:
+    """Best-effort: a Eufy failure (e.g. bad credentials, API change) is logged and never blocks
+    the other sources or the staleness check."""
     try:
         logger.info("starting scheduled eufy sync for %s", athlete_id)
         email, password, device_id, customer_id = resolve_eufy_credentials(
@@ -118,8 +127,8 @@ def _sync_one_athlete(
     except Exception:
         logger.exception("eufy sync failed unexpectedly for athlete %s", athlete_id)
 
-    _import_kaya_for_athlete(conn, settings, athlete_id)
 
+def _check_staleness(conn: Connection, settings: Settings, athlete_id: str) -> None:
     alerts = check_staleness(
         conn,
         athlete_id,
@@ -136,6 +145,16 @@ def _sync_one_athlete(
         )
         if settings.staleness_webhook_url:
             notify_webhook(settings.staleness_webhook_url, alert)
+
+
+def _sync_one_athlete(
+    conn: Connection, settings: Settings, athlete_id: str, display_name: str
+) -> None:
+    """Every source, one after the other, then the staleness check (the manual full run)."""
+    _sync_garmin(conn, settings, athlete_id, display_name)
+    _sync_eufy(conn, settings, athlete_id)
+    _import_kaya_for_athlete(conn, settings, athlete_id)
+    _check_staleness(conn, settings, athlete_id)
 
 
 def _import_kaya_for_athlete(conn: Connection, settings: Settings, athlete_id: str) -> None:
@@ -176,8 +195,9 @@ def _import_kaya_for_athlete(conn: Connection, settings: Settings, athlete_id: s
 
 
 def run_daily_sync() -> None:
-    """The daily job: per athlete, Garmin + Eufy + Kaya sync and the staleness check, then gear
-    alerts. One athlete's failure never stops the others.
+    """Every source for every athlete right now (`sync run-scheduled`): Garmin + Eufy + Kaya sync
+    and the staleness check, then gear alerts. One athlete's failure never stops the others. The
+    worker itself runs `run_scheduled_syncs` instead, each source at its own time.
     """
     settings = get_settings()
     engine = make_engine(settings.db_path)
@@ -203,6 +223,71 @@ def run_daily_sync() -> None:
             except Exception:
                 conn.rollback()
                 logger.exception("gear alert email failed for athlete %s", row.id)
+
+
+def run_scheduled_syncs(now: datetime | None = None) -> None:
+    """The scheduled tick, every `TICK_MINUTES` minutes: for each athlete, each connected source
+    whose own time (athlete's local clock; see sync_schedule.py) has come and that has not run
+    today is synced, in the order Garmin, Eufy, Kaya.  After any of them ran, the staleness check;
+    after Garmin, the gear replacement alerts.  One source's or athlete's failure never stops the
+    others, and a source that failed is not retried until tomorrow (Garmin's SSO locks accounts
+    that retry).  `now` is for tests."""
+    settings = get_settings()
+    now_utc = (now or datetime.now(UTC)).astimezone(UTC)
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        athletes = conn.execute(
+            select(
+                athlete_table.c.id,
+                athlete_table.c.display_name,
+                athlete_table.c.email,
+                athlete_table.c.timezone,
+            )
+        ).fetchall()
+        for row in athletes:
+            try:
+                due = [
+                    e
+                    for e in load_schedules(conn, settings, row.id, row.timezone)
+                    if is_due(e, now_utc) and source_configured(conn, settings, row.id, e.source)
+                ]
+                if not due:
+                    continue
+                ran: set[str] = set()
+                for entry in due:
+                    local_date = now_utc.astimezone(entry.zone).date()
+                    logger.info(
+                        "%s sync due for %s (local %s)",
+                        SOURCE_LABELS[entry.source],
+                        row.id,
+                        now_utc.astimezone(entry.zone),
+                    )
+                    # Marked first: a crash or a failure must not make the next tick retry it.
+                    mark_run(conn, row.id, entry.source, local_date)
+                    conn.commit()
+                    try:
+                        if entry.source == "garmin_connect":
+                            _sync_garmin(conn, settings, row.id, row.display_name)
+                        elif entry.source == "eufy":
+                            _sync_eufy(conn, settings, row.id)
+                        else:
+                            _import_kaya_for_athlete(conn, settings, row.id)
+                        ran.add(entry.source)
+                    except Exception:
+                        conn.rollback()
+                        logger.exception(
+                            "scheduled %s sync failed unexpectedly for athlete %s",
+                            entry.source,
+                            row.id,
+                        )
+                _check_staleness(conn, settings, row.id)
+                if "garmin_connect" in ran:
+                    sent = send_over_limit_alerts(conn, settings, row.id, row.email)
+                    if sent:
+                        logger.info("sent %d gear replacement alert(s) for %s", sent, row.id)
+            except Exception:
+                conn.rollback()
+                logger.exception("scheduled syncs failed unexpectedly for athlete %s", row.id)
 
 
 def run_daily_backup() -> None:
@@ -405,18 +490,6 @@ EMAIL_TICK_MINUTES = 15
 _WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
-def athlete_zone(timezone: str | None, fallback: str) -> ZoneInfo:
-    """The athlete's own timezone, or the deployment's when theirs is missing or not a real one."""
-    for name in (timezone, fallback):
-        if not name:
-            continue
-        try:
-            return ZoneInfo(name)
-        except Exception:  # unknown key, malformed name
-            continue
-    return ZoneInfo("UTC")
-
-
 def report_due(kind: ReportKind, local_now: datetime, settings: Settings) -> bool:
     """Whether `local_now` (an athlete's own wall clock) falls in the send window of `kind`: the
     configured weekday (weekly) or the month's last day (monthly), within the first
@@ -496,21 +569,20 @@ def main() -> None:
 
     scheduler = BlockingScheduler()
     scheduler.add_job(
-        run_daily_sync,
-        trigger=CronTrigger(
-            hour=settings.schedule_hour,
-            minute=settings.schedule_minute,
-            jitter=settings.schedule_jitter_s,
-            timezone=settings.schedule_timezone,
-        ),
-        id="daily_garmin_sync",
+        run_scheduled_syncs,
+        # On the clock's five-minute marks (UTC is just the grid: each source's own time, on its
+        # athlete's own clock, decides whether it is due, see sync_schedule.is_due).
+        trigger=CronTrigger(minute=f"*/{TICK_MINUTES}", timezone="UTC"),
+        id="scheduled_syncs",
+        coalesce=True,
     )
     logger.info(
-        "scheduled daily sync at %02d:%02d %s (+/- %ds jitter)",
+        "checking every %d minutes for syncs due in each athlete's own local time (default "
+        "%02d:%02d %s, per source in Settings)",
+        TICK_MINUTES,
         settings.schedule_hour,
         settings.schedule_minute,
         settings.schedule_timezone,
-        settings.schedule_jitter_s,
     )
     scheduler.add_job(
         run_daily_backup,

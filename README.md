@@ -364,12 +364,12 @@ The app is responsive and installable as a PWA.
 
 | Source | How | Data |
 |---|---|---|
-| Garmin Connect | Daily sync (token-based, rate-limited) | Activities, sleep, HRV, readiness, training status, VO2max, race predictions, lactate threshold, body battery, stress, steps, hydration |
+| Garmin Connect | Daily sync, at a time you choose (token-based, rate-limited) | Activities, sleep, HRV, readiness, training status, VO2max, race predictions, lactate threshold, body battery, stress, steps, hydration |
 | Garmin "Export your data" | Import a `.zip` | Full history of activities and wellness |
 | Strava export | Import a `.zip` | Activities (FIT, GPX, TCX) |
 | Apple Health export | Import `export.xml` | Blood pressure, historical weight and body composition |
-| Eufy smart scale | Daily sync | Weight and body composition |
-| Kaya | Daily sync | Bouldering routes, grades, attempts and sends |
+| Eufy smart scale | Daily sync, at a time you choose | Weight and body composition |
+| Kaya | Daily sync, at a time you choose | Bouldering routes, grades, attempts and sends |
 | Any FIT files | Import or watch a folder | Activities and health files |
 
 Garmin Connect and Kaya are reached through unofficial clients. Perseverer is careful with them:

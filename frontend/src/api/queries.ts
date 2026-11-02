@@ -102,6 +102,8 @@ import type {
   PosterOut,
   PosterSportOut,
   RunningLoadConfigIn,
+  SyncScheduleIn,
+  SyncScheduleOut,
   RunningLoadConfigOut,
   ShareLinkOut,
   SleepSessionOut,
@@ -2034,5 +2036,21 @@ export function useDeletePoster() {
   return useMutation({
     mutationFn: (id: string) => apiDelete<void>(`/api/v1/posters/${id}`),
     onSuccess: () => void client.invalidateQueries({ queryKey: [POSTERS_KEY] }),
+  });
+}
+
+export function useSyncSchedule() {
+  return useQuery({
+    queryKey: ["sync-schedule"],
+    queryFn: () => apiGet<SyncScheduleOut>("/api/v1/settings/sync-schedule"),
+  });
+}
+
+export function useSetSyncSchedule() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SyncScheduleIn) =>
+      apiPut<SyncScheduleOut>("/api/v1/settings/sync-schedule", body),
+    onSuccess: (data) => client.setQueryData(["sync-schedule"], data),
   });
 }

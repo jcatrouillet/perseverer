@@ -131,7 +131,8 @@ Things that are easy to get wrong, each learned from a real bug:
   preferences apply.
 
 **Scheduled jobs**
-- Anything an athlete is told the time of (the weekly and monthly emails) runs in that athlete's own
+- Anything an athlete is told the time of or chooses the time of (the weekly and monthly emails, each
+  source's automatic sync in `sync_schedule.py`) runs in that athlete's own
   timezone (`athlete.timezone`), not the server's: the worker checks every 15 minutes who is due and
   records the local date it last sent, so a restart cannot send twice.
 

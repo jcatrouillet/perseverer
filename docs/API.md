@@ -2238,6 +2238,31 @@ when no selected activity has a start point), `center_lat`, `center_lon`, `radiu
 
 ---
 
+### `GET /settings/sync-schedule`
+
+When each data source syncs by itself. Every connected source (Garmin Connect, Eufy scale, Kaya)
+has its own time of day, on the athlete's own clock (the profile `timezone`, the deployment's
+`PERSEVERER_SCHEDULE_TIMEZONE` if unset), and can be switched off; a source with no chosen time
+follows the deployment's default (`PERSEVERER_SCHEDULE_HOUR` / `_MINUTE`, 04:15). The worker checks
+every 5 minutes, so a source starts within `window_minutes` after its time, at most once a day; a
+source that is not connected never runs.
+
+**Response `200`** (`SyncScheduleOut`): `window_minutes` (5) and `sources`, always the three in
+the order Garmin Connect, Eufy, Kaya (`SyncSourceOut`): `source` (`"garmin_connect"|"eufy"|"kaya"`),
+`label`, `configured` (connected), `enabled`, `time` (`"HH:MM"` on `timezone`'s clock; a default
+time is shown converted to that clock), `is_default` (no chosen time), `timezone` (IANA name) and
+`next_run_at` (UTC instant of the next run, `null` when switched off or not connected).
+
+### `PUT /settings/sync-schedule`
+
+Saves the sources listed (the others are untouched). **Request body** (`SyncScheduleIn`):
+`sources`: a list of `{source, time, enabled}` where `time` is `"HH:MM"` (00:00 to 23:59) or `null`
+for the default, and `enabled` switches the automatic sync of that source on or off. **Responses:**
+`200` -> `SyncScheduleOut`; `422` -> an unknown source or a malformed time. The date a source last
+ran is kept, so moving its time later on the day it already ran does not run it again that day.
+
+---
+
 ## Sharing
 
 An athlete-issued link granting **unauthenticated, read-only** access to one activity or one

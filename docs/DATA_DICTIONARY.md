@@ -849,6 +849,15 @@ download name, `<Sport>-<year>-all-<kind>-4000-<yyyymmdd>-<hhmm>-<4 hex>.png`), 
 the raw archive and a rebuild leaves it alone. A row still `queued`/`running` 30 minutes after it
 was created is reported `failed` (a restart lost it).
 
+### Automatic sync times (sync_schedule)
+
+**`sync_schedule`**: one row per athlete and source (`garmin_connect | eufy | kaya`) once the
+athlete has chosen a time or switched a source off, or after it has run: `local_time` (`"HH:MM"` on
+the athlete's own clock, `athlete.timezone`; null = the deployment's default time), `enabled`, and
+`last_run_on` (the local date it last ran, so a worker restart cannot run it twice in a day). No row
+means the default (`PERSEVERER_SCHEDULE_HOUR` / `_MINUTE` on `PERSEVERER_SCHEDULE_TIMEZONE`) and
+enabled. Set via `PUT /settings/sync-schedule` (Settings -> External tools).
+
 ### Email reports
 
 **`athlete_email_report_config`**: `weekly_enabled`, `monthly_enabled` (both default false);

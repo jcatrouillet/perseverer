@@ -397,3 +397,38 @@ fieldset.settings-form__row input {
 .settings-commute__field .input {
   width: 100%;
 }
+
+.settings-sync__list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.settings-sync__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* `.settings-form label` / `.settings-form input` (column layout, 9ch) have the same
+   specificity as a lone class, so these carry the extra qualifier to win. */
+.settings-form label.settings-sync__enabled {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 11rem;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+}
+
+.settings-form input.settings-sync__time {
+  width: 9rem;
+}
+
+.settings-sync__meta {
+  margin: 0;
+}

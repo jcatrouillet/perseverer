@@ -1569,3 +1569,37 @@ export interface HeatmapDefaultsOut {
   source: "home_address" | "profile_home" | "activities" | null;
   activities: number;
 }
+
+// GET/PUT /settings/sync-schedule -- when each source syncs by itself.
+export type SyncSource = "garmin_connect" | "eufy" | "kaya";
+
+export interface SyncSourceOut {
+  source: SyncSource;
+  label: string;
+  /** Connected; an unconnected source never runs. */
+  configured: boolean;
+  enabled: boolean;
+  /** "HH:MM" on `timezone`'s clock. */
+  time: string;
+  /** No chosen time: the deployment's default. */
+  is_default: boolean;
+  timezone: string;
+  next_run_at: string | null;
+}
+
+export interface SyncScheduleOut {
+  sources: SyncSourceOut[];
+  /** A source starts within this many minutes after its time. */
+  window_minutes: number;
+}
+
+export interface SyncSourceIn {
+  source: SyncSource;
+  /** null = the default time. */
+  time: string | null;
+  enabled: boolean;
+}
+
+export interface SyncScheduleIn {
+  sources: SyncSourceIn[];
+}

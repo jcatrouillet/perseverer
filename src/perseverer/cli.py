@@ -330,8 +330,9 @@ def import_eufy_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
 
 @app.command("daily-sync")
 def daily_sync_cmd() -> None:
-    """One shot of the exact same work the `worker` container's daily APScheduler job does
-    (garmin_connect incremental sync + staleness check/webhook) -- see worker/main.py's own
+    """One shot of every source for every athlete (garmin_connect incremental sync, Eufy, Kaya,
+    staleness check/webhook): the work the `worker` container does per source at each source's own
+    time -- see worker/main.py's own
     `run_daily_sync`. Exists so a platform that can't run the `worker` container (e.g. Windows,
     where Podman is known to corrupt this project's SQLite WAL file -- see AGENTS.md) can still
     get the daily sync via a plain OS scheduler (Windows Task Scheduler, cron) invoking this

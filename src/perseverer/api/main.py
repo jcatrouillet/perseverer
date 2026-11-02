@@ -49,6 +49,7 @@ from perseverer.api.routers import (
     posters,
     share,
     sleep,
+    sync_schedule,
     weather_forecast,
 )
 from perseverer.api.routers import settings as settings_router
@@ -90,6 +91,7 @@ app.include_router(gear.router, prefix="/api/v1")
 app.include_router(bikes.router, prefix="/api/v1")
 app.include_router(commute_settings.router, prefix="/api/v1")
 app.include_router(posters.router, prefix="/api/v1")
+app.include_router(sync_schedule.router, prefix="/api/v1")
 app.include_router(performance.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")

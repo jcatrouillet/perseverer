@@ -33,9 +33,10 @@ class Settings(BaseSettings):
     garmin_stale_escalate_days: int = 7
     export_freshness_days: int = 90
     staleness_webhook_url: str | None = None
+    # The default time of day of every source's automatic sync (each athlete can choose their
+    # own per source in Settings, in their own timezone -- sync_schedule.py).
     schedule_hour: int = 4
     schedule_minute: int = 15
-    schedule_jitter_s: int = 600
     # IANA name (e.g. "America/Los_Angeles"), not a fixed UTC offset -- CronTrigger resolves
     # hour/minute against this zone's own wall clock every run, so the schedule stays correct
     # across DST transitions instead of drifting by an hour twice a year the way a hardcoded UTC

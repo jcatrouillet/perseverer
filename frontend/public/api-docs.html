@@ -2846,6 +2846,20 @@ const GROUPS = [
       responses: [ { code: 200, note: "available, center_lat, center_lon, radius_km, source (home_address | profile_home | activities), activities (with a GPS trace)." } ], example: {}
     },
   ]},
+  { id: "sync-schedule", title: "Sync schedule", endpoints: [
+    { method: "GET", path: "/api/v1/settings/sync-schedule", summary: "When each source (Garmin Connect, Eufy, Kaya) syncs by itself.",
+      description: "Each source has its own time of day on the athlete's own clock (profile timezone) and can be switched off; no chosen time means the deployment's default. The worker checks every 5 minutes, so a source starts within window_minutes after its time, once a day; a source that is not connected never runs.",
+      responses: [ { code: 200, note: "window_minutes, and sources (garmin_connect, eufy, kaya): source, label, configured, enabled, time (HH:MM on timezone's clock), is_default, timezone, next_run_at (UTC instant; null when off or not connected)." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/settings/sync-schedule", summary: "Set the time and on/off of the sources listed.",
+      description: "Only the listed sources change. time null = the default time. The date a source last ran is kept, so moving its time later after it ran does not run it twice in a day.",
+      body: { fields: [["sources","object[]","req","","Each { source: garmin_connect | eufy | kaya, time: \"HH:MM\" or null, enabled: boolean }."]] },
+      responses: [ { code: 200, note: "The saved schedule (same as GET)." }, { code: 422, note: "An unknown source or a malformed time." } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/settings/sync-schedule \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"sources": [{"source": "garmin_connect", "time": "06:30", "enabled": true}]}'` }
+    },
+  ]},
   { id: "sharing", title: "Sharing", endpoints: [
     { method: "POST", path: "/api/v1/activities/{activity_id}/share", summary: "Create an unauthenticated share link for one activity.",
       description: "The raw token is only ever returned here — only its SHA-256 hash is stored. Anyone with the resulting URL can view the activity without signing in.",

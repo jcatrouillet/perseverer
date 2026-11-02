@@ -206,6 +206,20 @@ poster = Table(
     Index("ix_poster_athlete_year", "athlete_id", "year"),
 )
 
+# When a data source syncs by itself (sync_schedule.py), per athlete and per source
+# (garmin_connect | eufy | kaya).  `local_time` is "HH:MM" on the athlete's own clock; null means
+# the deployment's default time.  `enabled` switches the automatic sync off.  `last_run_on` is the
+# local date it last ran, so a worker restart cannot run it twice in a day.
+sync_schedule = Table(
+    "sync_schedule",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("source", String, primary_key=True),
+    Column("local_time", String, nullable=True),
+    Column("enabled", Boolean, nullable=False, default=True, server_default=text("1")),
+    Column("last_run_on", String, nullable=True),
+)
+
 # Per-athlete opt-in for the weekly/monthly training-report emails (email_reports.py). One row
 # per athlete (upsert, same shape as athlete_hr_zone_config above); no row, or a row with both
 # flags False, means "no emails" -- the default. The SMTP relay itself is deployment-global
