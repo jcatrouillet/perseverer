@@ -220,6 +220,19 @@ sync_schedule = Table(
     Column("last_run_on", String, nullable=True),
 )
 
+# Who coaches whom (routers/coach.py). `athlete_id` is the coachee, who chose the coach and can
+# drop the link at any time; `coach_athlete_id` is the coach, who may then view the coachee's data
+# as the coachee (the X-Act-As header, api/dependencies.py), plan workouts and add comments. One
+# coach per athlete.
+coach_link = Table(
+    "coach_link",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("coach_athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    Index("ix_coach_link_coach", "coach_athlete_id"),
+)
+
 # Per-athlete opt-in for the weekly/monthly training-report emails (email_reports.py). One row
 # per athlete (upsert, same shape as athlete_hr_zone_config above); no row, or a row with both
 # flags False, means "no emails" -- the default. The SMTP relay itself is deployment-global

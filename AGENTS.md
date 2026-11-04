@@ -106,6 +106,12 @@ Things that are easy to get wrong, each learned from a real bug:
   counter. A bike's rides come from the explicit choice, else the most specific dated category
   default; a tire counts only rides made while it was installed (`bike_tire_install`).
 
+**Coaches**
+- `require_api_key` returns the athlete whose data is read or written, which is the *coachee* when a coach
+  sends `X-Act-As`. Never resolve the athlete any other way in a router. A new write endpoint is closed
+  to coaches until it is added to `coach_may` (`api/dependencies.py`); anything that touches credentials,
+  vendor accounts or sharing must stay off that list.
+
 **Runtime**
 - `api` runs two uvicorn workers: no state in process memory (sessions, locks, MCP sessions). Use
   SQLite.

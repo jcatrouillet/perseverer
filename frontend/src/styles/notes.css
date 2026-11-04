@@ -29,6 +29,13 @@
   white-space: pre-wrap;
 }
 
+/* Who wrote it, when that is not the athlete themselves (a coach, an agent). */
+.notes__item-author {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
 .notes__item-footer {
   display: flex;
   align-items: center;

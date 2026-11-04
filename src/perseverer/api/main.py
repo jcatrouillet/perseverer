@@ -34,6 +34,7 @@ from perseverer.api.routers import (
     calendar,
     calendar_feed,
     climb_notes,
+    coach,
     commute_settings,
     duration_goals,
     fitness,
@@ -75,8 +76,8 @@ if _settings.cors_origins_list:
         # tab rather than trusting curl/pytest alone.
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         # Authorization for JWT bearer-token login -- X-API-Key
-        # and Content-Type predate it.
-        allow_headers=["X-API-Key", "Authorization", "Content-Type"],
+        # and Content-Type predate it. X-Act-As is a coach viewing an athlete's data.
+        allow_headers=["X-API-Key", "Authorization", "Content-Type", "X-Act-As"],
         allow_credentials=False,
     )
 
@@ -92,6 +93,7 @@ app.include_router(bikes.router, prefix="/api/v1")
 app.include_router(commute_settings.router, prefix="/api/v1")
 app.include_router(posters.router, prefix="/api/v1")
 app.include_router(sync_schedule.router, prefix="/api/v1")
+app.include_router(coach.router, prefix="/api/v1")
 app.include_router(performance.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
 app.include_router(notes.router, prefix="/api/v1")

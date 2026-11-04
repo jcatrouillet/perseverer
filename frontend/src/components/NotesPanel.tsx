@@ -70,6 +70,7 @@ function NoteItem({
   return (
     <li className="notes__item">
       <p className="notes__item-body">{note.body}</p>
+      {note.author && <p className="notes__item-author">{note.author}</p>}
       <div className="notes__item-footer">
         <small className="notes__item-meta">{new Date(note.created_at).toLocaleString()}</small>
         <div className="notes__item-actions">

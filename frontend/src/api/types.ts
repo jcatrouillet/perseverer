@@ -1603,3 +1603,15 @@ export interface SyncSourceIn {
 export interface SyncScheduleIn {
   sources: SyncSourceIn[];
 }
+
+export interface CoachPersonOut {
+  id: string;
+  display_name: string;
+  username: string | null;
+  since: string;
+}
+
+export interface CoachOut {
+  coach: CoachPersonOut | null;
+  coachees: CoachPersonOut[];
+}

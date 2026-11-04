@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 
 import { AuthGate } from "./components/AuthGate";
+import { CoachBanner, CoacheeSwitcher } from "./components/CoachBar";
 import { GearAlertBanner } from "./components/GearAlertBanner";
 import { Icon, type IconName } from "./components/Icon";
 import { useLastImportedActivity } from "./api/queries";
@@ -10,6 +11,7 @@ import { LogoutButton } from "./components/LogoutButton";
 import { calendarHomeHref, startingPageIsCalendar } from "./calendarHome";
 import { localIsoDate } from "./dateUtils";
 import { usePersonalize, PersonalizeProvider } from "./PersonalizeContext";
+import { useActingAs } from "./useActingAs";
 import "./styles/gear.css";
 import { MonthView } from "./pages/calendar/MonthView";
 // Also statically imported: this is what the default "/" route (CurrentWeek() below) renders, so
@@ -140,74 +142,97 @@ function CalendarNavLink() {
 export function App() {
   return (
     <AuthGate>
-      <PersonalizeProvider>
-        <nav className="app-nav">
-          <div className="app-nav__links">
-            <CalendarNavLink />
-            <NavLink href="/activities" icon="list">
-              Activities
-            </NavLink>
-            <NavLink href="/fitness" icon="trend">
-              Fitness &amp; Form
-            </NavLink>
-            <NavLink href="/health" icon="heart">
-              Health
-            </NavLink>
-            <NavLink href="/map" icon="map">
-              Map
-            </NavLink>
-            <NavLink href="/insights" icon="bolt">
-              Insights
-            </NavLink>
-            <NavLink href="/gear" icon="shoe">
-              Gear
-            </NavLink>
-            <NavLink href="/exercises" icon="dumbbell">
-              Exercises
-            </NavLink>
+      <AppShell />
+    </AuthGate>
+  );
+}
+
+// Keyed by whose data is shown: switching to or from an athlete as their coach remounts every
+// screen, so nothing of the other athlete's data lingers in component state.
+function AppShell() {
+  const { actingAs } = useActingAs();
+  return (
+    <PersonalizeProvider key={actingAs?.id ?? "self"}>
+      <AppContent viewingAsCoach={actingAs !== null} />
+    </PersonalizeProvider>
+  );
+}
+
+function AppContent({ viewingAsCoach }: { viewingAsCoach: boolean }) {
+  return (
+    <>
+      <nav className="app-nav">
+        <div className="app-nav__links">
+          <CalendarNavLink />
+          <NavLink href="/activities" icon="list">
+            Activities
+          </NavLink>
+          <NavLink href="/fitness" icon="trend">
+            Fitness &amp; Form
+          </NavLink>
+          <NavLink href="/health" icon="heart">
+            Health
+          </NavLink>
+          <NavLink href="/map" icon="map">
+            Map
+          </NavLink>
+          <NavLink href="/insights" icon="bolt">
+            Insights
+          </NavLink>
+          <NavLink href="/gear" icon="shoe">
+            Gear
+          </NavLink>
+          <NavLink href="/exercises" icon="dumbbell">
+            Exercises
+          </NavLink>
+          {!viewingAsCoach && (
             <NavLink href="/settings" icon="settings">
               Settings
             </NavLink>
-          </div>
-          <div className="app-nav__actions">
-            <LogoutButton />
-          </div>
-        </nav>
-        <GearAlertBanner />
-        <div className="app-main">
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
-            <Switch>
-              <Route path="/activities/compare" component={CompareRunsPage} />
-              <Route path="/activities/:id">
-                {(params) => <ActivityDetailPage id={params.id} />}
-              </Route>
-              <Route path="/activities" component={ActivityListPage} />
-              <Route path="/fitness" component={FitnessPage} />
-              <Route path="/health" component={HealthPage} />
-              <Route path="/map" component={MapExplorerPage} />
-              <Route path="/insights" component={InsightsPage} />
-              <Route path="/gear" component={GearPage} />
-              <Route path="/exercises" component={ExerciseLibraryPage} />
-              <Route path="/settings" component={SettingsPage} />
-              <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>
-              <Route path="/calendar/week/:date">
-                {(params) => <WeekView date={params.date ?? localIsoDate()} />}
-              </Route>
-              <Route path="/calendar/all" component={AllTimeView} />
-              <Route path="/calendar/:year/:month">
-                {(params) => <MonthView year={Number(params.year)} month={Number(params.month)} />}
-              </Route>
-              <Route path="/calendar/:year">
-                {(params) => <YearView year={Number(params.year)} />}
-              </Route>
-              <Route path="/" component={DefaultLandingPage} />
-              <Route>
-                <p>Not found.</p>
-              </Route>
-            </Switch>
-          </Suspense>
+          )}
         </div>
-      </PersonalizeProvider>
-    </AuthGate>
+        <div className="app-nav__actions">
+          <CoacheeSwitcher />
+          <LogoutButton />
+        </div>
+      </nav>
+      <CoachBanner />
+      <GearAlertBanner />
+      <div className="app-main">
+        <Suspense fallback={<LoadingSpinner size="lg" />}>
+          <Switch>
+            <Route path="/activities/compare" component={CompareRunsPage} />
+            <Route path="/activities/:id">
+              {(params) => <ActivityDetailPage id={params.id} />}
+            </Route>
+            <Route path="/activities" component={ActivityListPage} />
+            <Route path="/fitness" component={FitnessPage} />
+            <Route path="/health" component={HealthPage} />
+            <Route path="/map" component={MapExplorerPage} />
+            <Route path="/insights" component={InsightsPage} />
+            <Route path="/gear" component={GearPage} />
+            <Route path="/exercises" component={ExerciseLibraryPage} />
+            <Route path="/settings">
+              {viewingAsCoach ? <Redirect to="/" replace /> : <SettingsPage />}
+            </Route>
+            <Route path="/day/:date">{(params) => <DayViewPage date={params.date} />}</Route>
+            <Route path="/calendar/week/:date">
+              {(params) => <WeekView date={params.date ?? localIsoDate()} />}
+            </Route>
+            <Route path="/calendar/all" component={AllTimeView} />
+            <Route path="/calendar/:year/:month">
+              {(params) => <MonthView year={Number(params.year)} month={Number(params.month)} />}
+            </Route>
+            <Route path="/calendar/:year">
+              {(params) => <YearView year={Number(params.year)} />}
+            </Route>
+            <Route path="/" component={DefaultLandingPage} />
+            <Route>
+              <p>Not found.</p>
+            </Route>
+          </Switch>
+        </Suspense>
+      </div>
+    </>
   );
 }

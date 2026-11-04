@@ -2846,6 +2846,25 @@ const GROUPS = [
       responses: [ { code: 200, note: "available, center_lat, center_lon, radius_km, source (home_address | profile_home | activities), activities (with a GPS trace)." } ], example: {}
     },
   ]},
+  { id: "coach", title: "Coach", endpoints: [
+    { method: "GET", path: "/api/v1/coach", summary: "Your coach, and the athletes you coach.",
+      description: "An athlete picks one coach by username; the coach then views the athlete's data with the X-Act-As header, plans workouts and writes comments. These endpoints are about the signed-in athlete themselves, send them without X-Act-As.",
+      responses: [ { code: 200, note: "coach (a person or null) and coachees (a list). A person: id, display_name, username, since." } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/coach", summary: "Choose your coach by username (replaces any earlier one).",
+      body: { fields: [["username","string","req","","The coach's username."]] },
+      responses: [ { code: 200, note: "The updated coach and coachees." }, { code: 404, note: "No athlete has this username." }, { code: 422, note: "Your own username." } ],
+      example: { curl: `curl -X PUT https://your-perseverer-host/api/v1/coach \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"username": "coach"}'` }
+    },
+    { method: "DELETE", path: "/api/v1/coach", summary: "Stop sharing with your coach.",
+      responses: [ { code: 204, note: "Done. The coach's next request with X-Act-As is 403." } ], example: {}
+    },
+    { method: "DELETE", path: "/api/v1/coach/coachees/{coachee_id}", summary: "As a coach, give an athlete back.",
+      responses: [ { code: 204, note: "The link is ended from the coach's side." } ], example: {}
+    },
+  ]},
   { id: "sync-schedule", title: "Sync schedule", endpoints: [
     { method: "GET", path: "/api/v1/settings/sync-schedule", summary: "When each source (Garmin Connect, Eufy, Kaya) syncs by itself.",
       description: "Each source has its own time of day on the athlete's own clock (profile timezone) and can be switched off; no chosen time means the deployment's default. The worker checks every 5 minutes, so a source starts within window_minutes after its time, once a day; a source that is not connected never runs.",

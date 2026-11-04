@@ -7,13 +7,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import Connection, select
 
-from perseverer.api.dependencies import get_conn, require_api_key
+from perseverer.api.dependencies import get_actor_id, get_conn, require_api_key
 from perseverer.api.schemas.common import to_utc
 from perseverer.api.schemas.notes import NoteCreate, NoteOut, NoteUpdate
-from perseverer.db.schema import activity, note
+from perseverer.db.schema import activity, athlete, note
 
 router = APIRouter()
 
@@ -21,6 +21,7 @@ router = APIRouter()
 @router.post("/notes", status_code=status.HTTP_201_CREATED)
 def create_note(
     payload: NoteCreate,
+    request: Request,
     athlete_id: Annotated[str, Depends(require_api_key)],
     conn: Connection = Depends(get_conn),
 ) -> NoteOut:
@@ -37,6 +38,14 @@ def create_note(
     # entity_type == "day" or "week": no existence check -- both are just a date (a week's own
     # entity_id being its Monday), not a row that can be missing.
 
+    # A coach writing for an athlete signs the comment with their own name.
+    author = payload.author
+    actor_id = get_actor_id(request, athlete_id)
+    if actor_id != athlete_id:
+        author = conn.execute(
+            select(athlete.c.display_name).where(athlete.c.id == actor_id)
+        ).scalar_one_or_none()
+
     now = datetime.now(UTC).replace(tzinfo=None)  # naive-implicit-UTC, matches storage
     result = conn.execute(
         note.insert().values(
@@ -44,7 +53,7 @@ def create_note(
             entity_type=payload.entity_type,
             entity_id=payload.entity_id,
             body=payload.body,
-            author=payload.author,
+            author=author,
             created_at=now,
             updated_at=now,
         )
@@ -59,7 +68,7 @@ def create_note(
         entity_type=payload.entity_type,
         entity_id=payload.entity_id,
         body=payload.body,
-        author=payload.author,
+        author=author,
         created_at=to_utc(now),
         updated_at=to_utc(now),
     )

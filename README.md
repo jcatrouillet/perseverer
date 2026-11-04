@@ -67,6 +67,9 @@ Form and health summaries.
 |---|---|
 | ![Month view](docs/screenshots/calendar-month.png) | ![Year view](docs/screenshots/calendar-year.png) |
 
+Pick another athlete as your **coach** (Settings) and they see your whole view, plan workouts for you and
+write comments on your activities, until you stop sharing.
+
 The year view can also make **posters** of the year, drawn in the background and downloaded as
 PNGs: a grid of every GPS trace (one sport or all), a heatmap around a point you pick on a map
 (by default your home, with a range that holds at least half of your activities), a calendar

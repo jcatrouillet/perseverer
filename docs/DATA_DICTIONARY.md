@@ -858,6 +858,14 @@ the athlete's own clock, `athlete.timezone`; null = the deployment's default tim
 means the default (`PERSEVERER_SCHEDULE_HOUR` / `_MINUTE` on `PERSEVERER_SCHEDULE_TIMEZONE`) and
 enabled. Set via `PUT /settings/sync-schedule` (Settings -> External tools).
 
+### Coach (coach_link)
+
+**`coach_link`**: one row per athlete who has a coach: `athlete_id` (the coachee, primary key, so one
+coach each), `coach_athlete_id` (the coach), `created_at`. Chosen by the coachee
+(`PUT /coach`), deleted by either side. A coach who sends `X-Act-As: <coachee id>` is answered as the
+coachee when this row exists. Comments a coach writes keep `note.author` set to the coach's display
+name; nothing else records who acted.
+
 ### Email reports
 
 **`athlete_email_report_config`**: `weekly_enabled`, `monthly_enabled` (both default false);

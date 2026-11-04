@@ -1,0 +1,63 @@
+.coach-switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.coach-switcher__select {
+  width: auto;
+  max-width: 11rem;
+}
+
+.coach-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border-bottom: 2px solid var(--color-pace);
+  color: var(--color-text);
+}
+
+/* `.settings-form input` (9ch) has the same specificity as a lone class, so the extra qualifier. */
+.settings-form input.coach-username {
+  width: min(100%, 18rem);
+}
+
+.coach-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.coach-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.coach-list__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.coach-list__row > span {
+  min-width: 8rem;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .coach-switcher__label {
+    display: none;
+  }
+}

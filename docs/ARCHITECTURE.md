@@ -485,6 +485,22 @@ Every table and query is scoped by `athlete_id`. A second athlete needs only a r
 and their own vendor logins; each athlete has their own Garmin and Kaya token store and Eufy
 config, and every worker job loops over all athletes.
 
+### Coaches
+
+An athlete can choose another athlete as coach (`coach_link`, one coach each, dropped by either
+side). The coach views the athlete's data by sending `X-Act-As: <athlete id>`; `require_api_key`
+(`api/dependencies.py`) then returns the **coachee's** id, so every router, already scoped by the
+athlete it receives, answers for the coachee with no per-endpoint change. The real caller stays on
+`request.state.actor_id` (`get_actor_id`), used to sign a coach's comments. What a coach may *write*
+is an allowlist in the same file (`coach_may`): notes and planned workouts, minus the actions on the
+athlete's own Garmin account and training log; everything else that is not a read, and the reads of
+the API key and calendar feed settings, is refused. New write endpoints are therefore closed to
+coaches until added there. The frontend keeps the viewed athlete in `localStorage`
+(`api/client.ts`, `useActingAs.ts`), re-keys the app on a switch so no data of the other athlete
+lingers, hides Settings while viewing, and shows a banner; a `403` saying the caller is no longer
+the coach drops it back to the coach's own view. The coach endpoints themselves are never sent the
+header.
+
 ## Performance
 
 - Dashboards read rollups; request-time computation is bounded to one item.

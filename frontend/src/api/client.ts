@@ -7,6 +7,42 @@ import type { ForgotPasswordResponse, LoginRequest, LoginResponse } from "./type
 const JWT_STORAGE_KEY = "perseverer_jwt";
 const API_KEY_STORAGE_KEY = "perseverer_api_key";
 
+/** The athlete a coach is currently viewing as (the X-Act-As header), kept so a reload stays in
+ * the coachee's view. */
+export interface ActingAs {
+  id: string;
+  display_name: string;
+}
+
+const ACTING_AS_STORAGE_KEY = "perseverer_acting_as";
+export const ACTING_AS_EVENT = "perseverer:acting-as-changed";
+
+export function getActingAs(): ActingAs | null {
+  try {
+    const raw = localStorage.getItem(ACTING_AS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ActingAs>;
+    return typeof parsed.id === "string" && typeof parsed.display_name === "string"
+      ? { id: parsed.id, display_name: parsed.display_name }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setActingAs(value: ActingAs | null): void {
+  if (value) localStorage.setItem(ACTING_AS_STORAGE_KEY, JSON.stringify(value));
+  else localStorage.removeItem(ACTING_AS_STORAGE_KEY);
+  window.dispatchEvent(new Event(ACTING_AS_EVENT));
+}
+
+// The coach endpoints are about the signed-in athlete themselves (their coach, their coachees),
+// never the athlete being viewed.
+function withActingAs(headers: Headers, path: string): void {
+  const acting = getActingAs();
+  if (acting && !path.startsWith("/api/v1/coach")) headers.set("X-Act-As", acting.id);
+}
+
 export class AuthError extends Error {}
 export class ServerUnconfiguredError extends Error {}
 /** A password reset link that is invalid, expired or already used. */
@@ -80,6 +116,7 @@ export function storeApiKey(key: string): void {
 }
 
 export function clearCredential(): void {
+  localStorage.removeItem(ACTING_AS_STORAGE_KEY);
   localStorage.removeItem(JWT_STORAGE_KEY);
   localStorage.removeItem(API_KEY_STORAGE_KEY);
   window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
@@ -96,6 +133,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
   if (credential) headers.set(credential.header, credential.value);
+  withActingAs(headers, path);
 
   const response = await fetch(`${getBaseUrl()}${path}`, { ...options, headers });
 
@@ -108,6 +146,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "");
+    // The athlete stopped sharing while their coach was viewing: fall back to the coach's own view.
+    if (response.status === 403 && getActingAs() && body.includes("not this athlete's coach")) {
+      setActingAs(null);
+    }
     throw new ApiError(response.status, body, errorDetail(body));
   }
   if (response.status === 204) {
@@ -142,6 +184,7 @@ export async function apiBlob(path: string): Promise<Blob> {
   const credential = getStoredCredential();
   const headers = new Headers();
   if (credential) headers.set(credential.header, credential.value);
+  withActingAs(headers, path);
   const response = await fetch(`${getBaseUrl()}${path}`, { method: "GET", headers });
   if (response.status === 401) {
     clearCredential();

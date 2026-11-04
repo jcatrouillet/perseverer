@@ -30,6 +30,7 @@ import { BulkImportCard } from "../components/BulkImportCard";
 import { CommuteCard } from "../components/CommuteCard";
 import { CalendarFeedCard } from "../components/CalendarFeedCard";
 import { EmailReportsCard } from "../components/EmailReportsCard";
+import { CoachCard } from "../components/CoachCard";
 import { EufyCard } from "../components/EufyCard";
 import { KayaCard } from "../components/KayaCard";
 import { GarminConnectCard } from "../components/GarminConnectCard";
@@ -566,6 +567,7 @@ export function SettingsPage() {
           </section>
 
           <ApiKeyCard />
+          <CoachCard />
           <ApiDocsCard />
         </>
       ),

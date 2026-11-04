@@ -36,6 +36,7 @@ import type {
   BloodTestResultIn,
   BloodTestResultOut,
   CalendarFeedStatusOut,
+  CoachOut,
   CalendarFeedUrlOut,
   CalendarResponse,
   ChangePasswordIn,
@@ -2052,5 +2053,36 @@ export function useSetSyncSchedule() {
     mutationFn: (body: SyncScheduleIn) =>
       apiPut<SyncScheduleOut>("/api/v1/settings/sync-schedule", body),
     onSuccess: (data) => client.setQueryData(["sync-schedule"], data),
+  });
+}
+
+export function useCoach() {
+  return useQuery({
+    queryKey: ["coach"],
+    queryFn: () => apiGet<CoachOut>("/api/v1/coach"),
+  });
+}
+
+export function useSetCoach() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (username: string) => apiPut<CoachOut>("/api/v1/coach", { username }),
+    onSuccess: (data) => client.setQueryData(["coach"], data),
+  });
+}
+
+export function useStopSharing() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiDelete<void>("/api/v1/coach"),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["coach"] }),
+  });
+}
+
+export function useStopCoaching() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (coacheeId: string) => apiDelete<void>(`/api/v1/coach/coachees/${coacheeId}`),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["coach"] }),
   });
 }

@@ -43,10 +43,21 @@ curl -H "Authorization: Bearer eyJhbGciOi..." \
   https://your-perseverer-host/api/v1/activities?limit=10
 ```
 
+**Viewing as a coachee.** An athlete can choose another athlete as their coach (`PUT /coach`). The
+coach then adds `X-Act-As: <athlete id>` to any request (together with their own credential), and the
+request is answered as that athlete: every endpoint reads and writes the coachee's data. It is
+refused with `403` unless the coachee chose the caller as coach, and reads are open but the writes
+a coach may make are limited to **notes** (`/notes`) and **planned workouts**
+(`/planned-workouts`, except `/push`, `/complete` and `/uncomplete`, which act on the athlete's own
+Garmin account and training log). Everything else that is not a read (settings, credentials, sharing,
+sync, the coach link itself) is `403` while acting, and so are the reads of the API key and calendar
+feed settings. A note a coach writes is signed with the coach's display name (`author`).
+
 **Failure modes:**
 
 | Status | When |
 |---|---|
+| `403` | `X-Act-As` names an athlete who has not chosen the caller as their coach, or the request is one a coach may not make for an athlete. |
 | `401` | No credential presented (and the server has at least one auth method configured), or the credential is invalid, malformed, or expired. |
 | `503` | The server has **neither** `PERSEVERER_API_KEY` nor `PERSEVERER_JWT_SECRET` configured — auth fails closed, never open. A deployment misconfiguration, not something a client request can fix. |
 
@@ -1225,6 +1236,36 @@ bands).
 
 ---
 
+## Coach
+
+An athlete picks one coach by username. The coach can then view the athlete's whole view with the
+`X-Act-As` header (see Authentication), plan workouts and write comments. These endpoints are about
+the signed-in athlete themselves: send them without `X-Act-As` (the web app does). With it, the
+writes are `403` and `GET /coach` would describe the athlete being viewed.
+
+### `GET /coach`
+
+**Response `200`** (`CoachOut`): `coach` (the athlete's coach, or `null`) and `coachees` (the
+athletes who chose the caller as coach, by name). Each person (`CoachPersonOut`): `id`,
+`display_name`, `username`, `since` (UTC instant the link was made).
+
+### `PUT /coach`
+
+Chooses the caller's coach, replacing any earlier one. **Request body** (`CoachIn`): `username`.
+**Responses:** `200` -> `CoachOut`; `404` -> no athlete has this username; `422` -> the caller's own
+username.
+
+### `DELETE /coach`
+
+The athlete stops sharing with their coach. `204`; nothing to stop is not an error. The coach's
+next request with `X-Act-As` is `403`.
+
+### `DELETE /coach/coachees/{coachee_id}`
+
+The coach gives an athlete back, ending the link from their side. `204`.
+
+---
+
 ## Notes
 
 ### `POST /notes`
@@ -1240,7 +1281,7 @@ deliberately read-only around.
 | `entity_type` | `"activity"` \| `"day"` \| `"week"` | required | |
 | `entity_id` | string | required | An activity id when `entity_type` is `activity`; a `local_date` (`YYYY-MM-DD`) string when `entity_type` is `day`; that week's own Monday `local_date` when `entity_type` is `week` (matching `rollups.py`'s own Monday-start week convention). |
 | `body` | string | required | |
-| `author` | string, nullable | optional | |
+| `author` | string, nullable | optional | Who wrote it. Replaced by the coach's display name when a coach writes it for an athlete (`X-Act-As`). |
 
 **Responses:** `201` → `NoteOut`. `404` → `detail: "activity not found"` — only checked when
 `entity_type` is `activity`; a `day`/`week` entity_id is never validated against anything, since
