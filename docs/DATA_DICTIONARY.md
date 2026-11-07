@@ -582,8 +582,10 @@ readings; content addressing makes repeats free.
 - **Outlier filtering** (`api/routers/health.py::_body_composition_daily`, display only): a shared
   scale records other people's weigh-ins with no way to tell them apart. Body-composition metrics
   read straight from `health_observation` and walk the history in order, accepting a reading only
-  within 15% of the last *accepted* value. A run of foreign readings is rejected as a block, even
-  where it outnumbers the athlete's own.
+  within 15% of the median of the last five *accepted* values (one borderline foreign reading that
+  slips through cannot become the baseline and hide the real ones). A run of foreign readings is
+  rejected as a block, even where it outnumbers the athlete's own. A stored `0` (a weigh-in the scale
+  could not take a component for) is not a reading and is ignored.
 
 ### Apple Health export
 

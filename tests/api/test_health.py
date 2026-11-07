@@ -288,6 +288,50 @@ def test_health_dashboard_drops_a_body_composition_outlier_reading(
     assert dates == {"2026-08-08", "2026-08-09", "2026-08-12"}
 
 
+def test_health_dashboard_one_borderline_reading_does_not_hide_the_real_ones(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # Mirrors a real stretch of body-fat readings: the athlete's own ~22, one borderline 19.0 that
+    # is within 15% of 21.7 (so it is accepted) but would, as the lone baseline, reject every
+    # later 22.x (16-17% above it) for weeks. Foreign readings far off (11.3) are still dropped,
+    # and a stored 0 (a weigh-in with no body-fat component) is not a reading at all.
+    key = "eufy.scale.body_fat"
+    readings = [
+        ("2025-10-19", 21.7),
+        ("2025-10-28", 19.0),
+        ("2025-10-29", 22.3),
+        ("2025-11-09", 22.2),
+        ("2025-11-11", 11.3),
+        ("2025-11-12", 22.5),
+        ("2025-11-20", 0.0),
+        ("2025-11-23", 22.1),
+    ]
+    for day, value in readings:
+        _seed_body_observation(
+            engine,
+            metric_key=key,
+            local_date=day,
+            value=value,
+            observed_at_utc=dt.datetime.fromisoformat(f"{day}T09:00:00").replace(tzinfo=dt.UTC),
+        )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2025-10-01&end_date=2025-12-01",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    daily = {d["local_date"]: d["value_last"] for d in metrics["body_fat_pct"]["daily"]}
+    assert daily == {
+        "2025-10-19": 21.7,
+        "2025-10-28": 19.0,
+        "2025-10-29": 22.3,
+        "2025-11-09": 22.2,
+        "2025-11-12": 22.5,
+        "2025-11-23": 22.1,
+    }
+
+
 def test_health_dashboard_merges_apple_health_pre_eufy_weight_with_eufy(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:

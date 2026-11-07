@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import statistics
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
 
@@ -200,6 +202,33 @@ _OUTLIER_FILTERED_METRICS = frozenset(
 )
 
 
+#: How many of the latest accepted readings the next one is compared with (their median).
+_BASELINE_WINDOW = 5
+
+
+def _accepted_body_readings(
+    rows: Sequence[Row[Any]], max_relative_deviation: float
+) -> list[Row[Any]]:
+    """The readings (chronological) that survive the shared-scale outlier filter: each within
+    `max_relative_deviation` of the *median of the last `_BASELINE_WINDOW` accepted* readings. The
+    last accepted reading alone is too fragile a baseline: one borderline foreign reading that
+    slipped through (a 19.0 body-fat reading among the athlete's ~22) became the baseline and then
+    rejected every real reading for seven weeks, since they were more than 15% above it. A median
+    of a few recent readings shrugs a single stray off, while a foreign run is still never
+    accepted (it is far from the median, so it never gets in to move it)."""
+    recent: list[float] = []
+    accepted: list[Row[Any]] = []
+    for row in rows:
+        value = row.value_num
+        if recent:
+            baseline = statistics.median(recent[-_BASELINE_WINDOW:])
+            if abs(value - baseline) / abs(baseline) > max_relative_deviation:
+                continue
+        recent.append(value)
+        accepted.append(row)
+    return accepted
+
+
 def _body_composition_daily(
     conn: Connection,
     *,
@@ -213,15 +242,15 @@ def _body_composition_daily(
     `health_observation` rows, walking the *entire* history (across every alias in `aliases`,
     e.g. Eufy plus Apple Health's pre-Eufy era -- the two never share a date by construction) in
     chronological order and rejecting a reading if it deviates more than `max_relative_deviation`
-    from the last *accepted* reading -- not from its nearby peers. A symmetric neighbor-window
-    comparison (tried first, see git history) breaks down on real data: a shared scale can go
-    through a multi-week stretch where someone else's readings actually outnumber the athlete's
-    own within any reasonably-sized window, so a plain local median gets pulled toward the wrong
-    cluster. Anchoring to the last accepted value instead means a whole run of bad readings gets
-    rejected together, however many of them there are or how tightly they cluster near each
-    other, since they're never compared to each other -- only to the last value that was itself
-    accepted. The very first-ever reading for a metric has nothing to compare against and is
-    always accepted.
+    from the median of the last few *accepted* readings (`_accepted_body_readings`) -- not from
+    its nearby peers. A symmetric neighbor-window comparison (tried first, see git history) breaks
+    down on real data: a shared scale can go through a multi-week stretch where someone else's
+    readings actually outnumber the athlete's own within any reasonably-sized window, so a plain
+    local median gets pulled toward the wrong cluster. Anchoring to what was itself accepted
+    instead means a whole run of bad readings gets rejected together, however many of them there
+    are or how tightly they cluster near each other, since they're never compared to each other.
+    The very first-ever reading for a metric has nothing to compare against and is always
+    accepted.
     """
     rows = conn.execute(
         select(
@@ -233,26 +262,20 @@ def _body_composition_daily(
         .where(
             health_observation.c.athlete_id == athlete_id,
             health_observation.c.metric_key.in_(aliases),
-            health_observation.c.value_num.is_not(None),
+            # A scale that could not measure a component stores 0 (a weigh-in with no body-fat
+            # reading): not a measurement, and it would otherwise become the baseline.
+            health_observation.c.value_num > 0,
         )
         .order_by(health_observation.c.observed_at_utc)
     ).fetchall()
 
-    baseline: float | None = None
+    accepted_rows = _accepted_body_readings(rows, max_relative_deviation)
     by_date: dict[str, list[float]] = {}
     last_by_date: dict[str, tuple[object, float]] = {}
     source_by_date: dict[str, str] = {}
     last_accepted_date: str | None = None
-    for row in rows:
+    for row in accepted_rows:
         value = row.value_num
-        accepted = (
-            baseline is None
-            or baseline == 0
-            or abs(value - baseline) / abs(baseline) <= max_relative_deviation
-        )
-        if not accepted:
-            continue
-        baseline = value
         last_accepted_date = row.local_date
 
         row_date = date.fromisoformat(row.local_date)
