@@ -190,6 +190,10 @@ Patterns:
 
 - **Reveal in place.** Adding a note, a blood result or a route opens a form where the "+ Add"
   link was, rather than a modal. Lists of many items collapse into `<details>`.
+- **Goal reached:** `GoalCelebration` (mounted once in `App.tsx`, hidden while a coach views an
+  athlete) opens a small `Modal` when a monthly or yearly goal of the current period reaches 100%. It
+  lists the goals reached and is shown once per goal (remembered in `localStorage`,
+  `perseverer_celebrated_goals`).
 - **Long creation forms open in a popup.** Adding shoes, a bike, a tire or a goal opens a `Modal`
   from a "+ Add" button beside the list's title, so the page stays about what you own; Cancel,
   Escape and a click outside close it. Action buttons in a form sit in a `.gear-form__actions` row

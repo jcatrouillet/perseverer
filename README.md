@@ -275,7 +275,8 @@ With the **Cycling** switch, the same tabs describe your rides:
     private course.
 - **Races** with goal times, compared with the predicted finish.
 - **Goals** per week, month or year: as many distance goals and time goals as you like, one per
-  sport (or all sports together), and bouldering sends by grade, each with a pace-to-target chart.
+  sport (or all sports together), and bouldering sends by grade, each with a pace-to-target chart. A congratulations popup appears, once per goal, when a
+  monthly or yearly goal is reached.
 - **Compliance** per sport in the week view, matched automatically against recorded activities.
 - **Notes** on any activity, day or week, written by you or by an AI agent through the API; the
   coming week's notes also appear in the weekly email.

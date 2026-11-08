@@ -4,6 +4,7 @@ import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import { AuthGate } from "./components/AuthGate";
 import { CoachBanner, CoacheeSwitcher } from "./components/CoachBar";
 import { GearAlertBanner } from "./components/GearAlertBanner";
+import { GoalCelebration } from "./components/GoalCelebration";
 import { Icon, type IconName } from "./components/Icon";
 import { useLastImportedActivity } from "./api/queries";
 import { LoadingSpinner } from "./components/LoadingSpinner";
@@ -198,6 +199,7 @@ function AppContent({ viewingAsCoach }: { viewingAsCoach: boolean }) {
       </nav>
       <CoachBanner />
       <GearAlertBanner />
+      {!viewingAsCoach && <GoalCelebration />}
       <div className="app-main">
         <Suspense fallback={<LoadingSpinner size="lg" />}>
           <Switch>
