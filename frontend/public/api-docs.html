@@ -1869,6 +1869,27 @@ const GROUPS = [
     },
   ]},
 
+  { id: "dexa-scans", title: "DEXA Scans", endpoints: [
+    { method: "GET", path: "/api/v1/dexa-scans", summary: "Every DEXA scan, newest first.",
+      description: "Athlete-entered body-composition scans: one value per region and metric, several sharing one local_date forming one scan. SI units (kg, cm3, g/cm2). Regions: total, arms, legs, trunk, android, gynoid, right_arm, left_arm, right_leg, left_leg, head, ribs, spine, pelvis. Metrics: fat_pct, total_mass_kg, fat_mass_kg, lean_mass_kg, bmc_kg, bmd_g_cm2, and for total t_score, z_score, rmr_kcal_day, ag_ratio, vat_mass_kg, vat_volume_cm3. A coach acting as an athlete can read but not write.",
+      responses: [ { code: 200, note: "A list of scans: local_date, provider (nullable) and values (region, metric, value_num)." } ], example: {}
+    },
+    { method: "POST", path: "/api/v1/dexa-scans", summary: "Records a scan (re-posting a date replaces the values it names).",
+      body: { fields: [
+        ["local_date","string","req","","ISO date of the scan."],
+        ["provider","string|null","opt","","e.g. BodySpec."],
+        ["values","array","req","","At least one { region, metric, value_num }."],
+      ]},
+      responses: [ { code: 200, note: "The stored scan." }, { code: 422, note: "Bad date, empty values, or a blank region or metric." } ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/dexa-scans \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"local_date": "2025-11-23", "provider": "BodySpec", "values": [{"region": "total", "metric": "fat_pct", "value_num": 23.8}]}'` }
+    },
+    { method: "DELETE", path: "/api/v1/dexa-scans/{local_date}", summary: "Deletes the scan taken that day.",
+      params: [ ["local_date","path","req","string(date)","—",""] ],
+      responses: [ { code: 200, note: "Deleted." }, { code: 404, note: "No scan on that date." } ], example: {}
+    },
+  ]},
   { id: "blood-tests", title: "Blood Tests", endpoints: [
     { method: "GET", path: "/api/v1/blood-tests", summary: "Athlete-entered blood test results in a date range.",
       description: "One row per marker per draw, several rows sharing one local_date forming one logical panel. Ordered by local_date descending then marker.",

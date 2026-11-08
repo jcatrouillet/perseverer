@@ -7,6 +7,7 @@ import { HealthPage } from "./HealthPage";
 const mockUseHealthDashboard = vi.fn();
 const mockUseSleep = vi.fn();
 const mockUseBloodTests = vi.fn();
+const mockUseDexaScans = vi.fn();
 
 vi.mock("../api/queries", () => ({
   useHealthDashboard: (...args: unknown[]) => mockUseHealthDashboard(...args),
@@ -14,6 +15,8 @@ vi.mock("../api/queries", () => ({
   // BloodTestsPanel's own hooks -- this page renders it unconditionally alongside the metric
   // explorer, so every test here needs it mocked too, even ones that don't care about it.
   useBloodTests: (...args: unknown[]) => mockUseBloodTests(...args),
+  useDexaScans: () => mockUseDexaScans(),
+  useDeleteDexaScan: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateBloodTestBatch: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useUpdateBloodTestResult: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteBloodTestResult: () => ({ mutate: vi.fn(), isPending: false }),
@@ -49,6 +52,7 @@ describe("HealthPage", () => {
     // BloodTestsPanel renders unconditionally below the metric explorer -- not this describe
     // block's own concern (see BloodTestsPanel.test.tsx), so give it an inert empty default.
     mockUseBloodTests.mockReturnValue({ data: [], isLoading: false, isError: false });
+    mockUseDexaScans.mockReturnValue({ data: [], isLoading: false, isError: false });
   });
 
   it("shows nothing to select when there's no data at all", () => {
@@ -245,6 +249,31 @@ describe("HealthPage", () => {
     expect(screen.getByText(/1 result, 1 outside the range/)).toBeInTheDocument();
     // A blood marker is its own all-time history, so the window controls are not shown for it.
     expect(screen.queryByRole("button", { name: "Week" })).not.toBeInTheDocument();
+  });
+
+  it("lists the DEXA scan under its own group once one is recorded", () => {
+    mockUseHealthDashboard.mockReturnValue({ ...EMPTY, data: { metrics: [] } });
+    mockUseSleep.mockReturnValue({ ...EMPTY, data: [] });
+    mockUseDexaScans.mockReturnValue({
+      data: [
+        {
+          local_date: "2025-11-23",
+          provider: "BodySpec",
+          values: [
+            { region: "total", metric: "fat_pct", value_num: 23.8 },
+            { region: "total", metric: "lean_mass_kg", value_num: 61.1 },
+          ],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    render(<HealthPage />);
+    fireEvent.click(screen.getByRole("button", { name: /^DEXA scan/ }));
+    fireEvent.click(screen.getByRole("button", { name: "DEXA scan results" }));
+    expect(screen.getAllByText("23.8%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("61.1 kg").length).toBeGreaterThan(0);
+    expect(screen.getByText("BodySpec")).toBeInTheDocument();
   });
 
   it("groups the body metrics into collapsible categories", () => {

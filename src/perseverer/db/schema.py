@@ -607,6 +607,28 @@ blood_test_result = Table(
     Index("ix_blood_test_result_athlete_date", "athlete_id", "local_date"),
 )
 
+# One row per measurement per DEXA body-composition scan: `region` ("total", "arms", "legs",
+# "trunk", "android", "gynoid", "right_arm", "left_arm", "right_leg", "left_leg", "head", "ribs",
+# "spine", "pelvis") by `metric` ("fat_pct", "total_mass_kg", "fat_mass_kg", "lean_mass_kg",
+# "bmc_kg", "bmd_g_cm2", "t_score", "z_score", "rmr_kcal_day", "ag_ratio", "vat_mass_kg",
+# "vat_volume_cm3"). Athlete-entered from the scan report, like blood_test_result, so it is its own
+# plain table rather than the vendor EAV pipeline. SI units in storage (masses in kg); several rows
+# sharing one `local_date` form one scan. A new region or metric is a new row, not a migration.
+dexa_scan_result = Table(
+    "dexa_scan_result",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("local_date", String, nullable=False),
+    Column("region", String, nullable=False),
+    Column("metric", String, nullable=False),
+    Column("value_num", Float, nullable=False),
+    Column("provider", String, nullable=True),  # e.g. "BodySpec"
+    Column("created_at", DateTime(), nullable=False),
+    Index("ix_dexa_scan_result_athlete_date", "athlete_id", "local_date"),
+    UniqueConstraint("athlete_id", "local_date", "region", "metric", name="uq_dexa_scan_result"),
+)
+
 # --- Bronze: immutable raw archive --------------------------------------------
 
 raw_object = Table(

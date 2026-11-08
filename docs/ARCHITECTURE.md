@@ -140,7 +140,7 @@ Main table groups (see [DATA_DICTIONARY.md](DATA_DICTIONARY.md) for every column
   `health_metric_period_rollup`, `fitness_daily_rollup`, `performance_daily_rollup`, `insight`.
 - **Athlete input:** `note`, `goal`, `duration_goal`, `bouldering_goal`, `planned_workout`,
   `planned_workout_step`, `planned_race`, `shoe`, `athlete_default_shoe`, `bike`, `athlete_default_bike`, `bike_tire`,
-  `bike_tire_install`, `blood_test_result`,
+  `bike_tire_install`, `blood_test_result`, `dexa_scan_result`,
   `kaya_climb_note`.
 - **Durable overrides:** `activity_sport_override`, `activity_trim_override`,
   `activity_merge_override`, `bouldering_route_status_override`, `bouldering_manual_route`,

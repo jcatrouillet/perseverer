@@ -35,6 +35,7 @@ import type {
   BloodTestBatchIn,
   BloodTestResultIn,
   BloodTestResultOut,
+  DexaScanOut,
   CalendarFeedStatusOut,
   CoachOut,
   CalendarFeedUrlOut,
@@ -2084,5 +2085,24 @@ export function useStopCoaching() {
   return useMutation({
     mutationFn: (coacheeId: string) => apiDelete<void>(`/api/v1/coach/coachees/${coacheeId}`),
     onSuccess: () => client.invalidateQueries({ queryKey: ["coach"] }),
+  });
+}
+
+// --- DEXA scans (dexa_scan_result) -- see api/routers/dexa.py. Read and delete here; a scan is
+// entered through POST /dexa-scans (API or MCP) from the numbers on the report.
+export function useDexaScans() {
+  return useQuery({
+    queryKey: ["dexa-scans"],
+    queryFn: () => apiGet<DexaScanOut[]>("/api/v1/dexa-scans"),
+  });
+}
+
+export function useDeleteDexaScan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (localDate: string) => apiDelete<void>(`/api/v1/dexa-scans/${localDate}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["dexa-scans"] });
+    },
   });
 }

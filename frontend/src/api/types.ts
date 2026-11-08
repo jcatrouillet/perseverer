@@ -1615,3 +1615,16 @@ export interface CoachOut {
   coach: CoachPersonOut | null;
   coachees: CoachPersonOut[];
 }
+
+// --- DEXA scans (GET/POST /dexa-scans, DELETE /dexa-scans/{date}); masses in kg, volumes in cm3.
+export interface DexaValueOut {
+  region: string;
+  metric: string;
+  value_num: number;
+}
+
+export interface DexaScanOut {
+  local_date: string;
+  provider: string | null;
+  values: DexaValueOut[];
+}

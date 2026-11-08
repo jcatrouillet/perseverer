@@ -1,0 +1,98 @@
+/* Health page: DexaScanPanel.tsx -- summary tiles, plain tables, a body-fat history line. */
+.dexa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.dexa__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dexa__provider {
+  color: var(--color-text-muted);
+  margin-right: auto;
+}
+
+.dexa__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.dexa__tile {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+.dexa__tile dt,
+.dexa__row dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.dexa__tile dd {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.dexa__scroll {
+  overflow-x: auto;
+}
+
+.dexa__table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.dexa__table th,
+.dexa__table td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dexa__table th:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+
+.dexa__rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dexa__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dexa__row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.dexa__gaps {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.dexa__chart {
+  height: 14rem;
+}

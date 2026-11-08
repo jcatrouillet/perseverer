@@ -610,6 +610,24 @@ readings; content addressing makes repeats free.
 - **Dashboard:** `weight_kg`, `bmi`, `body_fat_pct` alias both sources; blood pressure has its own
   logical metrics (`blood_pressure_systolic`, `blood_pressure_diastolic`) and chart.
 
+### DEXA scans
+
+Athlete-entered body-composition scans, a plain table like blood tests (nothing to archive).
+
+- **`dexa_scan_result`**: `local_date` (scan date), `region`, `metric`, `value_num`, `provider`
+  (optional), `created_at`; unique on `(athlete_id, local_date, region, metric)`. Several rows on
+  one date form one scan. SI units: masses in kg (`*_kg`), volumes in cm3, bone density in g/cm2,
+  resting metabolic rate in kcal/day; a report in pounds or cubic inches is converted before it is
+  posted.
+- Regions: `total`, `arms`, `legs`, `trunk`, `android`, `gynoid`, `right_arm`, `left_arm`,
+  `right_leg`, `left_leg`, and for bone density `head`, `ribs`, `spine`, `pelvis`. Metrics:
+  `fat_pct`, `total_mass_kg`, `fat_mass_kg`, `lean_mass_kg`, `bmc_kg`, `bmd_g_cm2`, and on `total`
+  only `t_score`, `z_score`, `rmr_kcal_day`, `ag_ratio` (android / gynoid), `vat_mass_kg`,
+  `vat_volume_cm3`. A new region or metric is a new row, not a migration. Lean share and the
+  left/right gaps are computed on read, never stored.
+- Routes: `GET /dexa-scans`, `POST /dexa-scans` (idempotent per date, region and metric),
+  `DELETE /dexa-scans/{local_date}`. The Health page shows them under "DEXA scan".
+
 ### Blood test results
 
 Athlete-entered lab results, a plain table rather than the vendor EAV pipeline (nothing to archive,

@@ -5,11 +5,12 @@
 // components/MetricExplorer.tsx for the list+chart split itself.
 import { useMemo, useState } from "react";
 
-import { useBloodTests, useHealthDashboard, useSleep } from "../api/queries";
+import { useBloodTests, useDexaScans, useHealthDashboard, useSleep } from "../api/queries";
 import type { SleepSessionOut } from "../api/types";
 import { groupResultsByMarker } from "../bloodMarkers";
 import { BloodMarkerChart } from "../components/BloodMarkerChart";
 import { BloodTestsPanel } from "../components/BloodTestsPanel";
+import { DexaScanPanel } from "../components/DexaScanPanel";
 import { ChartFullscreen } from "../components/ChartFullscreen";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { MetricExplorer, type ExplorerMetric } from "../components/MetricExplorer";
@@ -33,9 +34,16 @@ const TODAY = localIsoDate();
 
 const BLOOD_PREFIX = "blood:";
 const BLOOD_MANAGE_KEY = "blood-manage";
+const DEXA_KEY = "dexa";
 
 /** Order of the top-level menu groups: body metrics first, blood tests last. */
-const GROUP_ORDER = ["Body composition", "Heart & vitals", "Activity & sleep", "Blood tests"];
+const GROUP_ORDER = [
+  "Body composition",
+  "Heart & vitals",
+  "Activity & sleep",
+  "Blood tests",
+  "DEXA scan",
+];
 
 function color(logicalMetric: string): string {
   return toneColor(healthMetricStyle(logicalMetric).tone);
@@ -215,6 +223,7 @@ export function HealthPage() {
   const dashboard = useHealthDashboard(EARLIEST_PLAUSIBLE_DATE, TODAY);
   const sleep = useSleep(EARLIEST_PLAUSIBLE_DATE, TODAY);
   const bloodTests = useBloodTests(EARLIEST_PLAUSIBLE_DATE, TODAY);
+  const dexaScans = useDexaScans();
   const bloodSeries = useMemo(() => groupResultsByMarker(bloodTests.data ?? []), [bloodTests.data]);
 
   const dashboardPoints = useMemo(
@@ -237,7 +246,9 @@ export function HealthPage() {
   // it neither takes part in the shared window controls nor in `activeChart`'s history bounds.
   const activeChart =
     availableCharts.find((c) => c.key === selectedMetric) ??
-    (selectedMetric?.startsWith(BLOOD_PREFIX) || selectedMetric === BLOOD_MANAGE_KEY
+    (selectedMetric?.startsWith(BLOOD_PREFIX) ||
+    selectedMetric === BLOOD_MANAGE_KEY ||
+    selectedMetric === DEXA_KEY
       ? null
       : availableCharts[0]) ??
     null;
@@ -259,7 +270,8 @@ export function HealthPage() {
     [resolution, anchor, dataStart, effectiveCustomRange],
   );
 
-  const isLoading = dashboard.isLoading || sleep.isLoading || bloodTests.isLoading;
+  const isLoading =
+    dashboard.isLoading || sleep.isLoading || bloodTests.isLoading || dexaScans.isLoading;
   const isError = dashboard.isError || sleep.isError;
 
   function changeResolution(next: Resolution) {
@@ -297,6 +309,23 @@ export function HealthPage() {
     [bloodSeries],
   );
 
+  // One entry, only once a scan exists: the scan itself is not a windowed time series.
+  const dexaMetrics: ExplorerMetric[] = useMemo(
+    () =>
+      dexaScans.data && dexaScans.data.length > 0
+        ? [
+            {
+              key: DEXA_KEY,
+              title: "DEXA scan results",
+              group: "DEXA scan",
+              hideDetailHeader: true,
+              content: <DexaScanPanel scans={dexaScans.data} />,
+            },
+          ]
+        : [],
+    [dexaScans.data],
+  );
+
   const metrics: ExplorerMetric[] = useMemo(
     () =>
       [
@@ -314,8 +343,9 @@ export function HealthPage() {
           };
         }),
         ...bloodMetrics,
+        ...dexaMetrics,
       ].sort((a, b) => GROUP_ORDER.indexOf(a.group ?? "") - GROUP_ORDER.indexOf(b.group ?? "")),
-    [availableCharts, window, bloodMetrics],
+    [availableCharts, window, bloodMetrics, dexaMetrics],
   );
 
   return (

@@ -725,6 +725,36 @@ own live-fetch start date).
 
 ---
 
+## DEXA Scans
+
+Athlete-entered DEXA body-composition scans: one row per `(region, metric)` per scan, several rows
+sharing one `local_date` forming one scan. Values are SI (masses in kg, volumes in cm3, bone density
+in g/cm2). A coach acting as an athlete (`X-Act-As`) can read them but not enter or delete them.
+
+### `GET /dexa-scans`
+
+Every scan, newest first. **Response `200`**: `list[DexaScanOut]`, each `local_date`, `provider`
+(nullable, e.g. `BodySpec`) and `values` (a list of `region`, `metric`, `value_num`).
+
+Regions: `total`, `arms`, `legs`, `trunk`, `android`, `gynoid`, `right_arm`, `left_arm`,
+`right_leg`, `left_leg`, and for bone density `head`, `ribs`, `spine`, `pelvis`. Metrics: `fat_pct`,
+`total_mass_kg`, `fat_mass_kg`, `lean_mass_kg`, `bmc_kg`, `bmd_g_cm2`, and for `total` only
+`t_score`, `z_score`, `rmr_kcal_day`, `ag_ratio`, `vat_mass_kg`, `vat_volume_cm3`. Any other region
+or metric name is stored as given.
+
+### `POST /dexa-scans`
+
+Records a scan. **Request body** (`DexaScanIn`): `local_date` (ISO date), `provider` (optional),
+`values` (at least one `region`, `metric`, `value_num`). A value already stored for the same date,
+region and metric is replaced, so posting a report twice changes nothing. **Responses:** `200` ->
+the stored `DexaScanOut`; `422` -> bad date, empty `values` or a blank region or metric.
+
+### `DELETE /dexa-scans/{local_date}`
+
+Deletes every value of the scan taken that day. `200`; `404` when there is none.
+
+---
+
 ## Blood Tests
 
 Athlete-entered blood test results — one row per marker per draw, several rows sharing one
