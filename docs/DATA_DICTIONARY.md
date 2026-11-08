@@ -586,6 +586,9 @@ readings; content addressing makes repeats free.
   slips through cannot become the baseline and hide the real ones). A run of foreign readings is
   rejected as a block, even where it outnumbers the athlete's own. A stored `0` (a weigh-in the scale
   could not take a component for) is not a reading and is ignored.
+  **Weight decides for the whole measurement:** the components stored with a weight at the same timestamp
+  (one scale measurement) are kept when that weight is accepted and dropped when it is not, whatever
+  their own values; the filter above only judges readings with no weight beside them.
 
 ### Apple Health export
 

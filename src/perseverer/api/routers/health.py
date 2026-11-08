@@ -229,30 +229,8 @@ def _accepted_body_readings(
     return accepted
 
 
-def _body_composition_daily(
-    conn: Connection,
-    *,
-    athlete_id: str,
-    aliases: list[str],
-    start_date: date,
-    end_date: date,
-    max_relative_deviation: float = 0.15,
-) -> HealthDashboardMetricOut | None:
-    """Rebuilds the daily aggregate for one body-composition metric directly from raw
-    `health_observation` rows, walking the *entire* history (across every alias in `aliases`,
-    e.g. Eufy plus Apple Health's pre-Eufy era -- the two never share a date by construction) in
-    chronological order and rejecting a reading if it deviates more than `max_relative_deviation`
-    from the median of the last few *accepted* readings (`_accepted_body_readings`) -- not from
-    its nearby peers. A symmetric neighbor-window comparison (tried first, see git history) breaks
-    down on real data: a shared scale can go through a multi-week stretch where someone else's
-    readings actually outnumber the athlete's own within any reasonably-sized window, so a plain
-    local median gets pulled toward the wrong cluster. Anchoring to what was itself accepted
-    instead means a whole run of bad readings gets rejected together, however many of them there
-    are or how tightly they cluster near each other, since they're never compared to each other.
-    The very first-ever reading for a metric has nothing to compare against and is always
-    accepted.
-    """
-    rows = conn.execute(
+def _body_rows(conn: Connection, *, athlete_id: str, aliases: list[str]) -> Sequence[Row[Any]]:
+    return conn.execute(
         select(
             health_observation.c.local_date,
             health_observation.c.observed_at_utc,
@@ -269,7 +247,58 @@ def _body_composition_daily(
         .order_by(health_observation.c.observed_at_utc)
     ).fetchall()
 
-    accepted_rows = _accepted_body_readings(rows, max_relative_deviation)
+
+def _weight_verdicts(
+    conn: Connection, *, athlete_id: str, max_relative_deviation: float = 0.15
+) -> dict[datetime, bool]:
+    """Per scale measurement (keyed by its timestamp), whether its weight is in range. Weight is
+    the one component every measurement has and the one that tells two people apart (82 kg
+    against 47 kg), so it decides for the whole measurement: the other components stored with the
+    same timestamp are kept when it is accepted and dropped when it is not (see
+    `_body_composition_daily`)."""
+    rows = _body_rows(conn, athlete_id=athlete_id, aliases=LOGICAL_METRICS["weight_kg"])
+    accepted = {r.observed_at_utc for r in _accepted_body_readings(rows, max_relative_deviation)}
+    return {r.observed_at_utc: r.observed_at_utc in accepted for r in rows}
+
+
+def _body_composition_daily(
+    conn: Connection,
+    *,
+    athlete_id: str,
+    aliases: list[str],
+    start_date: date,
+    end_date: date,
+    weight_verdicts: dict[datetime, bool] | None = None,
+    max_relative_deviation: float = 0.15,
+) -> HealthDashboardMetricOut | None:
+    """Rebuilds the daily aggregate for one body-composition metric directly from raw
+    `health_observation` rows, walking the *entire* history (across every alias in `aliases`,
+    e.g. Eufy plus Apple Health's pre-Eufy era -- the two never share a date by construction) in
+    chronological order and rejecting a reading if it deviates more than `max_relative_deviation`
+    from the median of the last few *accepted* readings (`_accepted_body_readings`) -- not from
+    its nearby peers. A symmetric neighbor-window comparison (tried first, see git history) breaks
+    down on real data: a shared scale can go through a multi-week stretch where someone else's
+    readings actually outnumber the athlete's own within any reasonably-sized window, so a plain
+    local median gets pulled toward the wrong cluster. Anchoring to what was itself accepted
+    instead means a whole run of bad readings gets rejected together, however many of them there
+    are or how tightly they cluster near each other, since they're never compared to each other.
+    The very first-ever reading for a metric has nothing to compare against and is always
+    accepted.
+
+    `weight_verdicts` (every metric but weight itself): a reading taken in the same scale
+    measurement as a weight (same timestamp) follows that weight's verdict, so a measurement whose
+    weight is in range keeps all of its components and one whose weight is not loses all of them.
+    Only readings with no weight beside them go through the filter above.
+    """
+    rows = _body_rows(conn, athlete_id=athlete_id, aliases=aliases)
+    verdicts = weight_verdicts or {}
+    undecided = [r for r in rows if r.observed_at_utc not in verdicts]
+    kept = {id(r) for r in _accepted_body_readings(undecided, max_relative_deviation)}
+    accepted_rows = [
+        r
+        for r in rows
+        if (verdicts[r.observed_at_utc] if r.observed_at_utc in verdicts else id(r) in kept)
+    ]
     by_date: dict[str, list[float]] = {}
     last_by_date: dict[str, tuple[object, float]] = {}
     source_by_date: dict[str, str] = {}
@@ -466,6 +495,7 @@ def get_health_dashboard(
 
     metrics = []
     metrics_by_name: dict[str, HealthDashboardMetricOut] = {}
+    weight_verdicts = _weight_verdicts(conn, athlete_id=athlete_id)
     for logical_metric, aliases in LOGICAL_METRICS.items():
         if logical_metric in _OUTLIER_FILTERED_METRICS:
             merged = _body_composition_daily(
@@ -474,6 +504,7 @@ def get_health_dashboard(
                 aliases=aliases,
                 start_date=start_date,
                 end_date=end_date,
+                weight_verdicts=None if logical_metric == "weight_kg" else weight_verdicts,
             )
         else:
             merged = _merge_logical_metric(

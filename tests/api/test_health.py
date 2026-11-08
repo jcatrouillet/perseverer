@@ -332,6 +332,44 @@ def test_health_dashboard_one_borderline_reading_does_not_hide_the_real_ones(
     }
 
 
+def test_health_dashboard_weight_decides_for_the_whole_scale_measurement(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    # Each measurement stores weight and body fat with one timestamp. A measurement whose weight
+    # is in range keeps its body fat even when that value alone would look off (a real 12.0 after
+    # readings of ~22); one whose weight is not in range loses its body fat even when that value
+    # alone looks plausible (a foreign 22.0 beside a 47 kg weight).
+    measurements = [
+        ("2026-03-01", 82.0, 22.0),
+        ("2026-03-02", 82.4, 22.2),
+        ("2026-03-03", 82.1, 12.0),
+        ("2026-03-04", 47.0, 22.0),
+        ("2026-03-05", 82.3, 21.8),
+    ]
+    for day, weight, fat in measurements:
+        at = dt.datetime.fromisoformat(f"{day}T08:00:00").replace(tzinfo=dt.UTC)
+        for key, value in (("eufy.scale.weight", weight), ("eufy.scale.body_fat", fat)):
+            _seed_body_observation(
+                engine, metric_key=key, local_date=day, value=value, observed_at_utc=at
+            )
+
+    r = client.get(
+        "/api/v1/health/dashboard?start_date=2026-03-01&end_date=2026-03-31",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    metrics = {m["logical_metric"]: m for m in r.json()["metrics"]}
+    weight_days = {d["local_date"] for d in metrics["weight_kg"]["daily"]}
+    fat_by_day = {d["local_date"]: d["value_last"] for d in metrics["body_fat_pct"]["daily"]}
+    assert weight_days == {"2026-03-01", "2026-03-02", "2026-03-03", "2026-03-05"}
+    assert fat_by_day == {
+        "2026-03-01": 22.0,
+        "2026-03-02": 22.2,
+        "2026-03-03": 12.0,
+        "2026-03-05": 21.8,
+    }
+
+
 def test_health_dashboard_merges_apple_health_pre_eufy_weight_with_eufy(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
