@@ -335,6 +335,8 @@ def insert_new_activity(
                 avg_hr=lap_row.avg_hr,
                 max_hr=lap_row.max_hr,
                 avg_speed_mps=lap_row.avg_speed_mps,
+                wkt_step_index=lap_row.wkt_step_index,
+                lap_trigger=lap_row.lap_trigger,
             )
         )
 

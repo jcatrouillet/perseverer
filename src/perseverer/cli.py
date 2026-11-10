@@ -48,6 +48,7 @@ from perseverer.adapters.strava_export import import_strava_export
 from perseverer.auth.api_keys import generate_api_key, hash_api_key
 from perseverer.auth.passwords import hash_password
 from perseverer.backfill_lap_moving_duration import backfill_lap_moving_duration
+from perseverer.backfill_lap_workout_steps import backfill_lap_workout_steps
 from perseverer.backfill_locations import backfill_locations
 from perseverer.backfill_workouts import backfill_workouts
 from perseverer.backup import create_backup, restore_backup
@@ -764,6 +765,20 @@ def backfill_lap_moving_duration_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_
         count = backfill_lap_moving_duration(conn, settings.raw_archive_dir, athlete_id=athlete_id)
         conn.commit()
     typer.echo(f"backfilled moving_duration_s for {count} laps")
+
+
+@app.command("backfill-lap-workout-steps")
+def backfill_lap_workout_steps_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
+    """Backfills lap.wkt_step_index and lap.lap_trigger for already-ingested activities from their
+    already-archived raw FIT bytes -- no full `sync rebuild` needed. See
+    backfill_lap_workout_steps.py's own docstring: the tag is what ties each lap to its workout
+    step when the watch's auto-lap cuts extra laps inside a step.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    with engine.connect() as conn:
+        count = backfill_lap_workout_steps(conn, settings.raw_archive_dir, athlete_id=athlete_id)
+    typer.echo(f"backfilled workout step and trigger for {count} laps")
 
 
 @app.command("backfill-locations")

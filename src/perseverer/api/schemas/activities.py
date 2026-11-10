@@ -29,6 +29,10 @@ class LapOut(BaseModel):
     avg_hr: float | None
     max_hr: float | None
     avg_speed_mps: float | None
+    # The workout step (activity workout `step_index`) the device recorded this lap under, and why
+    # the lap ended ("manual", "distance" for an auto-lap, "session_end"...). Null without them.
+    wkt_step_index: int | None = None
+    lap_trigger: str | None = None
     # m/s, SI storage convention (AGENTS.md principle 6) -- see module docstring above and
     # gap.py::compute_lap_gap_speeds_mps.
     avg_gap_speed_mps: float | None

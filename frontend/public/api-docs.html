@@ -628,6 +628,8 @@ const F = {
     ["avg_hr","number|null",""],
     ["max_hr","number|null",""],
     ["avg_speed_mps","number|null",""],
+    ["wkt_step_index","integer|null","The workout step (step_index from GET /activities/{id}/workout) the device recorded this lap under; null without a structured workout or for a source that does not carry it."],
+    ["lap_trigger","string|null","Why the lap ended: manual, distance or time (the device auto-lap), session_end...; null if not recorded."],
     ["avg_gap_speed_mps","number|null","Grade-adjusted average speed (m/s) for this lap, computed fresh per request from the raw stream -- not stored. null for a non-running activity, no stream, or a lap whose own stream slice is too short/missing altitude or distance data."],
   ],
   split: [

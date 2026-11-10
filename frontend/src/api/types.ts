@@ -24,6 +24,11 @@ export interface LapOut {
   avg_hr: number | null;
   max_hr: number | null;
   avg_speed_mps: number | null;
+  /** The workout step the device recorded this lap under (an activity workout `step_index`), and
+   * why the lap ended ("manual", "distance" for an auto-lap, "session_end"...). Null when the
+   * source does not carry them. */
+  wkt_step_index?: number | null;
+  lap_trigger?: string | null;
   // m/s -- computed server-side per request from the raw stream (see gap.py::
   // compute_lap_gap_speeds_mps), null for a non-running activity or a lap with no usable stream
   // slice. Convert to min/km the same way ActivityComparisonTable.tsx does for the whole-activity

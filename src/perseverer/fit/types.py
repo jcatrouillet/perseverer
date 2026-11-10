@@ -37,6 +37,14 @@ class ParsedLap:
     avg_hr: float | None
     max_hr: float | None
     avg_speed_mps: float | None
+    # FIT's own `wkt_step_index`: the workout step (a `workout_step_mesgs` message_index) this lap
+    # was recorded under, set by the device whenever a structured workout is running. This is what
+    # ties a lap to its step exactly -- the device's auto-lap (every 1 km, say) cuts extra laps
+    # inside a step that are indistinguishable from step laps by distance and duration alone.
+    wkt_step_index: int | None = None
+    # FIT's own `lap_trigger` ("manual", "distance", "time", "session_end", "position_start"...):
+    # why the lap ended. "distance"/"time" laps are the device's auto-lap setting.
+    lap_trigger: str | None = None
 
 
 @dataclass(frozen=True)

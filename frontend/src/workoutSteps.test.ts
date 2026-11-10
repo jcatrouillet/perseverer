@@ -316,3 +316,69 @@ describe("alignLapsToWorkoutSteps", () => {
     expect(alignLapsToWorkoutSteps([lap({})], [])).toEqual([null]);
   });
 });
+
+describe("alignLapsToWorkoutSteps with the step index recorded on each lap", () => {
+  const warmup = step({ step_index: 0, duration_type: "open", intensity: "warmup" });
+  const climb = step({ step_index: 1, duration_type: "open", intensity: "active" });
+  const descent = step({ step_index: 2, duration_type: "open", intensity: "active" });
+  const repeat = step({
+    step_index: 3,
+    duration_type: "repeat_until_steps_cmplt",
+    repeat_from_step: 1,
+    repeat_count: 2,
+  });
+  const cooldown = step({ step_index: 4, duration_type: "open", intensity: "cooldown" });
+  const expanded = expandWorkoutSteps([warmup, climb, descent, repeat, cooldown]);
+
+  it("keeps every auto-lap inside the step it was cut in", () => {
+    // Open steps (ended by the lap button) with the watch auto-lapping every 1 km: many more laps
+    // than steps, and none of them a step of their own.
+    const laps = [
+      lap({ wkt_step_index: 0, lap_trigger: "distance", distance_m: 1000 }),
+      lap({ wkt_step_index: 0, lap_trigger: "manual", distance_m: 235 }),
+      lap({ wkt_step_index: 1, lap_trigger: "distance", distance_m: 1000 }),
+      lap({ wkt_step_index: 1, lap_trigger: "manual", distance_m: 56 }),
+      lap({ wkt_step_index: 2, lap_trigger: "distance", distance_m: 1000 }),
+      lap({ wkt_step_index: 2, lap_trigger: "distance", distance_m: 1000 }),
+      lap({ wkt_step_index: 2, lap_trigger: "manual", distance_m: 424 }),
+      lap({ wkt_step_index: 1, lap_trigger: "distance", distance_m: 1000 }),
+      lap({ wkt_step_index: 1, lap_trigger: "manual", distance_m: 22 }),
+      lap({ wkt_step_index: 2, lap_trigger: "session_end", distance_m: 610 }),
+    ];
+    expect(alignLapsToWorkoutSteps(laps, expanded)).toEqual([
+      expanded[0],
+      expanded[0],
+      expanded[1],
+      expanded[1],
+      expanded[2],
+      expanded[2],
+      expanded[2],
+      expanded[3],
+      expanded[3],
+      expanded[4],
+    ]);
+  });
+
+  it("starts the next repetition of a one-step repeat after a manual lap", () => {
+    const rep = step({ step_index: 0, duration_type: "open", intensity: "active" });
+    const block = step({
+      step_index: 1,
+      duration_type: "repeat_until_steps_cmplt",
+      repeat_from_step: 0,
+      repeat_count: 2,
+    });
+    const steps = expandWorkoutSteps([rep, block]);
+    const laps = [
+      lap({ wkt_step_index: 0, lap_trigger: "distance" }),
+      lap({ wkt_step_index: 0, lap_trigger: "manual" }),
+      lap({ wkt_step_index: 0, lap_trigger: "distance" }),
+      lap({ wkt_step_index: 0, lap_trigger: "session_end" }),
+    ];
+    expect(alignLapsToWorkoutSteps(laps, steps)).toEqual([steps[0], steps[0], steps[1], steps[1]]);
+  });
+
+  it("falls back to accumulating laps when a lap has no recorded step", () => {
+    const laps = [lap({ wkt_step_index: 0 }), lap({ wkt_step_index: null })];
+    expect(alignLapsToWorkoutSteps(laps, [warmup, climb])).toEqual([warmup, climb]);
+  });
+});

@@ -2561,6 +2561,8 @@ Returned by `GET /activities/{id}`.
 | `lap_index` | integer (0-based) |
 | `start_time_utc` | string (date-time) |
 | `duration_s`, `moving_duration_s`, `distance_m`, `avg_hr`, `max_hr`, `avg_speed_mps` | number, nullable |
+| `wkt_step_index` | integer, nullable — the workout step (`step_index` from `GET /activities/{id}/workout`) the device recorded this lap under; `null` without a structured workout or for a source that does not carry it |
+| `lap_trigger` | string, nullable — why the lap ended: `manual`, `distance` or `time` (the device's auto-lap), `session_end`...; `null` if not recorded |
 | `avg_gap_speed_mps` | number, nullable — grade-adjusted average speed (m/s) for this lap, computed fresh per request from the activity's raw stream (`gap.py::compute_lap_gap_speeds_mps`), not stored. `null` for a non-running activity, an activity with no stream, or a lap whose own slice of the stream is too short/missing altitude or distance data. This is the same value the `avg_gap_speed_mps` field elsewhere in this API already reports at whole-activity granularity — the Intervals table on the frontend reads it from here rather than computing it client-side, so a headless caller gets the identical number. |
 
 ### SplitOut

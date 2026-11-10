@@ -96,7 +96,13 @@ Contents: [Conventions](#conventions) · [Tables](#tables) · [Metric registry](
 - **`activity_stream`**: one row per activity pointing at its Parquet file; `channels` lists which
   of `heart_rate`, `cadence`, `power`, `temperature`, `speed_mps`, `altitude_m`,
   `respiration_rate`, `distance_m`, `lat`, `lon` the file carries.
-- **`lap`**, **`split`**: per-lap and per-split rows (FIT `lap_mesgs`, `split_mesgs`). Bouldering
+- **`lap`**, **`split`**: per-lap and per-split rows (FIT `lap_mesgs`, `split_mesgs`). A lap also
+  carries `wkt_step_index` (the workout step the device recorded it under, an
+  `activity_workout_step.step_index`) and `lap_trigger` (why it ended: `manual`, `distance` and
+  `time` for the device's auto-lap, `session_end`...), both null for a source without them. They
+  tie each lap to its step exactly when auto-lap cuts extra laps inside a step; the Intervals
+  table aligns by them and falls back to accumulating laps when a lap has no step.
+  `sync backfill-lap-workout-steps` fills them for activities ingested earlier. Bouldering
   routes are `split` rows; see [Bouldering per-route data](#bouldering-per-route-data-reverse-engineered-undocumented-fit-fields)
   and [Kaya](#kaya-bouldering-logbook-kaya_session-kaya_ascent-adapterskaya_ingestpy).
 - **`route_geom`**: `encoded_polyline`/`simplified_polyline`, start/end points and bounding box;

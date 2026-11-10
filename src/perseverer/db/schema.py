@@ -981,6 +981,11 @@ lap = Table(
     Column("avg_hr", Float, nullable=True),
     Column("max_hr", Float, nullable=True),
     Column("avg_speed_mps", Float, nullable=True),
+    # The workout step this lap was recorded under (FIT `wkt_step_index`, a
+    # activity_workout_step.step_index) and why it ended (FIT `lap_trigger`: manual, distance,
+    # time, session_end...). Null for a source without them (TCX, GPX, older rows until backfilled).
+    Column("wkt_step_index", Integer, nullable=True),
+    Column("lap_trigger", String, nullable=True),
     UniqueConstraint("athlete_id", "activity_id", "lap_index", name="uq_lap_identity"),
     # Looked up by activity_id alone (e.g. one activity's detail page, the insight loader's
     # per-activity subqueries) -- the unique key leads with athlete_id, so it can't serve that.

@@ -274,6 +274,12 @@ _WORKOUT_STEP_CORE_FIELDS = frozenset(
 )
 
 
+def _lap_trigger(value: Any) -> str | None:
+    """The FIT SDK decodes `lap_trigger` to its name ("manual", "distance"...); an unknown
+    value stays a plain string, never dropped."""
+    return str(value) if value is not None else None
+
+
 def _parse_workout_step(row: dict[Any, Any]) -> ParsedWorkoutStep:
     duration_type = row.get("duration_type")
     target_type = row.get("target_type")
@@ -583,6 +589,8 @@ def parse_fit(raw_bytes: bytes) -> CanonicalBatch:
                 max_hr=_to_float(row.get("max_heart_rate")),
                 avg_speed_mps=_to_float(row.get("enhanced_avg_speed"))
                 or _to_float(row.get("avg_speed")),
+                wkt_step_index=_to_int(row.get("wkt_step_index")),
+                lap_trigger=_lap_trigger(row.get("lap_trigger")),
             )
         )
 

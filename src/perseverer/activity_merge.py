@@ -342,6 +342,8 @@ def _apply_field_choices(
                     avg_hr=r.avg_hr,
                     max_hr=r.max_hr,
                     avg_speed_mps=r.avg_speed_mps,
+                    wkt_step_index=r.wkt_step_index,
+                    lap_trigger=r.lap_trigger,
                 )
             )
 

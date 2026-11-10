@@ -748,3 +748,31 @@ def test_list_activities_surfaces_a_rides_best_20_minute_power(
 
     item = client.get("/api/v1/activities", headers=auth_headers).json()["items"][0]
     assert item["best_20min_power_w"] == 210.0
+
+
+def test_activity_laps_expose_the_recorded_workout_step_and_trigger(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    base = datetime(2026, 7, 1, 8, 0, 0)
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="a1")
+        for i, (step, trigger) in enumerate([(1, "distance"), (1, "manual"), (None, None)]):
+            conn.execute(
+                lap.insert().values(
+                    athlete_id=DEFAULT_ATHLETE_ID,
+                    activity_id="a1",
+                    lap_index=i,
+                    start_time_utc=base + timedelta(seconds=50 * i),
+                    duration_s=50.0,
+                    wkt_step_index=step,
+                    lap_trigger=trigger,
+                )
+            )
+        conn.commit()
+
+    laps_out = client.get("/api/v1/activities/a1", headers=auth_headers).json()["laps"]
+    assert [(lp["wkt_step_index"], lp["lap_trigger"]) for lp in laps_out] == [
+        (1, "distance"),
+        (1, "manual"),
+        (None, None),
+    ]

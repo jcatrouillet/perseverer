@@ -78,6 +78,48 @@ interface LapLike {
   duration_s: number | null;
   moving_duration_s: number | null;
   distance_m: number | null;
+  wkt_step_index?: number | null;
+  lap_trigger?: string | null;
+}
+
+// Laps the device cut by its own auto-lap setting rather than at a step end or a button press.
+const AUTO_LAP_TRIGGERS = new Set(["distance", "time"]);
+
+/** Exact alignment from the step index the device recorded on every lap (FIT `wkt_step_index`):
+ * a lap belongs to the step it names, however many auto-laps the watch cut inside it. A repeat
+ * block names the same step index once per repetition, so each change of index moves to the next
+ * occurrence of that step in the expanded sequence, and so does a step that follows a lap ended
+ * by anything other than an auto-lap when the same step comes round again straight away. */
+function alignByRecordedStep<T extends WorkoutStepLike>(
+  laps: LapLike[],
+  expandedSteps: T[],
+): (T | null)[] {
+  const result: (T | null)[] = [];
+  let position = -1;
+  let current: T | null = null;
+  let previous: LapLike | null = null;
+  for (const lap of laps) {
+    const index = lap.wkt_step_index as number;
+    const changed = previous === null || previous.wkt_step_index !== index;
+    const repeated =
+      !changed &&
+      previous !== null &&
+      !AUTO_LAP_TRIGGERS.has(previous.lap_trigger ?? "distance") &&
+      expandedSteps[position + 1]?.step_index === index;
+    if (changed || repeated) {
+      let next = position + 1;
+      while (next < expandedSteps.length && expandedSteps[next]!.step_index !== index) next += 1;
+      if (next < expandedSteps.length) {
+        position = next;
+        current = expandedSteps[next]!;
+      } else {
+        current = null;
+      }
+    }
+    result.push(current);
+    previous = lap;
+  }
+  return result;
 }
 
 // A lap's own recorded duration/distance is deemed to have "completed" its matched step once it
@@ -106,6 +148,9 @@ export function alignLapsToWorkoutSteps<T extends WorkoutStepLike & DurationStep
   laps: LapLike[],
   expandedSteps: T[],
 ): (T | null)[] {
+  if (laps.length > 0 && laps.every((lap) => lap.wkt_step_index != null)) {
+    return alignByRecordedStep(laps, expandedSteps);
+  }
   const result: (T | null)[] = [];
   let stepIdx = 0;
   let accumulatedDuration = 0;
