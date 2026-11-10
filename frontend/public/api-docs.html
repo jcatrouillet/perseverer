@@ -1539,7 +1539,7 @@ const GROUPS = [
       params: [
         ["start_date","query","opt","string(date)","—","Only activities with local_date ≥ this."],
         ["end_date","query","opt","string(date)","—","Only activities with local_date ≤ this."],
-        ["sport","query","opt","string","—","Exact match, e.g. running."],
+        ["sport","query","opt","string","—","Exact match, e.g. running. A discipline stored as a training sub-sport (strength_training, yoga, breathwork...) matches too, and training matches all of them."],
         ["limit","query","opt","integer","50","1–500."],
         ["offset","query","opt","integer","0","≥ 0."],
         ["q","query","opt","string","—","Case-insensitive text the activity's name contains (≤ 200 characters; % and _ match literally)."],

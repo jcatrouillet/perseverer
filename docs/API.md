@@ -220,7 +220,7 @@ List activity summaries, most recent first, paginated.
 |---|---|---|---|---|---|
 | `start_date` | query | optional | string (date) | — | Only activities with `local_date` ≥ this. |
 | `end_date` | query | optional | string (date) | — | Only activities with `local_date` ≤ this. |
-| `sport` | query | optional | string | — | Exact match, e.g. `running`. |
+| `sport` | query | optional | string | — | Exact match, e.g. `running`. A discipline stored as a `training` sub-sport (`strength_training`, `yoga`, `breathwork`...) matches too, and `training` matches all of them. |
 | `limit` | query | optional | integer | `50` | 1–500. |
 | `offset` | query | optional | integer | `0` | ≥ 0. |
 | `q` | query | optional | string | — | Case-insensitive text the activity's name contains (≤ 200 characters; `%` and `_` match literally). |

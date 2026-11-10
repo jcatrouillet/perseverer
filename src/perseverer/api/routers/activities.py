@@ -11,7 +11,7 @@ from typing import Annotated, Any
 
 import duckdb
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import Connection, Engine, Row, case, func, or_, select
+from sqlalchemy import ColumnElement, Connection, Engine, Row, case, func, or_, select
 
 from perseverer.activity_merge import (
     build_merge_preview,
@@ -245,6 +245,16 @@ def _climb_summary_from_splits(
     return len(climbs), (max(completed_grades) if completed_grades else None), climb_time_s
 
 
+def sport_matches(sport: str) -> ColumnElement[bool]:
+    """The `sport` filter of the list endpoints. Strength, yoga and breathwork arrive as
+    `sport="training"` with the real discipline in `sub_sport` (AGENTS.md), so a filter on
+    "strength_training" must match that sub-sport too -- the sport column alone finds nothing.
+    "training" itself still matches every such activity."""
+    return (activity.c.sport == sport) | (
+        (activity.c.sport == "training") & (activity.c.sub_sport == sport)
+    )
+
+
 @router.get("/activities")
 def list_activities(
     athlete_id: Annotated[str, Depends(require_api_key)],
@@ -279,7 +289,7 @@ def list_activities(
     if end_date is not None:
         filters.append(activity.c.local_date <= end_date.isoformat())
     if sport is not None:
-        filters.append(activity.c.sport == sport)
+        filters.append(sport_matches(sport))
     if q:
         # Escaped, so a "%" or "_" the athlete types is matched literally.
         escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -570,7 +580,7 @@ def list_activity_map_points(
     if end_date is not None:
         query = query.where(activity.c.local_date <= end_date.isoformat())
     if sport is not None:
-        query = query.where(activity.c.sport == sport)
+        query = query.where(sport_matches(sport))
 
     rows = conn.execute(query).fetchall()
     return [

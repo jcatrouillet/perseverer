@@ -112,6 +112,31 @@ def test_activity_years_empty_when_no_activities(
     assert r.json() == []
 
 
+def test_sport_filter_finds_a_discipline_stored_as_a_training_sub_sport(
+    client: TestClient, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    """Strength and yoga are `sport="training"` with the discipline in `sub_sport`: filtering on
+    the discipline must find them (it used to find nothing), and "training" finds all of them."""
+    with engine.connect() as conn:
+        seed_activity(conn, activity_id="s1", sport="training", sub_sport="strength_training")
+        seed_activity(conn, activity_id="s2", sport="training", sub_sport="strength_training")
+        seed_activity(conn, activity_id="y1", sport="training", sub_sport="yoga")
+        seed_activity(conn, activity_id="r1", sport="running")
+        conn.commit()
+
+    def ids(query: str) -> set[str]:
+        r = client.get(f"/api/v1/activities?{query}", headers=auth_headers)
+        assert r.status_code == 200
+        return {item["id"] for item in r.json()["items"]}
+
+    assert ids("sport=strength_training") == {"s1", "s2"}
+    assert ids("sport=yoga") == {"y1"}
+    assert ids("sport=training") == {"s1", "s2", "y1"}
+    assert ids("sport=running") == {"r1"}
+    total = client.get("/api/v1/activities?sport=strength_training", headers=auth_headers).json()
+    assert total["total"] == 2
+
+
 def test_list_activities_paginates_and_filters_by_sport(
     client: TestClient, auth_headers: dict[str, str], engine: Engine
 ) -> None:
