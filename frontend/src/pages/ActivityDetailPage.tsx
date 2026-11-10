@@ -59,6 +59,7 @@ import { CopyWorkoutButton } from "../components/CopyWorkoutButton";
 import { ClimbGradeChart } from "../components/ClimbGradeChart";
 import { Icon } from "../components/Icon";
 import { LoadingSpinner } from "../components/LoadingSpinner";
+import { MusclesWorkedCard } from "../components/MusclesWorkedCard";
 import { NotesPanel } from "../components/NotesPanel";
 import { PaceVariabilityChart } from "../components/PaceVariabilityChart";
 import { TimeInZoneChart } from "../components/TimeInZoneChart";
@@ -711,6 +712,8 @@ export function ActivityDetailPage({ id }: { id: string }) {
           )}
         </section>
       )}
+
+      {(sport === "strength_training" || sport === "hiit") && <MusclesWorkedCard activityId={id} />}
 
       {comparisons.data && (
         <ActivityComparisonTable activity={a} comparisons={comparisons.data} sport={sport} />

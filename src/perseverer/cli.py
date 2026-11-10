@@ -34,6 +34,9 @@ from perseverer.adapters.apple_health_export import (
 from perseverer.adapters.eufy import resolve_eufy_credentials, sync_eufy
 from perseverer.adapters.fit_folder import import_from_folder
 from perseverer.adapters.garmin_connect import (
+    GarminConnectAdapter,
+    GarminRateLimitAborted,
+    RateLimiter,
     RateLimitSettings,
     login_with_credentials,
     sync_garmin_connect,
@@ -47,6 +50,7 @@ from perseverer.adapters.kaya_ingest import KayaRateLimited, import_kaya
 from perseverer.adapters.strava_export import import_strava_export
 from perseverer.auth.api_keys import generate_api_key, hash_api_key
 from perseverer.auth.passwords import hash_password
+from perseverer.backfill_exercise_sets import backfill_exercise_sets
 from perseverer.backfill_lap_moving_duration import backfill_lap_moving_duration
 from perseverer.backfill_lap_workout_steps import backfill_lap_workout_steps
 from perseverer.backfill_locations import backfill_locations
@@ -779,6 +783,37 @@ def backfill_lap_workout_steps_cmd(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID
     with engine.connect() as conn:
         count = backfill_lap_workout_steps(conn, settings.raw_archive_dir, athlete_id=athlete_id)
     typer.echo(f"backfilled workout step and trigger for {count} laps")
+
+
+@app.command("backfill-exercise-sets")
+def backfill_exercise_sets_cmd(
+    limit: Annotated[
+        int | None, typer.Option(help="Ask Garmin about at most this many activities")
+    ] = None,
+    athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
+) -> None:
+    """Fetches the per-set data (Garmin Connect `exerciseSets`) of already-ingested HIIT and
+    strength activities not asked about yet, archives each response and derives the sets from it.
+    Real, rate-limited Garmin calls, one per activity; a 429 stops the run at once (no retry) and
+    it never uses credentials -- run `sync auth login` first if the token store is missing. Safe
+    to re-run: an activity already asked about, even one Garmin holds no sets for, is skipped.
+    """
+    settings = get_settings()
+    engine = make_engine(settings.db_path)
+    adapter = GarminConnectAdapter(
+        settings.garmin_tokenstore_dir_for(athlete_id),
+        RateLimiter(settings.garmin_request_interval_s, settings.garmin_max_requests_per_hour),
+    )
+    adapter.authenticate()
+    try:
+        with engine.connect() as conn:
+            count = backfill_exercise_sets(
+                conn, settings.raw_archive_dir, adapter, athlete_id=athlete_id, limit=limit
+            )
+    except GarminRateLimitAborted as e:
+        typer.echo(f"stopped: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    typer.echo(f"asked Garmin about {count} activities")
 
 
 @app.command("backfill-locations")

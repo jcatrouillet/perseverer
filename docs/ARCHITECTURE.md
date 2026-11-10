@@ -138,6 +138,8 @@ Main table groups (see [DATA_DICTIONARY.md](DATA_DICTIONARY.md) for every column
   `sleep_stage`.
 - **Rollups:** `day_rollup`, `period_rollup`, `health_metric_daily_rollup`,
   `health_metric_period_rollup`, `fitness_daily_rollup`, `performance_daily_rollup`, `insight`.
+- **Per-set exercise data:** `activity_exercise_set` (rebuilt from the archived Garmin
+  `exerciseSets` responses; HIIT / strength only).
 - **Athlete input:** `note`, `goal`, `duration_goal`, `bouldering_goal`, `planned_workout`,
   `planned_workout_step`, `planned_race`, `shoe`, `athlete_default_shoe`, `bike`, `athlete_default_bike`, `bike_tire`,
   `bike_tire_install`, `blood_test_result`, `dexa_scan_result`,

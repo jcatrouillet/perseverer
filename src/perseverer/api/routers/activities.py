@@ -66,6 +66,7 @@ from perseverer.api.schemas.activities import (
     DeviceOut,
     DuplicateCandidateOut,
     DuplicatePairOut,
+    ExerciseSetOut,
     FieldComparisonOut,
     LapOut,
     LastImportedActivityOut,
@@ -89,6 +90,7 @@ from perseverer.bouldering_overrides import (
 from perseverer.config import Settings, get_settings
 from perseverer.db.schema import (
     activity,
+    activity_exercise_set,
     activity_metric,
     activity_source_link,
     activity_stream,
@@ -1843,6 +1845,47 @@ def get_activity_location(
 
     background_tasks.add_task(_fetch_in_background)
     return ActivityLocationOut(available=False)
+
+
+@router.get("/activities/{activity_id}/exercise-sets")
+def get_activity_exercise_sets(
+    activity_id: str,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    conn: Connection = Depends(get_conn),
+) -> list[ExerciseSetOut]:
+    """The sets Garmin recorded for a HIIT / strength activity, in order -- an empty list when it
+    holds none (or the activity is another sport). See exercise_sets.py. The muscles worked follow
+    from each set's exercise; the frontend derives them from the exercise library."""
+    exists = conn.execute(
+        select(activity.c.id).where(
+            activity.c.id == activity_id,
+            activity.c.athlete_id == athlete_id,
+            activity.c.deleted_at.is_(None),
+        )
+    ).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="activity not found")
+    rows = conn.execute(
+        select(activity_exercise_set)
+        .where(
+            activity_exercise_set.c.athlete_id == athlete_id,
+            activity_exercise_set.c.activity_id == activity_id,
+        )
+        .order_by(activity_exercise_set.c.set_index)
+    ).fetchall()
+    return [
+        ExerciseSetOut(
+            set_index=row.set_index,
+            set_type=row.set_type,
+            start_time_utc=to_utc(row.start_time_utc) if row.start_time_utc else None,
+            duration_s=row.duration_s,
+            reps=row.reps,
+            weight_kg=row.weight_kg,
+            exercise_category=row.exercise_category,
+            exercise_name=row.exercise_name,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/activities/{activity_id}/workout")

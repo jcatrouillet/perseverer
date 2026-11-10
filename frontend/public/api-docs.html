@@ -1687,6 +1687,12 @@ const GROUPS = [
       responses: [ { code: 200, ref: "ActivityLocationOut" }, { code: 404, note: "" } ],
       example: {}
     },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/exercise-sets", summary: "The sets Garmin recorded for a HIIT / strength activity.",
+      description: "In order; an empty list when Garmin holds no sets for the activity or it is another sport. Each set: set_index, set_type (ACTIVE or REST), start_time_utc, duration_s, reps, weight_kg, exercise_category and exercise_name (Garmin's exercise enum pair, e.g. BENCH_PRESS / BARBELL_BENCH_PRESS), all nullable except set_index.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, note: "A list of sets." }, { code: 404, note: "" } ],
+      example: {}
+    },
     { method: "GET", path: "/api/v1/activities/{activity_id}/workout", summary: "The pre-planned workout structure attached to this activity, if any.",
       description: "Garmin Connect's Workout Builder plan downloaded to the device before the activity — null for the large majority of activities with no such plan, never a fabricated one. Steps are returned raw (unflattened repeat blocks), matching how the FIT file itself encodes them.",
       params: [ ["activity_id","path","req","string","—",""] ],

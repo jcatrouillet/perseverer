@@ -43,13 +43,14 @@ from garminconnect import (
     GarminConnectTooManyRequestsError,
 )
 from garminconnect.workout import BaseWorkout
-from sqlalchemy import Connection
+from sqlalchemy import Connection, select
 
 from perseverer.adapters.base import AdapterHealth
 from perseverer.adapters.fit_folder import IngestResult, IngestRunSummary, ingest_canonical_batch
 from perseverer.archive import archive_raw_bytes
 from perseverer.auto_tags import apply_auto_tags
-from perseverer.db.schema import ingest_run
+from perseverer.db.schema import ingest_run, raw_object
+from perseverer.exercise_sets import KIND_EXERCISE_SETS, ingest_exercise_sets
 from perseverer.fit.parser import parse_fit
 from perseverer.fitness import refresh_fitness_rollup
 from perseverer.gap import refresh_avg_gap
@@ -252,6 +253,15 @@ class GarminConnectAdapter:
                 f"429 from Garmin while downloading activity {activity_id}"
             ) from e
         fit_bytes = _unwrap_fit_bytes(raw_download)
+        # Per-set data exists only for the activity types that have sets, and is asked for once:
+        # the response (even an empty one) is archived, which is what marks it as done. Fetched
+        # here, before the first write, for the same reason as the download above.
+        sets_json = (
+            self.fetch_exercise_sets(activity_id)
+            if _has_sets(activity_summary)
+            and not _exercise_sets_archived(conn, athlete_id, activity_id)
+            else None
+        )
 
         archive_raw_bytes(
             conn,
@@ -276,7 +286,7 @@ class GarminConnectAdapter:
         )
         sha256 = _sha256(fit_bytes)
         batch = parse_fit(fit_bytes)
-        return ingest_canonical_batch(
+        result = ingest_canonical_batch(
             conn,
             parquet_dir,
             athlete_id=athlete_id,
@@ -286,6 +296,50 @@ class GarminConnectAdapter:
             batch=batch,
             external_id_hint=activity_id,
         )
+        if sets_json is not None:
+            archive_raw_bytes(
+                conn,
+                archive_root,
+                athlete_id=athlete_id,
+                source=SOURCE_NAME,
+                kind=KIND_EXERCISE_SETS,
+                content=sets_json,
+                locator=f"activity/{activity_id}/exerciseSets",
+                external_id=activity_id,
+            )
+            ingest_exercise_sets(
+                conn,
+                athlete_id=athlete_id,
+                source=SOURCE_NAME,
+                external_id=activity_id,
+                content=sets_json,
+            )
+        return result
+
+    def fetch_exercise_sets(self, activity_id: str) -> bytes | None:
+        """The per-set data of one HIIT / strength activity (`get_activity_exercise_sets`), as the
+        JSON bytes to archive. An activity Garmin holds no sets for answers 404, returned as an
+        empty `exerciseSets` response so it is archived (and not asked again) like any other. A 429
+        aborts the whole run, never retried, same as every call here."""
+        assert self._client is not None, "call authenticate() first"
+        self.rate_limiter.wait()
+        try:
+            data = self._client.get_activity_exercise_sets(activity_id)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching exercise sets for activity {activity_id}"
+            ) from e
+        except GarminConnectNotFoundError:
+            # Checked first: it is a kind of connection error, but a definite "no sets here".
+            return json.dumps({"activityId": activity_id, "exerciseSets": None}).encode("utf-8")
+        except GarminConnectConnectionError as e:
+            # The client reports a 429 as a plain connection error whose text says so.
+            if "429" in str(e):
+                raise GarminRateLimitAborted(
+                    f"429 from Garmin while fetching exercise sets for activity {activity_id}"
+                ) from e
+            raise
+        return json.dumps(data).encode("utf-8")
 
     def fetch_and_ingest_daily_wellness(
         self,
@@ -792,6 +846,33 @@ class GarminConnectAdapter:
                 f"429 from Garmin while scheduling workout {workout_id} on {local_date}"
             ) from e
         return workout_id
+
+
+_SET_ACTIVITY_TYPES = frozenset({"strength_training", "hiit"})
+
+
+def _has_sets(activity_summary: dict[str, Any]) -> bool:
+    """Garmin lists an activity's type as `activityType.typeKey`; only strength and HIIT record
+    sets."""
+    activity_type = activity_summary.get("activityType")
+    type_key = activity_type.get("typeKey") if isinstance(activity_type, dict) else None
+    return type_key in _SET_ACTIVITY_TYPES
+
+
+def _exercise_sets_archived(conn: Connection, athlete_id: str, activity_id: str) -> bool:
+    return (
+        conn.execute(
+            select(raw_object.c.id)
+            .where(
+                raw_object.c.athlete_id == athlete_id,
+                raw_object.c.source == SOURCE_NAME,
+                raw_object.c.kind == KIND_EXERCISE_SETS,
+                raw_object.c.external_id == activity_id,
+            )
+            .limit(1)
+        ).first()
+        is not None
+    )
 
 
 def _sha256(content: bytes) -> str:

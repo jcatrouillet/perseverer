@@ -190,6 +190,11 @@ Patterns:
 
 - **Reveal in place.** Adding a note, a blood result or a route opens a form where the "+ Add"
   link was, rather than a modal. Lists of many items collapse into `<details>`.
+- **Muscles worked:** `MusclesWorkedCard` (HIIT / strength activity page, only when Garmin recorded
+  sets) draws `BodyMuscleMap`, a front and back figure whose muscles shade from pale to deep orange
+  (`--muscle-pale` to `--muscle-hot`) by their share of the hardest-worked muscle, grey when not
+  worked, beside a table of weighted sets per muscle. The body shapes (`data/bodyMuscleShapes.ts`) are derived from
+  react-body-highlighter, MIT; its notice is in `NOTICE` and the file header.
 - **Goal reached:** `GoalCelebration` (mounted once in `App.tsx`, hidden while a coach views an
   athlete) opens a small `Modal` when a monthly or yearly goal of the current period reaches 100%. It
   lists the goals reached and is shown once per goal (remembered in `localStorage`,

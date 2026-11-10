@@ -36,6 +36,7 @@ import type {
   BloodTestResultIn,
   BloodTestResultOut,
   DexaScanOut,
+  ExerciseSetOut,
   CalendarFeedStatusOut,
   CoachOut,
   CalendarFeedUrlOut,
@@ -862,6 +863,13 @@ export function useActivityLocation(activityId: string, enabled: boolean) {
  * activities' own FIT files -- `null` for the (large majority of) activities with no such
  * plan. Always enabled: cheap (one row lookup), and unlike weather there's no cheaper
  * already-in-hand signal to gate it on. */
+export function useActivityExerciseSets(activityId: string) {
+  return useQuery({
+    queryKey: ["activity-exercise-sets", activityId],
+    queryFn: () => apiGet<ExerciseSetOut[]>(`/api/v1/activities/${activityId}/exercise-sets`),
+  });
+}
+
 export function useActivityWorkout(activityId: string) {
   return useQuery({
     queryKey: ["activity-workout", activityId],

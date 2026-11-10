@@ -277,6 +277,8 @@ With the **Cycling** switch, the same tabs describe your rides:
 - **Goals** per week, month or year: as many distance goals and time goals as you like, one per
   sport (or all sports together), and bouldering sends by grade, each with a pace-to-target chart. A congratulations popup appears, once per goal, when a
   monthly or yearly goal is reached.
+- **Muscles worked** for a HIIT or strength activity: the recorded sets are mapped to the muscles
+  they work and drawn on a front and back body, darker for the harder-worked.
 - **Compliance** per sport in the week view, matched automatically against recorded activities.
 - **Notes** on any activity, day or week, written by you or by an AI agent through the API; the
   coming week's notes also appear in the weekly email.

@@ -15,6 +15,19 @@ export interface DeviceOut {
   serial_number: string | null;
 }
 
+/** One set of a HIIT / strength activity as Garmin recorded it (GET /activities/{id}/exercise-sets).
+ * `exercise_category`/`exercise_name` are Garmin's exercise enum pair; masses in kg. */
+export interface ExerciseSetOut {
+  set_index: number;
+  set_type: string | null;
+  start_time_utc: string | null;
+  duration_s: number | null;
+  reps: number | null;
+  weight_kg: number | null;
+  exercise_category: string | null;
+  exercise_name: string | null;
+}
+
 export interface LapOut {
   lap_index: number;
   start_time_utc: string;

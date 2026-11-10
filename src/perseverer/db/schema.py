@@ -992,6 +992,30 @@ lap = Table(
     Index("ix_lap_activity", "activity_id"),
 )
 
+# One row per set of a hiit / strength_training activity, derived from the archived Garmin Connect
+# `exerciseSets` response (see exercise_sets.py). `set_type` is Garmin's "ACTIVE" or "REST";
+# `exercise_category`/`exercise_name` are Garmin's exercise enum pair (the same as
+# planned_workout_step's), the likeliest of the watch's guesses. SI units: weight in kg (the
+# payload gives grams). The muscles worked are not stored: they follow from the exercise through
+# the exercise library, on read.
+activity_exercise_set = Table(
+    "activity_exercise_set",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("activity_id", String(26), ForeignKey("activity.id"), nullable=False),
+    Column("set_index", Integer, nullable=False),
+    Column("set_type", String, nullable=True),
+    Column("start_time_utc", DateTime(), nullable=True),
+    Column("duration_s", Float, nullable=True),
+    Column("reps", Integer, nullable=True),
+    Column("weight_kg", Float, nullable=True),
+    Column("exercise_category", String, nullable=True),
+    Column("exercise_name", String, nullable=True),
+    UniqueConstraint("athlete_id", "activity_id", "set_index", name="uq_activity_exercise_set"),
+    Index("ix_activity_exercise_set_activity", "activity_id"),
+)
+
 split = Table(
     "split",
     metadata,

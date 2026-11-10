@@ -35,6 +35,7 @@ from perseverer.bouldering_overrides import apply_bouldering_route_overrides
 from perseverer.db.engine import make_engine
 from perseverer.db.schema import (
     activity,
+    activity_exercise_set,
     activity_metric,
     activity_source_link,
     activity_stream,
@@ -64,6 +65,7 @@ from perseverer.db.schema import (
 from perseverer.db.schema import (
     split as split_table,
 )
+from perseverer.exercise_sets import KIND_EXERCISE_SETS, ingest_exercise_sets
 from perseverer.fitness import refresh_fitness_rollup
 from perseverer.gap import refresh_avg_gap
 from perseverer.garmin_activity_summary import backfill_activity_corrections
@@ -111,6 +113,7 @@ _REBUILDABLE_TABLES = (
     activity_workout_step,
     activity_workout,
     lap,
+    activity_exercise_set,
     split_table,
     route_geom,
     activity_source_link,
@@ -163,6 +166,7 @@ _SHADOW_SWAP_INSERT_ORDER = (
     activity_workout_step,
     activity_workout,
     lap,
+    activity_exercise_set,
     split_table,
     route_geom,
     insight,
@@ -452,6 +456,16 @@ def rebuild_database(
                 athlete_id=athlete_id,
                 raw_object_id=row.id,
                 kind=row.kind,
+                content=content,
+            )
+        elif row.kind == KIND_EXERCISE_SETS:
+            # The activity this response belongs to was replayed from its FIT file just before
+            # (fetch order), so its source link already exists.
+            ingest_exercise_sets(
+                conn,
+                athlete_id=athlete_id,
+                source=row.source,
+                external_id=row.external_id or "",
                 content=content,
             )
         elif row.kind in ("strava_export_gpx", "strava_export_tcx"):

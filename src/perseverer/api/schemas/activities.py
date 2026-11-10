@@ -38,6 +38,19 @@ class LapOut(BaseModel):
     avg_gap_speed_mps: float | None
 
 
+class ExerciseSetOut(BaseModel):
+    """One set of a HIIT / strength activity, as Garmin recorded it. SI: weight in kg."""
+
+    set_index: int
+    set_type: str | None  # "ACTIVE" | "REST"
+    start_time_utc: datetime | None
+    duration_s: float | None
+    reps: int | None
+    weight_kg: float | None
+    exercise_category: str | None  # Garmin exercise enum, e.g. "BENCH_PRESS"
+    exercise_name: str | None  # e.g. "BARBELL_BENCH_PRESS"
+
+
 class SplitOut(BaseModel):
     split_index: int
     split_type: str | None

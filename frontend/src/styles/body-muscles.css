@@ -1,0 +1,86 @@
+/* BodyMuscleMap.tsx and MusclesWorkedCard.tsx: front and back figures coloured by intensity. */
+.body-map,
+.muscles-worked {
+  --muscle-pale: #f7d3b0;
+  --muscle-hot: #ec5b12;
+}
+
+.body-map {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.body-map svg {
+  width: min(100%, 26rem);
+  height: auto;
+  overflow: visible;
+}
+
+.body-map__muscle {
+  fill: color-mix(in srgb, var(--color-text-muted) 24%, var(--color-surface));
+  stroke: var(--color-surface);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+}
+
+.body-map__legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.body-map__ramp {
+  width: 8rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--muscle-pale), var(--muscle-hot));
+}
+
+.muscles-worked__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.muscles-worked__table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.muscles-worked__table th,
+.muscles-worked__table td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.muscles-worked__table td:last-child {
+  text-align: right;
+}
+
+.muscles-worked__bar {
+  display: block;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--muscle-hot) calc(25% + 75% * var(--intensity)),
+    var(--muscle-pale)
+  );
+  width: calc(100% * var(--intensity));
+  min-width: 0.4rem;
+}
+
+@media (max-width: 40rem) {
+  .muscles-worked__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

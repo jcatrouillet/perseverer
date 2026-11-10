@@ -45,6 +45,9 @@ Contents: [Conventions](#conventions) · [Tables](#tables) · [Metric registry](
     older activity-only kind still replayed.
   - `daily_summary_json`, `hydration_json`: Garmin Connect-shaped health JSON found by
     `fit_folder`.
+  - `garmin_connect_exercise_sets_json`: Garmin's per-set response for one HIIT / strength activity
+    (`external_id` = the Garmin activity id), archived even when Garmin holds no sets (an empty
+    `exerciseSets`), which marks the activity as asked. Replayed by `sync rebuild`.
   - `garmin_connect_json` (activity summary; archived, not linked from `activity_source_link`) and
     one `garmin_connect_daily_*_json` kind per live wellness fetch.
   - `garmin_export_health_json` (wellness report JSON from an export, parsed);
@@ -96,6 +99,16 @@ Contents: [Conventions](#conventions) · [Tables](#tables) · [Metric registry](
 - **`activity_stream`**: one row per activity pointing at its Parquet file; `channels` lists which
   of `heart_rate`, `cadence`, `power`, `temperature`, `speed_mps`, `altitude_m`,
   `respiration_rate`, `distance_m`, `lat`, `lon` the file carries.
+- **`activity_exercise_set`**: one row per set of a HIIT / strength activity, derived from the
+  archived Garmin `exerciseSets` response (`exercise_sets.py`): `set_index`, `set_type` (`ACTIVE` |
+  `REST`), `start_time_utc`, `duration_s`, `reps`, `weight_kg` (the payload gives grams),
+  `exercise_category` / `exercise_name` (Garmin's exercise enum pair, the watch's likeliest guess).
+  Rebuilt from the archive, never edited. The FIT file of the same activity carries only one summary
+  set, so these rows exist only for an activity Garmin returned sets for. The muscles worked are
+  not stored: each set's exercise is looked up in the exercise library on read (primary muscles
+  count 1 per set, secondary 0.5; intensity is relative to the hardest-worked muscle).
+  `sync backfill-exercise-sets` asks Garmin about earlier activities (rate limited, one call each,
+  stops at a 429).
 - **`lap`**, **`split`**: per-lap and per-split rows (FIT `lap_mesgs`, `split_mesgs`). A lap also
   carries `wkt_step_index` (the workout step the device recorded it under, an
   `activity_workout_step.step_index`) and `lap_trigger` (why it ended: `manual`, `distance` and

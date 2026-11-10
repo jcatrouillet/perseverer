@@ -471,6 +471,14 @@ rather than blocking on Nominatim's 1 req/s throttle — the name appears on the
 
 **Responses:** `200` → `ActivityLocationOut`. `404`.
 
+### `GET /activities/{activity_id}/exercise-sets`
+
+The sets Garmin recorded for a HIIT / strength activity, in order; an empty list when it holds none
+or the activity is another sport. Each `ExerciseSetOut`: `set_index`, `set_type` (`ACTIVE` |
+`REST`), `start_time_utc`, `duration_s`, `reps`, `weight_kg`, `exercise_category` and
+`exercise_name` (Garmin's exercise enum pair, e.g. `BENCH_PRESS` / `BARBELL_BENCH_PRESS`); all
+nullable except `set_index`. **Responses:** `200` → `list[ExerciseSetOut]`. `404`.
+
 ### `GET /activities/{activity_id}/workout`
 
 The pre-planned workout structure attached to this activity (Garmin Connect's Workout Builder),
