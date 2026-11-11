@@ -190,6 +190,10 @@ Patterns:
 
 - **Reveal in place.** Adding a note, a blood result or a route opens a form where the "+ Add"
   link was, rather than a modal. Lists of many items collapse into `<details>`.
+- **Handwritten notes:** `LogbookCard` (HIIT / strength activity page) holds the photo thumbnails
+  (a `Modal` opens one full size), the reading status and the sets editor: one bordered block per
+  exercise with up / down buttons to reorder, the library match with suggestions, and a set table.
+  The watch's recorded exercise at the same position is shown under each block.
 - **Muscles worked:** `MusclesWorkedCard` (HIIT / strength activity page, only when Garmin recorded
   sets) draws `BodyMuscleMap`, a front and back figure whose muscles shade from pale to deep orange
   (`--muscle-pale` to `--muscle-hot`) by their share of the hardest-worked muscle, grey when not

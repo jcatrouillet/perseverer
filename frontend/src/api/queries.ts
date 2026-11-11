@@ -3,7 +3,16 @@
 // can be created from either the calendar page or the activity detail page.
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiDelete, apiGet, apiPatch, apiPost, apiPostFile, apiPostForm, apiPut } from "./client";
+import {
+  apiBlob,
+  apiDelete,
+  apiGet,
+  apiPatch,
+  apiPost,
+  apiPostFile,
+  apiPostForm,
+  apiPut,
+} from "./client";
 import type {
   ActivityComparisonsOut,
   ActivityContextOut,
@@ -37,6 +46,9 @@ import type {
   BloodTestResultOut,
   DexaScanOut,
   ExerciseSetOut,
+  Logbook,
+  LogbookStatus,
+  PhotoOut,
   CalendarFeedStatusOut,
   CoachOut,
   CalendarFeedUrlOut,
@@ -859,10 +871,6 @@ export function useActivityLocation(activityId: string, enabled: boolean) {
   });
 }
 
-/** The pre-planned workout structure (Garmin Connect's "Workout" builder) recorded into some
- * activities' own FIT files -- `null` for the (large majority of) activities with no such
- * plan. Always enabled: cheap (one row lookup), and unlike weather there's no cheaper
- * already-in-hand signal to gate it on. */
 export function useActivityExerciseSets(activityId: string) {
   return useQuery({
     queryKey: ["activity-exercise-sets", activityId],
@@ -870,6 +878,10 @@ export function useActivityExerciseSets(activityId: string) {
   });
 }
 
+/** The pre-planned workout structure (Garmin Connect's "Workout" builder) recorded into some
+ * activities' own FIT files -- `null` for the (large majority of) activities with no such
+ * plan. Always enabled: cheap (one row lookup), and unlike weather there's no cheaper
+ * already-in-hand signal to gate it on. */
 export function useActivityWorkout(activityId: string) {
   return useQuery({
     queryKey: ["activity-workout", activityId],
@@ -2111,6 +2123,94 @@ export function useDeleteDexaScan() {
     mutationFn: (localDate: string) => apiDelete<void>(`/api/v1/dexa-scans/${localDate}`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["dexa-scans"] });
+    },
+  });
+}
+
+// --- Handwritten workout notes (photos, what was read from them, the confirmed logbook) -- see
+// routers/activity_logbook.py.
+export function useLogbookStatus() {
+  return useQuery({
+    queryKey: ["logbook-status"],
+    queryFn: () => apiGet<LogbookStatus>("/api/v1/logbook/status"),
+    staleTime: 60_000,
+  });
+}
+
+/** The photos of an activity; polls every 2 s while one is being read. */
+export function useActivityPhotos(activityId: string) {
+  return useQuery({
+    queryKey: ["activity-photos", activityId],
+    queryFn: () => apiGet<PhotoOut[]>(`/api/v1/activities/${activityId}/photos`),
+    refetchInterval: (query) =>
+      query.state.data?.some((p) => p.decode_status === "pending") ? 2000 : false,
+  });
+}
+
+/** A photo as an object URL (an <img> cannot send the credential itself). */
+export function usePhotoUrl(activityId: string, photoId: number) {
+  return useQuery({
+    queryKey: ["activity-photo-image", activityId, photoId],
+    queryFn: async () =>
+      URL.createObjectURL(
+        await apiBlob(`/api/v1/activities/${activityId}/photos/${photoId}/image`),
+      ),
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+}
+
+export function useUploadActivityPhoto(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return apiPostForm<PhotoOut>(`/api/v1/activities/${activityId}/photos`, form);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity-photos", activityId] });
+    },
+  });
+}
+
+export function useDeleteActivityPhoto(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (photoId: number) =>
+      apiDelete<void>(`/api/v1/activities/${activityId}/photos/${photoId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity-photos", activityId] });
+      void queryClient.invalidateQueries({ queryKey: ["activity-logbook", activityId] });
+    },
+  });
+}
+
+export function useReadActivityPhoto(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (photoId: number) =>
+      apiPost<PhotoOut>(`/api/v1/activities/${activityId}/photos/${photoId}/read`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["activity-photos", activityId] });
+    },
+  });
+}
+
+export function useActivityLogbook(activityId: string) {
+  return useQuery({
+    queryKey: ["activity-logbook", activityId],
+    queryFn: () => apiGet<Logbook>(`/api/v1/activities/${activityId}/logbook`),
+  });
+}
+
+export function useSaveActivityLogbook(activityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Logbook) =>
+      apiPut<Logbook>(`/api/v1/activities/${activityId}/logbook`, body),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["activity-logbook", activityId], saved);
     },
   });
 }

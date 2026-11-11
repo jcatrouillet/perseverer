@@ -27,6 +27,7 @@ from perseverer import __version__
 from perseverer.api.mcp_server import build_mcp_asgi_app, mcp_lifespan
 from perseverer.api.routers import (
     activities,
+    activity_logbook,
     auth,
     bikes,
     blood_tests,
@@ -86,6 +87,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(activities.router, prefix="/api/v1")
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(blood_tests.router, prefix="/api/v1")
+app.include_router(activity_logbook.router, prefix="/api/v1")
 app.include_router(dexa.router, prefix="/api/v1")
 app.include_router(sleep.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")

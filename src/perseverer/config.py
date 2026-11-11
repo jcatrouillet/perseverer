@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # --- garmin_connect rate limiting, rolling window, staleness, scheduler ---
     garmin_rolling_window_days: int = 10
     garmin_request_interval_s: float = 3.0
+    # --- Reading handwritten workout notes from a photo (handwriting.py) ---
+    # Optional: unset, the photo can still be attached and the sets typed in. Set, a photo is sent
+    # to the Anthropic API when the athlete asks to read it (never automatically).
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-opus-5-5"
     garmin_max_requests_per_hour: int = 300
     garmin_stale_escalate_days: int = 7
     export_freshness_days: int = 90

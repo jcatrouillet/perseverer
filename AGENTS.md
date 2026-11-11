@@ -113,6 +113,10 @@ Things that are easy to get wrong, each learned from a real bug:
   vendor accounts or sharing must stay off that list.
 
 **Runtime**
+- A photo of handwritten notes (`activity_photo`) leaves the server only when the athlete asks for it
+  to be read, through `handwriting.py`, with `PERSEVERER_ANTHROPIC_API_KEY` set. Never send an
+  athlete's data to a third party automatically or in a sync, and never let a provider's error text
+  reach the page.
 - `api` runs two uvicorn workers: no state in process memory (sessions, locks, MCP sessions). Use
   SQLite.
 - SQLite has one writer at a time, and the API writes too (OAuth token refreshes, notes,

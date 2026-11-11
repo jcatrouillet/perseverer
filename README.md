@@ -277,6 +277,10 @@ With the **Cycling** switch, the same tabs describe your rides:
 - **Goals** per week, month or year: as many distance goals and time goals as you like, one per
   sport (or all sports together), and bouldering sends by grade, each with a pace-to-target chart. A congratulations popup appears, once per goal, when a
   monthly or yearly goal is reached.
+- **Handwritten notes** on a HIIT or strength activity: attach a photo of the sets you wrote down,
+  let Claude read the handwriting (optional, with an Anthropic API key; the photo is sent only when
+  you ask), correct and reorder the exercises to match what you did, and save them as the activity's
+  sets.
 - **Muscles worked** for a HIIT or strength activity: the recorded sets are mapped to the muscles
   they work and drawn on a front and back body, darker for the harder-worked.
 - **Compliance** per sport in the week view, matched automatically against recorded activities.

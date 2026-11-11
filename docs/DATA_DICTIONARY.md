@@ -647,6 +647,23 @@ Athlete-entered body-composition scans, a plain table like blood tests (nothing 
 - Routes: `GET /dexa-scans`, `POST /dexa-scans` (idempotent per date, region and metric),
   `DELETE /dexa-scans/{local_date}`. The Health page shows them under "DEXA scan".
 
+### Handwritten notes (activity_photo, activity_logged_set)
+
+Athlete input on a HIIT / strength activity, keyed by `activity_start_time_utc` (never `activity_id`),
+so a rebuild, which wipes and re-creates activity rows, does not lose it.
+
+- **`activity_photo`**: a photo of the notes. The original is in the raw archive (`raw_object`,
+  source `athlete_upload`, kind `activity_photo`); the row holds `raw_object_id`, `content_type`,
+  `byte_size`, and the state of reading it: `decode_status` (`pending` | `done` | `failed`; null = not
+  asked), `decode_started_at`, `decode_error`, `decoded_json` (what Claude read, a suggestion),
+  `decode_model`, `decoded_at`. Reading runs as a background job and the page polls this row.
+- **`activity_logged_set`**: the sets the athlete confirmed, one row per set: `position` (order done),
+  `block_index` (the exercise as written the set belongs to), `exercise_label` (as written),
+  `exercise_category` / `exercise_name` (Garmin's exercise enum pair of the matched library
+  exercise, null when not matched), `reps`, `weight_kg` (SI), `duration_s`, `note`, `photo_id`.
+  Replaced as a whole by `PUT /activities/{id}/logbook`. When present they replace the watch's
+  recorded sets (`activity_exercise_set`) as the source of the muscles worked.
+
 ### Blood test results
 
 Athlete-entered lab results, a plain table rather than the vendor EAV pipeline (nothing to archive,

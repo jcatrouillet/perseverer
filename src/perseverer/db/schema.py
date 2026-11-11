@@ -1016,6 +1016,57 @@ activity_exercise_set = Table(
     Index("ix_activity_exercise_set_activity", "activity_id"),
 )
 
+# A photo the athlete attached to a HIIT / strength activity: their handwritten set notes. Durable
+# athlete input like activity_sport_override: keyed by the activity's start time, not activity_id
+# (activity rows are wiped and re-derived on rebuild, ids change), never wiped by a rebuild. The
+# original bytes live in the raw archive (raw_object, source "athlete_upload"); what Claude read
+# from the photo is kept as JSON in `decoded_json` (a suggestion, see handwriting.py) with its
+# state: reading takes seconds, so it runs in the background and the page polls this row.
+activity_photo = Table(
+    "activity_photo",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("activity_start_time_utc", DateTime(), nullable=False),
+    Column("raw_object_id", Integer, ForeignKey("raw_object.id"), nullable=False),
+    Column("content_type", String, nullable=False),
+    Column("byte_size", Integer, nullable=False),
+    Column("created_at", DateTime(), nullable=False),
+    Column("decode_status", String, nullable=True),  # pending | done | failed; null = not asked
+    Column("decode_started_at", DateTime(), nullable=True),
+    Column("decode_error", Text, nullable=True),
+    Column("decoded_json", Text, nullable=True),
+    Column("decode_model", String, nullable=True),
+    Column("decoded_at", DateTime(), nullable=True),
+    Index("ix_activity_photo_athlete_start", "athlete_id", "activity_start_time_utc"),
+)
+
+# The sets the athlete confirmed from their notes (or typed in), in the order they were done: one
+# row per set, the exercise as written plus the library exercise it was matched to. Durable and
+# keyed by activity start time like activity_photo above. When present they replace the watch's
+# recorded sets as the source of the muscles worked.
+activity_logged_set = Table(
+    "activity_logged_set",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("athlete_id", String, ForeignKey("athlete.id"), nullable=False),
+    Column("activity_start_time_utc", DateTime(), nullable=False),
+    Column("position", Integer, nullable=False),  # order of the set within the activity
+    Column("block_index", Integer, nullable=False),  # the exercise (as written) the set belongs to
+    Column("exercise_label", String, nullable=False),  # as written
+    Column("exercise_category", String, nullable=True),  # Garmin exercise enum pair, from the
+    Column("exercise_name", String, nullable=True),  # exercise library; null = not matched
+    Column("reps", Integer, nullable=True),
+    Column("weight_kg", Float, nullable=True),
+    Column("duration_s", Float, nullable=True),
+    Column("note", Text, nullable=True),
+    Column("photo_id", Integer, ForeignKey("activity_photo.id"), nullable=True),
+    Column("created_at", DateTime(), nullable=False),
+    UniqueConstraint(
+        "athlete_id", "activity_start_time_utc", "position", name="uq_activity_logged_set"
+    ),
+)
+
 split = Table(
     "split",
     metadata,

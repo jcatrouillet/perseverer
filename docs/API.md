@@ -763,6 +763,61 @@ Deletes every value of the scan taken that day. `200`; `404` when there is none.
 
 ---
 
+## Handwritten notes (HIIT / strength)
+
+Photos of the athlete's handwritten set notes on a HIIT or strength activity, what Claude read from
+them, and the sets the athlete confirmed. Everything is keyed by the activity's start time, so it
+survives `sync rebuild`. Writes are closed to a coach acting as the athlete. Reading the handwriting
+sends the photo to the Anthropic API, only on request and only when `PERSEVERER_ANTHROPIC_API_KEY`
+is set.
+
+### `GET /logbook/status`
+
+`{ "can_read_handwriting": bool }`: whether an Anthropic API key is configured.
+
+### `GET /activities/{activity_id}/photos`
+
+The photos, oldest first. Each `PhotoOut`: `id`, `content_type`, `byte_size`, `created_at`,
+`decode_status` (`null` = not asked, `pending`, `done`, `failed`), `decode_error`, `decoded` (what
+was read, below) and `decoded_at`. A reading still `pending` after 5 minutes is reported `failed`
+(the job was lost to a restart). `404` for an unknown activity.
+
+`decoded` is `{ legible, transcript, exercises: [{ name, note, sets: [{ reps, weight, unit,
+duration_s }] }] }`: the exercises as written, in the written order, `unit` `kg` | `lb` | `null`. It
+is a suggestion; it is never stored as sets until the athlete saves the logbook.
+
+### `POST /activities/{activity_id}/photos`
+
+Multipart `file`: a JPEG, PNG, WebP or GIF (not HEIC). The original is archived untouched.
+`201` → `PhotoOut`; `400` not a readable image or not an allowed type; `413` over 15 MB; `409` at 12
+photos per activity.
+
+### `GET /activities/{activity_id}/photos/{photo_id}/image`
+
+The photo as a JPEG at most 1600 px on its long side, orientation applied, metadata removed.
+
+### `DELETE /activities/{activity_id}/photos/{photo_id}`
+
+`204`. Removes the photo and its reading; the confirmed sets stay; the archived original is kept.
+
+### `POST /activities/{activity_id}/photos/{photo_id}/read`
+
+Starts reading the handwriting in the background and returns at once, `202` → `PhotoOut` with
+`decode_status: "pending"`; poll the photo list. `503` without an API key; `409` while a reading
+runs. The model is `PERSEVERER_ANTHROPIC_MODEL`.
+
+### `GET /activities/{activity_id}/logbook` and `PUT /activities/{activity_id}/logbook`
+
+The confirmed sets, exercises in the order done. `LogbookOut` / `LogbookIn`: `exercises` (at most
+100), each `label` (as written), `exercise_category` and `exercise_name` (the Garmin exercise enum
+pair of the library exercise it was matched to, or `null`), `note`, `photo_id`, and `sets` (each
+`reps`, `weight_kg`, `duration_s`, all nullable). `PUT` replaces the whole logbook (an exercise with
+no set is dropped; an empty list clears it) and returns it. `422` for a blank label or a negative
+number. When a logbook exists it is what the muscles worked are computed from, instead of the sets
+the watch recorded.
+
+---
+
 ## Blood Tests
 
 Athlete-entered blood test results — one row per marker per draw, several rows sharing one

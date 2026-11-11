@@ -4,7 +4,7 @@ available=False no-goal-set case, upsert-not-duplicate, validation, and auth."""
 
 from __future__ import annotations
 
-import httpx
+import httpx2 as httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, select
 

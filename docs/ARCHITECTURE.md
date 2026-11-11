@@ -336,6 +336,20 @@ own numbers:
   power (`best_20min_power_w` on the activity list). VO2max, race
   predictions and race readiness are running models (VDOT) and only exist for running.
 
+## Reading handwritten notes
+
+A HIIT or strength activity can carry photos of the athlete's handwritten set notes
+(`activity_photo`, originals in the raw archive). With `PERSEVERER_ANTHROPIC_API_KEY` set, a photo
+can be read by Claude's vision (`handwriting.py`, the Anthropic SDK): it is resized and stripped of
+metadata, sent to the Anthropic API **only when the athlete clicks "Read the handwriting"**, never
+automatically, and the result (exercises and sets as written) is stored on the photo as a
+suggestion. It runs as a background job with its state on the photo row, no database write is open
+across the call, and a failure shows a short message, never the provider's error. The athlete
+corrects the list, matches each exercise to the exercise library (`logbookMatch.ts`) and orders
+the exercises as done, helped by the order of the sets the watch recorded; the saved list
+(`activity_logged_set`) feeds the muscles-worked card. Without a key the photo can still be attached
+and the sets typed in.
+
 ## Writing back to Garmin
 
 Perseverer writes to one third-party account: Garmin Connect.

@@ -1898,6 +1898,45 @@ const GROUPS = [
       responses: [ { code: 200, note: "Deleted." }, { code: 404, note: "No scan on that date." } ], example: {}
     },
   ]},
+  { id: "logbook", title: "Handwritten notes", endpoints: [
+    { method: "GET", path: "/api/v1/logbook/status", summary: "Whether handwriting can be read on this server.",
+      description: "can_read_handwriting is true when PERSEVERER_ANTHROPIC_API_KEY is configured.",
+      responses: [ { code: 200, note: "{ can_read_handwriting: bool }" } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/photos", summary: "The photos of the athlete's handwritten notes on an activity.",
+      description: "Each photo: id, content_type, byte_size, created_at, decode_status (null, pending, done, failed), decode_error, decoded and decoded_at. decoded is what Claude read: { legible, transcript, exercises: [{ name, note, sets: [{ reps, weight, unit, duration_s }] }] } -- a suggestion, never stored as sets until the logbook is saved. A reading pending for more than 5 minutes is reported failed.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, note: "A list of photos." }, { code: 404, note: "Unknown activity." } ], example: {}
+    },
+    { method: "POST", path: "/api/v1/activities/{activity_id}/photos", summary: "Attach a photo (multipart file: JPEG, PNG, WebP or GIF).",
+      description: "The original is archived untouched. Not HEIC.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 201, note: "The photo." }, { code: 400, note: "Not a readable image, or not an allowed type." }, { code: 409, note: "12 photos per activity at most." }, { code: 413, note: "Over 15 MB." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/photos/{photo_id}/image", summary: "The photo as a JPEG, at most 1600 px on its long side.",
+      params: [ ["activity_id","path","req","string","—",""], ["photo_id","path","req","integer","—",""] ],
+      responses: [ { code: 200, note: "image/jpeg" }, { code: 404, note: "" } ], example: {}
+    },
+    { method: "DELETE", path: "/api/v1/activities/{activity_id}/photos/{photo_id}", summary: "Remove a photo and its reading (the confirmed sets stay).",
+      params: [ ["activity_id","path","req","string","—",""], ["photo_id","path","req","integer","—",""] ],
+      responses: [ { code: 204, note: "Removed." }, { code: 404, note: "" } ], example: {}
+    },
+    { method: "POST", path: "/api/v1/activities/{activity_id}/photos/{photo_id}/read", summary: "Read the handwriting of a photo with Claude (in the background).",
+      description: "Sends the photo to the Anthropic API. Returns at once with decode_status pending; poll the photo list. The model is PERSEVERER_ANTHROPIC_MODEL.",
+      params: [ ["activity_id","path","req","string","—",""], ["photo_id","path","req","integer","—",""] ],
+      responses: [ { code: 202, note: "The photo, pending." }, { code: 409, note: "A reading is already running." }, { code: 503, note: "No API key configured." } ], example: {}
+    },
+    { method: "GET", path: "/api/v1/activities/{activity_id}/logbook", summary: "The sets the athlete confirmed from their notes, exercises in the order done.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      responses: [ { code: 200, note: "{ exercises: [{ label, exercise_category, exercise_name, note, photo_id, sets: [{ reps, weight_kg, duration_s }] }] }" } ], example: {}
+    },
+    { method: "PUT", path: "/api/v1/activities/{activity_id}/logbook", summary: "Replace the logbook of an activity.",
+      description: "Exercises in the order done; an exercise with no set is dropped; an empty list clears it. When a logbook exists, the muscles worked are computed from it instead of the sets the watch recorded.",
+      params: [ ["activity_id","path","req","string","—",""] ],
+      body: { fields: [["exercises","array","req","","At most 100 exercises: { label, exercise_category, exercise_name, note, photo_id, sets: [{ reps, weight_kg, duration_s }] }."]] },
+      responses: [ { code: 200, note: "The saved logbook." }, { code: 422, note: "Blank label or a negative number." } ], example: {}
+    },
+  ]},
   { id: "blood-tests", title: "Blood Tests", endpoints: [
     { method: "GET", path: "/api/v1/blood-tests", summary: "Athlete-entered blood test results in a date range.",
       description: "One row per marker per draw, several rows sharing one local_date forming one logical panel. Ordered by local_date descending then marker.",

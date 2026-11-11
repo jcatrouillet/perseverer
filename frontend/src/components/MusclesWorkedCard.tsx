@@ -3,14 +3,21 @@
 // an activity without sets (the watch logged one summary set, or none) shows no card at all.
 import { useEffect, useState } from "react";
 
-import { useActivityExerciseSets } from "../api/queries";
+import { useActivityExerciseSets, useActivityLogbook } from "../api/queries";
 import { loadExerciseLibrary, type ExerciseLibraryEntry } from "../exerciseLibrary";
+import { logbookAsSets } from "../logbookMatch";
 import { musclesWorked } from "../musclesWorked";
 import { BodyMuscleMap } from "./BodyMuscleMap";
 import "../styles/body-muscles.css";
 
 export function MusclesWorkedCard({ activityId }: { activityId: string }) {
-  const sets = useActivityExerciseSets(activityId);
+  const watch = useActivityExerciseSets(activityId);
+  const logbook = useActivityLogbook(activityId);
+  // The athlete's own confirmed sets, when there are any, are the truth; else the watch's.
+  const fromNotes = (logbook.data?.exercises.length ?? 0) > 0;
+  const sets = {
+    data: fromNotes ? logbookAsSets(logbook.data?.exercises ?? []) : watch.data,
+  };
   const [library, setLibrary] = useState<ExerciseLibraryEntry[] | null>(null);
   const hasSets = (sets.data?.length ?? 0) > 0;
 
@@ -60,9 +67,10 @@ export function MusclesWorkedCard({ activityId }: { activityId: string }) {
             </tbody>
           </table>
           <p className="chart-note">
-            From {worked.workingSets - worked.unmatchedSets} of {worked.workingSets} sets. A set
-            counts 1 for each muscle the exercise works most and 0.5 for each it works less; colour
-            is relative to the hardest-worked muscle of this activity.
+            From {worked.workingSets - worked.unmatchedSets} of {worked.workingSets} sets
+            {fromNotes ? " in your notes" : ""}. A set counts 1 for each muscle the exercise works
+            most and 0.5 for each it works less; colour is relative to the hardest-worked muscle of
+            this activity.
             {worked.unmatchedSets > 0 &&
               ` ${worked.unmatchedSets} set${worked.unmatchedSets === 1 ? "" : "s"} could not be matched to an exercise.`}
           </p>

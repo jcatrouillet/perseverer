@@ -1646,3 +1646,59 @@ export interface DexaScanOut {
   provider: string | null;
   values: DexaValueOut[];
 }
+
+// --- Handwritten workout notes of a HIIT / strength activity (routers/activity_logbook.py).
+export interface DecodedSet {
+  reps: number | null;
+  weight: number | null;
+  unit: "kg" | "lb" | null;
+  duration_s: number | null;
+}
+
+export interface DecodedExercise {
+  name: string;
+  sets: DecodedSet[];
+  note: string | null;
+}
+
+/** What Claude read from a photo: a suggestion for the athlete to correct. */
+export interface DecodedLogbook {
+  legible: boolean;
+  transcript: string;
+  exercises: DecodedExercise[];
+}
+
+export interface PhotoOut {
+  id: number;
+  content_type: string;
+  byte_size: number;
+  created_at: string;
+  decode_status: "pending" | "done" | "failed" | null;
+  decode_error: string | null;
+  decoded: DecodedLogbook | null;
+  decoded_at: string | null;
+}
+
+export interface LogbookStatus {
+  can_read_handwriting: boolean;
+}
+
+export interface LoggedSet {
+  reps: number | null;
+  weight_kg: number | null;
+  duration_s: number | null;
+}
+
+/** One exercise as the athlete wrote it, matched to a library exercise when they chose one. */
+export interface LoggedExercise {
+  label: string;
+  exercise_category: string | null;
+  exercise_name: string | null;
+  note: string | null;
+  photo_id: number | null;
+  sets: LoggedSet[];
+}
+
+export interface Logbook {
+  exercises: LoggedExercise[];
+}
