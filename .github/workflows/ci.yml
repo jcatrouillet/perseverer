@@ -70,7 +70,9 @@ jobs:
     # `qemu-x86_64 -cpu Westmere` (SSE4.2 and AES-NI, no AVX): a dependency compiled for
     # x86-64-v3 without runtime dispatch crashes with SIGILL here. `-cpu qemu64` is not used: it
     # lacks even SSE4.1/4.2, which fails numpy's own baseline, unrelated to the AVX question.
-    runs-on: ubuntu-latest
+    # Pinned: Ubuntu 26.04 (ubuntu-latest) ships an x86-64-v3 userland that SIGILLs under Westmere
+    # before any of our code runs, which would hide the dependency regressions this job exists for.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
@@ -79,7 +81,7 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --frozen --all-groups
       - name: Install qemu-user (same-arch CPU-feature emulation, not cross-arch)
-        run: sudo apt-get update && sudo apt-get install -y qemu-user
+        run: sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-static
       - name: Run AVX-sensitive-import smoke test under an AVX-less, SSE4.2-capable CPU model
         run: |
           set -euo pipefail
