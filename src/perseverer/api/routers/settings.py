@@ -73,7 +73,11 @@ from fastapi import (
     Query,
     Request,
 )
-from garminconnect import GarminConnectAuthenticationError, GarminConnectTooManyRequestsError
+from garminconnect import (
+    GarminConnectAuthenticationError,
+    GarminConnectConnectionError,
+    GarminConnectTooManyRequestsError,
+)
 from sqlalchemy import Connection, Row, desc, select
 from sqlalchemy.engine import Engine
 from starlette.requests import ClientDisconnect
@@ -86,6 +90,12 @@ from perseverer.adapters.garmin_connect import (
     token_store_status,
 )
 from perseverer.adapters.garmin_export import import_garmin_export
+from perseverer.adapters.garmin_personal_api import (
+    api_key_age_days,
+    connect_with_api_key,
+    has_api_key,
+)
+from perseverer.adapters.garmin_personal_api import delete_api_key as delete_garmin_api_key
 from perseverer.adapters.kaya import KayaInvalidCredentials
 from perseverer.adapters.kaya import login_with_credentials as kaya_login
 from perseverer.adapters.kaya import token_status as kaya_token_status
@@ -109,6 +119,7 @@ from perseverer.api.schemas.settings import (
     GarminAuthStatusOut,
     GarminLoginIn,
     GarminLoginOut,
+    GarminPersonalApiKeyIn,
     HrZoneConfigIn,
     HrZoneConfigOut,
     JobStatusOut,
@@ -709,7 +720,9 @@ def get_garmin_status(
     conn: Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
 ) -> GarminAuthStatusOut:
-    present, age_days = token_store_status(settings.garmin_tokenstore_dir_for(athlete_id))
+    tokenstore_dir = settings.garmin_tokenstore_dir_for(athlete_id)
+    present, age_days = token_store_status(tokenstore_dir)
+    key_present = has_api_key(tokenstore_dir)
     latest = _latest_ingest_run(conn, athlete_id, "garmin_connect")
     staleness = check_garmin_connect_staleness(
         conn, athlete_id, escalate_after_days=settings.garmin_stale_escalate_days
@@ -717,6 +730,8 @@ def get_garmin_status(
     return GarminAuthStatusOut(
         token_store_present=present,
         token_store_age_days=age_days,
+        auth_mode="personal_api_key" if key_present else ("login" if present else None),
+        api_key_age_days=api_key_age_days(tokenstore_dir) if key_present else None,
         last_sync_status=latest.status if latest else None,
         last_sync_at=(latest.finished_at or latest.started_at) if latest else None,
         last_sync_error=_first_error(latest.errors) if latest else None,
@@ -762,6 +777,50 @@ def post_garmin_login(
                 ),
             ) from e
         raise HTTPException(status_code=400, detail="Incorrect Garmin username or password.") from e
+    # The newest connection wins: a key stored earlier would otherwise silently override this login.
+    delete_garmin_api_key(settings.garmin_tokenstore_dir_for(athlete_id))
+    return GarminLoginOut(success=True)
+
+
+@router.post("/settings/garmin/personal-api-key")
+def post_garmin_personal_api_key(
+    payload: GarminPersonalApiKeyIn,
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    settings: Settings = Depends(get_settings),
+) -> GarminLoginOut:
+    """Connect with a Garmin *personal API key* (created on Garmin Connect Web) instead of a
+    login: read-only, no password, and no MFA to complete. The key is exchanged once to prove it
+    works and only then stored (under /data, never returned). While a key is stored it is what the
+    sync uses; a later password login replaces it. A rejected key is a 400, not a 401, for the
+    reason `post_garmin_login` gives."""
+    try:
+        connect_with_api_key(
+            settings.garmin_tokenstore_dir_for(athlete_id),
+            payload.api_key,
+            base_url=settings.garmin_personal_api_base_url,
+        )
+    except GarminConnectTooManyRequestsError as e:
+        raise HTTPException(
+            status_code=429, detail="Garmin rate-limited this attempt -- wait before retrying."
+        ) from e
+    except GarminConnectAuthenticationError as e:
+        raise HTTPException(
+            status_code=400,
+            detail="Garmin rejected this API key (mistyped, revoked or expired).",
+        ) from e
+    except GarminConnectConnectionError as e:
+        raise HTTPException(status_code=502, detail="Could not reach Garmin.") from e
+    return GarminLoginOut(success=True)
+
+
+@router.delete("/settings/garmin/personal-api-key")
+def remove_garmin_personal_api_key(
+    athlete_id: Annotated[str, Depends(require_api_key)],
+    settings: Settings = Depends(get_settings),
+) -> GarminLoginOut:
+    """Forget the stored key. A login session stored earlier (if any) becomes the connection
+    again; otherwise the account shows as not connected. Archived data is untouched."""
+    delete_garmin_api_key(settings.garmin_tokenstore_dir_for(athlete_id))
     return GarminLoginOut(success=True)
 
 

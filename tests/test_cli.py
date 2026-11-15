@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+import typer
 from sqlalchemy import Engine, select
 
 from perseverer.adapters.fit_folder import IngestRunSummary
@@ -115,3 +117,38 @@ def test_import_garmin_connect_threads_the_athlete_id_flag(tmp_path: Path) -> No
 
     assert captured["athlete_id"] == second_athlete_id
     assert captured["tokenstore_dir"] == settings.garmin_tokenstore_dir_for(second_athlete_id)
+
+
+def test_auth_personal_api_key_stores_checks_and_removes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`sync auth personal-api-key` checks the key with Garmin before storing it, reports a
+    rejected one without storing, and `--remove` forgets it. The key comes from the environment
+    here; interactively it is prompted for with the input hidden."""
+    from garminconnect import GarminConnectAuthenticationError
+
+    from perseverer import cli
+    from perseverer.adapters.garmin_personal_api import has_api_key, save_api_key
+
+    settings = Settings(data_dir=tmp_path)
+    store = settings.garmin_tokenstore_dir_for(DEFAULT_ATHLETE_ID)
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+    monkeypatch.setenv("GARMIN_PERSONAL_API_KEY", "a-key")
+
+    def accept(tokenstore_dir: Path, api_key: str, *, base_url: str) -> None:
+        save_api_key(tokenstore_dir, api_key, base_url=base_url)
+
+    monkeypatch.setattr(cli, "connect_with_api_key", accept)
+    cli.auth_personal_api_key(DEFAULT_ATHLETE_ID, remove=False)
+    assert has_api_key(store)
+
+    cli.auth_personal_api_key(DEFAULT_ATHLETE_ID, remove=True)
+    assert not has_api_key(store)
+
+    def reject(*a: object, **kw: object) -> None:
+        raise GarminConnectAuthenticationError("no")
+
+    monkeypatch.setattr(cli, "connect_with_api_key", reject)
+    with pytest.raises(typer.Exit):
+        cli.auth_personal_api_key(DEFAULT_ATHLETE_ID, remove=False)
+    assert not has_api_key(store)

@@ -9,12 +9,17 @@ import io
 import json
 import subprocess
 import zipfile
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from garminconnect import GarminConnectAuthenticationError, GarminConnectTooManyRequestsError
+from garminconnect import (
+    GarminConnectAuthenticationError,
+    GarminConnectConnectionError,
+    GarminConnectTooManyRequestsError,
+)
 from sqlalchemy import Connection, Engine, select
 
 import perseverer.api.routers.settings as settings_router
@@ -1284,3 +1289,87 @@ def test_latest_job_returns_error_details(
     assert body["status"] == "failed"
     assert body["error_count"] == 1
     assert body["first_error"] == "429 from Garmin"
+
+
+# --- POST/DELETE /settings/garmin/personal-api-key -- the key check is patched so no real Garmin
+# network access is ever attempted. ----------------------------------------------------------
+
+
+def test_garmin_personal_api_key_is_stored_and_reported_without_being_returned(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from perseverer.adapters.garmin_personal_api import save_api_key
+
+    def fake_connect(tokenstore_dir: Path, api_key: str, *, base_url: str) -> None:
+        assert base_url == test_settings.garmin_personal_api_base_url
+        save_api_key(tokenstore_dir, api_key, base_url=base_url)
+
+    monkeypatch.setattr(settings_router, "connect_with_api_key", fake_connect)
+    r = client.post(
+        "/api/v1/settings/garmin/personal-api-key",
+        json={"api_key": "secret-key-value"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert "secret-key-value" not in r.text
+
+    status = client.get("/api/v1/settings/garmin/status", headers=auth_headers).json()
+    assert status["auth_mode"] == "personal_api_key"
+    assert status["api_key_age_days"] == 0
+    assert "secret-key-value" not in json.dumps(status)
+
+    r = client.delete("/api/v1/settings/garmin/personal-api-key", headers=auth_headers)
+    assert r.status_code == 200
+    status = client.get("/api/v1/settings/garmin/status", headers=auth_headers).json()
+    assert status["auth_mode"] is None
+    assert status["api_key_age_days"] is None
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (GarminConnectAuthenticationError("rejected"), 400),  # never 401: see the login route
+        (GarminConnectTooManyRequestsError("429"), 429),
+        (GarminConnectConnectionError("down"), 502),
+    ],
+)
+def test_garmin_personal_api_key_failures_map_to_status_codes(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    expected: int,
+) -> None:
+    def failing(*a: object, **kw: object) -> None:
+        raise error
+
+    monkeypatch.setattr(settings_router, "connect_with_api_key", failing)
+    r = client.post(
+        "/api/v1/settings/garmin/personal-api-key",
+        json={"api_key": "x"},
+        headers=auth_headers,
+    )
+    assert r.status_code == expected
+
+
+def test_a_garmin_login_replaces_a_stored_personal_api_key(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from perseverer.adapters.garmin_personal_api import has_api_key, save_api_key
+
+    store = test_settings.garmin_tokenstore_dir_for(DEFAULT_ATHLETE_ID)
+    save_api_key(store, "k")
+    monkeypatch.setattr(settings_router, "login_with_credentials", lambda *a, **kw: None)
+    r = client.post(
+        "/api/v1/settings/garmin/login",
+        json={"username": "me@example.com", "password": "hunter2"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200
+    assert not has_api_key(store)

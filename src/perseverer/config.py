@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-5-5"
     garmin_max_requests_per_hour: int = 300
+    # Garmin's Personal API (a read-only key instead of a login); the China region uses
+    # https://personal.connectapi.garmin.cn
+    garmin_personal_api_base_url: str = "https://personal.connectapi.garmin.com"
     garmin_stale_escalate_days: int = 7
     export_freshness_days: int = 90
     staleness_webhook_url: str | None = None

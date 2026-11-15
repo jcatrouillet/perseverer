@@ -9,6 +9,8 @@ import {
   useGarminLogin,
   useGarminStatus,
   useLatestJob,
+  useRemoveGarminApiKey,
+  useSaveGarminApiKey,
   useTriggerGarminSync,
 } from "../api/queries";
 import { JobStatusBanner } from "./JobStatusBanner";
@@ -34,9 +36,19 @@ function loginErrorMessage(error: unknown): string {
   return "Could not sign in.";
 }
 
+function keyErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  if (message.includes("(400)")) return "Garmin rejected this key (mistyped, revoked or expired).";
+  if (message.includes("(429)")) return "Garmin rate-limited this attempt -- wait before retrying.";
+  return "Could not check the key with Garmin.";
+}
+
 export function GarminConnectCard() {
   const status = useGarminStatus();
   const login = useGarminLogin();
+  const saveKey = useSaveGarminApiKey();
+  const removeKey = useRemoveGarminApiKey();
+  const [apiKey, setApiKey] = useState("");
   const sync = useTriggerGarminSync();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -49,6 +61,14 @@ export function GarminConnectCard() {
     login.mutate(
       { username, password },
       { onSettled: () => setPassword("") }, // never lingers in state, success or failure
+    );
+  }
+
+  function handleSaveKey(e: React.FormEvent) {
+    e.preventDefault();
+    saveKey.mutate(
+      { api_key: apiKey },
+      { onSettled: () => setApiKey("") }, // never lingers in state, success or failure
     );
   }
 
@@ -67,9 +87,11 @@ export function GarminConnectCard() {
       {status.data && (
         <ul className="settings-garmin__status">
           <li>
-            {status.data.token_store_present
-              ? `Connected — session established ${formatAge(status.data.token_store_age_days)}.`
-              : "Not connected yet."}
+            {status.data.auth_mode === "personal_api_key"
+              ? `Connected with a personal API key — saved ${formatAge(status.data.api_key_age_days)}. Garmin keys expire after at most a year.`
+              : status.data.token_store_present
+                ? `Connected — session established ${formatAge(status.data.token_store_age_days)}.`
+                : "Not connected yet."}
           </li>
           <li>
             {status.data.last_sync_status == null
@@ -130,6 +152,46 @@ export function GarminConnectCard() {
           </span>
         )}
         {login.isSuccess && <span className="settings-garmin__saved">Signed in.</span>}
+      </form>
+
+      <form className="settings-garmin__login-form" onSubmit={handleSaveKey}>
+        <h3>Or connect with a personal API key</h3>
+        <p className="chart-note">
+          A read-only key created on Garmin Connect Web: no password, and it works for accounts that
+          need an MFA code. It cannot bring training readiness, training status, race predictions,
+          lactate threshold, strength sets or sleep stages, and it cannot push workouts. While a key
+          is saved it is what syncs use.
+        </p>
+        <label className="field">
+          Personal API key
+          <input
+            className="input"
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            autoComplete="off"
+            required
+          />
+        </label>
+        <button className="button" type="submit" disabled={saveKey.isPending}>
+          {saveKey.isPending ? "Checking…" : "Save key"}
+        </button>
+        {status.data?.auth_mode === "personal_api_key" && (
+          <button
+            className="button"
+            type="button"
+            onClick={() => removeKey.mutate()}
+            disabled={removeKey.isPending}
+          >
+            Remove key
+          </button>
+        )}
+        {saveKey.isError && (
+          <span role="alert" className="settings-garmin__error">
+            {keyErrorMessage(saveKey.error)}
+          </span>
+        )}
+        {saveKey.isSuccess && <span className="settings-garmin__saved">Key saved.</span>}
       </form>
 
       <button className="button" type="button" onClick={handleSync} disabled={syncRunning}>

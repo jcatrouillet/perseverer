@@ -617,6 +617,10 @@ export interface EmailReportConfigIn {
 export interface GarminAuthStatusOut {
   token_store_present: boolean;
   token_store_age_days: number | null;
+  /** How the account is connected: a read-only personal API key, or a username/password login. */
+  auth_mode: "personal_api_key" | "login" | null;
+  /** Days since the personal API key was saved (Garmin keys last 30 days to a year). */
+  api_key_age_days: number | null;
   last_sync_status: string | null;
   last_sync_at: string | null;
   last_sync_error: string | null;
@@ -634,6 +638,11 @@ export interface GarminLoginIn {
 }
 export interface GarminLoginOut {
   success: boolean;
+}
+
+// POST/DELETE /settings/garmin/personal-api-key -- the key is write-only, never returned.
+export interface GarminPersonalApiKeyIn {
+  api_key: string;
 }
 
 // GET /settings/kaya/status, POST /settings/kaya/login (docs/ARCHITECTURE.md)

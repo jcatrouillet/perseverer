@@ -1313,6 +1313,8 @@ const SCHEMAS = [
   { name: "GarminAuthStatusOut", note: "Returned by GET /settings/garmin/status. No real token expiry is reportable -- Garmin exposes no readable expiry for the refresh token that actually matters -- so staleness_severity/staleness_message (how many days the last sync has been failing) is the practical substitute.", fields: [
       ["token_store_present","boolean",""],
       ["token_store_age_days","integer|null",""],
+      ["auth_mode","string|null","personal_api_key | login; null when not connected."],
+      ["api_key_age_days","integer|null","Days since a personal API key was saved; null without one."],
       ["last_sync_status","string|null","running | success | failed; null means no sync has ever run."],
       ["last_sync_at","string(date-time)|null",""],
       ["last_sync_error","string|null",""],
@@ -2823,6 +2825,27 @@ const GROUPS = [
       example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/garmin/login \\
   -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
   -d '{"username": "me@example.com", "password": "..."}'` }
+    },
+    { method: "POST", path: "/api/v1/settings/garmin/personal-api-key", summary: "Connect with a Garmin personal API key.",
+      description: "The web counterpart of `sync auth personal-api-key`. A read-only key created on Garmin Connect Web (30 days to a year, shown once): no password, no MFA, no workout or course pushes. It is exchanged once for a 24 hour bearer token to prove it works and only then stored (never returned). While stored it is what syncs use; a password login replaces it. Not offered by the Personal API, so skipped: training readiness, training status, race predictions, lactate threshold, strength sets, the sleep stage timeline. Closed to coaches.",
+      body: { schema: "GarminPersonalApiKeyIn", fields: [
+        ["api_key","string","req","Never stored in the clear by the page and never returned."],
+      ]},
+      responses: [
+        { code: 200, ref: "GarminLoginOut" },
+        { code: 400, note: "Garmin rejected the key (mistyped, revoked or expired). Deliberately not 401, as for the login." },
+        { code: 429, note: "Garmin rate-limited this attempt." },
+        { code: 502, note: "Could not reach Garmin." },
+      ],
+      example: { curl: `curl -X POST https://your-perseverer-host/api/v1/settings/garmin/personal-api-key \\
+  -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"api_key": "..."}'` }
+    },
+    { method: "DELETE", path: "/api/v1/settings/garmin/personal-api-key", summary: "Forget the stored Garmin personal API key.",
+      description: "A login session stored earlier, if any, becomes the connection again; otherwise the account shows as not connected. Archived data is untouched. Closed to coaches.",
+      responses: [ { code: 200, ref: "GarminLoginOut" } ],
+      example: { curl: `curl -X DELETE https://your-perseverer-host/api/v1/settings/garmin/personal-api-key \\
+  -H "X-API-Key: YOUR_API_KEY"` }
     },
     { method: "POST", path: "/api/v1/settings/garmin/sync", summary: "Trigger a Garmin Connect sync right now.",
       description: "The same sync_garmin_connect() call the daily worker and `sync import garmin-connect` already make. Runs in the background — this returns immediately; poll GET /settings/jobs/latest?source=garmin_connect for progress.",

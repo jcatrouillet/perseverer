@@ -35,6 +35,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
 from garminconnect import (
     Garmin,
     GarminConnectAuthenticationError,
@@ -47,6 +48,12 @@ from sqlalchemy import Connection, select
 
 from perseverer.adapters.base import AdapterHealth
 from perseverer.adapters.fit_folder import IngestResult, IngestRunSummary, ingest_canonical_batch
+from perseverer.adapters.garmin_personal_api import (
+    PersonalApiClient,
+    PersonalApiReadOnly,
+    has_api_key,
+    load_api_key,
+)
 from perseverer.archive import archive_raw_bytes
 from perseverer.auto_tags import apply_auto_tags
 from perseverer.db.schema import ingest_run, raw_object
@@ -63,6 +70,7 @@ from perseverer.garmin_course import (
 )
 from perseverer.health.ingest import HealthIngestResult, ingest_health_batch
 from perseverer.health.json_parser import (
+    parse_daily_body_battery_json,
     parse_daily_hrv_json,
     parse_daily_lactate_threshold_json,
     parse_daily_race_predictions_json,
@@ -192,11 +200,25 @@ class GarminConnectAdapter:
         tokenstore_dir: Path,
         rate_limiter: RateLimiter,
         client_factory: Callable[[], Garmin] = Garmin,
+        http_client: httpx.Client | None = None,
     ) -> None:
         self.tokenstore_dir = tokenstore_dir
         self.rate_limiter = rate_limiter
         self._client_factory = client_factory
-        self._client: Garmin | None = None
+        self._http_client = http_client
+        # A `Garmin` (login) or a `PersonalApiClient` (API key): both answer the calls the sync
+        # makes. Typed `Any` because the two share no base class.
+        self._client: Any = None
+
+    @property
+    def personal_api(self) -> bool:
+        """True when connected with a Garmin personal API key rather than a login."""
+        return isinstance(self._client, PersonalApiClient)
+
+    def supports(self, feature: str) -> bool:
+        """Whether this connection can serve a sync step: training readiness / status, race
+        predictions, lactate threshold and per-set data exist only for a login."""
+        return not self.personal_api or PersonalApiClient.supports(feature)
 
     def health_check(self) -> AdapterHealth:
         if not self.tokenstore_dir.exists() or not any(self.tokenstore_dir.iterdir()):
@@ -205,7 +227,14 @@ class GarminConnectAdapter:
 
     def authenticate(self) -> None:
         """Loads the existing token store only. Never constructs a client with credentials —
-        see module docstring for why that matters."""
+        see module docstring for why that matters.
+
+        A personal API key stored in the token directory (see garmin_personal_api.py) takes
+        precedence: the key is exchanged for a 24 h bearer token, nothing else is attempted, and a
+        rejected key is reported like an expired login."""
+        if has_api_key(self.tokenstore_dir):
+            self._authenticate_with_key()
+            return
         client = self._client_factory()
         try:
             client.login(tokenstore=str(self.tokenstore_dir))
@@ -215,6 +244,27 @@ class GarminConnectAdapter:
                 "a credentialed login automatically - run `sync auth login` interactively."
             ) from e
         self._client = client
+
+    def _authenticate_with_key(self) -> None:
+        try:
+            api_key, base_url = load_api_key(self.tokenstore_dir)
+            personal = PersonalApiClient(
+                api_key,
+                base_url=base_url,
+                http=self._http_client,
+                throttle=self.rate_limiter.wait,
+            )
+            self.rate_limiter.wait()
+            personal.authenticate()
+        except GarminConnectAuthenticationError as e:
+            raise GarminAuthRequired(
+                "The Garmin personal API key was rejected or is missing (keys expire after at "
+                "most a year). Create a new key on Garmin Connect Web and add it in Settings, "
+                "or run `sync auth personal-api-key`."
+            ) from e
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted("429 from Garmin while exchanging the API key") from e
+        self._client = personal
 
     def list_activity_summaries(self, since: datetime) -> list[dict[str, Any]]:
         assert self._client is not None, "call authenticate() first"
@@ -258,7 +308,8 @@ class GarminConnectAdapter:
         # here, before the first write, for the same reason as the download above.
         sets_json = (
             self.fetch_exercise_sets(activity_id)
-            if _has_sets(activity_summary)
+            if self.supports("sets")
+            and _has_sets(activity_summary)
             and not _exercise_sets_archived(conn, athlete_id, activity_id)
             else None
         )
@@ -479,6 +530,8 @@ class GarminConnectAdapter:
         TrainingReadinessDTO report ever produced this, and that stopped the moment the last
         backfill ran out). See health/json_parser.py::parse_daily_training_readiness_json."""
         assert self._client is not None, "call authenticate() first"
+        if not self.supports("training_readiness"):  # not in the Personal API
+            return HealthIngestResult()
         self.rate_limiter.wait()
         try:
             readiness = self._client.get_training_readiness(local_date)
@@ -520,6 +573,8 @@ class GarminConnectAdapter:
         MetricsHeatAltitudeAcclimation, TrainingHistory) -- see
         health/json_parser.py::parse_daily_training_status_json for exactly how they map."""
         assert self._client is not None, "call authenticate() first"
+        if not self.supports("training_status"):  # not in the Personal API
+            return HealthIngestResult()
         self.rate_limiter.wait()
         try:
             status = self._client.get_training_status(local_date)
@@ -602,6 +657,8 @@ class GarminConnectAdapter:
         endpoint itself accepts a date range, so there's no reason to call it once per day. See
         health/json_parser.py::parse_daily_race_predictions_json."""
         assert self._client is not None, "call authenticate() first"
+        if not self.supports("race_predictions"):  # not in the Personal API
+            return HealthIngestResult()
         self.rate_limiter.wait()
         start_date = since.date().isoformat()
         end_date = until.date().isoformat()
@@ -648,6 +705,8 @@ class GarminConnectAdapter:
         health/json_parser.py::parse_daily_lactate_threshold_json for the response shape and
         the empirically-confirmed unit correction its own docstring documents."""
         assert self._client is not None, "call authenticate() first"
+        if not self.supports("lactate_threshold"):  # not in the Personal API
+            return HealthIngestResult()
         self.rate_limiter.wait()
         start_date = since.date().isoformat()
         end_date = until.date().isoformat()
@@ -694,6 +753,10 @@ class GarminConnectAdapter:
         shape and why the old parse_daily_body_battery_json/raw JSON kind stay in place
         unchanged (already-archived bytes must still replay on `sync rebuild`)."""
         assert self._client is not None, "call authenticate() first"
+        if self.personal_api:
+            return self._fetch_body_battery_report(
+                conn, archive_root, parquet_dir, athlete_id=athlete_id, local_date=local_date
+            )
         self.rate_limiter.wait()
         try:
             data = self._client.get_stress_data(local_date)
@@ -720,6 +783,49 @@ class GarminConnectAdapter:
             batch=parse_daily_stress_json(content),
         )
 
+    def _fetch_body_battery_report(
+        self,
+        conn: Connection,
+        archive_root: Path,
+        parquet_dir: Path,
+        *,
+        athlete_id: str,
+        local_date: str,
+    ) -> HealthIngestResult:
+        """Body battery for a key-connected account: the Personal API has only the `reports/daily`
+        endpoint (the sparse ~6 checkpoints a day one), not the dense daily-stress series, so the
+        original report kind and parser (kept for replaying old archives) serve it."""
+        self.rate_limiter.wait()
+        try:
+            data = self._client.get_body_battery(local_date, local_date)
+        except GarminConnectTooManyRequestsError as e:
+            raise GarminRateLimitAborted(
+                f"429 from Garmin while fetching body battery for {local_date}"
+            ) from e
+        content = json.dumps(data).encode("utf-8")
+        archive_raw_bytes(
+            conn,
+            archive_root,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            kind="garmin_connect_daily_body_battery_json",
+            content=content,
+            locator=f"daily-body-battery/{local_date}",
+        )
+        return ingest_health_batch(
+            conn,
+            parquet_dir,
+            athlete_id=athlete_id,
+            source=SOURCE_NAME,
+            batch=parse_daily_body_battery_json(content),
+        )
+
+    def _require_login(self, what: str) -> None:
+        if self.personal_api:
+            raise PersonalApiReadOnly(
+                f"{what} needs a Garmin login: a personal API key can only read."
+            )
+
     def delete_workout(self, workout_id: int) -> None:
         """Deletes one workout template from the athlete's Garmin workout library. Used both by
         `push_planned_workout` below (replacing a stale copy on edit) and directly by
@@ -727,6 +833,7 @@ class GarminConnectAdapter:
         deleted locally, see that route's own docstring for why a Garmin-side failure there must
         never block the local delete)."""
         assert self._client is not None, "call authenticate() first"
+        self._require_login("Deleting a workout")
         self.rate_limiter.wait()
         try:
             self._client.delete_workout(workout_id)
@@ -741,6 +848,7 @@ class GarminConnectAdapter:
         connection error whose text says so, hence the explicit check: a 429 aborts, never retries
         (same contract as every other call on this class)."""
         assert self._client is not None, "call authenticate() first"
+        self._require_login("Courses")
         self.rate_limiter.wait()
         try:
             return self._client.client.request(method, "connectapi", path, **kwargs)
@@ -828,6 +936,7 @@ class GarminConnectAdapter:
         it -- docs/ARCHITECTURE.md.
         """
         assert self._client is not None, "call authenticate() first"
+        self._require_login("Pushing a workout")
         if existing_workout_id is not None:
             self.delete_workout(existing_workout_id)
 
@@ -895,6 +1004,7 @@ def sync_garmin_connect(
     rolling_window_days: int,
     rate_limits: RateLimitSettings,
     client_factory: Callable[[], Garmin] = Garmin,
+    http_client: httpx.Client | None = None,
 ) -> IngestRunSummary:
     """The incremental sync: rolling re-fetch window, never retries past a 429, never falls
     back to credentialed auth. Always writes an ingest_run row, even on total auth failure —
@@ -904,7 +1014,9 @@ def sync_garmin_connect(
     whole orchestration (including ingest_run bookkeeping) with no real network access.
     """
     rate_limiter = RateLimiter(rate_limits.request_interval_s, rate_limits.max_requests_per_hour)
-    adapter = GarminConnectAdapter(tokenstore_dir, rate_limiter, client_factory=client_factory)
+    adapter = GarminConnectAdapter(
+        tokenstore_dir, rate_limiter, client_factory=client_factory, http_client=http_client
+    )
 
     started_at = datetime.now(UTC)
     result = conn.execute(

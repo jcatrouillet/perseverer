@@ -237,6 +237,11 @@ class EufyLoginOut(BaseModel):
 class GarminAuthStatusOut(BaseModel):
     token_store_present: bool
     token_store_age_days: int | None
+    # "personal_api_key" (a read-only Garmin key) or "login" (a session from a username/password
+    # login); null when not connected. The key itself is never returned.
+    auth_mode: str | None = None
+    # Days since the key was saved (Garmin keys last 30 days to a year); null without a key.
+    api_key_age_days: int | None = None
     last_sync_status: str | None
     last_sync_at: datetime | None
     last_sync_error: str | None
@@ -254,6 +259,10 @@ class GarminAuthStatusOut(BaseModel):
 class GarminLoginIn(BaseModel):
     username: str
     password: str
+
+
+class GarminPersonalApiKeyIn(BaseModel):
+    api_key: str
 
 
 # POST /settings/garmin/login response -- only ever returned with success=True; a failed

@@ -33,6 +33,9 @@ API, an MCP server and a React web app out. Start with
 - The Garmin client is never given credentials. `authenticate()` loads the token store and raises
   `GarminAuthRequired` if it can't. Credentials are used only in `sync auth login` and the Settings
   login form, both through `adapters/garmin_connect.py::login_with_credentials`, and never stored.
+- A personal API key (`adapters/garmin_personal_api.py`) is the other connection: read-only, kept
+  in the token directory, never returned by the API, never logged, exchanged for a bearer token
+  once per run. It never reaches a credentialed path, and anything that writes to Garmin refuses it.
 - Every call is rate limited. A 429 aborts the whole run immediately: no retry, anywhere. Garmin's
   SSO locks accounts that retry.
 - Writing to Garmin (workouts, courses) follows the same rules. Courses must be confirmed private

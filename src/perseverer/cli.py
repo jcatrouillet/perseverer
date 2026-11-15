@@ -13,6 +13,11 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from garminconnect import (
+    GarminConnectAuthenticationError,
+    GarminConnectConnectionError,
+    GarminConnectTooManyRequestsError,
+)
 
 # Windows' default console codepage (cp1252) can't encode an emoji in e.g. a Garmin-sourced
 # activity name ("☀️ San Jose Half Marathon 2026") -- confirmed the hard way: `sync
@@ -43,6 +48,12 @@ from perseverer.adapters.garmin_connect import (
     token_store_status,
 )
 from perseverer.adapters.garmin_export import import_garmin_export
+from perseverer.adapters.garmin_personal_api import (
+    api_key_age_days,
+    connect_with_api_key,
+    delete_api_key,
+    has_api_key,
+)
 from perseverer.adapters.kaya import KayaAuthRequired, KayaInvalidCredentials
 from perseverer.adapters.kaya import login_with_credentials as kaya_login
 from perseverer.adapters.kaya import token_status as kaya_token_status
@@ -366,6 +377,36 @@ def auth_login(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     typer.echo(f"Logged in. Token store saved to {tokenstore_dir}")
 
 
+@auth_app.command("personal-api-key")
+def auth_personal_api_key(
+    athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID,
+    remove: Annotated[bool, typer.Option("--remove", help="Forget the stored key.")] = False,
+) -> None:
+    """Connect to Garmin with a personal API key (created on Garmin Connect Web) instead of a
+    login: read-only, no password, no MFA. Prompts for the key (or reads GARMIN_PERSONAL_API_KEY),
+    checks it with Garmin, then stores it under the data directory. While stored it is what every
+    sync uses; `--remove` forgets it. Garmin keys expire after at most a year: repeat to renew."""
+    settings = get_settings()
+    tokenstore_dir = settings.garmin_tokenstore_dir_for(athlete_id)
+    if remove:
+        typer.echo("Key removed." if delete_api_key(tokenstore_dir) else "No key was stored.")
+        return
+    api_key = os.environ.get("GARMIN_PERSONAL_API_KEY") or typer.prompt(
+        "Garmin personal API key", hide_input=True
+    )
+    try:
+        connect_with_api_key(
+            tokenstore_dir, api_key, base_url=settings.garmin_personal_api_base_url
+        )
+    except GarminConnectAuthenticationError:
+        typer.echo("Garmin rejected this key (mistyped, revoked or expired).")
+        raise typer.Exit(code=1) from None
+    except (GarminConnectTooManyRequestsError, GarminConnectConnectionError) as e:
+        typer.echo(f"Could not check the key with Garmin: {e}")
+        raise typer.Exit(code=1) from None
+    typer.echo(f"Key accepted and stored in {tokenstore_dir}.")
+
+
 @auth_app.command("status")
 def auth_status(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     """Whether a Garmin token store exists and how long ago it was last written."""
@@ -373,8 +414,14 @@ def auth_status(athlete_id: AthleteIdOpt = DEFAULT_ATHLETE_ID) -> None:
     tokenstore_dir = settings.garmin_tokenstore_dir_for(athlete_id)
     present, age_days = token_store_status(tokenstore_dir)
     if not present:
-        typer.echo("No token store found - run `sync auth login`.")
+        typer.echo("No token store found - run `sync auth login` or `sync auth personal-api-key`.")
         raise typer.Exit(code=1)
+    if has_api_key(tokenstore_dir):
+        typer.echo(
+            f"Personal API key stored in {tokenstore_dir}, saved {api_key_age_days(tokenstore_dir)}"
+            " day(s) ago (Garmin keys expire after at most a year)."
+        )
+        return
     typer.echo(f"Token store present at {tokenstore_dir}, last written {age_days} day(s) ago.")
 
 

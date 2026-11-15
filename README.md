@@ -409,6 +409,7 @@ Open <http://localhost:5173> and sign in. Bring data in from **Settings → Exte
 
 ```bash
 uv run sync auth login                          # Garmin Connect, MFA-capable
+uv run sync auth personal-api-key               # or a read-only Garmin personal API key
 uv run sync import garmin-connect               # recent days
 uv run sync import garmin-export ~/garmin.zip   # full history
 ```

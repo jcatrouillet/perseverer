@@ -2198,7 +2198,9 @@ actionable) — `staleness_severity`/`staleness_message` are the practical subst
 escalating warning/critical signal off how many days the last sync has been failing.
 
 **Response `200`:** `GarminAuthStatusOut` — `token_store_present` (bool), `token_store_age_days`
-(int, nullable), `last_sync_status` (`"running"|"success"|"failed"`, nullable — `null` means no
+(int, nullable), `auth_mode` (`"personal_api_key"|"login"`, nullable — how the account is
+connected; `null` when not), `api_key_age_days` (int, nullable — days since a personal API key was
+saved, `null` without one), `last_sync_status` (`"running"|"success"|"failed"`, nullable — `null` means no
 sync has ever run), `last_sync_at` (datetime, nullable), `last_sync_error` (string, nullable),
 `staleness_severity` (`"warning"|"critical"`, nullable — `null` whenever the last sync
 succeeded), `staleness_message` (string, nullable).
@@ -2215,11 +2217,41 @@ requests an MFA flow would need.
 
 **Request body** (`GarminLoginIn`): `username` (string), `password` (string).
 
+A successful login removes a stored personal API key (below): the newest connection wins.
+
 **Response `200`:** `GarminLoginOut` — `{"success": true}`. **`400`** — wrong username/password
 (deliberately not `401`: this app's frontend treats any `401` as "your own Perseverer session
 expired" and force-logs you out — see the endpoint's own docstring). **`422`** — this account
 requires MFA. **`429`** — Garmin rate-limited the attempt; wait before retrying (never retried
 automatically, matching this adapter's own no-retry-on-429 rule everywhere else).
+
+### `POST /settings/garmin/personal-api-key`
+
+Connect with a Garmin **personal API key** instead of a login — the web counterpart of
+`sync auth personal-api-key`. The key is created by the account holder on Garmin Connect Web
+(30 days to one year validity, shown once, revocable) and is read-only: no password, no MFA, and
+no way to push workouts or courses. It is exchanged once for a 24 hour bearer token to prove it
+works, and only then stored under the athlete's Garmin token directory (never returned, never
+logged). While a key is stored it is what every sync uses; a password login replaces it.
+
+What a key-connected account does not get, because the Personal API does not offer it: training
+readiness, training status (VO2max trend, acclimation), race predictions, lactate threshold,
+per-set strength data, the sleep stage timeline, and workout/course pushes. The sync skips those
+instead of failing; everything else (activities with their original FIT files, daily summaries,
+sleep totals and score, HRV, hydration, body battery) is archived and parsed like a login's.
+
+**Request body** (`GarminPersonalApiKeyIn`): `api_key` (string).
+
+**Response `200`:** `GarminLoginOut` (`success: true`). **`400`** — Garmin rejected the key
+(mistyped, revoked or expired); deliberately not 401, for the reason given under
+`POST /settings/garmin/login`. **`429`** — Garmin rate-limited the attempt. **`502`** — Garmin
+could not be reached. Closed to coaches.
+
+### `DELETE /settings/garmin/personal-api-key`
+
+Forgets the stored key. A login session stored earlier, if any, becomes the connection again;
+otherwise the account shows as not connected. Archived data is untouched. **Response `200`:**
+`GarminLoginOut`. Closed to coaches.
 
 ### `POST /settings/garmin/sync`
 

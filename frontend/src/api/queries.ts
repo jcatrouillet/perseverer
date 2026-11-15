@@ -66,6 +66,7 @@ import type {
   GarminAuthStatusOut,
   GarminLoginIn,
   GarminLoginOut,
+  GarminPersonalApiKeyIn,
   BoulderingGoalIn,
   BoulderingGoalOut,
   BoulderingGoalProgressOut,
@@ -1439,6 +1440,30 @@ export function useGarminLogin() {
   return useMutation({
     mutationFn: (body: GarminLoginIn) =>
       apiPost<GarminLoginOut>("/api/v1/settings/garmin/login", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["garmin-status"] });
+    },
+  });
+}
+
+/** Connect with a Garmin personal API key (read-only, no password, no MFA). The server checks
+ * the key with Garmin before storing it; a rejected key is a 400. The key is never returned. */
+export function useSaveGarminApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: GarminPersonalApiKeyIn) =>
+      apiPost<GarminLoginOut>("/api/v1/settings/garmin/personal-api-key", body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["garmin-status"] });
+    },
+  });
+}
+
+/** Forgets the stored personal API key (a login session stored earlier takes over again). */
+export function useRemoveGarminApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiDelete<GarminLoginOut>("/api/v1/settings/garmin/personal-api-key"),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["garmin-status"] });
     },

@@ -374,6 +374,17 @@ Safety rules for every Garmin call:
 
 - Only a token store is ever loaded. Credentials are used in exactly two human-initiated places
   (`sync auth login` and the Settings login form) and are never stored.
+- A **personal API key** (`adapters/garmin_personal_api.py`) is the alternative connection: a
+  read-only key from Garmin Connect Web, stored as `personal_api_key.json` in the same token
+  directory (so every caller that passes the directory keeps working) and exchanged for a 24 hour
+  bearer token once per run, with no refresh and no credential fallback. It sits behind
+  `PersonalApiClient`, which answers the same calls as `garminconnect.Garmin` for what the sync
+  uses and raises the same exception types, so the adapter, parsers and archive have one path and a
+  429 still aborts the run. A stored key wins over a login session; a password login removes it.
+  The Personal API has no training readiness, training status, race predictions, lactate
+  threshold, exercise sets or sleep stage timeline, and cannot write: those sync steps are skipped
+  (`GarminConnectAdapter.supports`), body battery uses the `reports/daily` endpoint, and pushing a
+  workout or course raises `PersonalApiReadOnly`.
 - Calls are rate limited (minimum interval plus an hourly cap); an HTTP 429 aborts the whole run
   immediately, with no retry anywhere. Garmin's SSO locks accounts that retry.
 
