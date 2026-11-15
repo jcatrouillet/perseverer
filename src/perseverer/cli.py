@@ -852,6 +852,14 @@ def backfill_exercise_sets_cmd(
         RateLimiter(settings.garmin_request_interval_s, settings.garmin_max_requests_per_hour),
     )
     adapter.authenticate()
+    if not adapter.supports("sets"):
+        typer.echo(
+            "This account is connected with a personal API key, which cannot serve per-set data. "
+            "Remove the key (Settings, or `sync auth personal-api-key --remove`) so the login "
+            "session is used, then run this again.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
     try:
         with engine.connect() as conn:
             count = backfill_exercise_sets(

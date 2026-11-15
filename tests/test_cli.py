@@ -152,3 +152,29 @@ def test_auth_personal_api_key_stores_checks_and_removes(
     with pytest.raises(typer.Exit):
         cli.auth_personal_api_key(DEFAULT_ATHLETE_ID, remove=False)
     assert not has_api_key(store)
+
+
+def test_backfill_exercise_sets_refuses_a_key_connection_without_asking_garmin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A personal API key cannot serve per-set data: the backfill says so and exits instead of
+    crashing on the first activity."""
+    from perseverer import cli
+
+    settings = Settings(data_dir=tmp_path)
+    monkeypatch.setattr(cli, "get_settings", lambda: settings)
+
+    class KeyAdapter:
+        def __init__(self, *a: object, **kw: object) -> None: ...
+
+        def authenticate(self) -> None: ...
+
+        def supports(self, feature: str) -> bool:
+            return feature != "sets"
+
+    monkeypatch.setattr(cli, "GarminConnectAdapter", KeyAdapter)
+    monkeypatch.setattr(
+        cli, "backfill_exercise_sets", lambda *a, **kw: pytest.fail("must not call Garmin")
+    )
+    with pytest.raises(typer.Exit):
+        cli.backfill_exercise_sets_cmd(limit=None, athlete_id=DEFAULT_ATHLETE_ID)
