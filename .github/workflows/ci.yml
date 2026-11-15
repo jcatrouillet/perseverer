@@ -79,7 +79,7 @@ jobs:
       - run: uv python install 3.12
       - run: uv sync --frozen --all-groups
       - name: Install qemu-user (same-arch CPU-feature emulation, not cross-arch)
-        run: sudo apt-get update && sudo apt-get install -y qemu-user qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user
       - name: Run AVX-sensitive-import smoke test under an AVX-less, SSE4.2-capable CPU model
         run: |
           set -euo pipefail
