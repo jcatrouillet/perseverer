@@ -7,6 +7,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import httpx
+import pytest
 
 from perseverer.weather_forecast import (
     MAX_FORECAST_DAYS,
@@ -110,6 +111,15 @@ class TestFetchForecast:
 
         client = httpx.Client(transport=httpx.MockTransport(handler))
         assert fetch_forecast(0.0, 0.0, 5, client=client) is None
+
+    def test_a_provider_failure_is_logged_with_its_status_but_never_the_coordinates(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(429)))
+        with caplog.at_level("WARNING", logger="perseverer.weather_forecast"):
+            assert fetch_forecast(48.8566, 2.3522, 5, client=client) is None
+        assert "HTTP 429" in caplog.text
+        assert "48.85" not in caplog.text and "2.35" not in caplog.text
 
     def test_returns_empty_list_when_response_has_no_usable_data(self) -> None:
         client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})))

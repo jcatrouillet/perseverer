@@ -5,14 +5,18 @@ weather_forecast.py::fetch_forecast's own docstring for why UTC would misalign b
 roughly a third of the globe), plus a richer near-term (`upcoming`) detail -- see
 weather_forecast.py::fetch_upcoming_conditions's own docstring for why that's a second, separate
 Open-Meteo request rather than an extension of the coarse one. See api/schemas/weather_forecast.py
-for the response shape and weather_forecast.py for the fetch/parse (deliberately un-cached and
-un-archived -- a forecast has no permanent-record concept, unlike weather.py's own past-activity
-weather, see that module's own docstring).
+for the response shape and weather_forecast.py for the fetch/parse (deliberately un-archived and
+always fetched live -- a forecast has no permanent-record concept, unlike weather.py's own
+past-activity weather, see that module's own docstring; the one exception is the last answer
+weather_forecast_cache.py keeps to serve, flagged stale, when the provider is down).
 """
 
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Connection, select
@@ -34,8 +38,58 @@ from perseverer.weather_forecast import (
     fetch_forecast_with_timezone,
     fetch_upcoming_conditions,
 )
+from perseverer.weather_forecast_cache import (
+    KIND_HOME,
+    KIND_LAST_ACTIVITY,
+    load_forecast,
+    store_forecast,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _today_in(tz_name: str | None) -> str:
+    """The ISO date now in `tz_name` (UTC when it is missing or not a zone, e.g. \"auto\")."""
+    try:
+        zone = ZoneInfo(tz_name) if tz_name else UTC
+    except (KeyError, ValueError):
+        zone = UTC
+    return datetime.now(zone).date().isoformat()
+
+
+def _now_utc() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)  # naive UTC, as everywhere in storage
+
+
+def _remember(
+    conn: Connection,
+    athlete_id: str,
+    kind: str,
+    lat: float,
+    lon: float,
+    tz_name: str | None,
+    days: list[ForecastDayOut],
+    upcoming: list[ForecastDayDetailOut],
+) -> None:
+    """Keeps a forecast the provider just answered, for the outage fallback. Best effort: a
+    failure to remember it must never fail the request that already has its answer."""
+    try:
+        store_forecast(
+            conn,
+            athlete_id,
+            kind,
+            lat,
+            lon,
+            days=[d.model_dump(mode="json") for d in days],
+            upcoming=[u.model_dump(mode="json") for u in upcoming],
+            today=_today_in(tz_name),
+            now=_now_utc(),
+        )
+    except Exception:
+        conn.rollback()
+        logger.warning("Could not remember the forecast for the outage fallback", exc_info=True)
 
 
 def _day_detail_out(d: ForecastDayDetail) -> ForecastDayDetailOut:
@@ -82,7 +136,10 @@ def get_weather_forecast(
     days: Annotated[int, Query(ge=1, le=MAX_FORECAST_DAYS)] = MAX_FORECAST_DAYS,
 ) -> WeatherForecastOut:
     """`available=False` -- never a fabricated forecast -- whenever the athlete hasn't set a home
-    location (GET/PUT /settings/profile) or the Open-Meteo fetch fails. `days` is clamped to
+    location (GET/PUT /settings/profile) or the Open-Meteo fetch fails; `reason` says which
+    (`no_home_location`, `provider_error`, `no_forecast_data`). When the provider fails but an
+    earlier forecast for the same place is kept (weather_forecast_cache.py), that one is served with
+    `stale: true` and its `fetched_at` instead. `days` is clamped to
     Open-Meteo's own 0-16 range at the query-param level already; `fetch_forecast` clamps again
     defensively. `upcoming` is populated from a second, independent Open-Meteo request
     (`fetch_upcoming_conditions`) -- [] whenever that one fails or returns nothing usable, even
@@ -94,27 +151,59 @@ def get_weather_forecast(
         )
     ).fetchone()
     if row is None or row.home_lat is None or row.home_lon is None:
-        return WeatherForecastOut(available=False)
+        return WeatherForecastOut(available=False, reason="no_home_location")
 
+    # End the read transaction: nothing is held open across the vendor calls below.
+    conn.commit()
     forecast_days = fetch_forecast(row.home_lat, row.home_lon, days, tz=row.timezone)
     upcoming = fetch_upcoming_conditions(row.home_lat, row.home_lon, tz=row.timezone)
     upcoming_out = [_day_detail_out(d) for d in upcoming or []]
     if not forecast_days:
-        return WeatherForecastOut(available=False, upcoming=upcoming_out)
-
-    return WeatherForecastOut(
-        available=True,
-        days=[
-            ForecastDayOut(
-                local_date=d.local_date.isoformat(),
-                weather_code=d.weather_code,
-                temperature_min_c=d.temperature_min_c,
-                temperature_max_c=d.temperature_max_c,
+        # None is a failed fetch, [] an answer with nothing usable in it. Either way the last
+        # forecast the provider did answer is better than nothing, flagged stale.
+        cached = load_forecast(
+            conn,
+            athlete_id,
+            KIND_HOME,
+            row.home_lat,
+            row.home_lon,
+            today=_today_in(row.timezone),
+            now=_now_utc(),
+        )
+        if cached is not None:
+            return WeatherForecastOut(
+                available=True,
+                stale=True,
+                fetched_at=cached[2],
+                days=[ForecastDayOut(**d) for d in cached[0]],
+                upcoming=upcoming_out or [ForecastDayDetailOut(**u) for u in cached[1]],
             )
-            for d in forecast_days
-        ],
-        upcoming=upcoming_out,
+        return WeatherForecastOut(
+            available=False,
+            reason="provider_error" if forecast_days is None else "no_forecast_data",
+            upcoming=upcoming_out,
+        )
+
+    days_out = [
+        ForecastDayOut(
+            local_date=d.local_date.isoformat(),
+            weather_code=d.weather_code,
+            temperature_min_c=d.temperature_min_c,
+            temperature_max_c=d.temperature_max_c,
+        )
+        for d in forecast_days
+    ]
+    _remember(
+        conn,
+        athlete_id,
+        KIND_HOME,
+        row.home_lat,
+        row.home_lon,
+        row.timezone,
+        days_out,
+        upcoming_out,
     )
+    return WeatherForecastOut(available=True, days=days_out, upcoming=upcoming_out)
 
 
 # The near-term window this endpoint serves -- the same UPCOMING_DETAIL_DAYS the home-location
@@ -162,9 +251,10 @@ def get_last_activity_forecast(
         .limit(1)
     ).fetchone()
     if row is None:
-        return ActivityLocationForecastOut(available=False)
+        return ActivityLocationForecastOut(available=False, reason="no_gps_activity")
 
     requested_tz = row.tz_name or "auto"
+    conn.commit()  # end the read transaction before the vendor calls
     fetched = fetch_forecast_with_timezone(row.start_lat, row.start_lng, days, tz=requested_tz)
     forecast_days, resolved_tz = fetched if fetched is not None else (None, None)
     # Report the zone Open-Meteo actually used -- the real name behind an "auto" request -- and
@@ -184,20 +274,49 @@ def get_last_activity_forecast(
     )
     upcoming_out = [_day_detail_out(d) for d in upcoming or []]
     if not forecast_days:
-        return ActivityLocationForecastOut(
-            available=False, source_activity=source, upcoming=upcoming_out
+        cached = load_forecast(
+            conn,
+            athlete_id,
+            KIND_LAST_ACTIVITY,
+            row.start_lat,
+            row.start_lng,
+            today=_today_in(resolved_tz or row.tz_name),
+            now=_now_utc(),
         )
-    return ActivityLocationForecastOut(
-        available=True,
-        source_activity=source,
-        days=[
-            ForecastDayOut(
-                local_date=d.local_date.isoformat(),
-                weather_code=d.weather_code,
-                temperature_min_c=d.temperature_min_c,
-                temperature_max_c=d.temperature_max_c,
+        if cached is not None:
+            return ActivityLocationForecastOut(
+                available=True,
+                stale=True,
+                fetched_at=cached[2],
+                source_activity=source,
+                days=[ForecastDayOut(**d) for d in cached[0]],
+                upcoming=upcoming_out or [ForecastDayDetailOut(**u) for u in cached[1]],
             )
-            for d in forecast_days
-        ],
-        upcoming=upcoming_out,
+        return ActivityLocationForecastOut(
+            available=False,
+            reason="provider_error" if fetched is None else "no_forecast_data",
+            source_activity=source,
+            upcoming=upcoming_out,
+        )
+    days_out = [
+        ForecastDayOut(
+            local_date=d.local_date.isoformat(),
+            weather_code=d.weather_code,
+            temperature_min_c=d.temperature_min_c,
+            temperature_max_c=d.temperature_max_c,
+        )
+        for d in forecast_days
+    ]
+    _remember(
+        conn,
+        athlete_id,
+        KIND_LAST_ACTIVITY,
+        row.start_lat,
+        row.start_lng,
+        resolved_tz or row.tz_name,
+        days_out,
+        upcoming_out,
+    )
+    return ActivityLocationForecastOut(
+        available=True, source_activity=source, days=days_out, upcoming=upcoming_out
     )

@@ -1923,6 +1923,9 @@ time (see `ForecastDayDetailOut` below).
 | Field | Type | Description |
 |---|---|---|
 | `available` | boolean | `false` — never a fabricated forecast — when the athlete hasn't set a home location (`PUT /settings/profile`'s `home_lat`/`home_lon`) or the coarse-forecast Open-Meteo fetch failed. |
+| `stale` | boolean | `true` when Open-Meteo could not be reached (or had nothing usable) and the forecast returned is the last one it answered for the same location, at most 72 hours old, with days already past removed. Then `available` is `true`, `reason` is `null`, and `fetched_at` says when it was fetched. A live answer is always preferred. |
+| `fetched_at` | datetime, nullable | When a `stale` forecast was fetched (naive UTC); `null` for a live one. |
+| `reason` | string, nullable | Why `available` is `false`, `null` otherwise: `no_home_location`, `provider_error` (Open-Meteo could not be reached or answered with an error — usually transient; the server logs the HTTP status or exception type, never the coordinates) or `no_forecast_data` (it answered with nothing usable). |
 | `days` | `ForecastDayOut[]` | Empty when `available` is `false`. |
 | `upcoming` | `ForecastDayDetailOut[]` | The near-term rich-conditions detail, from a separate Open-Meteo request than `days`. `[]` whenever that request fails or returns nothing usable — independent of `available`/`days`, in either direction. |
 
@@ -1931,7 +1934,7 @@ time (see `ForecastDayDetailOut` below).
 The forecast (default the **next 3 days**) at the GPS start point of the athlete's **most recent
 recorded activity that has one** — for when they're away from home (a trip, a race weekend) and
 `GET /weather/forecast`'s configured home location would answer the wrong question. Same
-`days` + `upcoming` shape and the same deliberately-uncached, un-archived fetch as that endpoint.
+`days` + `upcoming` shape and the same live, un-archived fetch (with the same stale fallback) as that endpoint.
 The forecast is requested in the activity's own recorded timezone (`tz_name`) when it has one,
 else Open-Meteo's `auto` (derived from the coordinates), so `local_date` is the *location's*
 local date, not the athlete's home one. `source_activity.timezone` is always the real IANA name
@@ -1948,6 +1951,8 @@ would answer a different question than the one asked.
 | Field | Type | Description |
 |---|---|---|
 | `available` | boolean | `false` — never fabricated — when the athlete has no activity with a GPS start point, or the coarse-forecast fetch failed. |
+| `reason` | string, nullable | Why `available` is `false`, `null` otherwise: `no_gps_activity`, `provider_error` or `no_forecast_data` (as for `GET /weather/forecast`). |
+| `stale`, `fetched_at` | boolean, datetime | As for `GET /weather/forecast`: the last answered forecast for the same location, served when the provider is down. |
 | `source_activity` | `ForecastSourceActivityOut`, nullable | The activity the location came from: `id`, `local_date`, `name`, `sport`, `start_lat`, `start_lng`, `timezone` (IANA name; `null` only if the fetch failed and the activity stores no `tz_name`). Present even when `available` is `false` because the fetch failed (so a caller can see *where* it tried); `null` only when there is no located activity. |
 | `days` | `ForecastDayOut[]` | Empty when `available` is `false`. |
 | `upcoming` | `ForecastDayDetailOut[]` | Same rich near-term detail as `GET /weather/forecast`, for the same location. |

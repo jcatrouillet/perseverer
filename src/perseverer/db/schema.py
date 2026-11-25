@@ -182,6 +182,22 @@ athlete_commute_config = Table(
     Column("updated_at", DateTime(), nullable=False),
 )
 
+# The last forecast Open-Meteo answered for an athlete (weather_forecast_cache.py), kept only so a
+# provider outage does not blank the forecast: it is served, marked stale, when the live call
+# fails. One row per (athlete, kind) -- "home" or "last_activity" -- holding the days and the
+# near-term detail as the API's own JSON, for the one location they were fetched for. Derived and
+# disposable (a forecast is superseded by reality), never a record: deleting a row loses nothing.
+weather_forecast_cache = Table(
+    "weather_forecast_cache",
+    metadata,
+    Column("athlete_id", String, ForeignKey("athlete.id"), primary_key=True),
+    Column("kind", String, primary_key=True),
+    Column("lat", Float, nullable=False),
+    Column("lon", Float, nullable=False),
+    Column("payload", Text, nullable=False),
+    Column("fetched_at", DateTime(), nullable=False),
+)
+
 # A year poster (posters.py): a PNG rendered in the background from the athlete's activities --
 # a grid of every GPS trace, a heatmap around a chosen point, a calendar, a circular view.  The row
 # is the job (queued -> running -> done | failed); the picture itself is a file under

@@ -47,7 +47,14 @@ def test_unavailable_when_no_home_location_set(
 ) -> None:
     r = client.get("/api/v1/weather/forecast", headers=auth_headers)
     assert r.status_code == 200
-    assert r.json() == {"available": False, "days": [], "upcoming": []}
+    assert r.json() == {
+        "available": False,
+        "reason": "no_home_location",
+        "stale": False,
+        "fetched_at": None,
+        "days": [],
+        "upcoming": [],
+    }
 
 
 def test_returns_the_fetched_forecast_when_available(
@@ -70,6 +77,9 @@ def test_returns_the_fetched_forecast_when_available(
     assert r.status_code == 200
     assert r.json() == {
         "available": True,
+        "reason": None,
+        "stale": False,
+        "fetched_at": None,
         "days": [
             {
                 "local_date": "2026-09-14",
@@ -102,7 +112,30 @@ def test_unavailable_when_fetch_fails(
 
     r = client.get("/api/v1/weather/forecast", headers=auth_headers)
     assert r.status_code == 200
-    assert r.json() == {"available": False, "days": [], "upcoming": []}
+    assert r.json() == {
+        "available": False,
+        "reason": "provider_error",
+        "stale": False,
+        "fetched_at": None,
+        "days": [],
+        "upcoming": [],
+    }
+
+
+def test_unavailable_with_its_own_reason_when_the_answer_has_no_usable_days(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_home_location(engine, 48.8566, 2.3522)
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast",
+        lambda *args, **kwargs: [],
+    )
+    r = client.get("/api/v1/weather/forecast", headers=auth_headers)
+    assert r.json()["available"] is False
+    assert r.json()["reason"] == "no_forecast_data"
 
 
 def test_days_query_param_is_passed_through(
@@ -314,6 +347,9 @@ def test_last_activity_forecast_unavailable_without_a_located_activity(
     assert r.status_code == 200
     assert r.json() == {
         "available": False,
+        "reason": "no_gps_activity",
+        "stale": False,
+        "fetched_at": None,
         "source_activity": None,
         "days": [],
         "upcoming": [],
@@ -418,6 +454,7 @@ def test_last_activity_forecast_unavailable_when_fetch_fails_but_names_the_sourc
     )
     r = client.get("/api/v1/weather/forecast/last-activity", headers=auth_headers)
     assert r.json()["available"] is False
+    assert r.json()["reason"] == "provider_error"
     assert r.json()["source_activity"]["id"] == "a1"
     # Nothing was resolved and the activity stores no tz_name: unknown, not the literal "auto".
     assert r.json()["source_activity"]["timezone"] is None
@@ -429,3 +466,102 @@ def test_last_activity_forecast_requires_auth_and_bounds_days(
     assert client.get("/api/v1/weather/forecast/last-activity").status_code == 401
     r = client.get("/api/v1/weather/forecast/last-activity?days=17", headers=auth_headers)
     assert r.status_code == 422
+
+
+# --- the outage fallback: the last forecast the provider answered, flagged stale -------------
+
+
+def _upcoming_days(n: int = 3) -> list[ForecastDay]:
+    start = datetime.now().date()
+    return [
+        ForecastDay(date.fromordinal(start.toordinal() + 1 + i), 3, 5.0, 15.0) for i in range(n)
+    ]
+
+
+def _fetch_returns(monkeypatch: pytest.MonkeyPatch, result: object) -> None:
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast",
+        lambda *args, **kwargs: result,
+    )
+
+
+def test_a_provider_outage_serves_the_last_forecast_flagged_stale(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_home_location(engine, 48.8566, 2.3522, timezone="UTC")
+    days = _upcoming_days()
+    _fetch_returns(monkeypatch, days)
+    live = client.get("/api/v1/weather/forecast", headers=auth_headers).json()
+    assert live["available"] is True and live["stale"] is False and live["fetched_at"] is None
+
+    _fetch_returns(monkeypatch, None)
+    body = client.get("/api/v1/weather/forecast", headers=auth_headers).json()
+    assert body["available"] is True
+    assert body["stale"] is True
+    assert body["reason"] is None
+    assert body["fetched_at"] is not None
+    assert [d["local_date"] for d in body["days"]] == [d.local_date.isoformat() for d in days]
+
+
+def test_the_stale_forecast_is_not_served_for_a_moved_home_location(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_home_location(engine, 48.8566, 2.3522, timezone="UTC")
+    _fetch_returns(monkeypatch, _upcoming_days())
+    client.get("/api/v1/weather/forecast", headers=auth_headers)
+
+    _set_home_location(engine, 40.0, -3.7, timezone="UTC")
+    _fetch_returns(monkeypatch, None)
+    body = client.get("/api/v1/weather/forecast", headers=auth_headers).json()
+    assert body["available"] is False
+    assert body["reason"] == "provider_error"
+    assert body["stale"] is False
+
+
+def test_a_live_answer_always_wins_over_the_kept_one(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_home_location(engine, 48.8566, 2.3522, timezone="UTC")
+    _fetch_returns(monkeypatch, _upcoming_days())
+    client.get("/api/v1/weather/forecast", headers=auth_headers)
+    fresh = [ForecastDay(_upcoming_days()[0].local_date, 61, 1.0, 2.0)]
+    _fetch_returns(monkeypatch, fresh)
+    body = client.get("/api/v1/weather/forecast", headers=auth_headers).json()
+    assert body["stale"] is False
+    assert body["days"][0]["weather_code"] == 61
+
+
+def test_last_activity_forecast_also_falls_back_to_the_kept_one(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_located_activity(
+        engine, "a1", start=datetime(2026, 9, 1, 8), lat=10.0, lng=20.0, tz_name="UTC"
+    )
+    days = _upcoming_days()
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast_with_timezone",
+        lambda *a, **k: (days, "UTC"),
+    )
+    live = client.get("/api/v1/weather/forecast/last-activity", headers=auth_headers).json()
+    assert live["stale"] is False
+
+    monkeypatch.setattr(
+        "perseverer.api.routers.weather_forecast.fetch_forecast_with_timezone",
+        lambda *a, **k: None,
+    )
+    body = client.get("/api/v1/weather/forecast/last-activity", headers=auth_headers).json()
+    assert body["available"] is True and body["stale"] is True
+    assert body["source_activity"]["id"] == "a1"
+    assert len(body["days"]) == 3

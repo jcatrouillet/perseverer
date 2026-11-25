@@ -421,8 +421,11 @@ async def get_pace_bands() -> list[dict[str, Any]]:
 async def get_weather_forecast(days: int | None = None) -> dict[str, Any]:
     """Weather forecast for the athlete's own configured home location -- a coarse per-day
     icon/temperature for up to 16 days, plus rich hour-by-hour conditions (dew point, wind,
-    precipitation, sunrise/sunset) for the next few days. `available: false` if the athlete
-    hasn't set a home location. Defaults `days` to the maximum (16)."""
+    precipitation, sunrise/sunset) for the next few days. `available: false` carries a `reason`:
+    `no_home_location` (set one in Settings), `provider_error` (Open-Meteo failed -- usually
+    transient, retry later) or `no_forecast_data`. `stale: true` means Open-Meteo was down and
+    this is the last forecast it answered (`fetched_at`, at most 72 h old). Defaults `days` to the
+    maximum (16)."""
     params = {"days": days} if days is not None else {}
     response = await _call_api("GET", "/api/v1/weather/forecast", params=params)
     return dict(response.json())
@@ -434,7 +437,9 @@ async def get_last_activity_forecast(days: int | None = None) -> dict[str, Any]:
     precipitation, sunrise/sunset) at the GPS start point of the athlete's most recent activity
     that has one -- use this instead of get_weather_forecast when the athlete is away from home.
     The response names the source_activity and the timezone its local dates are in.
-    `available: false` if there is no activity with a location or the fetch failed."""
+    `available: false` carries a `reason`: `no_gps_activity`, `provider_error` (Open-Meteo
+    failed -- usually transient, retry later) or `no_forecast_data`. `stale: true` means
+    Open-Meteo was down and this is the last forecast it answered (`fetched_at`)."""
     params = {"days": days} if days is not None else {}
     response = await _call_api("GET", "/api/v1/weather/forecast/last-activity", params=params)
     return dict(response.json())

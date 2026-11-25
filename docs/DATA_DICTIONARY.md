@@ -871,16 +871,27 @@ Nominatim reverse geocoding (`nominatim_reverse_json`).
 `GET /weather/forecast` (`weather_forecast.py`) forecasts the athlete's home location
 (`athlete.home_lat`/`home_lon`, set in Settings → Profile, both or neither) in their `timezone`
 (an IANA name; Open-Meteo's daily dates follow the requested zone). Forecasts are neither archived
-nor cached: they are superseded by reality, so there is nothing to re-derive.
+nor cached in place of a live answer: they are superseded by reality, so there is nothing to
+re-derive. The one thing kept is the last answer, as a fallback (below).
 
 - `days`: up to 16 (`MAX_FORECAST_DAYS`) days of `local_date`, `weather_code`, min/max
-  temperature; `available: false` without a home location or when the fetch fails.
+  temperature; `available: false` without a home location or when the fetch fails, with a `reason`
+  (`no_home_location`, `provider_error`, `no_forecast_data`; `no_gps_activity` on the last-activity
+  endpoint). A failed Open-Meteo call is logged as a warning with its HTTP status or exception type.
 - `upcoming`: for the next 3 days (`UPCOMING_DETAIL_DAYS`), from a separate request, the same rich
   set as activity weather (humidity, dew point, radiation, cloud, apparent temperature,
   precipitation total, `sunrise_local`/`sunset_local`) and `hourly[]` in local time; `[]` if that
   request fails.
 - `GET /weather/forecast/last-activity`: the same, at the start point of the latest activity with
   GPS, in that location's own time zone (`source_activity.timezone`); no fallback to home.
+
+**`weather_forecast_cache`**: the last forecast Open-Meteo answered, per `(athlete_id, kind)` with
+`kind` `home` or `last_activity`, for the one place (`lat`, `lon`) it was fetched for: `payload`
+(JSON: the API's `days` and `upcoming`, merged across fetches so a shorter request never shrinks it,
+past days dropped) and `fetched_at` (naive UTC). Served by `GET /weather/forecast` and
+`/last-activity`, with `stale: true`, only when the live call fails, only for the same place, and
+only while at most 72 hours old (`MAX_STALE_HOURS`). Derived and disposable: deleting a row loses
+nothing.
 
 ### Commute addresses and automatic tags
 

@@ -7,8 +7,18 @@ comes from.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
+
+# Why a forecast is unavailable, so a caller (the Week view, the MCP tool) can say what to do
+# instead of showing nothing. `no_home_location`: none set yet (Settings -> Profile).
+# `no_gps_activity`: no recorded activity has a GPS start point. `provider_error`: Open-Meteo
+# could not be reached or answered with an error (transient; the server logs the status).
+# `no_forecast_data`: Open-Meteo answered but with nothing usable.
+ForecastUnavailableReason = Literal[
+    "no_home_location", "no_gps_activity", "provider_error", "no_forecast_data"
+]
 
 
 class ForecastDayOut(BaseModel):
@@ -72,6 +82,12 @@ class WeatherForecastOut(BaseModel):
     # (AGENTS.md's raw-first rule), matching ActivityWeatherOut/ActivityLocationOut's own
     # available-boolean convention.
     available: bool
+    # Set only when `available` is false; null otherwise.
+    reason: ForecastUnavailableReason | None = None
+    # True when the provider could not be reached and this is the last forecast it answered
+    # (`fetched_at`, naive UTC), served instead of nothing -- see weather_forecast_cache.py.
+    stale: bool = False
+    fetched_at: datetime | None = None
     days: list[ForecastDayOut] = []
     # The near-term (UPCOMING_DETAIL_DAYS) rich-conditions detail, from a separate Open-Meteo
     # request than `days` above -- see weather_forecast.py's own module docstring for why. []
@@ -104,6 +120,12 @@ class ActivityLocationForecastOut(BaseModel):
     activity or the Open-Meteo fetch failed."""
 
     available: bool
+    # Set only when `available` is false; null otherwise.
+    reason: ForecastUnavailableReason | None = None
+    # True when the provider could not be reached and this is the last forecast it answered
+    # (`fetched_at`, naive UTC), served instead of nothing -- see weather_forecast_cache.py.
+    stale: bool = False
+    fetched_at: datetime | None = None
     source_activity: ForecastSourceActivityOut | None = None
     days: list[ForecastDayOut] = []
     upcoming: list[ForecastDayDetailOut] = []

@@ -546,8 +546,18 @@ export interface ForecastDayDetailOut {
   hourly: ForecastHourlyPointOut[];
 }
 
+// Why a forecast is unavailable (null when it is available): no home location set, no activity with
+// a GPS start point, Open-Meteo failed (usually transient), or it answered with nothing usable.
+export type ForecastUnavailableReason =
+  "no_home_location" | "no_gps_activity" | "provider_error" | "no_forecast_data";
+
 export interface WeatherForecastOut {
   available: boolean;
+  reason: ForecastUnavailableReason | null;
+  // True when Open-Meteo was unreachable and `days` is the last forecast it answered for this
+  // location (`fetched_at`, naive UTC), at most 72 h old.
+  stale: boolean;
+  fetched_at: string | null;
   days: ForecastDayOut[];
   // The near-term rich-conditions detail, from a separate Open-Meteo request than `days` above
   // -- [] whenever that second request fails or returns nothing usable, independent of

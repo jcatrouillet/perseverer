@@ -18,13 +18,16 @@ Pacific returns a `time[0]` one calendar day ahead of the same request with
 would misalign by one day for roughly a third of the globe, exactly the kind of "changing weeks
 at the wrong time" bug an athlete would actually notice.
 
-Deliberately NOT archived raw and NOT cached, unlike every other vendor fetch in this codebase
+Deliberately NOT archived raw and never cached *in place of a live answer*, unlike every other
+vendor fetch in this codebase
 (AGENTS.md's "raw first, always" rule exists so a permanent record can be re-derived from an
 archive without recontacting a vendor -- a forecast has no such permanent-record concept, since
 it's superseded by reality as the date approaches, so archiving it would only accumulate useless
 bytes with zero re-derivation benefit). This mirrors the "request-time exception to the rollup
 mandate" precedent `vo2max_analysis.py`/`pace_hr_zones.py` already establish for a bounded,
-occasional live lookup, not a new one.
+occasional live lookup, not a new one. The one thing kept is the last answer the provider gave
+(`weather_forecast_cache.py`), served flagged stale only when the live call fails, so an Open-Meteo
+outage does not blank the forecast; it is a fallback, not a record.
 
 No API key needed (Open-Meteo's public tier). Weather-code-to-icon mapping stays a frontend
 presentation concern (`weatherCode.ts`) for the Week view, same posture as `weather.py` --
@@ -62,16 +65,32 @@ day-level forecast actually is rather than fabricating one representative hour.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime
 from typing import Any, NamedTuple
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
 # Open-Meteo's own hard cap, confirmed live -- requesting more raises an error response rather
 # than silently truncating.
 MAX_FORECAST_DAYS = 16
+
+
+def _log_provider_failure(what: str, exc: httpx.HTTPError) -> None:
+    """Names the Open-Meteo failure (status code or exception type) so "forecast unavailable" is
+    diagnosable. Never logs the request, whose coordinates are the athlete's home location."""
+    status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+    logger.warning(
+        "Open-Meteo %s failed: %s%s",
+        what,
+        type(exc).__name__,
+        f" (HTTP {status})" if status is not None else "",
+    )
+
 
 # How many of the athlete's own upcoming days get the full rich-conditions detail
 # (fetch_upcoming_conditions/ForecastDayDetail) alongside the coarse icon+temperature forecast
@@ -160,7 +179,8 @@ def fetch_forecast_with_timezone(
     try:
         response = http_client.get(OPEN_METEO_FORECAST_URL, params=params)
         response.raise_for_status()
-    except httpx.HTTPError:
+    except httpx.HTTPError as exc:
+        _log_provider_failure("forecast", exc)
         return None
     finally:
         if owns_client:
@@ -360,7 +380,8 @@ def fetch_upcoming_conditions(
     try:
         response = http_client.get(OPEN_METEO_FORECAST_URL, params=params)
         response.raise_for_status()
-    except httpx.HTTPError:
+    except httpx.HTTPError as exc:
+        _log_provider_failure("upcoming-conditions", exc)
         return None
     finally:
         if owns_client:

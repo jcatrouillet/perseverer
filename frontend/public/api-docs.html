@@ -1241,11 +1241,17 @@ const SCHEMAS = [
     ] },
   { name: "WeatherForecastOut", note: "Returned by GET /weather/forecast. See “available: false” in Conventions -- false when the athlete hasn't set a home location (home_lat/home_lon on PUT /settings/profile) or the coarse-forecast Open-Meteo fetch failed. Deliberately not archived or cached, unlike every other Open-Meteo response in this API -- see docs/DATA_DICTIONARY.md's own Weather forecast section.", fields: [
       ["available","boolean","required"],
+      ["reason","string|null","Why available is false, null otherwise: no_home_location | provider_error (Open-Meteo failed, usually transient) | no_forecast_data (it answered with nothing usable).","opt"],
+      ["stale","boolean","True when Open-Meteo could not be reached and this is the last forecast it answered for the same location (at most 72 h old, past days removed); then available is true and reason null. A live answer is always preferred.","opt"],
+      ["fetched_at","datetime|null","When a stale forecast was fetched (naive UTC); null for a live one.","opt"],
       ["days","array<ForecastDayOut>","[] when available is false.","opt"],
       ["upcoming","array<ForecastDayDetailOut>","The near-term rich-conditions detail, from a SECOND, independent Open-Meteo request than days -- [] whenever that one fails or returns nothing usable, regardless of available/days above (and vice versa).","opt"],
     ] },
   { name: "ActivityLocationForecastOut", note: "Returned by GET /weather/forecast/last-activity. available is false -- never fabricated -- when the athlete has no activity with a GPS start point or the coarse fetch failed.", fields: [
       ["available","boolean","required"],
+      ["reason","string|null","Why available is false, null otherwise: no_gps_activity | provider_error | no_forecast_data.","opt"],
+      ["stale","boolean","As for GET /weather/forecast: the last answered forecast for the same location, served when Open-Meteo is down.","opt"],
+      ["fetched_at","datetime|null","When a stale forecast was fetched (naive UTC); null for a live one.","opt"],
       ["source_activity","ForecastSourceActivityOut|null","The activity the location came from; present even when available is false because the fetch failed, null only when there is no located activity.","opt"],
       ["days","array<ForecastDayOut>","[] when available is false.","opt"],
       ["upcoming","array<ForecastDayDetailOut>","Same rich near-term detail as GET /weather/forecast, for the same location.","opt"]
