@@ -19,8 +19,10 @@ query since the rollup doesn't store it. Running planned workouts are enriched w
 distance/duration/load estimate the calendar UI shows (`planned_workout_stats.estimate_workout`
 over a fresh `workout_syntax.parse_workout_syntax` of `source_text`). The coming week's forecast
 reuses `weather_forecast.py` as-is (same un-cached, un-archived, athlete's-own-timezone fetch the
-Week view uses) -- `days` is sized to reach exactly `coming_end` from `today` (the Sunday the job
-fires on, the same "logical now" this whole report is built around), never a hardcoded constant.
+Week view uses; when Open-Meteo fails, the last forecast `weather_forecast_cache.py` kept for the
+same place stands in) -- `days` is sized to reach exactly `coming_end` from `today` (the Sunday the
+job fires on, the same "logical now" this whole report is built around), never a hardcoded
+constant.
 
 The HTML is deliberately email-client-safe: one inline-styled table layout, a light palette
 only, no `<style>` block, no external images or links -- with a plaintext alternative alongside.
@@ -81,6 +83,13 @@ from perseverer.planned_races import predicted_duration_s_for_distance
 from perseverer.planned_workout_stats import estimate_workout
 from perseverer.weather_code import weather_code_info
 from perseverer.weather_forecast import ForecastDay, fetch_forecast
+from perseverer.weather_forecast_cache import (
+    KIND_HOME,
+    load_forecast,
+    now_utc,
+    store_forecast,
+    today_in,
+)
 from perseverer.workout_syntax import parse_workout_syntax
 
 logger = logging.getLogger(__name__)
@@ -619,11 +628,59 @@ def _coming_week_forecast(
     # fetch_forecast's own `days` covers today (day 0) through today + (days - 1) -- +1 here so
     # the request actually reaches coming_end (today + 7), not today + 6.
     days_needed = (coming_end - today).days + 1
+    # End the read transaction: nothing is held open across the vendor call.
+    conn.commit()
     forecast = fetch_forecast(
         row.home_lat, row.home_lon, days_needed, tz=row.timezone, client=client
     )
-    if not forecast:
-        return []
+    if forecast:
+        try:
+            store_forecast(
+                conn,
+                athlete_id,
+                KIND_HOME,
+                row.home_lat,
+                row.home_lon,
+                days=[
+                    {
+                        "local_date": d.local_date.isoformat(),
+                        "weather_code": d.weather_code,
+                        "temperature_min_c": d.temperature_min_c,
+                        "temperature_max_c": d.temperature_max_c,
+                    }
+                    for d in forecast
+                ],
+                upcoming=[],
+                today=today_in(row.timezone),
+                now=now_utc(),
+            )
+        except Exception:
+            conn.rollback()
+            logger.warning("Could not remember the forecast for the outage fallback", exc_info=True)
+    else:
+        # The provider failed or answered nothing: the last forecast it did answer for this place
+        # (kept by the API's own forecast endpoint or an earlier report), a few hours old, beats an
+        # empty week.
+        cached = load_forecast(
+            conn,
+            athlete_id,
+            KIND_HOME,
+            row.home_lat,
+            row.home_lon,
+            today=today_in(row.timezone),
+            now=now_utc(),
+        )
+        if cached is None:
+            return []
+        forecast = [
+            ForecastDay(
+                local_date=date.fromisoformat(d["local_date"]),
+                weather_code=d["weather_code"],
+                temperature_min_c=d["temperature_min_c"],
+                temperature_max_c=d["temperature_max_c"],
+            )
+            for d in cached[0]
+        ]
     return [d for d in forecast if coming_start <= d.local_date <= coming_end]
 
 

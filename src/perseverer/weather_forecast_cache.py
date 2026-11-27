@@ -15,8 +15,9 @@ knows nothing about the models. Writes are short and happen after the vendor cal
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import Connection, select
 from sqlalchemy.dialects.sqlite import insert
@@ -28,6 +29,19 @@ MAX_STALE_HOURS = 72
 
 KIND_HOME = "home"
 KIND_LAST_ACTIVITY = "last_activity"
+
+
+def today_in(tz_name: str | None) -> str:
+    """The ISO date now in `tz_name` (UTC when it is missing or not a zone, e.g. "auto")."""
+    try:
+        zone = ZoneInfo(tz_name) if tz_name else UTC
+    except (KeyError, ValueError):
+        zone = UTC
+    return datetime.now(zone).date().isoformat()
+
+
+def now_utc() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)  # naive UTC, as everywhere in storage
 
 
 def _same_place(a: float, b: float) -> bool:

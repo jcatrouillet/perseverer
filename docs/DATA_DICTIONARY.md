@@ -889,7 +889,8 @@ re-derive. The one thing kept is the last answer, as a fallback (below).
 `kind` `home` or `last_activity`, for the one place (`lat`, `lon`) it was fetched for: `payload`
 (JSON: the API's `days` and `upcoming`, merged across fetches so a shorter request never shrinks it,
 past days dropped) and `fetched_at` (naive UTC). Served by `GET /weather/forecast` and
-`/last-activity`, with `stale: true`, only when the live call fails, only for the same place, and
+`/last-activity`, with `stale: true`, and by the weekly email's coming-week forecast (which also
+refreshes the `home` row after each successful fetch), only when the live call fails, only for the same place, and
 only while at most 72 hours old (`MAX_STALE_HOURS`). Derived and disposable: deleting a row loses
 nothing.
 

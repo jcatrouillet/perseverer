@@ -428,6 +428,42 @@ def test_coming_week_forecast_fetches_in_the_athletes_own_timezone_and_days(
     ]
 
 
+def test_coming_week_forecast_falls_back_to_the_last_answer_when_the_provider_fails(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _set_home_location(conn, lat=48.8566, lon=2.3522)
+    conn.commit()
+    # The fixture dates are in the past by the real clock; pin "today" to the report's own.
+    monkeypatch.setattr("perseverer.email_reports.today_in", lambda tz: SUNDAY.isoformat())
+    answered = [ForecastDay(COMING_WEEK_START, 3, 12.0, 20.0)]
+    monkeypatch.setattr("perseverer.email_reports.fetch_forecast", lambda *a, **kw: answered)
+    first = _coming_week_forecast(
+        conn, DEFAULT_ATHLETE_ID, SUNDAY, COMING_WEEK_START, COMING_WEEK_END
+    )
+    assert first == answered
+
+    # Open-Meteo is now down (None) or answers nothing ([]): the remembered week is served.
+    outages: list[list[ForecastDay] | None] = [None, []]
+    for down in outages:
+        monkeypatch.setattr(
+            "perseverer.email_reports.fetch_forecast", lambda *a, down=down, **kw: down
+        )
+        assert (
+            _coming_week_forecast(
+                conn, DEFAULT_ATHLETE_ID, SUNDAY, COMING_WEEK_START, COMING_WEEK_END
+            )
+            == answered
+        )
+
+    # A moved home location never gets another place's forecast.
+    _set_home_location(conn, lat=10.0, lon=10.0)
+    conn.commit()
+    assert (
+        _coming_week_forecast(conn, DEFAULT_ATHLETE_ID, SUNDAY, COMING_WEEK_START, COMING_WEEK_END)
+        == []
+    )
+
+
 def test_build_weekly_report_includes_coming_forecast(
     conn: Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:

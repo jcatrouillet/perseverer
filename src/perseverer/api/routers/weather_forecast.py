@@ -14,9 +14,7 @@ weather_forecast_cache.py keeps to serve, flagged stale, when the provider is do
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 from typing import Annotated
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Connection, select
@@ -42,7 +40,9 @@ from perseverer.weather_forecast_cache import (
     KIND_HOME,
     KIND_LAST_ACTIVITY,
     load_forecast,
+    now_utc,
     store_forecast,
+    today_in,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,17 +50,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _today_in(tz_name: str | None) -> str:
-    """The ISO date now in `tz_name` (UTC when it is missing or not a zone, e.g. \"auto\")."""
-    try:
-        zone = ZoneInfo(tz_name) if tz_name else UTC
-    except (KeyError, ValueError):
-        zone = UTC
-    return datetime.now(zone).date().isoformat()
-
-
-def _now_utc() -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None)  # naive UTC, as everywhere in storage
+_today_in = today_in
+_now_utc = now_utc
 
 
 def _remember(
