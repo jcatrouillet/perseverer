@@ -99,5 +99,41 @@ def test_a_chosen_time_is_on_the_athletes_clock_and_a_default_is_shown_on_it(
     assert got["garmin_connect"]["is_default"] is True
 
 
+def test_the_garmin_activity_check_interval_is_saved_kept_and_cleared(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    sources = _by_source(client.get(URL, headers=auth_headers).json())
+    assert sources["garmin_connect"]["activity_check_hours"] is None  # off by default
+    assert sources["eufy"]["activity_check_hours"] is None
+
+    def put(item: dict[str, Any]) -> dict[str, Any]:
+        r = client.put(URL, headers=auth_headers, json={"sources": [item]})
+        assert r.status_code == 200
+        return _by_source(r.json())["garmin_connect"]
+
+    with patch("perseverer.api.routers.sync_schedule.source_configured", return_value=True):
+        on = put({"source": "garmin_connect", "time": None, "activity_check_hours": 1})
+        assert on["activity_check_hours"] == 1
+        assert on["next_activity_check_at"] is not None
+        # A request that does not mention it leaves it alone.
+        kept = put({"source": "garmin_connect", "time": "07:30", "enabled": True})
+        assert kept["activity_check_hours"] == 1
+        off = put({"source": "garmin_connect", "time": "07:30", "activity_check_hours": None})
+    assert off["activity_check_hours"] is None
+    assert off["next_activity_check_at"] is None
+
+
+def test_the_activity_check_interval_is_garmin_only_and_bounded(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    for item in (
+        {"source": "eufy", "activity_check_hours": 1},
+        {"source": "garmin_connect", "activity_check_hours": 0},
+        {"source": "garmin_connect", "activity_check_hours": 25},
+    ):
+        r = client.put(URL, headers=auth_headers, json={"sources": [item]})
+        assert r.status_code == 422, item
+
+
 def test_requires_auth(client: TestClient) -> None:
     assert client.get(URL).status_code in (401, 403)

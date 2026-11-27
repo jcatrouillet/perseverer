@@ -161,7 +161,7 @@ which only speaks plain HTTP.
 
 | Source | How |
 |---|---|
-| Garmin Connect | Settings → External tools → Garmin (no MFA), or `podman exec -it perseverer-api sync auth login` (MFA-capable). Only the resulting tokens are stored; the daily sync uses them. Or a read-only **personal API key** (Garmin Connect Web → Personal API Key; Settings → External tools → Garmin, or `sync auth personal-api-key`): no password and no MFA, but no training readiness, training status, race predictions, lactate threshold, strength sets or workout pushes. The China region needs `PERSEVERER_GARMIN_PERSONAL_API_BASE_URL`. |
+| Garmin Connect | Settings → External tools → Garmin (no MFA), or `podman exec -it perseverer-api sync auth login` (MFA-capable). Only the resulting tokens are stored; the daily sync uses them (Settings -> Automatic sync times can also check for new activities every hour or so, which asks Garmin for little more than the activity list). Or a read-only **personal API key** (Garmin Connect Web → Personal API Key; Settings → External tools → Garmin, or `sync auth personal-api-key`): no password and no MFA, but no training readiness, training status, race predictions, lactate threshold, strength sets or workout pushes. The China region needs `PERSEVERER_GARMIN_PERSONAL_API_BASE_URL`. |
 | Garmin full history | Settings → External tools → upload the "Export your data" `.zip`, or `sync import garmin-export <path>` |
 | Strava | Settings → External tools → upload the export `.zip`, or `sync import strava-export <path>` |
 | Apple Health | `sync import apple-health <path-to-export.xml>` |

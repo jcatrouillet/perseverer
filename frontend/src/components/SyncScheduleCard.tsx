@@ -14,7 +14,12 @@ interface Draft {
   time: string;
   /** Changed by the athlete: until then a default time is saved as "still the default". */
   edited: boolean;
+  /** Garmin only: hours between new-activity checks, "" = off. */
+  checkHours: string;
 }
+
+/** The choices for how often Garmin is asked for new activities between the daily syncs. */
+const CHECK_HOURS = [1, 2, 3, 6, 12];
 
 /** "Sat 04:15" / "Sat 4:15 AM" on `timeZone`'s clock, from the UTC instant the API sends. */
 export function formatNextRun(iso: string, timeZone: string, hour12: boolean): string {
@@ -39,7 +44,12 @@ export function SyncScheduleCard() {
       Object.fromEntries(
         schedule.data.sources.map((s) => [
           s.source,
-          { enabled: s.enabled, time: s.time, edited: false },
+          {
+            enabled: s.enabled,
+            time: s.time,
+            edited: false,
+            checkHours: s.activity_check_hours ? String(s.activity_check_hours) : "",
+          },
         ]),
       ),
     );
@@ -48,19 +58,36 @@ export function SyncScheduleCard() {
   if (!schedule.data) return null;
   const { sources, window_minutes: windowMinutes } = schedule.data;
 
+  // Only a time or on/off change makes the time "chosen"; the check interval leaves a default
+  // time following the deployment's.
   const change = (source: string, patch: Partial<Draft>) =>
-    setDrafts((d) => ({ ...d, [source]: { ...d[source]!, ...patch, edited: true } }));
+    setDrafts((d) => ({
+      ...d,
+      [source]: {
+        ...d[source]!,
+        ...patch,
+        edited: d[source]!.edited || !("checkHours" in patch),
+      },
+    }));
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     save.mutate({
       sources: sources.map((s: SyncSourceOut) => {
-        const d = drafts[s.source] ?? { enabled: s.enabled, time: s.time, edited: false };
+        const d = drafts[s.source] ?? {
+          enabled: s.enabled,
+          time: s.time,
+          edited: false,
+          checkHours: "",
+        };
         return {
           source: s.source,
           // An untouched default stays the default (it follows the deployment's time).
           time: s.is_default && !d.edited ? null : d.time,
           enabled: d.enabled,
+          ...(s.source === "garmin_connect"
+            ? { activity_check_hours: d.checkHours ? Number(d.checkHours) : null }
+            : {}),
         };
       }),
     });
@@ -72,7 +99,9 @@ export function SyncScheduleCard() {
       <p className="chart-note">
         Each connected source syncs by itself once a day, at the time you choose here, on your own
         clock ({sources[0]?.timezone}; change it under Profile). A sync starts within{" "}
-        {windowMinutes} minutes after its time. A source you have not connected never runs.
+        {windowMinutes} minutes after its time. A source you have not connected never runs. Garmin
+        Connect can also look for new activities between the daily syncs; that check asks Garmin
+        only for activities you do not have yet, and does not fetch sleep or daily stats.
       </p>
       <form className="settings-form" onSubmit={submit}>
         <ul className="settings-sync__list">
@@ -109,6 +138,24 @@ export function SyncScheduleCard() {
                           }`
                         : ""}
                 </span>
+                {s.source === "garmin_connect" && (
+                  <label className="settings-sync__check">
+                    Also check for new activities
+                    <select
+                      className="input"
+                      value={d.checkHours}
+                      disabled={!s.configured || !d.enabled}
+                      onChange={(e) => change(s.source, { checkHours: e.target.value })}
+                    >
+                      <option value="">Never (daily only)</option>
+                      {CHECK_HOURS.map((h) => (
+                        <option key={h} value={h}>
+                          {h === 1 ? "Every hour" : `Every ${h} hours`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </li>
             );
           })}

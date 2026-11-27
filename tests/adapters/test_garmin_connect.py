@@ -73,6 +73,7 @@ class FakeGarminClient:
     ) -> None:
         self.activities = activities
         self.fit_bytes_by_id = fit_bytes_by_id
+        self.download_calls: list[str] = []
         self._raise_on_login = raise_on_login
         self._raise_on_download_for = raise_on_download_for or set()
         self.stats_by_date = stats_by_date or {}
@@ -112,6 +113,7 @@ class FakeGarminClient:
         return self.activities
 
     def download_activity(self, activity_id: str, dl_fmt: object = None) -> bytes:
+        self.download_calls.append(activity_id)
         if activity_id in self._raise_on_download_for:
             raise GarminConnectTooManyRequestsError("429")
         return self.fit_bytes_by_id[activity_id]
@@ -397,6 +399,54 @@ def test_sync_garmin_connect_full_orchestration_with_fake_client(tmp_path: Path)
     # own date (wherever the fixture's embedded date lands) is what actually matters here.
     activity_rollup_rows = [r for r in rollup_rows if r.activity_count == 1]
     assert len(activity_rollup_rows) == 1
+
+
+def test_activities_only_run_downloads_only_new_activities_and_skips_the_daily_endpoints(
+    tmp_path: Path,
+) -> None:
+    fit_bytes = FIXTURE.read_bytes()
+    clients: list[FakeGarminClient] = []
+
+    def factory() -> FakeGarminClient:
+        client = FakeGarminClient(
+            activities=[{"activityId": "42"}], fit_bytes_by_id={"42": fit_bytes}
+        )
+        clients.append(client)
+        return client
+
+    engine = make_engine(tmp_path / "db.sqlite")
+    metadata.create_all(engine)
+    _seed_athlete(engine)
+
+    def run(*, activities_only: bool) -> Any:
+        with engine.connect() as conn:
+            return sync_garmin_connect(
+                conn,
+                tmp_path / "archive",
+                tmp_path / "parquet",
+                tmp_path / "tokens",
+                athlete_id=DEFAULT_ATHLETE_ID,
+                rolling_window_days=2,
+                rate_limits=RateLimitSettings(request_interval_s=0, max_requests_per_hour=999),
+                client_factory=factory,
+                activities_only=activities_only,
+            )
+
+    first = run(activities_only=True)  # a new activity: downloaded, no daily endpoint asked
+    assert (first.items_seen, first.items_new, first.errors) == (1, 1, [])
+    assert clients[0].download_calls == ["42"]
+    assert clients[0].stats_calls == [] and clients[0].sleep_calls == []
+    assert clients[0].hrv_calls == [] and clients[0].hydration_calls == []
+    assert clients[0].race_predictions_calls == [] and clients[0].lactate_threshold_calls == []
+
+    second = run(activities_only=True)  # already archived: the list call and nothing more
+    assert (second.items_seen, second.items_new, second.errors) == (1, 0, [])
+    assert clients[1].download_calls == []
+
+    full = run(activities_only=False)  # the daily run still re-fetches everything
+    assert full.errors == []
+    assert clients[2].download_calls == ["42"]
+    assert clients[2].stats_calls != []
 
 
 def test_full_sync_with_injected_fake_client_archives_and_ingests(tmp_path: Path) -> None:

@@ -2422,14 +2422,22 @@ source that is not connected never runs.
 the order Garmin Connect, Eufy, Kaya (`SyncSourceOut`): `source` (`"garmin_connect"|"eufy"|"kaya"`),
 `label`, `configured` (connected), `enabled`, `time` (`"HH:MM"` on `timezone`'s clock; a default
 time is shown converted to that clock), `is_default` (no chosen time), `timezone` (IANA name) and
-`next_run_at` (UTC instant of the next run, `null` when switched off or not connected).
+`next_run_at` (UTC instant of the next run, `null` when switched off or not connected),
+`activity_check_hours` (Garmin Connect only, `null` for the others and when off: also look for new
+activities every this many hours between the daily runs) and `next_activity_check_at` (UTC instant,
+`null` when off or not connected). The check lists only the last
+`PERSEVERER_GARMIN_ACTIVITY_CHECK_WINDOW_DAYS` (2) days and downloads only activities not yet stored;
+it never fetches sleep or daily stats, and after an error (a 429 above all) it waits 24 hours.
 
 ### `PUT /settings/sync-schedule`
 
 Saves the sources listed (the others are untouched). **Request body** (`SyncScheduleIn`):
-`sources`: a list of `{source, time, enabled}` where `time` is `"HH:MM"` (00:00 to 23:59) or `null`
-for the default, and `enabled` switches the automatic sync of that source on or off. **Responses:**
-`200` -> `SyncScheduleOut`; `422` -> an unknown source or a malformed time. The date a source last
+`sources`: a list of `{source, time, enabled, activity_check_hours}` where `time` is `"HH:MM"`
+(00:00 to 23:59) or `null` for the default, `enabled` switches the automatic sync of that source on
+or off, and `activity_check_hours` (Garmin Connect only; 1 to 24, `null` = off, left out = unchanged)
+sets the interval of the new-activity check. **Responses:**
+`200` -> `SyncScheduleOut`; `422` -> an unknown source, a malformed time, or `activity_check_hours` outside 1 to 24 or on a
+source other than Garmin Connect. The date a source last
 ran is kept, so moving its time later on the day it already ran does not run it again that day.
 
 ---

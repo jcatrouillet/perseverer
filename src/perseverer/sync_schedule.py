@@ -64,6 +64,9 @@ class SourceSchedule:
     is_default: bool  # no chosen time: the deployment's default
     zone: ZoneInfo  # the wall clock `hour:minute` is read on
     last_run_on: str | None  # the local date it last ran, "YYYY-MM-DD"
+    # Garmin only: also look for new activities every this many hours between the daily runs.
+    activity_check_hours: int | None = None
+    activity_check_next_at: datetime | None = None  # naive UTC; None = due as soon as enabled
 
 
 def load_schedules(
@@ -85,7 +88,15 @@ def load_schedules(
             hour, minute = parse_time(row.local_time)
             out.append(
                 SourceSchedule(
-                    source, bool(row.enabled), hour, minute, False, own_zone, row.last_run_on
+                    source,
+                    bool(row.enabled),
+                    hour,
+                    minute,
+                    False,
+                    own_zone,
+                    row.last_run_on,
+                    row.activity_check_hours,
+                    row.activity_check_next_at,
                 )
             )
         else:
@@ -98,6 +109,8 @@ def load_schedules(
                     True,
                     default_zone,
                     row.last_run_on if row is not None else None,
+                    row.activity_check_hours if row is not None else None,
+                    row.activity_check_next_at if row is not None else None,
                 )
             )
     return out
@@ -131,6 +144,49 @@ def next_run(entry: SourceSchedule, now_utc: datetime) -> datetime | None:
     if today > local or (is_due(entry, now_utc) and entry.last_run_on != local.date().isoformat()):
         return today.astimezone(UTC)
     return at(local.date() + timedelta(days=1)).astimezone(UTC)
+
+
+# After a light check that hit an error (a 429 above all), the next one waits this long: Garmin's
+# SSO locks accounts that retry, so a failure is not retried on the next tick.
+ACTIVITY_CHECK_BACKOFF = timedelta(hours=24)
+
+
+def activity_check_due(entry: SourceSchedule, now_utc: datetime) -> bool:
+    """Whether the light "new activities" check is due: Garmin only, switched on, an interval
+    chosen and its next time reached. Never while the daily full run is due (that run looks for
+    activities too)."""
+    if entry.source != "garmin_connect" or not entry.enabled or entry.activity_check_hours is None:
+        return False
+    if is_due(entry, now_utc):
+        return False
+    nxt = entry.activity_check_next_at
+    return nxt is None or now_utc.replace(tzinfo=None) >= nxt
+
+
+def next_activity_check(entry: SourceSchedule, now_utc: datetime) -> datetime | None:
+    """The next instant (UTC) the light check is due, or None when it is off."""
+    if entry.source != "garmin_connect" or not entry.enabled or entry.activity_check_hours is None:
+        return None
+    nxt = entry.activity_check_next_at
+    now = now_utc.astimezone(UTC)
+    return now if nxt is None or nxt.replace(tzinfo=UTC) <= now else nxt.replace(tzinfo=UTC)
+
+
+def schedule_activity_check(
+    conn: Connection, athlete_id: str, now_utc: datetime, *, after: timedelta
+) -> None:
+    """Sets when the light check is next due (`now_utc + after`) for the athlete's Garmin row, if
+    it has an interval. Called when a check or the daily run is about to start, before it does, so
+    a crash cannot make the next tick retry it."""
+    conn.execute(
+        sync_schedule.update()
+        .where(
+            sync_schedule.c.athlete_id == athlete_id,
+            sync_schedule.c.source == "garmin_connect",
+            sync_schedule.c.activity_check_hours.is_not(None),
+        )
+        .values(activity_check_next_at=(now_utc.astimezone(UTC) + after).replace(tzinfo=None))
+    )
 
 
 def mark_run(conn: Connection, athlete_id: str, source: str, local_date: date) -> None:

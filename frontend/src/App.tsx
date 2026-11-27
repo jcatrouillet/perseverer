@@ -9,6 +9,7 @@ import { Icon, type IconName } from "./components/Icon";
 import { useLastImportedActivity } from "./api/queries";
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import { LogoutButton } from "./components/LogoutButton";
+import { RecentActivityPopup } from "./components/RecentActivityPopup";
 import { calendarHomeHref, startingPageIsCalendar } from "./calendarHome";
 import { localIsoDate } from "./dateUtils";
 import { usePersonalize, PersonalizeProvider } from "./PersonalizeContext";
@@ -200,6 +201,7 @@ function AppContent({ viewingAsCoach }: { viewingAsCoach: boolean }) {
       <CoachBanner />
       <GearAlertBanner />
       {!viewingAsCoach && <GoalCelebration />}
+      {!viewingAsCoach && <RecentActivityPopup />}
       <div className="app-main">
         <Suspense fallback={<LoadingSpinner size="lg" />}>
           <Switch>

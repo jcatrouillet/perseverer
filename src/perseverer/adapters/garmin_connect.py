@@ -984,6 +984,24 @@ def _exercise_sets_archived(conn: Connection, athlete_id: str, activity_id: str)
     )
 
 
+def _activity_archived(conn: Connection, athlete_id: str, activity_id: str) -> bool:
+    """Whether this activity's FIT file is already in the raw archive (so a light run need not
+    download it again)."""
+    return (
+        conn.execute(
+            select(raw_object.c.id)
+            .where(
+                raw_object.c.athlete_id == athlete_id,
+                raw_object.c.source == SOURCE_NAME,
+                raw_object.c.kind == "fit_activity",
+                raw_object.c.external_id == activity_id,
+            )
+            .limit(1)
+        ).first()
+        is not None
+    )
+
+
 def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
@@ -992,6 +1010,21 @@ def _sha256(content: bytes) -> str:
 class RateLimitSettings:
     request_interval_s: float
     max_requests_per_hour: int
+
+
+def _finish_ingest_run(conn: Connection, run_id: int, summary: IngestRunSummary) -> None:
+    conn.execute(
+        ingest_run.update()
+        .where(ingest_run.c.id == run_id)
+        .values(
+            finished_at=datetime.now(UTC),
+            status="failed" if summary.errors else "success",
+            items_seen=summary.items_seen,
+            items_new=summary.items_new,
+            errors=json.dumps(summary.errors) if summary.errors else None,
+        )
+    )
+    conn.commit()
 
 
 def sync_garmin_connect(
@@ -1005,6 +1038,7 @@ def sync_garmin_connect(
     rate_limits: RateLimitSettings,
     client_factory: Callable[[], Garmin] = Garmin,
     http_client: httpx.Client | None = None,
+    activities_only: bool = False,
 ) -> IngestRunSummary:
     """The incremental sync: rolling re-fetch window, never retries past a 429, never falls
     back to credentialed auth. Always writes an ingest_run row, even on total auth failure —
@@ -1012,6 +1046,12 @@ def sync_garmin_connect(
 
     `client_factory` defaults to the real `Garmin` class; tests inject a fake to exercise this
     whole orchestration (including ingest_run bookkeeping) with no real network access.
+
+    `activities_only` is the light run the worker makes between the daily full syncs: it lists the
+    activities of the (short) window and downloads only those not yet archived, then stops -- none
+    of the per-day endpoints (wellness, sleep, HRV, ...) -- and when nothing new came in it also
+    skips the rollup refreshes. A new activity gets the same rollup and derived-value refreshes as
+    in a full run.
     """
     rate_limiter = RateLimiter(rate_limits.request_interval_s, rate_limits.max_requests_per_hour)
     adapter = GarminConnectAdapter(
@@ -1045,6 +1085,8 @@ def sync_garmin_connect(
         for activity_summary in activities:
             summary.items_seen += 1
             activity_id = str(activity_summary.get("activityId"))
+            if activities_only and _activity_archived(conn, athlete_id, activity_id):
+                continue
             try:
                 ingest_result = adapter.fetch_and_ingest_activity(
                     conn,
@@ -1063,193 +1105,201 @@ def sync_garmin_connect(
                 summary.errors.append({"activity": activity_id, "error": str(e)})
                 break  # no retry loop — stop this run entirely, let the next scheduled run continue
 
-        # Daily wellness (steps, resting/max HR, calories, floors, SpO2, stress) -- the whole
-        # rolling window every run, not just "new" days: ingest_health_batch already upserts
-        # idempotently (same call fit_folder.py makes for this identical JSON shape), so a day
-        # that already has current data is a cheap no-op, and a day that failed to ingest on a
-        # previous run self-heals here without needing separate staleness tracking.
-        wellness_date = since.date()
-        today = datetime.now(UTC).date()
-        while wellness_date <= today:
+        if not activities_only:
+            # Daily wellness (steps, resting/max HR, calories, floors, SpO2, stress) -- the whole
+            # rolling window every run, not just "new" days: ingest_health_batch already upserts
+            # idempotently (same call fit_folder.py makes for this identical JSON shape), so a day
+            # that already has current data is a cheap no-op, and a day that failed to ingest on a
+            # previous run self-heals here without needing separate staleness tracking.
+            wellness_date = since.date()
+            today = datetime.now(UTC).date()
+            while wellness_date <= today:
+                try:
+                    health_result = adapter.fetch_and_ingest_daily_wellness(
+                        conn,
+                        archive_root,
+                        parquet_dir,
+                        athlete_id=athlete_id,
+                        local_date=wellness_date.isoformat(),
+                    )
+                    conn.commit()
+                    touched_dates |= health_result.affected_local_dates
+                except GarminRateLimitAborted as e:
+                    conn.rollback()
+                    summary.errors.append(
+                        {"wellness_date": wellness_date.isoformat(), "error": str(e)}
+                    )
+                    break  # no retry loop — same contract as the activity loop above
+                wellness_date += timedelta(days=1)
+
+            # Sleep -- same whole-rolling-window, idempotent-upsert, self-healing contract as daily
+            # wellness above (a night already ingested is a cheap no-op; a night whose fetch failed
+            # on a previous run just gets retried here on the next one).
+            sleep_date = since.date()
+            while sleep_date <= today:
+                try:
+                    sleep_result = adapter.fetch_and_ingest_daily_sleep(
+                        conn,
+                        archive_root,
+                        parquet_dir,
+                        athlete_id=athlete_id,
+                        local_date=sleep_date.isoformat(),
+                    )
+                    conn.commit()
+                    touched_dates |= sleep_result.affected_local_dates
+                except GarminRateLimitAborted as e:
+                    conn.rollback()
+                    summary.errors.append({"sleep_date": sleep_date.isoformat(), "error": str(e)})
+                    break  # no retry loop — same contract as the loops above
+                sleep_date += timedelta(days=1)
+
+            # HRV -- same whole-rolling-window, idempotent-upsert, self-healing contract as sleep
+            # and daily wellness above.
+            hrv_date = since.date()
+            while hrv_date <= today:
+                try:
+                    hrv_result = adapter.fetch_and_ingest_daily_hrv(
+                        conn,
+                        archive_root,
+                        parquet_dir,
+                        athlete_id=athlete_id,
+                        local_date=hrv_date.isoformat(),
+                    )
+                    conn.commit()
+                    touched_dates |= hrv_result.affected_local_dates
+                except GarminRateLimitAborted as e:
+                    conn.rollback()
+                    summary.errors.append({"hrv_date": hrv_date.isoformat(), "error": str(e)})
+                    break  # no retry loop — same contract as the loops above
+                hrv_date += timedelta(days=1)
+
+            # Training readiness -- same whole-rolling-window, idempotent-upsert, self-healing
+            # contract as sleep/HRV/wellness above.
+            readiness_date = since.date()
+            while readiness_date <= today:
+                try:
+                    readiness_result = adapter.fetch_and_ingest_daily_training_readiness(
+                        conn,
+                        archive_root,
+                        parquet_dir,
+                        athlete_id=athlete_id,
+                        local_date=readiness_date.isoformat(),
+                    )
+                    conn.commit()
+                    touched_dates |= readiness_result.affected_local_dates
+                except GarminRateLimitAborted as e:
+                    conn.rollback()
+                    summary.errors.append(
+                        {"readiness_date": readiness_date.isoformat(), "error": str(e)}
+                    )
+                    break  # no retry loop — same contract as the loops above
+                readiness_date += timedelta(days=1)
+
+            # Training status (VO2max, heat/altitude acclimation, fitness trend) -- same contract.
+            training_status_date = since.date()
+            while training_status_date <= today:
+                try:
+                    status_result = adapter.fetch_and_ingest_daily_training_status(
+                        conn,
+                        archive_root,
+                        parquet_dir,
+                        athlete_id=athlete_id,
+                        local_date=training_status_date.isoformat(),
+                    )
+                    conn.commit()
+                    touched_dates |= status_result.affected_local_dates
+                except GarminRateLimitAborted as e:
+                    conn.rollback()
+                    summary.errors.append(
+                        {"training_status_date": training_status_date.isoformat(), "error": str(e)}
+                    )
+                    break  # no retry loop — same contract as the loops above
+                training_status_date += timedelta(days=1)
+
+            # Hydration -- same contract.
+            hydration_date = since.date()
+            while hydration_date <= today:
+                try:
+                    hydration_result = adapter.fetch_and_ingest_daily_hydration(
+                        conn,
+                        archive_root,
+                        parquet_dir,
+                        athlete_id=athlete_id,
+                        local_date=hydration_date.isoformat(),
+                    )
+                    conn.commit()
+                    touched_dates |= hydration_result.affected_local_dates
+                except GarminRateLimitAborted as e:
+                    conn.rollback()
+                    summary.errors.append(
+                        {"hydration_date": hydration_date.isoformat(), "error": str(e)}
+                    )
+                    break  # no retry loop — same contract as the loops above
+                hydration_date += timedelta(days=1)
+
+            # Race predictions -- one range request for the whole window, not a per-day loop (see
+            # fetch_and_ingest_race_predictions's own docstring for why this endpoint is different).
             try:
-                health_result = adapter.fetch_and_ingest_daily_wellness(
+                race_result = adapter.fetch_and_ingest_race_predictions(
                     conn,
                     archive_root,
                     parquet_dir,
                     athlete_id=athlete_id,
-                    local_date=wellness_date.isoformat(),
+                    since=since,
+                    until=started_at,
                 )
                 conn.commit()
-                touched_dates |= health_result.affected_local_dates
+                touched_dates |= race_result.affected_local_dates
             except GarminRateLimitAborted as e:
                 conn.rollback()
-                summary.errors.append({"wellness_date": wellness_date.isoformat(), "error": str(e)})
-                break  # no retry loop — same contract as the activity loop above
-            wellness_date += timedelta(days=1)
+                summary.errors.append({"error": f"race predictions: {e}"})
 
-        # Sleep -- same whole-rolling-window, idempotent-upsert, self-healing contract as daily
-        # wellness above (a night already ingested is a cheap no-op; a night whose fetch failed
-        # on a previous run just gets retried here on the next one).
-        sleep_date = since.date()
-        while sleep_date <= today:
+            # Lactate threshold -- same whole-rolling-window, one-request contract as race
+            # predictions above (see fetch_and_ingest_lactate_threshold's own docstring).
             try:
-                sleep_result = adapter.fetch_and_ingest_daily_sleep(
+                lactate_result = adapter.fetch_and_ingest_lactate_threshold(
                     conn,
                     archive_root,
                     parquet_dir,
                     athlete_id=athlete_id,
-                    local_date=sleep_date.isoformat(),
+                    since=since,
+                    until=started_at,
                 )
                 conn.commit()
-                touched_dates |= sleep_result.affected_local_dates
+                touched_dates |= lactate_result.affected_local_dates
             except GarminRateLimitAborted as e:
                 conn.rollback()
-                summary.errors.append({"sleep_date": sleep_date.isoformat(), "error": str(e)})
-                break  # no retry loop — same contract as the loops above
-            sleep_date += timedelta(days=1)
+                summary.errors.append({"error": f"lactate threshold: {e}"})
 
-        # HRV -- same whole-rolling-window, idempotent-upsert, self-healing contract as sleep
-        # and daily wellness above.
-        hrv_date = since.date()
-        while hrv_date <= today:
-            try:
-                hrv_result = adapter.fetch_and_ingest_daily_hrv(
-                    conn,
-                    archive_root,
-                    parquet_dir,
-                    athlete_id=athlete_id,
-                    local_date=hrv_date.isoformat(),
-                )
-                conn.commit()
-                touched_dates |= hrv_result.affected_local_dates
-            except GarminRateLimitAborted as e:
-                conn.rollback()
-                summary.errors.append({"hrv_date": hrv_date.isoformat(), "error": str(e)})
-                break  # no retry loop — same contract as the loops above
-            hrv_date += timedelta(days=1)
-
-        # Training readiness -- same whole-rolling-window, idempotent-upsert, self-healing
-        # contract as sleep/HRV/wellness above.
-        readiness_date = since.date()
-        while readiness_date <= today:
-            try:
-                readiness_result = adapter.fetch_and_ingest_daily_training_readiness(
-                    conn,
-                    archive_root,
-                    parquet_dir,
-                    athlete_id=athlete_id,
-                    local_date=readiness_date.isoformat(),
-                )
-                conn.commit()
-                touched_dates |= readiness_result.affected_local_dates
-            except GarminRateLimitAborted as e:
-                conn.rollback()
-                summary.errors.append(
-                    {"readiness_date": readiness_date.isoformat(), "error": str(e)}
-                )
-                break  # no retry loop — same contract as the loops above
-            readiness_date += timedelta(days=1)
-
-        # Training status (VO2max, heat/altitude acclimation, fitness trend) -- same contract.
-        training_status_date = since.date()
-        while training_status_date <= today:
-            try:
-                status_result = adapter.fetch_and_ingest_daily_training_status(
-                    conn,
-                    archive_root,
-                    parquet_dir,
-                    athlete_id=athlete_id,
-                    local_date=training_status_date.isoformat(),
-                )
-                conn.commit()
-                touched_dates |= status_result.affected_local_dates
-            except GarminRateLimitAborted as e:
-                conn.rollback()
-                summary.errors.append(
-                    {"training_status_date": training_status_date.isoformat(), "error": str(e)}
-                )
-                break  # no retry loop — same contract as the loops above
-            training_status_date += timedelta(days=1)
-
-        # Hydration -- same contract.
-        hydration_date = since.date()
-        while hydration_date <= today:
-            try:
-                hydration_result = adapter.fetch_and_ingest_daily_hydration(
-                    conn,
-                    archive_root,
-                    parquet_dir,
-                    athlete_id=athlete_id,
-                    local_date=hydration_date.isoformat(),
-                )
-                conn.commit()
-                touched_dates |= hydration_result.affected_local_dates
-            except GarminRateLimitAborted as e:
-                conn.rollback()
-                summary.errors.append(
-                    {"hydration_date": hydration_date.isoformat(), "error": str(e)}
-                )
-                break  # no retry loop — same contract as the loops above
-            hydration_date += timedelta(days=1)
-
-        # Race predictions -- one range request for the whole window, not a per-day loop (see
-        # fetch_and_ingest_race_predictions's own docstring for why this endpoint is different).
-        try:
-            race_result = adapter.fetch_and_ingest_race_predictions(
-                conn,
-                archive_root,
-                parquet_dir,
-                athlete_id=athlete_id,
-                since=since,
-                until=started_at,
-            )
-            conn.commit()
-            touched_dates |= race_result.affected_local_dates
-        except GarminRateLimitAborted as e:
-            conn.rollback()
-            summary.errors.append({"error": f"race predictions: {e}"})
-
-        # Lactate threshold -- same whole-rolling-window, one-request contract as race
-        # predictions above (see fetch_and_ingest_lactate_threshold's own docstring).
-        try:
-            lactate_result = adapter.fetch_and_ingest_lactate_threshold(
-                conn,
-                archive_root,
-                parquet_dir,
-                athlete_id=athlete_id,
-                since=since,
-                until=started_at,
-            )
-            conn.commit()
-            touched_dates |= lactate_result.affected_local_dates
-        except GarminRateLimitAborted as e:
-            conn.rollback()
-            summary.errors.append({"error": f"lactate threshold: {e}"})
-
-        # Body battery -- same whole-rolling-window, idempotent-upsert, self-healing contract as
-        # sleep/HRV/wellness above (get_stress_data only takes a single date, unlike race
-        # predictions' own range endpoint).
-        body_battery_date = since.date()
-        while body_battery_date <= today:
-            try:
-                body_battery_result = adapter.fetch_and_ingest_daily_body_battery(
-                    conn,
-                    archive_root,
-                    parquet_dir,
-                    athlete_id=athlete_id,
-                    local_date=body_battery_date.isoformat(),
-                )
-                conn.commit()
-                touched_dates |= body_battery_result.affected_local_dates
-            except GarminRateLimitAborted as e:
-                conn.rollback()
-                summary.errors.append(
-                    {"body_battery_date": body_battery_date.isoformat(), "error": str(e)}
-                )
-                break  # no retry loop — same contract as the loops above
-            body_battery_date += timedelta(days=1)
+            # Body battery -- same whole-rolling-window, idempotent-upsert, self-healing contract as
+            # sleep/HRV/wellness above (get_stress_data only takes a single date, unlike race
+            # predictions' own range endpoint).
+            body_battery_date = since.date()
+            while body_battery_date <= today:
+                try:
+                    body_battery_result = adapter.fetch_and_ingest_daily_body_battery(
+                        conn,
+                        archive_root,
+                        parquet_dir,
+                        athlete_id=athlete_id,
+                        local_date=body_battery_date.isoformat(),
+                    )
+                    conn.commit()
+                    touched_dates |= body_battery_result.affected_local_dates
+                except GarminRateLimitAborted as e:
+                    conn.rollback()
+                    summary.errors.append(
+                        {"body_battery_date": body_battery_date.isoformat(), "error": str(e)}
+                    )
+                    break  # no retry loop — same contract as the loops above
+                body_battery_date += timedelta(days=1)
     except (GarminAuthRequired, GarminRateLimitAborted) as e:
         summary.errors.append({"error": str(e)})
+
+    if activities_only and not touched_dates:
+        # Nothing new: no rollup, fitness or insight value can have changed.
+        _finish_ingest_run(conn, run_id, summary)
+        return summary
 
     # Commit after each step: a step's write must not stay open while the next one reads every
     # run's stream (VDOT, pace bands, GAP, pacing), or the API's writers wait and time out.
@@ -1302,16 +1352,5 @@ def sync_garmin_connect(
     refresh_insights(conn, athlete_id=athlete_id)
     conn.commit()
 
-    conn.execute(
-        ingest_run.update()
-        .where(ingest_run.c.id == run_id)
-        .values(
-            finished_at=datetime.now(UTC),
-            status="failed" if summary.errors else "success",
-            items_seen=summary.items_seen,
-            items_new=summary.items_new,
-            errors=json.dumps(summary.errors) if summary.errors else None,
-        )
-    )
-    conn.commit()
+    _finish_ingest_run(conn, run_id, summary)
     return summary

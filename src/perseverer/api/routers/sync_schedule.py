@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import Connection, select
 
 from perseverer.api.dependencies import get_conn, require_api_key
@@ -25,6 +25,7 @@ from perseverer.sync_schedule import (
     SourceSchedule,
     athlete_zone,
     load_schedules,
+    next_activity_check,
     next_run,
     source_configured,
 )
@@ -58,6 +59,8 @@ def _out(conn: Connection, settings: Settings, athlete_id: str) -> SyncScheduleO
                 is_default=entry.is_default,
                 timezone=str(zone),
                 next_run_at=next_run(entry, now) if configured else None,
+                activity_check_hours=entry.activity_check_hours,
+                next_activity_check_at=next_activity_check(entry, now) if configured else None,
             )
         )
     return SyncScheduleOut(sources=sources, window_minutes=TICK_MINUTES)
@@ -86,10 +89,19 @@ def put_sync_schedule(
     conn: Connection = Depends(get_conn),
     settings: Settings = Depends(get_settings),
 ) -> SyncScheduleOut:
-    """Saves the time (null = the default) and on/off of each source listed.  The date a source
+    """Saves the time (null = the default), on/off and, for Garmin Connect, the hourly new-activity
+    check interval (null = off; left out = unchanged) of each source listed.  The date a source
     last ran is kept, so moving a time after today's run does not make it run again today."""
     for item in payload.sources:
-        values = {"local_time": item.time, "enabled": item.enabled}
+        values: dict[str, object] = {"local_time": item.time, "enabled": item.enabled}
+        if "activity_check_hours" in item.model_fields_set:
+            if item.source != "garmin_connect" and item.activity_check_hours is not None:
+                raise HTTPException(
+                    status_code=422,
+                    detail="activity_check_hours applies to garmin_connect only",
+                )
+            values["activity_check_hours"] = item.activity_check_hours
+            values["activity_check_next_at"] = None  # due at the next tick after a change
         updated = conn.execute(
             sync_schedule.update()
             .where(sync_schedule.c.athlete_id == athlete_id, sync_schedule.c.source == item.source)

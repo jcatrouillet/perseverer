@@ -1,0 +1,14 @@
+/* RecentActivityPopup.tsx: a compact popup over the shared Modal, phone-sized only. */
+.modal__panel.recent-activity {
+  width: min(26rem, calc(100vw - 2rem));
+  height: auto;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.recent-activity__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}

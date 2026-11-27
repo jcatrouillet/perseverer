@@ -927,7 +927,7 @@ athlete has chosen a time or switched a source off, or after it has run: `local_
 the athlete's own clock, `athlete.timezone`; null = the deployment's default time), `enabled`, and
 `last_run_on` (the local date it last ran, so a worker restart cannot run it twice in a day). No row
 means the default (`PERSEVERER_SCHEDULE_HOUR` / `_MINUTE` on `PERSEVERER_SCHEDULE_TIMEZONE`) and
-enabled. Set via `PUT /settings/sync-schedule` (Settings -> External tools).
+enabled. Garmin rows also carry `activity_check_hours` (1 to 24, null = off: also look for new activities every N hours between the daily runs) and `activity_check_next_at` (naive UTC: when the next such check is due; null = at the next tick; pushed 24 hours out after a check that errored). Set via `PUT /settings/sync-schedule` (Settings -> External tools).
 
 ### Coach (coach_link)
 

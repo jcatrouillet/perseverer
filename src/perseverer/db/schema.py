@@ -234,6 +234,10 @@ sync_schedule = Table(
     Column("local_time", String, nullable=True),
     Column("enabled", Boolean, nullable=False, default=True, server_default=text("1")),
     Column("last_run_on", String, nullable=True),
+    # Garmin only: also check for new activities every N hours (1 to 24), between the daily full
+    # syncs; null = off. `activity_check_next_at` (naive UTC) is when the next check is due.
+    Column("activity_check_hours", Integer, nullable=True),
+    Column("activity_check_next_at", DateTime(), nullable=True),
 )
 
 # Who coaches whom (routers/coach.py). `athlete_id` is the coachee, who chose the coach and can

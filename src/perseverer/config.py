@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # --- garmin_connect rate limiting, rolling window, staleness, scheduler ---
     garmin_rolling_window_days: int = 10
     garmin_request_interval_s: float = 3.0
+    # Days a light "new activities" check looks back (sync_schedule.py); the daily full sync keeps
+    # using the rolling window above.
+    garmin_activity_check_window_days: int = 2
     # --- Reading handwritten workout notes from a photo (handwriting.py) ---
     # Optional: unset, the photo can still be attached and the sets typed in. Set, a photo is sent
     # to the Anthropic API when the athlete asks to read it (never automatically).

@@ -73,7 +73,7 @@ describe("SyncScheduleCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(mockSave).toHaveBeenCalledWith({
       sources: [
-        { source: "garmin_connect", time: null, enabled: true },
+        { source: "garmin_connect", time: null, enabled: true, activity_check_hours: null },
         { source: "eufy", time: null, enabled: true },
         { source: "kaya", time: "08:30", enabled: true },
       ],
@@ -89,6 +89,40 @@ describe("SyncScheduleCard", () => {
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({
         sources: expect.arrayContaining([{ source: "kaya", time: "07:00", enabled: false }]),
+      }),
+    );
+  });
+});
+
+describe("SyncScheduleCard activity check", () => {
+  it("offers the new-activity check on Garmin only and saves the chosen interval", () => {
+    render(<SyncScheduleCard />);
+    expect(screen.getAllByLabelText("Also check for new activities")).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText("Also check for new activities"), {
+      target: { value: "1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sources: expect.arrayContaining([
+          { source: "garmin_connect", time: null, enabled: true, activity_check_hours: 1 },
+        ]),
+      }),
+    );
+  });
+
+  it("shows the interval already saved and can turn it off again", () => {
+    schedule.sources[0]!.activity_check_hours = 3;
+    render(<SyncScheduleCard />);
+    const select = screen.getByLabelText("Also check for new activities");
+    expect(select).toHaveValue("3");
+    fireEvent.change(select, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sources: expect.arrayContaining([
+          { source: "garmin_connect", time: null, enabled: true, activity_check_hours: null },
+        ]),
       }),
     );
   });

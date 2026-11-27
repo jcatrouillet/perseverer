@@ -33,6 +33,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import Connection, select
 
 from perseverer.adapters.eufy import resolve_eufy_credentials, sync_eufy
+from perseverer.adapters.fit_folder import IngestRunSummary
 from perseverer.adapters.garmin_connect import (
     GarminAuthRequired,
     GarminRateLimitAborted,
@@ -58,27 +59,47 @@ from perseverer.gear import send_over_limit_alerts
 from perseverer.planned_workouts import cleanup_past_garmin_workouts, push_planned_workout
 from perseverer.staleness import check_staleness, notify_webhook
 from perseverer.sync_schedule import (
+    ACTIVITY_CHECK_BACKOFF,
     SOURCE_LABELS,
     TICK_MINUTES,
+    activity_check_due,
     athlete_zone,
     is_due,
     load_schedules,
     mark_run,
+    schedule_activity_check,
     source_configured,
 )
 
 logger = logging.getLogger("perseverer.worker")
 
 
-def _sync_garmin(conn: Connection, settings: Settings, athlete_id: str, display_name: str) -> None:
-    logger.info("starting scheduled garmin_connect sync for %s (%s)", display_name, athlete_id)
+def _sync_garmin(
+    conn: Connection,
+    settings: Settings,
+    athlete_id: str,
+    display_name: str,
+    *,
+    activities_only: bool = False,
+) -> IngestRunSummary:
+    logger.info(
+        "starting scheduled garmin_connect %s for %s (%s)",
+        "activity check" if activities_only else "sync",
+        display_name,
+        athlete_id,
+    )
     summary = sync_garmin_connect(
         conn,
         settings.raw_archive_dir,
         settings.parquet_dir,
         settings.garmin_tokenstore_dir_for(athlete_id),
         athlete_id=athlete_id,
-        rolling_window_days=settings.garmin_rolling_window_days,
+        rolling_window_days=(
+            settings.garmin_activity_check_window_days
+            if activities_only
+            else settings.garmin_rolling_window_days
+        ),
+        activities_only=activities_only,
         rate_limits=RateLimitSettings(
             request_interval_s=settings.garmin_request_interval_s,
             max_requests_per_hour=settings.garmin_max_requests_per_hour,
@@ -91,6 +112,7 @@ def _sync_garmin(conn: Connection, settings: Settings, athlete_id: str, display_
         summary.items_new,
         len(summary.errors),
     )
+    return summary
 
 
 def _sync_eufy(conn: Connection, settings: Settings, athlete_id: str) -> None:
@@ -246,12 +268,22 @@ def run_scheduled_syncs(now: datetime | None = None) -> None:
         ).fetchall()
         for row in athletes:
             try:
+                schedules = load_schedules(conn, settings, row.id, row.timezone)
                 due = [
                     e
-                    for e in load_schedules(conn, settings, row.id, row.timezone)
+                    for e in schedules
                     if is_due(e, now_utc) and source_configured(conn, settings, row.id, e.source)
                 ]
-                if not due:
+                check = next(
+                    (
+                        e
+                        for e in schedules
+                        if activity_check_due(e, now_utc)
+                        and source_configured(conn, settings, row.id, e.source)
+                    ),
+                    None,
+                )
+                if not due and check is None:
                     continue
                 ran: set[str] = set()
                 for entry in due:
@@ -264,6 +296,15 @@ def run_scheduled_syncs(now: datetime | None = None) -> None:
                     )
                     # Marked first: a crash or a failure must not make the next tick retry it.
                     mark_run(conn, row.id, entry.source, local_date)
+                    if entry.activity_check_hours is not None:
+                        # The daily run looks for activities too: the next light check is a
+                        # full interval away.
+                        schedule_activity_check(
+                            conn,
+                            row.id,
+                            now_utc,
+                            after=timedelta(hours=entry.activity_check_hours),
+                        )
                     conn.commit()
                     try:
                         if entry.source == "garmin_connect":
@@ -280,6 +321,29 @@ def run_scheduled_syncs(now: datetime | None = None) -> None:
                             entry.source,
                             row.id,
                         )
+                if check is not None and check.activity_check_hours is not None:
+                    # Scheduled first, like the daily run: a crash or a failure must not make the
+                    # next tick retry it.
+                    schedule_activity_check(
+                        conn, row.id, now_utc, after=timedelta(hours=check.activity_check_hours)
+                    )
+                    conn.commit()
+                    try:
+                        light = _sync_garmin(
+                            conn, settings, row.id, row.display_name, activities_only=True
+                        )
+                        if light.errors:
+                            # A 429 or a dead session: leave Garmin alone until tomorrow.
+                            schedule_activity_check(
+                                conn, row.id, now_utc, after=ACTIVITY_CHECK_BACKOFF
+                            )
+                            conn.commit()
+                        ran.add("activity_check")
+                        if light.items_new:
+                            ran.add("garmin_connect")
+                    except Exception:
+                        conn.rollback()
+                        logger.exception("activity check failed unexpectedly for %s", row.id)
                 _check_staleness(conn, settings, row.id)
                 if "garmin_connect" in ran:
                     sent = send_over_limit_alerts(conn, settings, row.id, row.email)

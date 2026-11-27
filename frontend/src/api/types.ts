@@ -1622,6 +1622,10 @@ export interface SyncSourceOut {
   is_default: boolean;
   timezone: string;
   next_run_at: string | null;
+  /** Garmin Connect only: also look for new activities every this many hours; null = off. */
+  activity_check_hours?: number | null;
+  /** UTC instant of the next such check; null when off or not connected. */
+  next_activity_check_at?: string | null;
 }
 
 export interface SyncScheduleOut {
@@ -1635,6 +1639,8 @@ export interface SyncSourceIn {
   /** null = the default time. */
   time: string | null;
   enabled: boolean;
+  /** Garmin Connect only; null = off, left out = unchanged. */
+  activity_check_hours?: number | null;
 }
 
 export interface SyncScheduleIn {
