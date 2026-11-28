@@ -21,7 +21,7 @@ function ended(id: string, hoursAgo: number) {
 }
 
 beforeEach(() => {
-  window.sessionStorage.clear();
+  window.localStorage.clear();
   mobile = true;
   items = [];
 });
@@ -47,13 +47,17 @@ describe("RecentActivityPopup", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("is shown once per session: closing it keeps it from coming back", () => {
+  it("is shown once per activity: closing it keeps it from coming back, a newer one shows", () => {
     items = [ended("latest", 2)];
-    const { unmount } = render(<RecentActivityPopup />);
+    const first = render(<RecentActivityPopup />);
     fireEvent.click(screen.getByText("Close"));
     expect(screen.queryByRole("dialog")).toBeNull();
-    unmount();
-    render(<RecentActivityPopup />);
+    first.unmount();
+    const second = render(<RecentActivityPopup />);
     expect(screen.queryByRole("dialog")).toBeNull();
+    second.unmount();
+    items = [ended("latest", 2), ended("newer", 1)];
+    render(<RecentActivityPopup />);
+    expect(screen.getByText("card newer")).toBeTruthy();
   });
 });

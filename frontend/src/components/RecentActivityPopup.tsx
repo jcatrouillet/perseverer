@@ -1,5 +1,5 @@
 // A popup shown when the app is opened on a phone right after an activity: the last activity
-// that finished within the past 8 hours, once per browser session. Mounted once in the app shell;
+// that finished within the past 8 hours, once per activity. Mounted once in the app shell;
 // not shown while a coach views an athlete, nor on the activity's own page.
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -12,9 +12,12 @@ import { ActivityCard } from "./ActivityCard";
 import { Modal } from "./Modal";
 import "../styles/recent-activity.css";
 
+// The last activity the popup was dismissed for. Kept in localStorage, not sessionStorage: an
+// installed phone app can stay alive in the background for days, so "once per session" would hide
+// a new activity; "once per activity" never does.
 function alreadyShown(id: string): boolean {
   try {
-    return window.sessionStorage.getItem(SHOWN_STORAGE_KEY) === id;
+    return window.localStorage.getItem(SHOWN_STORAGE_KEY) === id;
   } catch {
     return false;
   }
@@ -22,7 +25,7 @@ function alreadyShown(id: string): boolean {
 
 function markShown(id: string): void {
   try {
-    window.sessionStorage.setItem(SHOWN_STORAGE_KEY, id);
+    window.localStorage.setItem(SHOWN_STORAGE_KEY, id);
   } catch {
     // Storage blocked: the popup may reappear on the next open, which is harmless.
   }
@@ -31,7 +34,8 @@ function markShown(id: string): void {
 export function RecentActivityPopup() {
   const isMobile = useIsMobile();
   const [location] = useLocation();
-  const [closed, setClosed] = useState(false);
+  // The activity whose popup was closed in this page's lifetime (a newer one may still show).
+  const [closedId, setClosedId] = useState<string | null>(null);
   // Two local dates back always covers 8 hours, whatever the offset; the exact window is applied
   // in lastFinishedWithin below.
   const twoDaysAgo = new Date();
@@ -40,12 +44,12 @@ export function RecentActivityPopup() {
   const last = isMobile && recent.data ? lastFinishedWithin(recent.data.items, new Date()) : null;
   const routes = useActivityRoutes(last ? [last.id] : []);
 
-  if (!last || closed || alreadyShown(last.id)) return null;
+  if (!last || closedId === last.id || alreadyShown(last.id)) return null;
   if (location === `/activities/${last.id}`) return null;
 
   const close = () => {
     markShown(last.id);
-    setClosed(true);
+    setClosedId(last.id);
   };
 
   return (
